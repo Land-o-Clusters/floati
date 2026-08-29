@@ -3,17 +3,17 @@
   "spec_path": "docs/design/capability-matrix-spec-2026-08-28.md",
   "seeded_by": "grok",
   "seeded_at": "2026-08-28",
-  "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals \u2014 those do not vary by surface.",
+  "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.",
   "columns": [
     {
       "id": "bus",
       "title": "bus",
-      "vocabulary": "live / CLI / \u2014"
+      "vocabulary": "live / CLI / —"
     },
     {
       "id": "work",
       "title": "work",
-      "vocabulary": "adapter / \u2014"
+      "vocabulary": "adapter / —"
     },
     {
       "id": "wake",
@@ -23,22 +23,22 @@
     {
       "id": "auto_turnover",
       "title": "auto-turnover",
-      "vocabulary": "auto / assisted / \u2014"
+      "vocabulary": "auto / assisted / —"
     },
     {
       "id": "compaction",
       "title": "native compact verb",
-      "vocabulary": "native / \u2014"
+      "vocabulary": "native / —"
     },
     {
       "id": "boot",
       "title": "boot",
-      "vocabulary": "yes / \u2014"
+      "vocabulary": "yes / —"
     },
     {
       "id": "managed_send",
       "title": "managed-send",
-      "vocabulary": "yes / \u2014"
+      "vocabulary": "yes / —"
     }
   ],
   "row_order": [
@@ -157,7 +157,7 @@
       "harness": "codex",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -169,7 +169,7 @@
       "harness": "codex",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -202,7 +202,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -213,7 +213,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -235,7 +235,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -246,7 +246,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -257,7 +257,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -268,8 +268,8 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "ChatGPT.app 26.820.60940"
@@ -312,7 +312,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -324,7 +324,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -335,7 +335,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -346,8 +346,8 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "2.1.231 (Claude Code)"
@@ -357,7 +357,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -368,7 +368,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -390,7 +390,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -401,7 +401,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -412,7 +412,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -423,8 +423,8 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop-chat": "Claude.app 1.37937.3"
@@ -434,7 +434,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -445,7 +445,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -467,7 +467,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -478,7 +478,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -489,7 +489,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -500,8 +500,8 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "ide-extension": "anthropic.claude-code-2.1.247-darwin-arm64"
@@ -544,7 +544,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -556,7 +556,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -567,7 +567,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -578,8 +578,8 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "1.18.9"
@@ -589,7 +589,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -600,7 +600,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -622,7 +622,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -633,7 +633,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -644,7 +644,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -655,8 +655,8 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "OpenCode.app 1.18.23"
@@ -699,7 +699,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -710,7 +710,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -721,7 +721,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -732,8 +732,8 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "cursor-agent 2026.07.09-a3815c0 (~/.local/bin; Homebrew wrapper exits 1)"
@@ -743,7 +743,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -754,7 +754,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -776,7 +776,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -787,7 +787,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -798,7 +798,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -809,8 +809,8 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "Cursor.app 3.17.21"
@@ -853,7 +853,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -864,7 +864,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -875,7 +875,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -886,8 +886,8 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "3.0.60"
@@ -930,7 +930,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -942,7 +942,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -953,7 +953,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -964,8 +964,8 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "grok 1.0.5 (5115b46bc909); grok-build ABSENT"
@@ -975,7 +975,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -986,7 +986,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1008,7 +1008,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1019,7 +1019,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1030,7 +1030,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1041,8 +1041,8 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "Grok Bot.app 0.29.0 (not the TUI)"
@@ -1085,7 +1085,7 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1097,7 +1097,7 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1108,7 +1108,7 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1119,8 +1119,8 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "0.84.3"
@@ -1141,7 +1141,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1163,7 +1163,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1174,7 +1174,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1185,7 +1185,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1196,8 +1196,8 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "0.8.2"
@@ -1218,7 +1218,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C9-t3-compatibility-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1240,7 +1240,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1251,7 +1251,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1262,7 +1262,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1273,8 +1273,8 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "t3 v0.0.35"
@@ -1284,7 +1284,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1295,7 +1295,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1317,7 +1317,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1328,7 +1328,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1339,7 +1339,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1350,8 +1350,8 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "T3 Code Nightly 0.0.35-nightly.20260826.1195"
@@ -1372,7 +1372,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C11-devin-conformance-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1394,7 +1394,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1405,7 +1405,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1416,7 +1416,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1427,8 +1427,8 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "devin 3000.2.17 (2c489dfc)"
@@ -1449,7 +1449,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C12-antigravity-conformance-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1471,7 +1471,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1482,7 +1482,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1493,7 +1493,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1504,8 +1504,8 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "agy PATH 1.1.5 (second copy ~/.local/bin 1.1.22)"
@@ -1515,7 +1515,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "bus",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1526,7 +1526,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "work",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1548,7 +1548,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1559,7 +1559,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1570,7 +1570,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "boot",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1581,8 +1581,8 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "\u2014",
-      "receipt_path": "docs/evidence/fleet-bus-profile-repoint-lane-puddle-2026-08-27.md",
+      "value": "—",
+      "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "desktop": "Antigravity.app 2.11.0"
@@ -1681,7 +1681,7 @@
     {
       "harness": "herdr",
       "surface": "cli",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/HARNESS-WIRING-MATRIX.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1692,7 +1692,7 @@
     {
       "harness": "devin",
       "surface": "cli",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C11-devin-conformance-live.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1703,7 +1703,7 @@
     {
       "harness": "antigravity",
       "surface": "cli",
-      "value": "\u2014",
+      "value": "—",
       "receipt_path": "docs/evidence/conformance/C12-antigravity-conformance-live.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1715,10 +1715,10 @@
   "honesty": [
     "No cell spans CLI and desktop (dual-surface law).",
     "claude/cli wake stays daemon: H-claude-wake-remeasure refused the flip.",
-    "compaction is \u2014 everywhere: T1 found no non-interactive compact argv.",
-    "auto_turnover stays \u2014 until T2-T4; five CLI surfaces keep derivable=A.",
+    "compaction is — everywhere: T1 found no non-interactive compact argv.",
+    "auto_turnover stays — until T2-T4; five CLI surfaces keep derivable=A.",
     "work adapter cells cite C-rows that launched floati/adapters/ modules on main (Car 4 roster: cline, cursor, grok-build, opencode, plus claude reference and C1/C7). COPY-LEDGER is not the proof.",
-    "herdr.py is observation-only (wave2-r3), not a worker adapter; work is \u2014.",
+    "herdr.py is observation-only (wave2-r3), not a worker adapter; work is —.",
     "boot yes only for Codex CLI: D3 tests photograph ManagedVerbShape(Codex, ~/.codex/bin/codex-fleet-bus). Other surfaces dash with that same D3 citation (genuine lack).",
     "managed_send yes cites gate-wsb-b5 transport-test envelope msg-01a0455838977b229394bcf297b43034; profile binding is fleet-bus-profile-repoint. WEEKEND_PROGRAM documents the contract and does not prove it. Dashes cite the Codex-only profile photograph.",
     "t3/devin/antigravity bus is CLI not live.",

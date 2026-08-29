@@ -46,25 +46,62 @@ Floati is worth installing for a single harness: a durable work log,
 receipts, and a board for your own sessions. Cross-harness fleets
 are the superpower, not the entry fee.
 
-| harness | status |
-|---|---|
-| codex | [live](docs/evidence/conformance/C1-codex-conformance-live.md) |
-| claude | [live](docs/evidence/conformance/C2-claude-conformance-live.md) |
-| opencode | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) |
-| cursor | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) |
-| cline | [live](docs/evidence/conformance/C5-cline-conformance-live.md) |
-| grok-build | [live](docs/evidence/conformance/C6-grok-build-conformance.md) |
-| pi | [live](docs/evidence/conformance/C7-pi-conformance-live.md) |
-| herdr | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) |
-| t3 | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) |
+<!-- capability-matrix:begin — GENERATED from docs/capability-matrix.v0.json by
+     scripts/capability-matrix-render.py; edit the dataset, rerun the script.
+     Every cell links the receipt that earned it; no cell says more than its receipt. -->
+Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.
 
-<!-- Every cell above links the receipt that earned it; no cell says more than
-     its receipt. `live` = surface_verified with a named launched executable,
-     independently gated. `CLI` = binary launched; bus-verb receipts pending.
-     Receipt paths resolve on main (conformance receipts landed 2026-08-28). -->
+| harness / surface | bus | work | wake | auto-turnover | native compact verb | boot | managed-send |
+|---|---|---|---|---|---|---|---|
+| codex / cli | [live](docs/evidence/conformance/C1-codex-conformance-live.md) | [adapter](docs/evidence/conformance/C1-codex-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [yes](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [yes](docs/evidence/gate-wsb-b5-2026-08-27.md) |
+| codex / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| claude / cli | [live](docs/evidence/conformance/C2-claude-conformance-live.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-claude-wake-remeasure.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| claude / desktop-chat | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| claude / ide-extension | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| opencode / cli | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) | [adapter](docs/evidence/conformance/C3-opencode-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| opencode / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| cursor / cli | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) | [adapter](docs/evidence/conformance/C4-cursor-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| cursor / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| cline / cli | [live](docs/evidence/conformance/C5-cline-conformance-live.md) | [adapter](docs/evidence/conformance/C5-cline-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| grok / cli | [live](docs/evidence/conformance/C6-grok-build-conformance.md) | [adapter](docs/evidence/conformance/C6-grok-build-conformance.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| grok / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| pi / cli | [live](docs/evidence/conformance/C7-pi-conformance-live.md) | [adapter](docs/evidence/conformance/C7-pi-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| herdr / cli | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) | [—](docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| t3 / cli | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| t3 / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| devin / cli | [CLI](docs/evidence/conformance/C11-devin-conformance-live.md) | [—](docs/evidence/conformance/C11-devin-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| antigravity / cli | [CLI](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [—](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+| antigravity / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+
+Provider notes (wiring matrix; not grid columns):
+
+- codex / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
+- claude / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
+- opencode / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
+- cursor / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
+- cline / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): Addendum: ChatGPT sign-in (openai-codex / gpt-5.6-luna). Original OpenRouter literal-key GAP row stays as the photograph.
+- pi / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): OpenRouter via models.json command-lookup; probe exit 0.
+- grok / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): OpenRouter via env_key OPENROUTER_API_KEY; provider pin is a documented surface limitation. C6 receipt is grok-build via this grok override.
+- t3 / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): Composed through Grok; no native OpenRouter driver.
+- herdr / cli — [—](docs/evidence/HARNESS-WIRING-MATRIX.md): Not an LLM-turn harness; wiring out of scope.
+- devin / cli — [—](docs/evidence/conformance/C11-devin-conformance-live.md): Wiring N/A (vendor account, not OpenRouter).
+- antigravity / cli — [—](docs/evidence/conformance/C12-antigravity-conformance-live.md): Wiring N/A (Google account, not OpenRouter).
+<!-- capability-matrix:end -->
 
 Platforms: macOS today. Anything POSIX is intended; a platform joins
 this list the same way a harness does — with receipts.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-architecture-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-architecture-light.svg">
+    <img src="docs/assets/floati-architecture-light.svg" alt="Floati architecture: harnesses feed one append-only root, and every operator surface is a projection of its ledgers" width="1400">
+  </picture>
+</p>
+
+One picture: harnesses at the edge, one append-only ledger in the
+middle, projections derived from it — never a second source of
+truth.
 
 ## What you can do with it
 
@@ -106,11 +143,7 @@ exits, and descendant cleanup audits all agree.
 ### See the whole harbor
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/evidence/captures/post-campaign-20260828/harbor-board-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/evidence/captures/post-campaign-20260828/harbor-board-light.svg">
-    <img src="docs/evidence/captures/post-campaign-20260828/harbor-board-light.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
-  </picture>
+  <img src="docs/evidence/captures/post-campaign-20260828/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
 </p>
 
 The Harbor Board: liveness, authority, and lock state as three
@@ -118,11 +151,7 @@ separate lamps — three different questions, never blended into one
 green dot. Keyboard-first, redraws only on state change.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/evidence/captures/post-campaign-20260828/harbor-chart-multibus-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/evidence/captures/post-campaign-20260828/harbor-chart-multibus-light.svg">
-    <img src="docs/evidence/captures/post-campaign-20260828/harbor-chart-multibus-light.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
-  </picture>
+  <img src="docs/evidence/captures/post-campaign-20260828/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
 </p>
 
 Running more than one fleet on this machine? Declare your roots
@@ -136,11 +165,7 @@ your request.
 ### Know which lane went deaf — and which step died
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/evidence/captures/post-campaign-20260828/doctor-delivery-health-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/evidence/captures/post-campaign-20260828/doctor-delivery-health-light.svg">
-    <img src="docs/evidence/captures/post-campaign-20260828/doctor-delivery-health-light.svg" alt="Doctor report: one node RED with a 16-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
-  </picture>
+  <img src="docs/evidence/captures/post-campaign-20260828/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 16-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
 </p>
 
 "The lane went quiet" is not a diagnosis. The doctor states per-node
@@ -152,11 +177,7 @@ hear — without touching anyone else's mail.
 ### Onboard and tear down nodes like it's nothing
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/evidence/captures/post-campaign-20260828/onboard-wizard-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset="docs/evidence/captures/post-campaign-20260828/onboard-wizard-light.gif">
-    <img src="docs/evidence/captures/post-campaign-20260828/onboard-wizard-light.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
-  </picture>
+  <img src="docs/evidence/captures/post-campaign-20260828/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
 </p>
 
 `floati node add` walks you through a new node: identity, harness,
@@ -190,11 +211,7 @@ invents a pressure number it can't measure.
 ### Replay any run
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/evidence/captures/post-campaign-20260828/flight-recorder-replay-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset="docs/evidence/captures/post-campaign-20260828/flight-recorder-replay-light.gif">
-    <img src="docs/evidence/captures/post-campaign-20260828/flight-recorder-replay-light.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
-  </picture>
+  <img src="docs/evidence/captures/post-campaign-20260828/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
 </p>
 
 The flight recorder replays a finished run as an ordered timeline:

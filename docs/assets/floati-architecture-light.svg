@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 640" role="img" aria-labelledby="title desc">
+  <title id="title">Floati architecture</title>
+  <desc id="desc">Codex, Claude, OpenCode, and Cursor feed one Floati root with append-only mail, work, and receipt ledgers. Harbor Board, Harbor Chart, Doctor, Replay, status JSON, and graph JSON are projections derived from that root.</desc>
+  <defs>
+    <marker id="arrow-in" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#2F6F8E"/>
+    </marker>
+    <marker id="arrow-out" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#2F7D5C"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="640" rx="28" fill="#F7F5EF"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="70" y="70" fill="#55636F" font-size="24" font-weight="700" letter-spacing="3">HARNESSES</text>
+    <text x="700" y="70" fill="#23313C" font-size="28" font-weight="800" text-anchor="middle" letter-spacing="2">ONE FLOATI ROOT</text>
+    <text x="1040" y="70" fill="#55636F" font-size="24" font-weight="700" letter-spacing="3">PROJECTIONS</text>
+
+    <g fill="#FFFFFF" stroke="#AAB6BF" stroke-width="2">
+      <rect x="70" y="105" width="290" height="72" rx="14"/>
+      <rect x="70" y="205" width="290" height="72" rx="14"/>
+      <rect x="70" y="305" width="290" height="72" rx="14"/>
+      <rect x="70" y="405" width="290" height="72" rx="14"/>
+    </g>
+    <g fill="#23313C" font-size="25" font-weight="700">
+      <text x="215" y="150" text-anchor="middle">Codex</text>
+      <text x="215" y="250" text-anchor="middle">Claude</text>
+      <text x="215" y="350" text-anchor="middle">OpenCode</text>
+      <text x="215" y="450" text-anchor="middle">Cursor</text>
+    </g>
+
+    <g fill="none" stroke="#2F6F8E" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-in)">
+      <path d="M 360 141 C 420 141 440 170 500 190"/>
+      <path d="M 360 241 C 420 241 445 250 500 270"/>
+      <path d="M 360 341 C 420 341 445 330 500 310"/>
+      <path d="M 360 441 C 420 441 440 410 500 390"/>
+    </g>
+
+    <rect x="500" y="104" width="400" height="432" rx="24" fill="#FFFFFF" stroke="#E8622C" stroke-width="4"/>
+    <rect x="500" y="104" width="400" height="16" rx="8" fill="#E8622C"/>
+    <text x="700" y="160" fill="#55636F" font-size="19" font-weight="700" text-anchor="middle" letter-spacing="3">APPEND-ONLY LEDGERS</text>
+
+    <g fill="#F7F5EF" stroke="#AAB6BF" stroke-width="2">
+      <rect x="550" y="188" width="300" height="82" rx="14"/>
+      <rect x="550" y="298" width="300" height="82" rx="14"/>
+      <rect x="550" y="408" width="300" height="82" rx="14"/>
+    </g>
+    <g font-size="25" font-weight="800" text-anchor="middle">
+      <text x="700" y="239" fill="#2F6F8E">MAIL</text>
+      <text x="700" y="349" fill="#23313C">WORK</text>
+      <text x="700" y="459" fill="#E8622C">RECEIPTS</text>
+    </g>
+
+    <g fill="none" stroke="#2F7D5C" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-out)">
+      <path d="M 900 188 C 960 188 980 129 1040 129"/>
+      <path d="M 900 255 C 960 255 980 219 1040 219"/>
+      <path d="M 900 320 L 1040 309"/>
+      <path d="M 900 385 C 960 385 980 399 1040 399"/>
+      <path d="M 900 452 C 960 452 980 507 1040 507"/>
+    </g>
+
+    <g fill="#FFFFFF" stroke="#AAB6BF" stroke-width="2">
+      <rect x="1040" y="95" width="290" height="68" rx="14"/>
+      <rect x="1040" y="185" width="290" height="68" rx="14"/>
+      <rect x="1040" y="275" width="290" height="68" rx="14"/>
+      <rect x="1040" y="365" width="290" height="68" rx="14"/>
+      <rect x="1040" y="465" width="290" height="84" rx="14"/>
+    </g>
+    <g fill="#23313C" font-size="22" font-weight="700" text-anchor="middle">
+      <text x="1185" y="137">Harbor Board</text>
+      <text x="1185" y="227">Harbor Chart</text>
+      <text x="1185" y="317">Doctor</text>
+      <text x="1185" y="407">Replay</text>
+      <text x="1185" y="499" font-size="18">status --json</text>
+      <text x="1185" y="529" font-size="18">graph --json</text>
+    </g>
+  </g>
+</svg>

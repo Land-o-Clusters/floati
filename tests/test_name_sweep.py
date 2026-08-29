@@ -125,6 +125,20 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         self.assertEqual(1, readme.count(APPROVED_HERO_LOOP))
         self.assertNotIn("[[readme.hero_loop]]", readme)
 
+    def test_readme_capability_matrix_is_generated_not_hand_written(self) -> None:
+        """Catches the README matrix drifting from the dataset it claims to render."""
+        import subprocess
+        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+        begin = readme.index("capability-matrix:begin")
+        begin = readme.index("-->", begin) + len("-->\n")
+        end = readme.index("<!-- capability-matrix:end -->")
+        embedded = readme[begin:end].strip()
+        rendered = subprocess.run(
+            ["python3", "scripts/capability-matrix-render.py"],
+            cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self.assertEqual(rendered, embedded)
+
     def test_readme_local_references_resolve(self) -> None:
         """Catches a README link or image that points at an absent repository file."""
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
