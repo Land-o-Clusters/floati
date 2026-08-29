@@ -1,0 +1,112 @@
+{
+  "app": "/Applications/T3 Code (Nightly).app",
+  "exists": true,
+  "is_dir": true,
+  "lstat_mode": "0o40755",
+  "plist_exists": true,
+  "plutil_exit": 0,
+  "plutil_stdout_bytes": 2690,
+  "plist_keys": {
+    "CFBundleExecutable": "\"CFBundleExecutable\" => \"T3 Code (Nightly)\"",
+    "CFBundleIdentifier": "\"CFBundleIdentifier\" => \"com.t3tools.t3code\"",
+    "CFBundleName": "\"CFBundleName\" => \"T3 Code (Nightly)\"",
+    "CFBundleShortVersionString": "\"CFBundleShortVersionString\" => \"0.0.35-nightly.20260826.1195\"",
+    "CFBundleVersion": "\"CFBundleVersion\" => \"0.0.35-nightly.20260826.1195\""
+  },
+  "bundle_bin_dirs": [
+    {
+      "dir": "/Applications/T3 Code (Nightly).app/Contents/MacOS",
+      "names": [
+        "T3 Code (Nightly)"
+      ],
+      "count": 1
+    }
+  ],
+  "name_hits_capped50": [
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/MacOS/T3 Code (Nightly)",
+      "size": 53328
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/windowsPtyAgent.js",
+      "size": 12388
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/conpty_console_list_agent.js.map",
+      "size": 475
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/windowsPtyAgent.test.js",
+      "size": 4147
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/windowsPtyAgent.test.js.map",
+      "size": 2951
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/windowsPtyAgent.js.map",
+      "size": 9105
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/lib/conpty_console_list_agent.js",
+      "size": 721
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/misc/DebugClient.py",
+      "size": 1558
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/src/libwinpty/AgentLocation.h",
+      "size": 1278
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/src/agent/AgentCreateDesktop.h",
+      "size": 1283
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/src/agent/Agent.h",
+      "size": 3520
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/src/shared/AgentMsg.h",
+      "size": 1418
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/deps/winpty/src/shared/DebugClient.h",
+      "size": 1696
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/src/conpty_console_list_agent.ts",
+      "size": 582
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/src/windowsPtyAgent.test.ts",
+      "size": 3419
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/src/windowsPtyAgent.ts",
+      "size": 10378
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Resources/resource-monitor/t3-resource-monitor",
+      "size": 562144
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Frameworks/T3 Code (Nightly) Helper (Renderer).app/Contents/MacOS/T3 Code (Nightly) Helper (Renderer)",
+      "size": 221632
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Frameworks/T3 Code (Nightly) Helper.app/Contents/MacOS/T3 Code (Nightly) Helper",
+      "size": 221616
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Frameworks/T3 Code (Nightly) Helper (GPU).app/Contents/MacOS/T3 Code (Nightly) Helper (GPU)",
+      "size": 221632
+    },
+    {
+      "path": "/Applications/T3 Code (Nightly).app/Contents/Frameworks/T3 Code (Nightly) Helper (Plugin).app/Contents/MacOS/T3 Code (Nightly) Helper (Plugin)",
+      "size": 221632
+    }
+  ],
+  "name_hits_capped50_count": 21
+}

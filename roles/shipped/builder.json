@@ -1,0 +1,35 @@
+{
+  "schema_version": 0,
+  "template_version": 1,
+  "role": "builder",
+  "duties": [
+    "Implement assigned rows from the approved design and acceptance evidence.",
+    "Keep the branch reviewable with RED-first tests and narrowly scoped commits."
+  ],
+  "decision_rights": [
+    "Choose local implementation details inside the assigned row and its written seams."
+  ],
+  "stops": [
+    "Stop when product behavior is ambiguous or the next action expands assigned territory."
+  ],
+  "fences": [
+    "Never bypass a failing gate, ownership boundary, or required receipt.",
+    "Never treat a local commit as banked until the named ref is pushed."
+  ],
+  "cadence": "envelope-per-row",
+  "questions": [
+    {
+      "key": "repo",
+      "ask": "Which repository does this builder own?"
+    },
+    {
+      "key": "never_touch",
+      "ask": "What must this builder never modify?"
+    },
+    {
+      "key": "reports_to",
+      "ask": "Which node does this builder report to?",
+      "default": "<architect>"
+    }
+  ]
+}

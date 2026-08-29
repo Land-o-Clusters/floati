@@ -1,0 +1,18 @@
+⊙ FLOATI // LIVE HARBOR MAP
+~ ≈ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ESTATE // 2 PIERS // 4 VESSELS
+
+╭─ ▶ ● PIER puddle-fleet  LAST 12s ──────────
+│    ● ▤ VESSEL puddle-floati-architect ⚑  Architect  ⣀⣠⣤⣶⣿
+│    ◐ ▤ VESSEL lane-floati  Codex  ⣿⣶⣤⣠⣀
+╰──────────────────────────────────────────
+
+╭─   ○ PIER regatta  LAST 305s ──────────
+│    ○ ▤ VESSEL harbor-master ⚑  Architect  ⣀⣀⣀⣀⣀
+│    ● ▤ VESSEL lane-sol  Codex  ⣀⣤⣠⣶⣿
+╰──────────────────────────────────────────
+
+CHANNELS ────────────────────
+  puddle-fleet ─────────▶ regatta
+
+↑/k ↓/j select  enter detail  q quit

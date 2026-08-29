@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/bridge-record.schema.json",
+  "title": "Floati Local Bridge Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "bridge_id", "left_tenant_id", "right_tenant_id", "left_consent_id", "right_consent_id", "transport", "scope", "state"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^bridge-record-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "bridge_record"},
+    "bridge_id": {"type": "string", "pattern": "^bridge-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "left_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "right_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "left_consent_id": {"type": "string", "pattern": "^bridge-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "right_consent_id": {"type": "string", "pattern": "^bridge-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "transport": {"const": "local_filesystem"},
+    "scope": {"const": "advisory_not_consumption"},
+    "state": {"enum": ["active", "revoked"]}
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "brew_list_cask": {
+    "argv": [
+      "/opt/homebrew/bin/brew",
+      "list",
+      "--cask"
+    ],
+    "exit": 0,
+    "stdout": "antigravity\nantigravity-cli\nclaude-code\ncodex\ncursor-cli\ndevin-cli\nxdeck\n",
+    "stderr": "",
+    "stdout_bytes": 73,
+    "stderr_bytes": 0
+  },
+  "brew_list_formula_line_count": 70,
+  "brew_list_formula_exit": 0,
+  "npm_ls_g": {
+    "argv": [
+      "/opt/homebrew/bin/npm",
+      "ls",
+      "-g",
+      "--depth=0",
+      "--json"
+    ],
+    "exit": 0,
+    "stdout": "{\n  \"name\": \"lib\",\n  \"dependencies\": {\n    \"@moonshot-ai/kimi-code\": {\n      \"version\": \"0.30.0\",\n      \"overridden\": false\n    },\n    \"@sourcegraph/amp\": {\n      \"version\": \"0.0.1784524244-g589322\",\n      \"overridden\": false\n    },\n    \"npm\": {\n      \"version\": \"11.17.0\",\n      \"overridden\": false\n    },\n    \"opencode-ai\": {\n      \"version\": \"1.18.9\",\n      \"overridden\": false\n    }\n  }\n}\n",
+    "stderr": "npm warn Unknown env config \"devdir\". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.\n",
+    "stdout_bytes": 393,
+    "stderr_bytes": 146
+  },
+  "opencode_ai_package_json_version": "1.18.9"
+}

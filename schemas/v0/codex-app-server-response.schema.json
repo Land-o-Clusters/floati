@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/codex-app-server-response.schema.json",
+  "title": "Codex app-server recorded response envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id"],
+  "properties": {
+    "id": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+    "result": {},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "integer"},
+        "message": {"type": "string"},
+        "data": {}
+      }
+    }
+  },
+  "oneOf": [
+    {"required": ["result"], "not": {"required": ["error"]}},
+    {"required": ["error"], "not": {"required": ["result"]}}
+  ]
+}

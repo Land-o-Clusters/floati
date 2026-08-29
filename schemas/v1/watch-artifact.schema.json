@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/watch-artifact.schema.json",
+  "title": "Floati Watch Artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_version", "command", "status", "evidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "artifact_version": {"const": 0},
+    "command": {"const": "watch"},
+    "status": {"const": "ok"},
+    "evidence": {"$ref": "#/$defs/evidence"}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delta"],
+      "properties": {
+        "delta": {"$ref": "#/$defs/delta"}
+      }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "snapshot"],
+      "properties": {
+        "kind": {"enum": ["initial", "change"]},
+        "snapshot": {"$ref": "#/$defs/snapshot"}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "nodes", "stale_leases", "stale_lease_count", "work_counts", "receipt_counts", "consumption", "worker_refusals", "workers", "threads", "installer_shadow", "unrecognized_kinds"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "nodes": {"type": "array", "maxItems": 100000, "items": {"$ref": "fleet-status-artifact.schema.json#/$defs/node"}},
+        "stale_leases": {"type": "array", "maxItems": 100000, "items": {"$ref": "fleet-status-artifact.schema.json#/$defs/stale"}},
+        "stale_lease_count": {"type": "integer", "minimum": 0},
+        "work_counts": {"$ref": "fleet-status-artifact.schema.json#/$defs/counts"},
+        "receipt_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delivery", "ack", "denial"],
+          "properties": {
+            "delivery": {"type": "integer", "minimum": 0},
+            "ack": {"type": "integer", "minimum": 0},
+            "denial": {"type": "integer", "minimum": 0}
+          }
+        },
+        "consumption": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["coordinate", "state", "wake_state", "counts"],
+          "properties": {
+            "coordinate": {"const": "work/items.jsonl"},
+            "state": {"enum": ["work_available", "caught_up"]},
+            "wake_state": {"enum": ["none", "unsatisfied_wake"]},
+            "counts": {"$ref": "fleet-status-artifact.schema.json#/$defs/counts"}
+          }
+        },
+        "worker_refusals": {"type": "array", "maxItems": 100000, "items": {"$ref": "../v0/worker-refusal-record.schema.json"}},
+        "workers": {"type": "array", "maxItems": 100000, "items": {"$ref": "fleet-status-artifact.schema.json#/$defs/worker"}},
+        "threads": {"$ref": "fleet-status-artifact.schema.json#/$defs/thread_summary"},
+        "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "fleet-status-artifact.schema.json#/$defs/unrecognized_kind"}},
+        "installer_shadow": {"$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"}
+      }
+    }
+  }
+}

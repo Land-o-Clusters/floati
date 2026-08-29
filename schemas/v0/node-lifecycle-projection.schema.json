@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/node-lifecycle-projection.schema.json",
+  "title": "Floati Node Lifecycle Projection v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "node_id",
+    "harness",
+    "workspace",
+    "state_file",
+    "fleet_map",
+    "role",
+    "wake",
+    "managed_bus",
+    "command",
+    "prompt"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "kind": {"enum": ["node_boot_projection", "node_teardown_projection"]},
+    "node_id": {"$ref": "#/$defs/identifier"},
+    "harness": {"$ref": "#/$defs/harness"},
+    "workspace": {"$ref": "#/$defs/absolute_path"},
+    "state_file": {"$ref": "#/$defs/absolute_path"},
+    "fleet_map": {"$ref": "#/$defs/fleet_map"},
+    "role": {"$ref": "#/$defs/role"},
+    "wake": {"$ref": "#/$defs/wake"},
+    "managed_bus": {"$ref": "#/$defs/managed_bus"},
+    "ritual": {"$ref": "#/$defs/ritual"},
+    "command": {"$ref": "#/$defs/copy_single_line"},
+    "prompt": {"$ref": "#/$defs/copy_text"}
+  },
+  "oneOf": [
+    {
+      "required": ["kind"],
+      "properties": {
+        "kind": {"const": "node_boot_projection"},
+        "ritual": {"not": {}}
+      }
+    },
+    {
+      "required": ["kind", "ritual"],
+      "properties": {
+        "kind": {"const": "node_teardown_projection"}
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "harness": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "x-floati-terminal-unsafe": true
+    },
+    "safe_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "x-floati-terminal-unsafe": true
+    },
+    "copy_text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!DRAFT - )"
+    },
+    "copy_single_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536,
+      "pattern": "^(?!DRAFT - )[^\\r\\n]+$",
+      "x-floati-terminal-unsafe": true
+    },
+    "absolute_path": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/",
+      "x-floati-terminal-unsafe": true
+    },
+    "copy_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "pattern": "^(?!DRAFT - )[^\\r\\n]+$",
+      "x-floati-terminal-unsafe": true
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "role", "harness", "state"],
+      "properties": {
+        "node_id": {"$ref": "#/$defs/identifier"},
+        "role": {"$ref": "#/$defs/identifier"},
+        "harness": {"$ref": "#/$defs/harness"},
+        "state": {"const": "active"}
+      }
+    },
+    "declared_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bus_id", "root", "architect_node", "downstream"],
+      "properties": {
+        "bus_id": {"$ref": "#/$defs/identifier"},
+        "root": {"$ref": "#/$defs/absolute_path"},
+        "architect_node": {"$ref": "#/$defs/identifier"},
+        "downstream": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        }
+      }
+    },
+    "fleet_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architect_node", "nodes", "declared_roots"],
+      "properties": {
+        "architect_node": {"$ref": "#/$defs/identifier"},
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": {"$ref": "#/$defs/node"}
+        },
+        "declared_roots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": {"$ref": "#/$defs/declared_root"}
+        }
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "template_role",
+        "template_version",
+        "template_sha256",
+        "duties",
+        "decision_rights",
+        "stops",
+        "fences",
+        "cadence",
+        "answers"
+      ],
+      "properties": {
+        "template_role": {"$ref": "#/$defs/identifier"},
+        "template_version": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "duties": {"$ref": "#/$defs/copy_lines"},
+        "decision_rights": {"$ref": "#/$defs/copy_lines"},
+        "stops": {"$ref": "#/$defs/copy_lines"},
+        "fences": {"$ref": "#/$defs/copy_lines"},
+        "cadence": {"$ref": "#/$defs/identifier"},
+        "answers": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "x-floati-terminal-unsafe": true
+          }
+        }
+      }
+    },
+    "copy_lines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/copy_line"}
+    },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "poll_at_row_boundaries"],
+      "properties": {
+        "status": {"enum": ["armed", "eligible", "none"]},
+        "poll_at_row_boundaries": {"type": "boolean"}
+      }
+    },
+    "managed_bus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "executable", "profile", "inbox", "ack", "send", "optional_send"],
+      "properties": {
+        "harness": {"$ref": "#/$defs/harness"},
+        "executable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9_./~-]+$",
+          "x-floati-terminal-unsafe": true
+        },
+        "profile": {"$ref": "#/$defs/identifier"},
+        "inbox": {"const": ["inbox"]},
+        "ack": {"const": ["ack", "--id"]},
+        "send": {"const": ["send", "--to", "--sha", "--doc", "--idempotency-key", "--note"]},
+        "optional_send": {"const": ["--reply-to"]}
+      }
+    },
+    "ritual_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "instruction"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+        "instruction": {"$ref": "#/$defs/copy_line"}
+      }
+    },
+    "ritual": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "read_state"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "flush_state"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "check_committed_and_banked"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "push_and_envelope_unbanked"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "report_drained"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "close_lease"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {"kind": {"const": "retire_without_deleting_workspace"}, "instruction": {"$ref": "#/$defs/copy_line"}}
+        }
+      ],
+      "items": false
+    }
+  }
+}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" role="img">
+  <title>FLOATI graph plain light</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="340" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">FLOATI // HARBOR CHART</tspan>
+    <tspan x="28" dy="18" fill="#20252c">tenant: demo-fleet</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">┌────────────────────┐</tspan>
+    <tspan x="28" dy="18" fill="#20252c">│ lane-floati        │</tspan>
+    <tspan x="28" dy="18" fill="#20252c">│ ACTIVE · 1 DRIVING │</tspan>
+    <tspan x="28" dy="18" fill="#20252c">└────────────────────┘</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">┌─────────────────────────┐</tspan>
+    <tspan x="28" dy="18" fill="#20252c">│ puddle-floati-architect │</tspan>
+    <tspan x="28" dy="18" fill="#20252c">│ ACTIVE · 0 WORKERS      │</tspan>
+    <tspan x="28" dy="18" fill="#20252c">└─────────────────────────┘</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">TRAFFIC</tspan>
+    <tspan x="28" dy="18" fill="#20252c">lane-floati ── 4 envelopes · ! 1 denial ──▶ puddle-floati-architect</tspan>
+    <tspan x="28" dy="18" fill="#20252c">puddle-floati-architect ── 3 envelopes · 0 denials ──▶ lane-floati</tspan>
+  </text>
+</svg>

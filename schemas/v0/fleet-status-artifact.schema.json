@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/fleet-status-artifact.schema.json",
+  "title": "Floati Fleet Status Artifact v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_version", "command", "status", "evidence"],
+  "properties": {
+    "artifact_version": {"const": 0},
+    "command": {"const": "status"},
+    "status": {"const": "ok"},
+    "evidence": {"$ref": "#/$defs/status"}
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["open", "claimed", "completed"],
+      "properties": {
+        "open": {"type": "integer", "minimum": 0},
+        "claimed": {"type": "integer", "minimum": 0},
+        "completed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "role", "liveness", "authority", "mutex", "inbox_depth", "last_activity"],
+      "properties": {
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "role": {"type": "string", "minLength": 1, "maxLength": 64},
+        "liveness": {"enum": ["present", "silent", "expired", "unknown"]},
+        "authority": {"enum": ["active", "expired", "none"]},
+        "mutex": {"enum": ["active", "expired", "none"]},
+        "inbox_depth": {"type": "integer", "minimum": 0},
+        "last_activity": {"type": "string", "format": "date-time"},
+        "tide": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy", "turnover_state"],
+          "properties": {
+            "policy": {"enum": ["off", "active"]},
+            "turnover_state": {"enum": ["none", "directed", "state_flushed"]}
+          }
+        }
+      }
+    },
+    "stale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plane", "subject_id", "holder", "epoch", "expires_at"],
+      "properties": {
+        "plane": {"enum": ["authority", "mutex"]},
+        "subject_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "holder": {"type": "string", "minLength": 1, "maxLength": 64},
+        "epoch": {"type": "integer", "minimum": 1},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "worker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "work_item_id", "node_id", "adapter", "authority_subject", "authority_epoch", "artifact_bindings", "transition", "state", "outcome_code", "last_activity"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "work_item_id": {"type": "string", "minLength": 1},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "adapter": {"type": "string", "minLength": 1, "maxLength": 128},
+        "authority_subject": {"type": "string", "minLength": 1, "maxLength": 64},
+        "authority_epoch": {"type": "integer", "minimum": 1},
+        "artifact_bindings": {"type": "array", "maxItems": 32, "items": {"$ref": "work-item-record.schema.json#/$defs/artifact_binding"}},
+        "transition": {"enum": ["claim", "spawn", "drive", "bind_artifact", "complete", "degrade"]},
+        "state": {"enum": ["claim", "driving", "complete", "degraded"]},
+        "outcome_code": {"type": ["string", "null"]},
+        "last_activity": {"type": "string", "format": "date-time"}
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_schema_version", "kind", "root", "tenant_id", "mode", "observed_at", "nodes", "stale_leases", "stale_lease_count", "work_counts", "receipt_counts", "consumption", "worker_refusals", "workers"],
+      "properties": {
+        "status_schema_version": {"const": 0},
+        "kind": {"const": "fleet_status"},
+        "root": {"type": "string", "pattern": "^/"},
+        "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "mode": {"const": "report_only"},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "nodes": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/node"}},
+        "stale_leases": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/stale"}},
+        "stale_lease_count": {"type": "integer", "minimum": 0},
+        "work_counts": {"$ref": "#/$defs/counts"},
+        "receipt_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delivery", "ack", "denial"],
+          "properties": {
+            "delivery": {"type": "integer", "minimum": 0},
+            "ack": {"type": "integer", "minimum": 0},
+            "denial": {"type": "integer", "minimum": 0}
+          }
+        },
+        "consumption": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["coordinate", "state", "wake_state", "counts"],
+          "properties": {
+            "coordinate": {"const": "work/items.jsonl"},
+            "state": {"enum": ["work_available", "caught_up"]},
+            "wake_state": {"enum": ["none", "unsatisfied_wake"]},
+            "counts": {"$ref": "#/$defs/counts"}
+          }
+        },
+        "worker_refusals": {"type": "array", "maxItems": 100000, "items": {"$ref": "worker-refusal-record.schema.json"}},
+        "workers": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/worker"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,432 @@
+{
+  "adapter_default_paths": {
+    "claude": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/claude: Mach-O 64-bit executable arm64",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787794293,
+      "lstat_size": 49,
+      "path": "/opt/homebrew/bin/claude",
+      "readlink": "/opt/homebrew/Caskroom/claude-code/2.1.231/claude",
+      "realpath": "/opt/homebrew/Caskroom/claude-code/2.1.231/claude",
+      "realpath_sha256": "ba790279cab6ef77b713864d4bf5f764fcea87d3a3eb7591a41f741e45212b5c",
+      "realpath_size": 294720528
+    },
+    "cline": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/cline: a /usr/bin/env node script text executable, ASCII text",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787869502,
+      "lstat_size": 35,
+      "path": "/opt/homebrew/bin/cline",
+      "readlink": "../lib/node_modules/cline/bin/cline",
+      "realpath": "/opt/homebrew/lib/node_modules/cline/bin/cline",
+      "realpath_sha256": "71d1b27aeeebdaa0b91c4babddd1f635eb7f5783257c2b3324a2cb22924cf60f",
+      "realpath_size": 4446
+    },
+    "codex": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/codex: Mach-O 64-bit executable arm64",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787794301,
+      "lstat_size": 46,
+      "path": "/opt/homebrew/bin/codex",
+      "readlink": "/opt/homebrew/Caskroom/codex/0.150.0/bin/codex",
+      "realpath": "/opt/homebrew/Caskroom/codex/0.150.0/bin/codex",
+      "realpath_sha256": "27cc146d8a5781350e232998e12c52e35fe03d5eac945d38d11ca2bb35854c97",
+      "realpath_size": 229004480
+    },
+    "cursor": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/cursor-agent: Bourne-Again shell script text executable, ASCII text",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1784173639,
+      "lstat_size": 78,
+      "path": "/opt/homebrew/bin/cursor-agent",
+      "readlink": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/cursor-agent",
+      "realpath": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/cursor-agent",
+      "realpath_sha256": "eed61c5224668c9236334c4c68936a16aecc37374b592f59e31eb50433817831",
+      "realpath_size": 1074
+    },
+    "grok-build": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/grok-build"
+    },
+    "herdr": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/herdr: Mach-O 64-bit executable arm64",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787869663,
+      "lstat_size": 31,
+      "path": "/opt/homebrew/bin/herdr",
+      "readlink": "../Cellar/herdr/0.8.2/bin/herdr",
+      "realpath": "/opt/homebrew/Cellar/herdr/0.8.2/bin/herdr",
+      "realpath_sha256": "3e0f0c2d5edc41f592963ef90f5d872db801cc7dbd0e01731023897ee428904a",
+      "realpath_size": 20222544
+    },
+    "opencode": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/opencode: Mach-O 64-bit executable arm64",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1785298567,
+      "lstat_size": 48,
+      "path": "/opt/homebrew/bin/opencode",
+      "readlink": "../lib/node_modules/opencode-ai/bin/opencode.exe",
+      "realpath": "/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode.exe",
+      "realpath_sha256": "2348bf6751a04498090b2a301afcae4ff55785e0502ba76a42acba6617f3a7ea",
+      "realpath_size": 138509666
+    },
+    "pi": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/pi: a /usr/bin/env node script text executable, ASCII text, with very long lines (490)",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787869625,
+      "lstat_size": 70,
+      "path": "/opt/homebrew/bin/pi",
+      "readlink": "../lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+      "realpath": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+      "realpath_sha256": "1c3a5094b54aae9ae98c66516ce8c6578140363d081471ca7e91f9cb8c23dc8a",
+      "realpath_size": 629
+    },
+    "t3": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/t3: a /usr/bin/env node script executable (binary data)",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787869698,
+      "lstat_size": 35,
+      "path": "/opt/homebrew/bin/t3",
+      "readlink": "../lib/node_modules/t3/dist/bin.mjs",
+      "realpath": "/opt/homebrew/lib/node_modules/t3/dist/bin.mjs",
+      "realpath_sha256": "a5ad9c28388c835f30e1119502ba5a31613937d2820b281fdf3ba64aff4285b0",
+      "realpath_size": 7008453
+    }
+  },
+  "brew_cask_count": 7,
+  "brew_cask_exit": 0,
+  "brew_cask_names": [
+    "antigravity",
+    "antigravity-cli",
+    "claude-code",
+    "codex",
+    "cursor-cli",
+    "devin-cli",
+    "xdeck"
+  ],
+  "brew_formula_count": 71,
+  "brew_formula_exit": 0,
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "elapsed_s": 0.012,
+    "exit": 0,
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "utf8_preview": ""
+    },
+    "stdout": {
+      "bytes": 13,
+      "sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+      "utf8_preview": "Python 3.9.6\n"
+    },
+    "timed_out": false
+  },
+  "extra_paths": {
+    "~/.local/bin/claude": {
+      "exists": true,
+      "file_stdout": "~/.local/bin/claude: Mach-O 64-bit executable arm64",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787262376,
+      "lstat_size": 57,
+      "path": "~/.local/bin/claude",
+      "readlink": "~/.local/share/claude/versions/2.1.238",
+      "realpath": "~/.local/share/claude/versions/2.1.238",
+      "realpath_sha256": "1c196c456373b57818ae87df84aecee96cb659448c0d6a6bbb401ac5758431b2",
+      "realpath_size": 321263536
+    },
+    "~/.local/bin/cline": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/cline"
+    },
+    "~/.local/bin/cursor-agent": {
+      "exists": true,
+      "file_stdout": "~/.local/bin/cursor-agent: Bourne-Again shell script text executable, ASCII text",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1784173718,
+      "lstat_size": 87,
+      "path": "~/.local/bin/cursor-agent",
+      "readlink": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "realpath": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "realpath_sha256": "eed61c5224668c9236334c4c68936a16aecc37374b592f59e31eb50433817831",
+      "realpath_size": 1074
+    },
+    "~/.local/bin/grok": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/grok"
+    },
+    "~/.local/bin/grok-build": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/grok-build"
+    },
+    "~/.local/bin/herdr": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/herdr"
+    },
+    "~/.local/bin/pi": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/pi"
+    },
+    "~/.local/bin/t3": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3"
+    },
+    "/opt/homebrew/bin/grok": {
+      "exists": true,
+      "file_stdout": "/opt/homebrew/bin/grok: a /usr/bin/env node script text executable, Unicode text, UTF-8 text",
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787869594,
+      "lstat_size": 47,
+      "path": "/opt/homebrew/bin/grok",
+      "readlink": "../lib/node_modules/@xai-official/grok/bin/grok",
+      "realpath": "/opt/homebrew/lib/node_modules/@xai-official/grok/bin/grok",
+      "realpath_sha256": "13a2405556fe9e86108731a801771db1b9a742ef11e934ab2cb886f1089aeef0",
+      "realpath_size": 5672
+    }
+  },
+  "npm_dep_names": [
+    "@earendil-works/pi-coding-agent",
+    "@moonshot-ai/kimi-code",
+    "@sourcegraph/amp",
+    "@xai-official/grok",
+    "cline",
+    "npm",
+    "opencode-ai",
+    "t3"
+  ],
+  "npm_dep_versions": {
+    "@earendil-works/pi-coding-agent": "0.84.3",
+    "@moonshot-ai/kimi-code": "0.30.0",
+    "@sourcegraph/amp": "0.0.1784524244-g589322",
+    "@xai-official/grok": "1.0.5",
+    "cline": "3.0.60",
+    "npm": "11.17.0",
+    "opencode-ai": "1.18.9",
+    "t3": "0.0.35"
+  },
+  "npm_ls_exit": 0,
+  "path_lookup": {
+    "claude": "/opt/homebrew/bin/claude",
+    "cline": "/opt/homebrew/bin/cline",
+    "codex": "/opt/homebrew/bin/codex",
+    "cursor": null,
+    "cursor-agent": "/opt/homebrew/bin/cursor-agent",
+    "grok": "/opt/homebrew/bin/grok",
+    "grok-build": null,
+    "herdr": "/opt/homebrew/bin/herdr",
+    "opencode": "/opt/homebrew/bin/opencode",
+    "pi": "/opt/homebrew/bin/pi",
+    "t3": "/opt/homebrew/bin/t3",
+    "t3-code": null
+  },
+  "started_utc": "2026-08-27T22:34:02Z",
+  "versions": {
+    "claude": {
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "--version"
+      ],
+      "elapsed_s": 0.618,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 22,
+        "sha256": "6220c2a7dbd3dd819ca057957744532f271788bb2de7ba59d4bbbe6847d44fc2",
+        "utf8_preview": "2.1.231 (Claude Code)\n"
+      },
+      "timed_out": false
+    },
+    "cline": {
+      "argv": [
+        "/opt/homebrew/bin/cline",
+        "--version"
+      ],
+      "elapsed_s": 0.781,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 7,
+        "sha256": "f5f15202f18fd38a2a332fd2e44ee6e4fc2357a69b2db25580ccc242b2688a5e",
+        "utf8_preview": "3.0.60\n"
+      },
+      "timed_out": false
+    },
+    "codex": {
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "--version"
+      ],
+      "elapsed_s": 0.075,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 18,
+        "sha256": "22c3a470a09f98a30e23cb3eac0efb697a01d2ae8869f49660550ed599648961",
+        "utf8_preview": "codex-cli 0.150.0\n"
+      },
+      "timed_out": false
+    },
+    "cursor-agent-homebrew": {
+      "argv": [
+        "/opt/homebrew/bin/cursor-agent",
+        "--version"
+      ],
+      "elapsed_s": 0.218,
+      "exit": 1,
+      "stderr": {
+        "bytes": 65536,
+        "sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+        "utf8_preview": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};const m=\"CURSOR_AGENT_DISABLE_DEBUG_LOG\";let f=null,p=null,A=0,g=[],h=[];function y(e){return e.map((e=>{if(\"string\"==typeof e)return e;try{return JSON.stringify(e)}catch(t){return String(e)}})).join(\" \")}function C(e=new Date,t=process.pid){return A+=1,`session-${e.toISOString().replace(/[:.]/g,\"-\")}-${t}-${A}.log`}function v(){return(0,c.join)((0,o.tmpdir)(),`cursor-agent-logs-${function(){try{const{uid:e,username:t}=(0,o.userInfo)();if(e>=0)return String(e);if(t)return t.replace(/[^A-Za-z0-9._-]/g,\"_\")}catch(e){}return\"default\"}()}`)}function _(){return!!process.env[m]}function E(){return I().logFile}function w(e){return null!=e?e:\"disabled\"}function T(e){return d(this,arguments,void 0,(function*({directory:e,liveLogFile:t,now:n=new Date,keepNewest:r=50,maxAgeMs:s=6048e5}){try{const a=[];for(const t of yield(0,i.readdir)(e)){if(!t.startsWith(\"session-\")||!t.endsWith(\".log\"))continue;const n=(0,c.join)(e,t);try{a.push({path:n,mtimeMs:(yield(0,i.stat)(n)).mtimeMs})}catch(e){}}a.sort(((e,t)=>t.mtimeMs-e.mtimeMs));for(const[e,o]of a.entries()){if(o.path===t)continue;if(n.getTime()-o.mtimeMs>s||e>=r)try{yield(0,i.unlink)(o.path)}catch(e){}}}catch(e){}}))}function k(e){return{directory:v(),logFile:null,persistence:e,lineEmitter:new r.EventEmitter,append:()=>{},log:()=>{},close:()=>d(this,void 0,void 0,(function*(){}))}}function I(){if(p)return p;if(_())return p=k({kind:\"disabled\"}),p;try{p=function(){const e=v();(0,s.mkdirSync)(e,{recursive:!0,mode:448});const t=(0,c.join)(e,C());(0,s.closeSync)((0,s.openSync)(t,\"a\",384));const n=(0,s.createWriteStream)(t,{flags:\"a\",mode:384,encoding:\"utf8\"});n.on(\"error\",(()=>{}));const i=new r.EventEmitter;let a=!1;const l=e=>{const t=e.endsWith(\"\\n\")?e:`${e}\\n`;n.write(t),i.emit(\"line\",e)},u={directory:e,logFile:t,persistence:{kind:\"active\",logFile:t},lineEmitter:i,append:l,log:(...e)=>{l(`[${(new Date).toISOString()}] ${y(e)}`)},close:()=>d(this,void 0,void 0,(function*(){a||(a=!0,yield new Promise((e=>{n.end((()=>e()))})))}))};return T({directory:e,liveLogFile:t}),function(e,t){const n=(0,c.join)(e,\"latest.log\"),r=(0,c.join)(e,\"latest.txt\");if(\"win32\"!==(0,o.platform)()){try{(0,s.unlinkSync)(n)}catch(e){}try{(0,s.symlinkSync)(t,n);try{(0,s.unlinkSync)(r)}catch(e){}}catch(e){try{(0,s.writeFileSync)(r,`${t}\\n`,{encoding:\"utf8\",mode:384})}catch(e){}}}else try{(0,s.writeFileSync)(r,`${t}\\n`,{encoding:\"utf8\",mode:384})}catch(e){}}(e,t),l(`--- Cursor Agent Debug Session ${(new Date).toISOString()} ---`),l(JSON.stringify({event:\"debug-session-start\",directory:e,logFile:t,pid:process.pid,startTime:(new Date).toISOString()})),u}()}catch(e){p=k({kind:\"unavailable\"})}return g.length>0||(g=[{event:\"exit\",handler:()=>{L()}}],g.forEach((({event:e,handler:t})=>{process.once(e,t)}))),p}function S(){h.forEach((({event:e,handler:t})=>{process.off(e,t)})),h=[]}function b(){return d(this,void 0,void 0,(function*(){if(f)return f;const e=I(),t=(0,c.join)((0,o.tmpdir)(),\"cursor-agent-debug-\"),n=(0,s.mkdtempSync)(t),r=process.env.CURSOR_AGENT_DEBUG_PORT,i=r?Number(r):43111,p=(0,a.createServer)(((t,r)=>{try{if(!t.url)return r.statusCode=404,void r.end();if(\"/\"===t.url||t.url.startsWith(\"/index\"))return r.setHeader(\"Content-Type\",\"text/html; charset=utf-8\"),void r.end((A(),l));if(\"/log\"===t.url){if(r.setHeader(\"Content-Type\",\"text/plain; charset=utf-8\"),\"active\"!==e.persistence.kind)return void r.end(function(e){switch(e.kind){case\"disabled\":return`Debug logging is disabled by ${m}.\\n`;case\"unavailable\":return\"Debug log file is unavailable.\\n\"}}(e.persistence));try{r.end((0,s.readFileSync)(e.persistence.logFile,\"utf8\"))}catch(e){r.statusCode=500,r.end(String(e))}return}const i=new URL(t.url,A());if"
+      },
+      "stdout": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "timed_out": false
+    },
+    "grok": {
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "--version"
+      ],
+      "elapsed_s": 0.069,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 26,
+        "sha256": "0e600840edc731ab0a2370fb49ff7b499f128daab9c4971a0e39c58da205d959",
+        "utf8_preview": "grok 1.0.5 (5115b46bc909)\n"
+      },
+      "timed_out": false
+    },
+    "grok-build": {
+      "argv": [
+        "/opt/homebrew/bin/grok-build",
+        "--version"
+      ],
+      "skipped": "absent"
+    },
+    "herdr": {
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--version"
+      ],
+      "elapsed_s": 0.013,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 12,
+        "sha256": "9654e7f916941ff3f48a0b7bdf19110ce63a11880765fc8e362a94472bc948b3",
+        "utf8_preview": "herdr 0.8.2\n"
+      },
+      "timed_out": false
+    },
+    "opencode": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "--version"
+      ],
+      "elapsed_s": 0.249,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 7,
+        "sha256": "13d998dc1d8d8589fdf6090020f5e59ec9875126beda74ef6e81f6e9c638697c",
+        "utf8_preview": "1.18.9\n"
+      },
+      "timed_out": false
+    },
+    "pi": {
+      "argv": [
+        "/opt/homebrew/bin/pi",
+        "--version"
+      ],
+      "elapsed_s": 0.189,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 7,
+        "sha256": "e470244f5d207065cacf7314a910c7cff5fc8334840dc42426d62da3e661f580",
+        "utf8_preview": "0.84.3\n"
+      },
+      "timed_out": false
+    },
+    "t3": {
+      "argv": [
+        "/opt/homebrew/bin/t3",
+        "--version"
+      ],
+      "elapsed_s": 0.313,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview": ""
+      },
+      "stdout": {
+        "bytes": 11,
+        "sha256": "610a294a2246e84be6500cb811c83619559693dd1f5bf1cee6b54bc626be2ac8",
+        "utf8_preview": "t3 v0.0.35\n"
+      },
+      "timed_out": false
+    }
+  }
+}

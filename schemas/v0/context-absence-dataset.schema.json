@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/context-absence-dataset.schema.json",
+  "title": "Floati E1 Context Absence Dataset v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "source_commit",
+    "harnesses",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "dataset_id": {"const": "e1-context-absence-v1"},
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "harnesses": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/harness"}
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/absence"}
+    }
+  },
+  "$defs": {
+    "harness": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "absence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "access_class",
+        "state",
+        "receipt_path",
+        "receipt_sha256"
+      ],
+      "properties": {
+        "harness": {"$ref": "#/$defs/harness"},
+        "access_class": {"enum": ["A", "B", "C"]},
+        "state": {"const": "not_exposed"},
+        "receipt_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "receipt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

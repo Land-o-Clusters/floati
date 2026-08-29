@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "/opt/homebrew/bin/opencode",
+    "serve",
+    "--port",
+    "4098"
+  ],
+  "cycles": [
+    {
+      "bytes": 500,
+      "elapsed_s": 0.013,
+      "http_status": 200,
+      "i": 1
+    },
+    {
+      "bytes": 500,
+      "elapsed_s": 0.001,
+      "http_status": 200,
+      "i": 2
+    },
+    {
+      "bytes": 500,
+      "elapsed_s": 0.001,
+      "http_status": 200,
+      "i": 3
+    }
+  ],
+  "returncode": -15,
+  "server_stderr": "",
+  "server_stdout": "Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\nopencode server listening on http://127.0.0.1:4098\n",
+  "started_utc": "2026-08-28T02:23:43Z"
+}

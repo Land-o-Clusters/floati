@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/decision-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "repository", "decision_id", "scope", "statement", "status", "author_authority", "source_artifact_ids", "task_contract_id", "decided_by", "supersedes", "decision_digest"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^decision-record-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "decision_record"},
+    "repository": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9_-])?)?$", "not": {"pattern": "[\\r\\n]"}},
+    "decision_id": {"type": "string", "pattern": "^decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "scope": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"const": "repository"}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "path_prefix"], "properties": {"kind": {"const": "path_prefix"}, "path_prefix": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB\\uD800-\\uDFFF]+$", "not": {"pattern": "(?:^/|/$|//|\\\\|(?:^|/)(?:\\.|\\.\\.)(?:/|$))"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"const": "contract"}}}
+      ]
+    },
+    "statement": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB\\uD800-\\uDFFF]*$", "not": {"pattern": "[\\r\\n]"}},
+    "status": {"enum": ["proposed", "accepted", "rejected"]},
+    "author_authority": {"enum": ["operator", "architect", "worker"]},
+    "source_artifact_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {"type": "string", "pattern": "^run:run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          {"type": "string", "pattern": "^attempt:attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          {"type": "string", "pattern": "^contract:task-contract-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          {"type": "string", "pattern": "^receipt:(?:worker-receipt|acceptance-receipt)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          {"type": "string", "pattern": "^decision:decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          {"type": "string", "minLength": 46, "maxLength": 2048, "pattern": "^doc:[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB\\uD800-\\uDFFF]{1,1024}@(?:[0-9a-f]{40}|[0-9a-f]{64})$", "not": {"pattern": "(?:^doc:/|^doc:.*/@(?:[0-9a-f]{40}|[0-9a-f]{64})$|^doc:.*//|^doc:.*\\\\|(?:^doc:|/)(?:\\.|\\.\\.)(?:/|@))"}}
+        ]
+      }
+    },
+    "task_contract_id": {"type": ["string", "null"], "pattern": "^task-contract-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "decided_by": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB\\uD800-\\uDFFF]*$", "not": {"pattern": "[\\r\\n]"}},
+    "supersedes": {"type": ["string", "null"], "pattern": "^decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "decision_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {"kind": {"const": "contract"}}
+          }
+        },
+        "required": ["scope"]
+      },
+      "then": {
+        "properties": {
+          "task_contract_id": {"type": "string", "pattern": "^task-contract-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"enum": ["accepted", "rejected"]}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {"author_authority": {"enum": ["operator", "architect"]}}
+      }
+    }
+  ]
+}

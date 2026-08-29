@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/child-admitted-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "spawn_group_id",
+    "plan_amendment_id",
+    "parent_attempt_id",
+    "child_item_id",
+    "child_depth",
+    "task_contract_id",
+    "task_contract_digest",
+    "admission_digest",
+    "capability_ceiling",
+    "budget_allocation",
+    "workspace_policy",
+    "workspace",
+    "admitted_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^child-admitted-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "kind": {
+      "const": "child_admitted"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "spawn_group_id": {
+      "type": "string",
+      "pattern": "^spawn-group-created-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "plan_amendment_id": {
+      "type": "string",
+      "pattern": "^plan-amendment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_attempt_id": {
+      "type": "string",
+      "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "child_item_id": {
+      "type": "string",
+      "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "child_depth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "task_contract_id": {
+      "type": "string",
+      "pattern": "^task-contract-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "task_contract_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "admission_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "capability_ceiling": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/capability_set"
+    },
+    "budget_allocation": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"
+    },
+    "workspace_policy": {
+      "enum": [
+        "patch_only",
+        "isolated_worktree"
+      ]
+    },
+    "workspace": {
+      "type": "string",
+      "pattern": "^/private/tmp/floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "admitted_at_testimony": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    }
+  }
+}

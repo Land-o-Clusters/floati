@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/attempt-cancelled-before-start-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "run_id", "item_id", "attempt_id", "attempt_opened_id", "retry_scheduled_id", "fence_token", "cancel_scope_resolved_id", "capability_set_bound_id", "dispatch_decision_id", "reason_code", "cancelled_at_testimony"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^attempt-cancelled-before-start-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "kind": {"const": "attempt_cancelled_before_start"},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "attempt_opened_id": {"type": ["string", "null"], "pattern": "^attempt-opened-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "retry_scheduled_id": {"type": ["string", "null"], "pattern": "^retry-scheduled-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "fence_token": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "cancel_scope_resolved_id": {"type": "string", "pattern": "^cancel-scope-resolved-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "capability_set_bound_id": {"type": ["string", "null"], "pattern": "^capability-set-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "dispatch_decision_id": {"type": ["string", "null"], "pattern": "^run-dispatch-decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "reason_code": {"const": "cancelled_before_start"},
+    "cancelled_at_testimony": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}}
+  },
+  "oneOf": [
+    {"properties": {"attempt_opened_id": {"type": "string"}, "retry_scheduled_id": {"type": "null"}}},
+    {"properties": {"attempt_opened_id": {"type": "null"}, "retry_scheduled_id": {"type": "string"}}}
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "c7.2-candidate",
+  "kind": "c7_read_bundle_index",
+  "title": "Floati C7.2 Read Bundle",
+  "approvals": "excluded-c7.2",
+  "reader_upgrade": {
+    "highest_understood": true,
+    "unknown": "fail_closed"
+  },
+  "index_schema": {
+    "id": "https://landoclusters.com/floati/schemas/c7.2/c7-read-bundle.schema.json",
+    "version": "c7.2-candidate",
+    "file": "schemas/c7-read-bundle.schema.json"
+  },
+  "predecessor": {
+    "path": "bundle/c7.1/bundle-index.json",
+    "version": "c7.1-candidate",
+    "mutation": "forbidden"
+  },
+  "schema_catalog": "schema-catalog.json",
+  "families": [
+    {
+      "name": "run_truth",
+      "ledger": "raw/runs/events.jsonl",
+      "projection": "families/run-projection.json",
+      "causal_order": "physical_frame"
+    },
+    {
+      "name": "worker_receipts",
+      "ledger": "raw/receipts/workers.jsonl",
+      "projection": "raw_fallback_only",
+      "causal_order": "evidence_only_no_merge"
+    },
+    {
+      "name": "work_item_context",
+      "ledger": "raw/work/items.jsonl",
+      "projection": "raw_fallback_only",
+      "causal_order": "physical_frame_independent"
+    },
+    {
+      "name": "decision_register",
+      "ledger_template": "raw/repositories/<repository-coordinate>/decisions.jsonl",
+      "projection_pointer": "/families/decisions",
+      "causal_order": "physical_frame_independent"
+    },
+    {
+      "name": "registry_lineage",
+      "ledger": "raw/registry/entries.jsonl",
+      "projection_pointer": "/families/supervisor_orphans",
+      "causal_order": "physical_frame_independent"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+⊙ FLIGHT RECORDER CINEMA
+~ ≈ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+HARBOR MAP // SPEED 4x
+╭─ ● PIER beta ──────────
+│  x ▤ VESSEL lane-b ⚑  FAULT E_DENIED
+╰──────────────────────────────────────────
+╭─ ● PIER alpha ──────────
+│    ▤ VESSEL lane-a ⚑
+╰──────────────────────────────────────────
+● ROUTE // lane-b [beta] ─────▶ lane-a [alpha]
+TIMELINE ├◆──◆──x──○┤
+  3/4 // 1500ms
+EVENT STREAM ────────────────
+◆ +0000.000s  CLAIM    WORK    lane-a work-1 claim
+│ +0000.500s  TURN     WORKER  lane-b work-1 drive
+! +0001.000s  DENIED   DENIAL  lane-b work-1 E_DENIED

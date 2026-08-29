@@ -1,0 +1,134 @@
+{
+  "applications_t3_name_hits": [
+    "T3 Code (Nightly).app"
+  ],
+  "brew_cask_count": 7,
+  "brew_cask_exit": 0,
+  "brew_cask_t3_hits": [],
+  "brew_formula_count": 70,
+  "brew_formula_exit": 0,
+  "brew_formula_t3_hits": [],
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "elapsed_s": 0.011,
+    "exit": 0,
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "utf8_preview_200": ""
+    },
+    "stdout": {
+      "bytes": 13,
+      "sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+      "utf8_preview_200": "Python 3.9.6\n"
+    },
+    "timed_out": false
+  },
+  "fixed_paths": [
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3-code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3_code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3code-cli"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/t3-cli"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3-code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3_code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3code-cli"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/usr/local/bin/t3-cli"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3-code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3_code"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3code-cli"
+    },
+    {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/t3-cli"
+    }
+  ],
+  "npm_dep_count": 4,
+  "npm_ls_exit": 0,
+  "npm_t3_hits": [],
+  "path_lookup": {
+    "t3": null,
+    "t3-cli": null,
+    "t3-code": null,
+    "t3_code": null,
+    "t3code": null,
+    "t3code-cli": null
+  },
+  "started_utc": "2026-08-27T22:21:53Z"
+}

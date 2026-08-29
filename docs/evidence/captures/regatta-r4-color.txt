@@ -1,0 +1,18 @@
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ APPROVAL REQUIRED                                                                                │
+│                                                                                                  │
+│ EXACT RECORD UNDER DECISION                                                                      │
+│ {                                                                                                │
+│   "effect_type": "git_remote_ref_update",                                                        │
+│   "id": "effect-intent-demo",                                                                    │
+│   "kind": "effect_intent",                                                                       │
+│   "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",          │
+│   "target": "refs/heads/main"                                                                    │
+│ }                                                                                                │
+│                                                                                                  │
+│ [38;5;208m> 1[0m  Refuse once                                                                                 │
+│   2  Allow once                                                                                  │
+│   3  Allow for this session                                                                      │
+│                                                                                                  │
+│ Esc refuse · digits/arrows move · Enter commit                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘

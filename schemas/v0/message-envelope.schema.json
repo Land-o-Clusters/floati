@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/message-envelope.schema.json",
+  "title": "Floati Message Envelope v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "sender",
+    "recipient",
+    "repo",
+    "sha",
+    "doc",
+    "note",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "message_envelope"},
+    "sender": {"type": "string", "minLength": 1, "maxLength": 64},
+    "recipient": {"type": "string", "minLength": 1, "maxLength": 64},
+    "repo": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?$"
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "doc": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/]+(?:/[^/]+)*$"
+    },
+    "note": {"type": "string", "maxLength": 1024},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+    "reply_to": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "worker_session_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "attempt_binding": {
+      "oneOf": [
+        {"const": "absent_legacy"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["attempt_id", "claim_id", "lease_id", "worker_session_id"],
+          "properties": {
+            "attempt_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "claim_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "lease_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "worker_session_id": {"type": "string", "minLength": 1, "maxLength": 512}
+          }
+        }
+      ]
+    }
+  }
+}

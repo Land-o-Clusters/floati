@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/harbor-chart-topology.schema.json",
+  "title": "Floati Harbor Chart Topology v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "topology_version", "tenant_id", "nodes", "workers", "edges", "bridge_stubs", "unrecognized_kinds"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "topology_version": {"const": "0"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "nodes": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "role", "state"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "kind": {"const": "node"},
+          "role": {"type": "string", "minLength": 1, "maxLength": 64},
+          "state": {"enum": ["active", "retired"]}
+        }
+      }
+    },
+    "workers": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "node_id", "work_item_id", "adapter", "state", "outcome_code"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^worker-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "kind": {"const": "worker"},
+          "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "adapter": {"type": "string", "minLength": 1, "maxLength": 128},
+          "state": {"enum": ["claim", "driving", "complete", "degraded"]},
+          "outcome_code": {"type": ["string", "null"], "maxLength": 128}
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "maxItems": 6400000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "source", "target", "requires"],
+        "properties": {
+          "kind": {"enum": ["work_dependency", "run_dependency"]},
+          "source": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "target": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "requires": {"enum": ["produced", "verified", "accepted"]},
+          "failure_policy": {"enum": ["fail_run", "skip_dependent", "continue"]}
+        }
+      }
+    },
+    "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unrecognized_kind"}},
+    "bridge_stubs": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "bridge_id", "peer_tenant_id", "state"],
+        "properties": {
+          "kind": {"const": "bridge_stub"},
+          "bridge_id": {"type": "string", "pattern": "^bridge-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "peer_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "state": {"enum": ["active", "revoked"]}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "unrecognized_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "count", "first_id"],
+      "properties": {
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$"},
+        "count": {"type": "integer", "minimum": 1},
+        "first_id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    }
+  }
+}

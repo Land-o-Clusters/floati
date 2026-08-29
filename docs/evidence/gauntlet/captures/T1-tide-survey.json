@@ -1,0 +1,2424 @@
+{
+  "agy_copies": {
+    "brew_exists": false,
+    "local_exists": true,
+    "local_version": {
+      "absent": false,
+      "argv": [
+        "~/.local/bin/agy",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 7,
+      "stdout_head": "1.1.22\n",
+      "stdout_sha256": "9b3b81e5314efb5d2f9c0897cfd1621c3aaa2b83e900ad599d07a28b314b5b80",
+      "timed_out": false
+    },
+    "path_agy": "~/.local/bin/agy"
+  },
+  "control": {
+    "absent": false,
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "auth_prompt_suspected": false,
+    "exit": 0,
+    "help_hits": [],
+    "stderr_bytes": 0,
+    "stderr_head": "",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 13,
+    "stdout_head": "Python 3.9.6\n",
+    "stdout_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+    "timed_out": false
+  },
+  "declared_dir_listings": [
+    {
+      "count": 102,
+      "names": [
+        "..codex-global-state.json.tmp-1784406901004-725ed8c8-a842-4fae-96c6-4a4af9ee90d2",
+        "..codex-global-state.json.tmp-1784690564194-ba6878a2-e348-4842-b40e-455114369af9",
+        "..codex-global-state.json.tmp-1784838274104-f7adbcba-c091-45a7-8ab8-349df6685160",
+        "..codex-global-state.json.tmp-1784925820843-a84347bf-42d6-4dd8-bf0a-80afedc4a5ac",
+        "..codex-global-state.json.tmp-1785359699223-2bb5dfdf-185a-4af0-9e82-3ab90d03d3ba",
+        "..codex-global-state.json.tmp-1785445260216-62b66cd3-7154-43ad-8575-bf3dcd5e70f7",
+        "..codex-global-state.json.tmp-1785591291753-d8562a52-702a-487d-bc17-4058f4151a95",
+        "..codex-global-state.json.tmp-1785895496112-c29bf1ed-d3bb-48d3-a473-b4f8f5f92c4f",
+        "..codex-global-state.json.tmp-1785965476539-a6492ede-ba97-4984-95c9-86eaacfdc02c",
+        "..codex-global-state.json.tmp-1786118432061-abad2a59-58a7-4a3e-9d00-4c469b67e124",
+        ".codex-global-state.json",
+        ".codex-global-state.json.bak",
+        ".personality_migration",
+        ".sandbox_migration",
+        ".tmp",
+        "AGENTS.md",
+        "CODEX_BUS_HOOK_CONTROL.md",
+        "HOOK_DISABLED_sol.md",
+        "HOOK_DISABLED_sol2.md",
+        "approval-router",
+        "archived_sessions",
+        "attachments",
+        "auth.json",
+        "automations",
+        "backups",
+        "bin",
+        "browser",
+        "cache",
+        "chrome-native-hosts-v2.json",
+        "codex_bus_target",
+        "codex_bus_target.backend-backup-20260709",
+        "codex_bus_target.bak.5.5",
+        "codex_bus_targets.json",
+        "codex_bus_targets.json.bak-2026-07-17",
+        "codex_bus_targets.json.bak-20260729T192804Z",
+        "codex_bus_targets.json.bak.5.5",
+        "codex_bus_targets.json.pre-detach-20260719-2210",
+        "computer-use",
+        "config-backup-approvals-2026-07-22",
+        "config-backup-custom-approvals-2026-08-07",
+        "config.toml",
+        "config.toml.before-lane-bus-probe.20260808T051229Z.bak",
+        "config.toml.before-remaining-lane-rollout.20260808T120733Z.bak",
+        "dictation-history",
+        "disabled-hooks",
+        "external_agent_session_imports.json",
+        "fleet-bus-profiles.json",
+        "fleet-bus-profiles.json.bak-2026-08-19",
+        "fleet-bus-profiles.json.bak-20260827-prefloati",
+        "floati-wake"
+      ],
+      "path": "~/.codex",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "count": 22,
+      "names": [
+        ".last-cleanup",
+        "backups",
+        "cache",
+        "commands",
+        "downloads",
+        "history.jsonl",
+        "hooks",
+        "ide",
+        "mcp-needs-auth-cache.json",
+        "plugins",
+        "projects",
+        "security",
+        "session-env",
+        "sessions",
+        "settings.json",
+        "settings.json.backup",
+        "settings.json.backup.2026-07-29T01-57-01Z",
+        "shell-snapshots",
+        "tasks",
+        "teams",
+        "telemetry",
+        "uploads"
+      ],
+      "path": "~/.claude",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 27,
+      "names": [
+        ".gitignore",
+        "acp-sessions",
+        "agent-cli-state.json",
+        "agents",
+        "ai-tracking",
+        "argv.json",
+        "cli-config.json",
+        "cli-config.json.26802.1020e6e4-b718-4b5f-9463-a0cb94f20ee1.tmp",
+        "cli-config.json.bak-nongrok-fix-20260726T100207",
+        "commands",
+        "extensions",
+        "hooks",
+        "hooks.json",
+        "hooks.json.backup",
+        "hooks.json.backup.2026-07-29T01-57-01Z",
+        "hooks.json.backup.20260822T040931Z",
+        "ide_state.json",
+        "permissions.json",
+        "permissions.json.bak-20260720-105058",
+        "permissions.json.bak-20260726-cards",
+        "plugins",
+        "projects",
+        "rules",
+        "sandbox-policies",
+        "sandbox.json",
+        "skills-cursor",
+        "statsig-cache.json"
+      ],
+      "path": "~/.cursor",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 6,
+      "names": [
+        ".gitignore",
+        "node_modules",
+        "opencode.jsonc",
+        "package-lock.json",
+        "package.json",
+        "plugins"
+      ],
+      "path": "~/.config/opencode",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 9,
+      "names": [
+        "auth.json",
+        "log",
+        "opencode.db",
+        "opencode.db-shm",
+        "opencode.db-wal",
+        "repos",
+        "snapshot",
+        "storage",
+        "tool-output"
+      ],
+      "path": "~/.local/share/opencode",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 1,
+      "names": [
+        "data"
+      ],
+      "path": "~/.cline",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 15,
+      "names": [
+        ".config-init.lock",
+        ".metadata_version",
+        "README.md",
+        "active_sessions.json",
+        "active_sessions.lock",
+        "agent_id",
+        "bin",
+        "config.toml",
+        "docs",
+        "logs",
+        "managed_config.lock",
+        "memtrace",
+        "relocations",
+        "sessions",
+        "version.json"
+      ],
+      "path": "~/.grok",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 1,
+      "names": [
+        "agent"
+      ],
+      "path": "~/.pi",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 6,
+      "names": [
+        ".plugins.lock",
+        "herdr-client.log",
+        "herdr-client.sock",
+        "herdr-server.log",
+        "herdr.sock",
+        "session.json"
+      ],
+      "path": "~/.config/herdr",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 4,
+      "names": [
+        "cli",
+        "config.json",
+        "config.json.backup",
+        "config.json.backup.2026-07-29T01-57-01Z"
+      ],
+      "path": "~/.config/devin",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 48,
+      "names": [
+        "Cache",
+        "Code Cache",
+        "Cookies",
+        "Cookies-journal",
+        "Crashpad",
+        "DIPS",
+        "DIPS-wal",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "GPUCache",
+        "IndexedDB",
+        "InterestGroups",
+        "Local State",
+        "Local Storage",
+        "Network Persistent State",
+        "Partitions",
+        "Preferences",
+        "Session Storage",
+        "Shared Dictionary",
+        "SharedStorage",
+        "SharedStorage-wal",
+        "TransportSecurity",
+        "Trust Tokens",
+        "Trust Tokens-journal",
+        "VideoDecodeStats",
+        "WebStorage",
+        "ant-device-registry.json",
+        "ant-did",
+        "blob_storage",
+        "bridge-state.json",
+        "bridge-state.json.bak-20260717",
+        "buddy-tokens.json",
+        "claude-code",
+        "claude-code-sessions",
+        "claude-code-vm",
+        "claude_desktop_config.json",
+        "config.json",
+        "cowork-enabled-cli-ops.json",
+        "extensions-blocklist.json",
+        "fcache",
+        "git-worktrees.json",
+        "local-agent-mode-sessions",
+        "mcp-user-tool-toggles.json",
+        "sentry",
+        "shared_proto_db",
+        "vm-support-probe.json",
+        "vm_bundles",
+        "window-state.json"
+      ],
+      "path": "~/Library/Application Support/Claude",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 42,
+      "names": [
+        "ActorSafetyLists",
+        "AmountExtractionHeuristicRegexes",
+        "BrowserMetrics-spare.pma",
+        "CaptchaProviders",
+        "CertificateRevocation",
+        "ChromeFeatureState",
+        "Crashpad",
+        "Crowd Deny",
+        "Default",
+        "FileTypePolicies",
+        "FirstPartySetsPreloaded",
+        "GPUPersistentCache",
+        "GraphiteDawnCache",
+        "Last Version",
+        "Local State",
+        "MEIPreload",
+        "OnDeviceHeadSuggestModel",
+        "OptimizationHints",
+        "OriginTrials",
+        "PKIMetadata",
+        "PrivacySandboxAttestationsPreloaded",
+        "RunningChromeVersion",
+        "SSLErrorAssistant",
+        "Safe Browsing",
+        "SafetyTips",
+        "SingletonCookie",
+        "SingletonLock",
+        "SingletonSocket",
+        "Subresource Filter",
+        "TrustTokenKeyCommitments",
+        "WasmTtsEngine",
+        "WidevineCdm",
+        "ZxcvbnData",
+        "browser-sidebar-page-states.json",
+        "codex-browser-app",
+        "component_crx_cache",
+        "extensions_crx_cache",
+        "first_party_sets.db",
+        "first_party_sets.db-journal",
+        "owl-feature-bootstrap-cache.json",
+        "segmentation_platform",
+        "sentry"
+      ],
+      "path": "~/Library/Application Support/Codex",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 43,
+      "names": [
+        "3.17-main.sock",
+        "Backups",
+        "Cache",
+        "CachedConfigurations",
+        "CachedData",
+        "CachedExtensionVSIXs",
+        "CachedProfilesData",
+        "Code Cache",
+        "Cookies",
+        "Cookies-journal",
+        "Crashpad",
+        "DIPS",
+        "DIPS-wal",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "GPUCache",
+        "IndexedDB",
+        "Local Storage",
+        "Network Persistent State",
+        "Partitions",
+        "Preferences",
+        "Service Worker",
+        "Session Storage",
+        "Shared Dictionary",
+        "SharedStorage",
+        "SharedStorage-wal",
+        "TransportSecurity",
+        "Trust Tokens",
+        "Trust Tokens-journal",
+        "User",
+        "WebStorage",
+        "Workspaces",
+        "blob_storage",
+        "code.lock",
+        "debugging-data",
+        "glassMultiRootWorkspaces",
+        "languagepacks.json",
+        "logs",
+        "machineid",
+        "process-monitor",
+        "sentry",
+        "snapshots",
+        "update-supervisor"
+      ],
+      "path": "~/Library/Application Support/Cursor",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 26,
+      "names": [
+        ".updaterId",
+        "Cache",
+        "Code Cache",
+        "Cookies",
+        "Cookies-journal",
+        "DIPS",
+        "DIPS-wal",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "DevToolsActivePort",
+        "GPUCache",
+        "Local Storage",
+        "Network Persistent State",
+        "Preferences",
+        "Session Storage",
+        "Shared Dictionary",
+        "SharedStorage",
+        "SharedStorage-wal",
+        "SingletonCookie",
+        "SingletonLock",
+        "SingletonSocket",
+        "Trust Tokens",
+        "Trust Tokens-journal",
+        "app_storage.json",
+        "bin",
+        "blob_storage"
+      ],
+      "path": "~/Library/Application Support/Antigravity",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 23,
+      "names": [
+        ".updaterId",
+        "Cache",
+        "Code Cache",
+        "Cookies",
+        "Cookies-journal",
+        "DIPS",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "GPUCache",
+        "IndexedDB",
+        "Local State",
+        "Local Storage",
+        "Network Persistent State",
+        "Partitions",
+        "Preferences",
+        "Session Storage",
+        "Shared Dictionary",
+        "SharedStorage",
+        "TransportSecurity",
+        "Trust Tokens",
+        "Trust Tokens-journal",
+        "WebStorage",
+        "blob_storage"
+      ],
+      "path": "~/Library/Application Support/t3code",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "count": 1,
+      "names": [
+        "44b70300-ddc4-4869-a4ce-a0e15d2e12f5"
+      ],
+      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "present": true,
+      "truncated": false
+    }
+  ],
+  "declared_dir_presence": [
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.codex",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.claude",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.cursor",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/opencode",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.local/share/opencode",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.cline",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.grok",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.pi",
+      "size": null
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/pi"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/herdr",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/devin",
+      "size": null
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/antigravity"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.agy"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Claude",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Codex",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Cursor",
+      "size": null
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/OpenCode"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Antigravity",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/t3code",
+      "size": null
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/T3 Code"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Grok"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "size": null
+    }
+  ],
+  "declared_dir_trees": [
+    {
+      "entries": [
+        "..codex-global-state.json.tmp-1784406901004-725ed8c8-a842-4fae-96c6-4a4af9ee90d2",
+        "..codex-global-state.json.tmp-1784690564194-ba6878a2-e348-4842-b40e-455114369af9",
+        "..codex-global-state.json.tmp-1784838274104-f7adbcba-c091-45a7-8ab8-349df6685160",
+        "..codex-global-state.json.tmp-1784925820843-a84347bf-42d6-4dd8-bf0a-80afedc4a5ac",
+        "..codex-global-state.json.tmp-1785359699223-2bb5dfdf-185a-4af0-9e82-3ab90d03d3ba",
+        "..codex-global-state.json.tmp-1785445260216-62b66cd3-7154-43ad-8575-bf3dcd5e70f7",
+        "..codex-global-state.json.tmp-1785591291753-d8562a52-702a-487d-bc17-4058f4151a95",
+        "..codex-global-state.json.tmp-1785895496112-c29bf1ed-d3bb-48d3-a473-b4f8f5f92c4f",
+        "..codex-global-state.json.tmp-1785965476539-a6492ede-ba97-4984-95c9-86eaacfdc02c",
+        "..codex-global-state.json.tmp-1786118432061-abad2a59-58a7-4a3e-9d00-4c469b67e124",
+        ".codex-global-state.json",
+        ".codex-global-state.json.bak",
+        ".personality_migration",
+        ".sandbox_migration",
+        ".tmp/",
+        ".tmp/bundled-marketplaces/",
+        ".tmp/bundled-marketplaces/openai-bundled/",
+        ".tmp/marketplaces/",
+        ".tmp/plugins/",
+        ".tmp/plugins/.agents/",
+        ".tmp/plugins/.git/",
+        ".tmp/plugins/.gitignore",
+        ".tmp/plugins/README.md",
+        ".tmp/plugins/plugins/",
+        ".tmp/plugins-clone-qMXXnz/",
+        ".tmp/plugins-clone-qMXXnz/.agents/",
+        ".tmp/plugins-clone-qMXXnz/.git/",
+        ".tmp/plugins-clone-qMXXnz/.gitignore",
+        ".tmp/plugins-clone-qMXXnz/README.md",
+        ".tmp/plugins-clone-qMXXnz/plugins/",
+        ".tmp/plugins.sha",
+        ".tmp/plugins.sync.lock",
+        "AGENTS.md",
+        "CODEX_BUS_HOOK_CONTROL.md",
+        "HOOK_DISABLED_sol.md"
+      ],
+      "path": "~/.codex",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        ".last-cleanup",
+        "backups/",
+        "backups/.claude.json.backup.1787886643669",
+        "backups/.claude.json.backup.1787886715950",
+        "backups/.claude.json.backup.1787886786195",
+        "backups/.claude.json.backup.1787886848629",
+        "backups/.claude.json.backup.1787886989039",
+        "cache/",
+        "cache/changelog.md",
+        "cache/my-closed-issues.json",
+        "commands/",
+        "commands/boot-backend-consultant.md",
+        "commands/boot-cis.md",
+        "commands/boot-ghops.md",
+        "commands/boot-ohe.md",
+        "commands/boot-puddle-architect.md",
+        "commands/boot-sre.md",
+        "commands/boot-web-consultant.md",
+        "commands/prep-clear-backend-consultant.md",
+        "commands/prep-clear-cis.md",
+        "commands/prep-clear-ghops.md",
+        "commands/prep-clear-ohe.md",
+        "commands/prep-clear-puddle-architect.md",
+        "commands/prep-clear-sre.md",
+        "commands/prep-clear-web-consultant.md",
+        "downloads/",
+        "history.jsonl",
+        "hooks/",
+        "hooks/architect_watchers_reminder.sh",
+        "ide/",
+        "mcp-needs-auth-cache.json",
+        "plugins/",
+        "plugins/.last_inuse_sweep",
+        "plugins/blocklist.json",
+        "plugins/cache/",
+        "projects/"
+      ],
+      "path": "~/.claude",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        ".gitignore",
+        "acp-sessions/",
+        "acp-sessions/17f910c6-3f28-47b6-867f-b0028ad2db00/",
+        "acp-sessions/17f910c6-3f28-47b6-867f-b0028ad2db00/meta.json",
+        "acp-sessions/48836c88-4d1d-4dc9-85b7-54ee5874530c/",
+        "acp-sessions/48836c88-4d1d-4dc9-85b7-54ee5874530c/meta.json",
+        "acp-sessions/529f6a3b-b342-43f5-8fef-56a6108987ce/",
+        "acp-sessions/529f6a3b-b342-43f5-8fef-56a6108987ce/meta.json",
+        "acp-sessions/5cc37d66-1ef9-4572-952a-ab82a3bfdcb0/",
+        "acp-sessions/5cc37d66-1ef9-4572-952a-ab82a3bfdcb0/meta.json",
+        "acp-sessions/723fce81-06fe-4751-b876-59d1e10f5aab/",
+        "acp-sessions/723fce81-06fe-4751-b876-59d1e10f5aab/meta.json",
+        "acp-sessions/89b930ea-ce1d-4dfb-8b2f-921979b3d9de/",
+        "acp-sessions/89b930ea-ce1d-4dfb-8b2f-921979b3d9de/meta.json",
+        "acp-sessions/8b290afb-2d7a-4ec9-bde1-73dbab9b4d70/",
+        "acp-sessions/8b290afb-2d7a-4ec9-bde1-73dbab9b4d70/meta.json",
+        "acp-sessions/c4e2ec4a-bb8c-4f43-a02d-0bef967eed29/",
+        "acp-sessions/c4e2ec4a-bb8c-4f43-a02d-0bef967eed29/meta.json",
+        "acp-sessions/ca8514ce-49b1-4bb9-9ceb-5b4566e55003/",
+        "acp-sessions/ca8514ce-49b1-4bb9-9ceb-5b4566e55003/meta.json",
+        "acp-sessions/ce4a8114-19a8-4c8b-b709-879199d77e4f/",
+        "acp-sessions/ce4a8114-19a8-4c8b-b709-879199d77e4f/meta.json",
+        "acp-sessions/d000133a-6682-495a-9bbd-3fb2ab3fcea2/",
+        "acp-sessions/d000133a-6682-495a-9bbd-3fb2ab3fcea2/meta.json",
+        "acp-sessions/deb6b027-c00c-439d-98a9-773423e50271/",
+        "acp-sessions/deb6b027-c00c-439d-98a9-773423e50271/meta.json",
+        "acp-sessions/e25d6d2c-53a2-4341-8829-2cdce5b3a8bf/",
+        "acp-sessions/e25d6d2c-53a2-4341-8829-2cdce5b3a8bf/meta.json",
+        "acp-sessions/f4dc52f0-037b-4313-8aae-f3ed4de01e8b/",
+        "acp-sessions/f4dc52f0-037b-4313-8aae-f3ed4de01e8b/meta.json",
+        "acp-sessions/fa21ee9f-1c9c-46be-ab3f-8354f2a676a6/",
+        "acp-sessions/fa21ee9f-1c9c-46be-ab3f-8354f2a676a6/meta.json",
+        "agent-cli-state.json",
+        "agents/",
+        "ai-tracking/"
+      ],
+      "path": "~/.cursor",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        ".gitignore",
+        "node_modules/",
+        "node_modules/.bin/",
+        "node_modules/.bin/download-msgpackr-prebuilds",
+        "node_modules/.bin/node-gyp-build-optional-packages",
+        "node_modules/.bin/node-gyp-build-optional-packages-optional",
+        "node_modules/.bin/node-gyp-build-optional-packages-test",
+        "node_modules/.bin/node-which",
+        "node_modules/.bin/uuid",
+        "node_modules/.bin/yaml",
+        "node_modules/.package-lock.json",
+        "node_modules/@ai-sdk/",
+        "node_modules/@ai-sdk/provider/",
+        "node_modules/@msgpackr-extract/",
+        "node_modules/@msgpackr-extract/msgpackr-extract-darwin-arm64/",
+        "node_modules/@opencode-ai/",
+        "node_modules/@opencode-ai/plugin/",
+        "node_modules/@opencode-ai/sdk/",
+        "node_modules/@standard-schema/",
+        "node_modules/@standard-schema/spec/",
+        "node_modules/cross-spawn/",
+        "node_modules/cross-spawn/LICENSE",
+        "node_modules/cross-spawn/README.md",
+        "node_modules/cross-spawn/index.js",
+        "node_modules/cross-spawn/lib/",
+        "node_modules/cross-spawn/package.json",
+        "node_modules/detect-libc/",
+        "node_modules/detect-libc/LICENSE",
+        "node_modules/detect-libc/README.md",
+        "node_modules/detect-libc/index.d.ts",
+        "node_modules/detect-libc/lib/",
+        "node_modules/detect-libc/package.json",
+        "node_modules/effect/",
+        "node_modules/effect/LICENSE",
+        "node_modules/effect/README.md",
+        "node_modules/fast-check/",
+        "opencode.jsonc"
+      ],
+      "path": "~/.config/opencode",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        "auth.json",
+        "log/",
+        "log/opencode.log",
+        "opencode.db",
+        "opencode.db-shm",
+        "opencode.db-wal",
+        "repos/",
+        "snapshot/",
+        "snapshot/1eb01120dbd5eb8b42431687adf3c1fbccc48c0e/",
+        "snapshot/1eb01120dbd5eb8b42431687adf3c1fbccc48c0e/24cc48e4071bc5a6a66818ed134bbf8e4736c0e2/",
+        "snapshot/1eb01120dbd5eb8b42431687adf3c1fbccc48c0e/4c4d544ca69c58c84c8566c45c929e41b865f090/",
+        "snapshot/5698a2dfe0546fb43ebc7b7894defd1fb8c07c69/",
+        "snapshot/5698a2dfe0546fb43ebc7b7894defd1fb8c07c69/38a1c2119c0555946d2f1dfce5e1e0e53b2f9aa4/",
+        "snapshot/5698a2dfe0546fb43ebc7b7894defd1fb8c07c69/9dfd2224b29689f99e6c0eec13d6e0883319f201/",
+        "snapshot/5698a2dfe0546fb43ebc7b7894defd1fb8c07c69/afe5ca22f21150005ca460475e8ab92a7bc1422d/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/24cc48e4071bc5a6a66818ed134bbf8e4736c0e2/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/66427f4944ef9a238eaafefe9f0314704b78436b/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/7a41d74647a67061b63939a16ba5ac6c5a0adf7f/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/7d8df468be929bc39664dd604c39be0ac572049d/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/84b3ed6bbe5acb7a03f26d6ff7058e8a6485217b/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/e1fea21848dd8d4f040a5aea6112db03c5e04320/",
+        "snapshot/59e720f8ba7513296d50b062ff9e7ae17b4a15f3/f9a3e0cc8885ac000afbef51d4b56168fa86ce5c/",
+        "snapshot/8b43fefaeeed1c631f8139d23950352787989246/",
+        "snapshot/8b43fefaeeed1c631f8139d23950352787989246/987f496feb9059ff928f472a8f23d87673e54a75/",
+        "snapshot/8b43fefaeeed1c631f8139d23950352787989246/a004a0e5077826604347e02f033a1ebd920b97f1/",
+        "snapshot/global/",
+        "snapshot/global/2db6e5a495239fe07ceb7e0874f038841300b45d/",
+        "storage/",
+        "storage/migration",
+        "storage/session_diff/",
+        "storage/session_diff/ses_fdaf21501ffey7n6m18hor86sD.json",
+        "tool-output/",
+        "tool-output/tool_024f3a964001jIpSMHZL4LULxs",
+        "tool-output/tool_0252d3e17001fyqu0Qnql1w712"
+      ],
+      "path": "~/.local/share/opencode",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        "data/",
+        "data/cache/",
+        "data/cache/feature-flags.json",
+        "data/logs/",
+        "data/logs/cline.log",
+        "data/settings/",
+        "data/settings/providers.json"
+      ],
+      "path": "~/.cline",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "entries": [
+        ".config-init.lock",
+        ".metadata_version",
+        "README.md",
+        "active_sessions.json",
+        "active_sessions.lock",
+        "agent_id",
+        "bin/",
+        "bin/grok",
+        "bin/grok-1.0.5",
+        "config.toml",
+        "docs/",
+        "docs/user-guide/",
+        "docs/user-guide/01-getting-started.md",
+        "docs/user-guide/02-authentication.md",
+        "docs/user-guide/03-keyboard-shortcuts.md",
+        "docs/user-guide/04-slash-commands.md",
+        "docs/user-guide/05-configuration.md",
+        "docs/user-guide/06-theming.md",
+        "docs/user-guide/07-mcp-servers.md",
+        "docs/user-guide/08-skills.md",
+        "docs/user-guide/09-plugins.md",
+        "docs/user-guide/10-hooks.md",
+        "docs/user-guide/11-custom-models.md",
+        "docs/user-guide/12-project-rules.md",
+        "docs/user-guide/13-memory.md",
+        "docs/user-guide/14-headless-mode.md",
+        "docs/user-guide/15-agent-mode.md",
+        "docs/user-guide/16-subagents.md",
+        "docs/user-guide/17-sessions.md",
+        "docs/user-guide/18-sandbox.md",
+        "docs/user-guide/19-plan-mode.md",
+        "docs/user-guide/20-background-tasks.md",
+        "docs/user-guide/21-terminal-support.md",
+        "docs/user-guide/22-permissions-and-safety.md",
+        "docs/user-guide/23-dashboard.md",
+        "logs/"
+      ],
+      "path": "~/.grok",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        "agent/",
+        "agent/auth.json",
+        "agent/models-store.json",
+        "agent/models.json"
+      ],
+      "path": "~/.pi",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "path": "~/.config/pi",
+      "present": false
+    },
+    {
+      "entries": [
+        ".plugins.lock",
+        "herdr-client.log",
+        "herdr-client.sock",
+        "herdr-server.log",
+        "herdr.sock",
+        "session.json"
+      ],
+      "path": "~/.config/herdr",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "entries": [
+        "cli/",
+        "config.json",
+        "config.json.backup",
+        "config.json.backup.2026-07-29T01-57-01Z"
+      ],
+      "path": "~/.config/devin",
+      "present": true,
+      "truncated": false
+    },
+    {
+      "path": "~/.config/antigravity",
+      "present": false
+    },
+    {
+      "path": "~/.agy",
+      "present": false
+    },
+    {
+      "entries": [
+        "Cache/",
+        "Cache/Cache_Data/",
+        "Cache/Cache_Data/00029577e2393192_0",
+        "Cache/Cache_Data/0004007f52bc6a70_0",
+        "Cache/Cache_Data/000505eb03c0ec9c_0",
+        "Cache/Cache_Data/0014c93792b725f6_0",
+        "Cache/Cache_Data/0017f7afe9e755c7_0",
+        "Cache/Cache_Data/001b47e9f3b4d264_0",
+        "Cache/Cache_Data/001d91fbda98b315_0",
+        "Cache/Cache_Data/002357259ad88bf9_0",
+        "Cache/Cache_Data/002be54103ebe0fb_0",
+        "Cache/Cache_Data/002d1665cec900b2_0",
+        "Cache/Cache_Data/002e67c2fef93076_0",
+        "Cache/Cache_Data/0030e37abbbe7652_0",
+        "Cache/Cache_Data/003342c7e67caed0_0",
+        "Cache/Cache_Data/0039d4089543737b_0",
+        "Cache/Cache_Data/003f31ac7aee6cc2_0",
+        "Cache/Cache_Data/0040303678b1c59c_0",
+        "Cache/Cache_Data/0045031adf816402_0",
+        "Cache/Cache_Data/004803a2d7606fdc_0",
+        "Cache/Cache_Data/0049ffb32ea9f1ad_0",
+        "Cache/Cache_Data/005390f545228bb8_0",
+        "Cache/Cache_Data/00578ed4726077a7_0",
+        "Cache/Cache_Data/0059dcbae1a2bdf8_0",
+        "Cache/Cache_Data/0059eb27ceb7c001_0",
+        "Cache/Cache_Data/005b1c95b9f78c16_0",
+        "Cache/Cache_Data/0060051f3432ed1b_0",
+        "Cache/Cache_Data/0063da0385e4b208_0",
+        "Cache/Cache_Data/0066f4b25d552556_0",
+        "Cache/Cache_Data/006b30b39e13342a_0",
+        "Cache/Cache_Data/0090907002ec58bd_0",
+        "Cache/Cache_Data/00a4f39be1cd72ef_0",
+        "Cache/Cache_Data/00a50154be1d9981_0",
+        "Cache/Cache_Data/00a6e2fa250aa4e4_0",
+        "Cache/Cache_Data/00a84d70872397f7_0",
+        "Cache/No_Vary_Search/",
+        "Code Cache/"
+      ],
+      "path": "~/Library/Application Support/Claude",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        "ActorSafetyLists/",
+        "ActorSafetyLists/9.5220.3721/",
+        "ActorSafetyLists/9.5220.3721/_metadata/",
+        "ActorSafetyLists/9.5220.3721/listdata.json",
+        "ActorSafetyLists/9.5220.3721/manifest.json",
+        "AmountExtractionHeuristicRegexes/",
+        "AmountExtractionHeuristicRegexes/4/",
+        "AmountExtractionHeuristicRegexes/4/_metadata/",
+        "AmountExtractionHeuristicRegexes/4/heuristic_regexes.binarypb",
+        "AmountExtractionHeuristicRegexes/4/manifest.json",
+        "BrowserMetrics-spare.pma",
+        "CaptchaProviders/",
+        "CaptchaProviders/8.5419.4434/",
+        "CaptchaProviders/8.5419.4434/_metadata/",
+        "CaptchaProviders/8.5419.4434/captcha_providers.json",
+        "CaptchaProviders/8.5419.4434/manifest.json",
+        "CertificateRevocation/",
+        "CertificateRevocation/10736/",
+        "CertificateRevocation/10736/LICENSE",
+        "CertificateRevocation/10736/_metadata/",
+        "CertificateRevocation/10736/crl-set",
+        "CertificateRevocation/10736/manifest.json",
+        "CertificateRevocation/10737/",
+        "CertificateRevocation/10737/LICENSE",
+        "CertificateRevocation/10737/_metadata/",
+        "CertificateRevocation/10737/crl-set",
+        "CertificateRevocation/10737/manifest.json",
+        "CertificateRevocation/10738/",
+        "CertificateRevocation/10738/LICENSE",
+        "CertificateRevocation/10738/_metadata/",
+        "CertificateRevocation/10738/crl-set",
+        "CertificateRevocation/10738/manifest.json",
+        "CertificateRevocation/10739/",
+        "CertificateRevocation/10739/LICENSE",
+        "CertificateRevocation/10739/_metadata/",
+        "ChromeFeatureState"
+      ],
+      "path": "~/Library/Application Support/Codex",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        "3.17-main.sock",
+        "Backups/",
+        "Cache/",
+        "Cache/Cache_Data/",
+        "Cache/Cache_Data/03f0bc0dca8f479d_0",
+        "Cache/Cache_Data/168978a3c2540ec3_0",
+        "Cache/Cache_Data/206ddb5fed089ee3_0",
+        "Cache/Cache_Data/2406d96eefec3ae5_0",
+        "Cache/Cache_Data/24f977b1beb5c938_0",
+        "Cache/Cache_Data/25c7b4186f437821_0",
+        "Cache/Cache_Data/2d5e588825566fe8_0",
+        "Cache/Cache_Data/2d9f484e9343141e_0",
+        "Cache/Cache_Data/52bb98a8572580fb_0",
+        "Cache/Cache_Data/55ba9e8080be7d79_0",
+        "Cache/Cache_Data/60a4e4e1030dd38a_0",
+        "Cache/Cache_Data/83f2a29e64d3c7f9_0",
+        "Cache/Cache_Data/a4d082426b8c2135_0",
+        "Cache/Cache_Data/b00ea524eed725cb_0",
+        "Cache/Cache_Data/b12fd1cdb2f65771_0",
+        "Cache/Cache_Data/bf6f9e70fd91dbcf_0",
+        "Cache/Cache_Data/c0561da8d12fd833_0",
+        "Cache/Cache_Data/dea449585e2f77ff_0",
+        "Cache/Cache_Data/df5065cbddb60926_0",
+        "Cache/Cache_Data/ea51f17a95d8812e_0",
+        "Cache/Cache_Data/f0cf6070a709346d_0",
+        "Cache/Cache_Data/f8a44e76603475a9_0",
+        "Cache/Cache_Data/f9482333f46c059e_0",
+        "Cache/Cache_Data/index",
+        "Cache/Cache_Data/index-dir/",
+        "Cache/No_Vary_Search/",
+        "Cache/No_Vary_Search/journal.baj",
+        "Cache/No_Vary_Search/snapshot.baf",
+        "CachedConfigurations/",
+        "CachedConfigurations/folder/",
+        "CachedConfigurations/folder/-124a415c/",
+        "CachedData/"
+      ],
+      "path": "~/Library/Application Support/Cursor",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "path": "~/Library/Application Support/OpenCode",
+      "present": false
+    },
+    {
+      "entries": [
+        ".updaterId",
+        "Cache/",
+        "Cache/Cache_Data/",
+        "Cache/Cache_Data/26828a1dd58cf549_0",
+        "Cache/Cache_Data/2b2e345fb51f652a_0",
+        "Cache/Cache_Data/31aee40554febee6_0",
+        "Cache/Cache_Data/3b255a2651823dca_0",
+        "Cache/Cache_Data/5ddc2b7387103fca_0",
+        "Cache/Cache_Data/5fd8584cf8809c28_0",
+        "Cache/Cache_Data/7f5153ba2a3930ea_0",
+        "Cache/Cache_Data/7fb09fbfd0070225_0",
+        "Cache/Cache_Data/a876a5e5a771d059_0",
+        "Cache/Cache_Data/b502774a5e296fde_0",
+        "Cache/Cache_Data/c0080b5e5b933412_0",
+        "Cache/Cache_Data/ed8f2150b32c4ce9_0",
+        "Cache/Cache_Data/index",
+        "Cache/Cache_Data/index-dir/",
+        "Cache/No_Vary_Search/",
+        "Cache/No_Vary_Search/journal.baj",
+        "Cache/No_Vary_Search/snapshot.baf",
+        "Code Cache/",
+        "Code Cache/js/",
+        "Code Cache/js/07a7ed3f778bfd2b_0",
+        "Code Cache/js/2fd9e3486008899b_0",
+        "Code Cache/js/95de464b48161582_0",
+        "Code Cache/js/a97649ba3ec1b876_0",
+        "Code Cache/js/c1c6c5642fc8d422_0",
+        "Code Cache/js/e5a13883c7d60185_0",
+        "Code Cache/js/index",
+        "Code Cache/js/index-dir/",
+        "Code Cache/wasm/",
+        "Code Cache/wasm/index",
+        "Code Cache/wasm/index-dir/",
+        "Cookies",
+        "Cookies-journal"
+      ],
+      "path": "~/Library/Application Support/Antigravity",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "entries": [
+        ".updaterId",
+        "Cache/",
+        "Cache/Cache_Data/",
+        "Cache/Cache_Data/00de4b4f5b0a5040_0",
+        "Cache/Cache_Data/0e421a11607ba141_0",
+        "Cache/Cache_Data/0f9eabc78ddff585_0",
+        "Cache/Cache_Data/12f2ccc197b26e0d_0",
+        "Cache/Cache_Data/1a340bf5b8ce23cd_0",
+        "Cache/Cache_Data/1c52dd2bb135ab5c_0",
+        "Cache/Cache_Data/209da335b1357c69_0",
+        "Cache/Cache_Data/2c7faec4d285a4fe_0",
+        "Cache/Cache_Data/2dc4abe281a5d9a4_0",
+        "Cache/Cache_Data/2e86fb499e756593_0",
+        "Cache/Cache_Data/3026d1e68b8346c2_0",
+        "Cache/Cache_Data/343655ac0349b5dd_0",
+        "Cache/Cache_Data/3afd61c2c3753c0e_0",
+        "Cache/Cache_Data/3b1db4619504e792_0",
+        "Cache/Cache_Data/3c30c34202aa6006_0",
+        "Cache/Cache_Data/42364608ed0f9a36_0",
+        "Cache/Cache_Data/5132477640840b07_0",
+        "Cache/Cache_Data/528674b3668ff231_0",
+        "Cache/Cache_Data/56799d4b638eca90_0",
+        "Cache/Cache_Data/6262988457d36205_0",
+        "Cache/Cache_Data/62e4decebeab48ab_0",
+        "Cache/Cache_Data/6eb961a71d72ad77_0",
+        "Cache/Cache_Data/741a5e28dd339fdd_0",
+        "Cache/Cache_Data/76631de95a70e6cf_0",
+        "Cache/Cache_Data/77b4a33a42f1b06c_0",
+        "Cache/Cache_Data/7dc90505c0b73e33_0",
+        "Cache/Cache_Data/82be4880bea325c2_0",
+        "Cache/Cache_Data/83d540f1fd4fde88_0",
+        "Cache/Cache_Data/878696a296e03c04_0",
+        "Cache/Cache_Data/8a0611b5a85fb492_0",
+        "Cache/Cache_Data/8a63e5af70575665_0",
+        "Cache/Cache_Data/9048ae4f717d6197_0",
+        "Cache/No_Vary_Search/",
+        "Code Cache/"
+      ],
+      "path": "~/Library/Application Support/t3code",
+      "present": true,
+      "truncated": true
+    },
+    {
+      "path": "~/Library/Application Support/T3 Code",
+      "present": false
+    },
+    {
+      "path": "~/Library/Application Support/Grok",
+      "present": false
+    },
+    {
+      "entries": [
+        "44b70300-ddc4-4869-a4ce-a0e15d2e12f5/",
+        "44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl"
+      ],
+      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "present": true,
+      "truncated": false
+    }
+  ],
+  "help_probes": {
+    "~/.local/bin/agy --help": {
+      "absent": false,
+      "argv": [
+        "~/.local/bin/agy",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage of agy:"
+      ],
+      "stderr_bytes": 2675,
+      "stderr_head": "Usage of agy:\n  --add-dir                       Add a directory to the workspace (repeatable) (default [])\n  --agent                         Agent for the current CLI session\n  -c                              Short alias for --continue\n  --continue                      Continue the most recent conversation\n  --conversation                  Resume a previous conversation by ID\n  --dangerously-skip-",
+      "stderr_sha256": "c26943c81bf16cf55fb35e6152eda42de30f6e09cd671e29dcbc22bc5517fde6",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "~/.local/bin/agy plugin --help": {
+      "absent": false,
+      "argv": [
+        "~/.local/bin/agy",
+        "plugin",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: agy plugin <command> [arguments]"
+      ],
+      "stderr_bytes": 498,
+      "stderr_head": "Usage: agy plugin <command> [arguments]\n\nCommands:\n  list                   List imported plugins\n  import [source]        Import plugins from gemini or claude\n  install <target>       Install a plugin (supports plugin@marketplace)\n  uninstall <name>       Uninstall a plugin\n  enable <name>          Enable a plugin\n  disable <name>         Disable a plugin\n  validate [path]        Validate a plugi",
+      "stderr_sha256": "08d0335e04e1b2117d3f1414fac629ecb395add02bdcb01a46d025e33e7f00c4",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/claude --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage: claude [options] [command] [prompt]",
+        "  --autocompact <auto|tokens>           Auto-compact window size (auto, or",
+        "                                        100k\u20131M tokens)",
+        "                                        /skill-name. Explicitly provide context",
+        "      Move per-machine sections (cwd, env info, memory paths, git status) from",
+        "  setup-token                           Set up a long-lived authentication token"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 16890,
+      "stdout_head": "Usage: claude [options] [command] [prompt]\n\nClaude Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                Your prompt\n\nOptions:\n  --add-dir <directories...>            Additional directories to allow tool\n                                        access to\n  --agent <agent>                       Agent for the current session. Overrides\n                                        the 'agent' setting.\n  --agents <json>                       JSON object defining custom agents (e.g.\n                                        '{\"reviewer\": {\"description\": \"Reviews\n                                        code\", \"prompt\": \"You are a code\n                                        reviewer\"}}')\n  --allow-dangerously-skip-permissions  Enable bypassing all permission checks\n                                        as an option, without it being enabled\n                                        by default. Recommended only for\n                                        sandboxes with no internet access.\n  --allowedTools, --allowed-tools <tools...>\n      Comma or space-separated list of tool names to allow (e.g. \"Bash(git *)",
+      "stdout_sha256": "71ad650f59e08ae40ede14c534db4f49d8590ee5a4f92f6da2882d3a5560fea6",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/claude mcp --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "mcp",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage: claude mcp [options] [command]"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 2310,
+      "stdout_head": "Usage: claude mcp [options] [command]\n\nConfigure and manage MCP servers\n\nOptions:\n  -h, --help                            Display help for command\n\nCommands:\n  add [options] <name> <commandOrUrl> [args...]  Add an MCP server to Claude Code.\n  \n  Examples:\n    # Add HTTP server:\n    claude mcp add --transport http sentry https://mcp.sentry.dev/mcp\n  \n    # Add HTTP server with headers:\n    claude mcp add --transport http corridor https://app.corridor.dev/api/mcp --header \"Authorization: Bearer ...\"\n  \n    # Add stdio server with environment variables:\n    claude mcp add my-server -e API_KEY=xxx -- npx my-mcp-server\n  \n    # Add stdio server with subprocess flags:\n    claude mcp add my-server -- my-command --some-flag arg1\n  add-from-claude-desktop [options]     Import MCP servers from Claude Desktop\n                                        (Mac and WSL only)\n  add-json [options] <name> <json>      Add an MCP server (stdio or SSE) with a\n                                        JSON string\n  get <name>                            Get details about an MCP server.\n                                        Unapproved .mcp.json servers are shown\n                                        as \u23f8 Pe",
+      "stdout_sha256": "3128059f3ec6e003edb0764de7632649b60c50558d32dfb0e7f2614018b44d2a",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/cline --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cline",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage: cline [options] [command] [prompt]",
+        "  --compaction <mode>           Context compaction mode: agentic|basic|off"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3768,
+      "stdout_head": "Usage: cline [options] [command] [prompt]\n\nCline CLI - AI coding assistant in your terminal\n\nArguments:\n  prompt                        Your prompt. Default to start in act mode with\n                                auto-approve enabled.\n\nOptions:\n  -V, --version                 Output the version number\n  -p, --plan                    Run in plan mode\n  --json                        Output messages as JSON instead of styled text\n  --auto-approve <boolean>      Set tool auto-approval for all tools (default:\n                                true)\n  -c, --cwd <path>              Working directory\n  --thinking <level>            Set reasoning effort:\n                                none|low|medium|high|xhigh. Bare --thinking uses\n                                medium; omitted leaves provider default.\n  --compaction <mode>           Context compaction mode: agentic|basic|off\n                                (default: agentic)\n  -i, --tui                     Open the terminal user interface (TUI) for\n                                interactive sessions\n  --id <session-id>             Resume an existing session by ID\n  -P, --provider <id>           Provider id (default: cline)\n  -k, --key ",
+      "stdout_sha256": "5eb3b0a80e8dd33501f32f4b4d8996390d21604e8719f39caee8e3ecb1c06242",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/cline hook --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cline",
+        "hook",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: cline hook [options]"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 111,
+      "stdout_head": "Usage: cline hook [options]\n\nHandle a hook payload from stdin\n\nOptions:\n  -h, --help  display help for command\n",
+      "stdout_sha256": "8d1252a4e34dc9eabcb08c5a54a353b729800ced284ec9bb58ce411b49f7c0d8",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/codex --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage: codex [OPTIONS] [PROMPT]",
+        "      --remote-auth-token-env <ENV_VAR>",
+        "          Name of the environment variable containing the bearer token to send to a remote app"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 5731,
+      "stdout_head": "Codex CLI\n\nIf no subcommand is specified, options will be forwarded to the interactive CLI.\n\nUsage: codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]\n\nCommands:\n  agents            Browse all agent sessions on the shared local app-server daemon\n  exec              Run Codex non-interactively [aliases: e]\n  review            Run a code review non-interactively\n  login             Manage login\n  logout            Remove stored authentication credentials\n  mcp               Manage external MCP servers for Codex\n  plugin            Manage Codex plugins\n  mcp-server        Start Codex as an MCP server (stdio)\n  app-server        [experimental] Run the app server or related tooling\n  remote-control    [experimental] Manage the app-server daemon with remote control enabled\n  app               Launch the Desktop app (opens the app installer if missing)\n  completion        Generate shell completion scripts\n  update            Update Codex to the latest version\n  doctor            Diagnose local Codex installation, config, auth, and runtime health\n  sandbox           Run commands within a Codex-provided sandbox\n  debug             Debugging tools\n  apply             Apply the ",
+      "stdout_sha256": "e8ecd554e6e3e870a55e540f1a21598c085cfee237f9c735ff9b5ba4ac4cf08a",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/codex app-server --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "app-server",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: codex app-server [OPTIONS] [COMMAND]",
+        "          [possible values: capability-token, signed-bearer-token]",
+        "      --ws-token-file <PATH>",
+        "          Absolute path to the capability-token file",
+        "      --ws-token-sha256 <HEX>",
+        "          Hex-encoded SHA-256 digest of the capability token",
+        "          Absolute path to the shared secret file for signed JWT bearer tokens",
+        "          Expected issuer for signed JWT bearer tokens",
+        "          Expected audience for signed JWT bearer tokens",
+        "          Maximum clock skew when validating signed JWT bearer tokens"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3206,
+      "stdout_head": "[experimental] Run the app server or related tooling\n\nUsage: codex app-server [OPTIONS] [COMMAND]\n\nCommands:\n  daemon                Manage the local app-server daemon\n  proxy                 Proxy stdio bytes to the running app-server control socket\n  generate-ts           [experimental] Generate TypeScript bindings for the app server protocol\n  generate-json-schema  [experimental] Generate JSON Schema for the app server protocol\n  help                  Print this message or the help of the given subcommand(s)\n\nOptions:\n  -c, --config <key=value>\n          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.\n          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed\n          as TOML. If it fails to parse as TOML, the raw string is used as a literal.\n          \n          Examples: - `-c model=\"o3\"` - `-c 'sandbox_permissions=[\"disk-full-read-access\"]'` - `-c\n          shell_environment_policy.inherit=all`\n\n      --enable <FEATURE>\n          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`\n\n      --disable <FEATURE>\n          Disable a feature (repeatable). Equivalent to `-c featur",
+      "stdout_sha256": "95d290035d274e91e6f85b9af63e9a3fd2cf70a2295d9eedbfc23a2ee82d4383",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/cursor-agent --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cursor-agent",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 1,
+      "help_hits": [
+        "</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value)"
+      ],
+      "stderr_bytes": 65536,
+      "stderr_head": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e",
+      "stderr_sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/devin --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/devin",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: devin [OPTIONS] [-- <PROMPT>...] [COMMAND]",
+        "  mcp        Connect and log in to Model Context Protocol servers",
+        "  rules      Manage agent rules (always-on context blobs)",
+        "  skills     Manage agent skills (slash commands and agent-triggered context blobs)",
+        "  shell      [Feature preview] Integrate with your shell to instantly launch devin with relevant context"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3834,
+      "stdout_head": "A fast and minimal agent that lives both in your terminal and in the cloud.\n\nUsage: devin [OPTIONS] [-- <PROMPT>...] [COMMAND]\n\nCommands:\n  auth       Authentication related commands\n  mcp        Connect and log in to Model Context Protocol servers\n  models     List the models available to your account\n  rules      Manage agent rules (always-on context blobs)\n  skills     Manage agent skills (slash commands and agent-triggered context blobs)\n  plugins    Manage plugins (install, list, info, update, remove)\n  cloud      Manage Devin Cloud resources (environment setup, sandbox sessions, builds)\n  list       List sessions in the current directory [aliases: ls]\n  update     Check for updates and optionally install them\n  version    Print the current version\n  migrate    Migrate configuration from other tools\n  sandbox    [Research Preview] Process sandboxing for the exec tool\n  setup      Interactive setup wizard\n  uninstall  Uninstall and remove data\n  acp        Run as an ACP (Agent Client Protocol) server over stdio\n  shell      [Feature preview] Integrate with your shell to instantly launch devin with relevant context\n  help       Print this message or the help of the given subcomm",
+      "stdout_sha256": "8f1e72f43a88affa36050f2cc0d5fd9aaf47abc6e2f616495b5e689d6016f557",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/devin plugins --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/devin",
+        "plugins",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: devin plugins <COMMAND>",
+        "  list     List installed plugins with their version and blocked status"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 737,
+      "stdout_head": "Manage plugins (install, list, info, update, remove)\n\nUsage: devin plugins <COMMAND>\n\nCommands:\n  install  Install a plugin from a source (auto-installs its required plugins)\n  list     List installed plugins with their version and blocked status\n  info     Show a plugin's skills and its required/optional/forbidden lists\n  update   Re-fetch and re-install a plugin (or all plugins) at the latest HEAD\n  remove   Remove an installed plugin (auto-installed requireds are left in place)\n  prune    Prune plugin requirements from repos that no longer exist on disk, then garbage-collect any plugin content no live scope still requires\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n  -h, --help  Print help\n",
+      "stdout_sha256": "ff99fce1cd2a05e8176e4fc4a16cd0c61da4e33a16f093a425ca1f31b5d8547b",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/grok --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage: grok [OPTIONS] [PROMPT] [COMMAND]",
+        "  du           Show what the grok home (~/.grok) uses on disk [aliases: disk-usage]"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 6959,
+      "stdout_head": "Grok Build TUI\n\nUsage: grok [OPTIONS] [PROMPT] [COMMAND]\n\nArguments:\n  [PROMPT]\n          Initial prompt for the interactive session, e.g. `grok \"fix the bug\"` or `grok --worktree=feat \"create this feature\"`\n\nOptions:\n      --agent <NAME>\n          Agent name or definition file path\n\n      --agents <JSON>\n          Inline subagent definitions as JSON\n\n      --allow <RULE>\n          Permission allow rule (compat alias: --allowedTools)\n\n      --always-approve\n          Auto-approve all tool executions\n\n  -c, --continue\n          Continue the most recent session for the current working directory\n\n      --cwd <CWD>\n          Working directory\n\n      --debug\n          Enable debug logging\n\n      --debug-file <FILE>\n          Write debug logs to FILE\n\n      --deny <RULE>\n          Permission deny rule (compat alias: --disallowedTools)\n\n      --disable-web-search\n          Disable web search and web fetch tools\n\n      --disallowed-tools <TOOLS>\n          Built-in tools to remove (comma-separated)\n\n      --fork-session\n          When resuming (`--resume` / `--continue`), create a new session ID instead of reusing the original (optionally set via `--session-id`)\n\n      --fullscreen\n        ",
+      "stdout_sha256": "a0e05fe31356e5c06d79354c19bc9a2d7a8abeaef6de15dc3287c7194a4cad9e",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/grok du": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "du"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Disk usage for ~/.grok"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 236,
+      "stdout_head": "Disk usage for ~/.grok\n    128.1 MB  bin\n    500.0 KB  docs\n    308.0 KB  sessions\n     48.0 KB  logs\n      4.0 KB  memtrace\n         0 B  relocations\n    128.0 KB  (top-level files)\n    129.1 MB  total\n\nWorktrees\n  No worktrees found.\n",
+      "stdout_sha256": "11b76b6715e8ef5a2478fa42d6b2e01a46ea58d66d8ced28c9afdaed50cc0eff",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/grok export --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "export",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: grok export [OPTIONS] <SESSION_ID> [OUTPUT]"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 533,
+      "stdout_head": "Export a session transcript as Markdown\n\nUsage: grok export [OPTIONS] <SESSION_ID> [OUTPUT]\n\nArguments:\n  <SESSION_ID>  Session ID to export\n  [OUTPUT]      Output file path (default: stdout)\n\nOptions:\n  -c, --clipboard             Copy to clipboard instead of writing to stdout\n      --debug                 Enable debug logging\n      --debug-file <FILE>     Write debug logs to FILE\n  -h, --help                  Print help\n      --leader-socket <PATH>  Use a custom leader socket path instead of the default `~/.grok/leader.sock`\n",
+      "stdout_sha256": "963d86b168cb4a1fd2d2deb2ca3d2d495fed06a550cd9e4da726cce432879180",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/herdr --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage: herdr [options]",
+        "  herdr status [server|client]     Show local client and running server status",
+        "    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3498,
+      "stdout_head": "herdr \u2014 terminal workspace manager for AI coding agents\n\nUsage: herdr [options]\n       herdr --session <name> [options]\n       herdr --remote <ssh-target> [--session <name>]\n       herdr session attach <name>\n       herdr completion zsh\n       herdr update [--handoff]\n       herdr channel set <stable|preview>\n       herdr server stop\n       herdr server reload-config\n       herdr api <subcommand> ...\n       herdr completion <shell>\n       herdr config <subcommand> ...\n       herdr channel <subcommand> ...\n       herdr workspace <subcommand> ...\n       herdr worktree <subcommand> ...\n       herdr tab <subcommand> ...\n       herdr notification <subcommand> ...\n       herdr agent <subcommand> ...\n       herdr pane <subcommand> ...\n       herdr session <subcommand> ...\n       herdr integration <subcommand> ...\n\nCommon commands:\n  herdr                            Launch or attach to the persistent session\n  herdr status [server|client]     Show local client and running server status\n  herdr update                     Download and install the latest version\n  herdr completion zsh             Generate shell completions for zsh\n  herdr server stop                Stop the running server via",
+      "stdout_sha256": "198d82d8e313e4a8394d2bae801eb0077584359c10bb366bd59c6eb3efe1b97a",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/herdr status": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "status"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "  status: running"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 221,
+      "stdout_head": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout_sha256": "2480e044fa8ab0d61a228dae986138a2932517bdf74d0ba9421d55eb89415f1a",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/opencode --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "  opencode mcp                 manage MCP (Model Context Protocol) servers",
+        "  opencode stats               show token usage and cost statistics"
+      ],
+      "stderr_bytes": 4285,
+      "stderr_head": "\u2800                                \u2584     \n\u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2584 \u2588\u2580\u2580\u2580 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588\n\u2588  \u2588 \u2588  \u2588 \u2588\u2580\u2580\u2580 \u2588  \u2588 \u2588    \u2588  \u2588 \u2588  \u2588 \u2588\u2580\u2580\u2580\n\u2580\u2580\u2580\u2580 \u2588\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580  \u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580\n\nCommands:\n  opencode completion          generate shell completion script\n  opencode acp                 start ACP (Agent Client Protocol) server\n  opencode mcp                 manage MCP (Model Context Protocol) servers\n  opencode [projec",
+      "stderr_sha256": "b594ad32674bf8008017157833ab87316170523ed23dbd10c37ae9931d2ba178",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/opencode export --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "export",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 787,
+      "stderr_head": "opencode export [sessionID]\n\nexport session data as JSON\n\nPositionals:\n  sessionID  session id to export                                                           [string]\n\nOptions:\n  -h, --help        show help                                                              [boolean]\n  -v, --version     show version number                                                    [boolean]\n      --print-lo",
+      "stderr_sha256": "77d31edd5082b35efefa0920aa6a47ef39d5bce8a971f0613074b62db451209c",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/opencode serve --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "serve",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 1234,
+      "stderr_head": "opencode serve\n\nstarts a headless opencode server\n\nOptions:\n  -h, --help         show help                                                             [boolean]\n  -v, --version      show version number                                                   [boolean]\n      --print-logs   print logs to stderr                                                  [boolean]\n      --log-level    log level       ",
+      "stderr_sha256": "6855794f108c83a3a32b03efcc36a9a62c83093d8f065cd740475092f839684e",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/opencode session --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "session",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 668,
+      "stderr_head": "opencode session\n\nmanage sessions\n\nCommands:\n  opencode session list                list sessions\n  opencode session delete <sessionID>  delete a session\n\nOptions:\n  -h, --help        show help                                                              [boolean]\n  -v, --version     show version number                                                    [boolean]\n      --print-logs  print logs to ",
+      "stderr_sha256": "ebbab45776f63a6043de43cd2fd97ec3fcb8e83d0273c0996aaaa5dadb20d26f",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/opencode stats": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "stats"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "\u2502                    COST & TOKENS                       \u2502",
+        "\u2502Total Cost                                        $0.54 \u2502",
+        "\u2502Avg Cost/Day                                      $0.02 \u2502",
+        "\u2502Avg Tokens/Session                                 1.2M \u2502",
+        "\u2502Median Tokens/Session                            134.7K \u2502",
+        "\u2502                      TOOL USAGE                        \u2502"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 3090,
+      "stdout_head": "\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                       OVERVIEW                         \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502Sessions                                             49 \u2502\n\u2502Messages                                            820 \u2502\n\u2502Days                                                 29 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                    COST & TOKENS                       \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502Total Cost                                        $0.54 \u2502\n\u2502Avg Cost/Day                                      $0.02 \u2502\n\u2502Avg Tokens/Session                                 1.2M \u2502\n\u2502Median Tokens/Session                            134.7K \u2502\n\u2502Input                                              7.1M \u2502\n\u2502Output                                           229.2K \u2502\n\u2502Cache Read                                        49.4M \u2502\n\u2502Cache Write                                           0 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502                ",
+      "stdout_sha256": "8eea2475581c9b5b658ad2559003ac09f81a2b8fa0241cb0c47b81c84d6ec227",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/pi --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/pi",
+        "--help"
+      ],
+      "auth_prompt_suspected": true,
+      "exit": 0,
+      "help_hits": [
+        "Usage:",
+        "  --no-context-files, -nc        Disable AGENTS.md and CLAUDE.md discovery and loading",
+        "  # Print an OAuth bearer token for an external client (refreshes if expired)",
+        "  pi auth print-bearer-token --provider openai-codex",
+        "  pi -p -- \"- Summarize these points\"",
+        "  ANTHROPIC_AUTH_TOKEN             - Anthropic bearer auth token",
+        "  ANTHROPIC_OAUTH_TOKEN            - Anthropic OAuth token (alternative to API key)",
+        "  CLOUDFLARE_API_KEY               - Cloudflare API token (Workers AI and AI Gateway)",
+        "  QWEN_TOKEN_PLAN_API_KEY          - Qwen Token Plan API key (international region)",
+        "  QWEN_TOKEN_PLAN_CN_API_KEY       - Qwen Token Plan API key (China region)",
+        "  XIAOMI_TOKEN_PLAN_CN_API_KEY     - Xiaomi MiMo Token Plan API key (China region)",
+        "  XIAOMI_TOKEN_PLAN_AMS_API_KEY    - Xiaomi MiMo Token Plan API key (Amsterdam region)",
+        "  XIAOMI_TOKEN_PLAN_SGP_API_KEY    - Xiaomi MiMo Token Plan API key (Singapore region)",
+        "  AWS_BEARER_TOKEN_BEDROCK         - Bedrock API key (bearer token)",
+        "  powershell - Execute PowerShell commands on Windows"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 10120,
+      "stdout_head": "pi - AI coding assistant with read, bash, edit, write tools\n\nUsage:\n  pi [options] [--] [@files...] [messages...]\n\nCommands:\n  pi install <source> [-l]     Install extension source and add to settings\n  pi remove <source> [-l]      Remove extension source from settings\n  pi uninstall <source> [-l]   Alias for remove\n  pi update [source|self|pi]   Update pi, extensions, or model catalogs\n  pi list                      List installed extensions from settings\n  pi config [-l]               Open TUI to enable/disable package resources (Tab switches scope)\n  pi auth <command>            Print credentials or check provider readiness\n  pi <command> --help          Show help for install/remove/uninstall/update/list/config/auth\n\nOptions:\n  --provider <name>              Provider name (default: google)\n  --model <pattern>              Model pattern or ID (supports \"provider/id\" and optional \":<thinking>\")\n  --api-key <key>                API key (defaults to env vars)\n  --system-prompt <text>         System prompt (default: coding assistant prompt)\n  --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)\n  --mode <mode>                  ",
+      "stdout_sha256": "894957a01dfbf97ec0723edadbbc95094e0f216fc735705f47b94c2ddcb0962a",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/pi install --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/pi",
+        "install",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "Usage:"
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 533,
+      "stdout_head": "Usage:\n  pi install <source> [-l] [--approve|--no-approve]\n\nInstall a package and add it to settings.\n\nOptions:\n  -l, --local       Install project-locally (.pi/settings.json)\n  -a, --approve     Trust project-local files for this command\n  -na, --no-approve Ignore project-local files for this command\n\nExamples:\n  pi install npm:@foo/bar\n  pi install git:github.com/user/repo\n  pi install git:git@github.com:user/repo\n  pi install https://github.com/user/repo\n  pi install ssh://git@github.com/user/repo\n  pi install ./local/path\n\n",
+      "stdout_sha256": "3c7d14deaae5853376f9f1d33aef8235c66ea2fe5e7c521ae6b2f3f42901270c",
+      "timed_out": false
+    },
+    "/opt/homebrew/bin/t3 --help": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/t3",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [
+        "USAGE",
+        "  pair       Mint a pairing token for a running T3 Code server and print it as a QR code."
+      ],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 2635,
+      "stdout_head": "DESCRIPTION\n  Run the T3 Code server.\n\nUSAGE\n  t3 <subcommand> [flags] [<cwd>]\n\nARGUMENTS\n  cwd string    Working directory for provider sessions (defaults to the current directory). (optional)\n\nFLAGS\n  --mode choice                              Runtime mode. `desktop` keeps loopback defaults unless overridden. (choices: web, desktop)\n  --port integer                             Port for the HTTP/WebSocket server.\n  --host string                              Host/interface to bind (for example 127.0.0.1, 0.0.0.0, or a Tailnet IP).\n  --base-dir string                          Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME).\n  --dev-url string                           Dev web URL to proxy/redirect to (equivalent to VITE_DEV_SERVER_URL).\n  --no-browser                               Disable automatic browser opening.\n  --bootstrap-fd integer                     Read one-time bootstrap secrets from the given file descriptor.\n  --auto-bootstrap-project-from-cwd          Create a project for the current working directory on startup when missing.\n  --log-websocket-events, --log-ws-events    Emit server-side logs for outbound WebSocket pu",
+      "stdout_sha256": "f226c0a3da52e556ff009afe81751b4c09aadb8a9dc17c41f82e09ca53ede63c",
+      "timed_out": false
+    }
+  },
+  "json_key_samples": [
+    {
+      "bytes_read": 65536,
+      "parse": "JSONDecodeError",
+      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-57-019f2b2d-ebd9-7870-9ebc-956de09084f2.jsonl"
+    },
+    {
+      "bytes_read": 65536,
+      "parse": "JSONDecodeError",
+      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T22-12-39-019f2ae6-3a3c-7840-bc54-f597208129ed.jsonl"
+    },
+    {
+      "bytes_read": 65536,
+      "parse": "JSONDecodeError",
+      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-38-019f2b2d-a10b-7861-94d8-93dad0f927ff.jsonl"
+    },
+    {
+      "bytes_read": 57117,
+      "key_count": 39,
+      "keys": [
+        "addedLines",
+        "addedNames",
+        "addedTypes",
+        "attachment",
+        "command",
+        "content",
+        "cwd",
+        "durationMs",
+        "entrypoint",
+        "exitCode",
+        "gitBranch",
+        "hookEvent",
+        "hookName",
+        "isInitial",
+        "isSidechain",
+        "message",
+        "names",
+        "needsAuthMcpServers",
+        "operation",
+        "parentUuid",
+        "pendingMcpServers",
+        "permissionMode",
+        "promptId",
+        "promptSource",
+        "readdedNames",
+        "removedNames",
+        "removedTypes",
+        "role",
+        "sessionId",
+        "showConcurrencyNote",
+        "skillCount",
+        "stderr",
+        "stdout",
+        "timestamp",
+        "toolUseID",
+        "type",
+        "userType",
+        "uuid",
+        "version"
+      ],
+      "path": "~/.claude/projects/-Users-operator-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl",
+      "records": 8
+    },
+    {
+      "bytes_read": 67705,
+      "key_count": 37,
+      "keys": [
+        "addedLines",
+        "addedNames",
+        "addedTypes",
+        "attachment",
+        "command",
+        "content",
+        "cwd",
+        "durationMs",
+        "entrypoint",
+        "exitCode",
+        "gitBranch",
+        "hookEvent",
+        "hookName",
+        "isInitial",
+        "isSidechain",
+        "message",
+        "needsAuthMcpServers",
+        "operation",
+        "parentUuid",
+        "pendingMcpServers",
+        "permissionMode",
+        "promptId",
+        "promptSource",
+        "readdedNames",
+        "removedNames",
+        "removedTypes",
+        "role",
+        "sessionId",
+        "showConcurrencyNote",
+        "stderr",
+        "stdout",
+        "timestamp",
+        "toolUseID",
+        "type",
+        "userType",
+        "uuid",
+        "version"
+      ],
+      "path": "~/.claude/projects/-Users-operator-Projects-floati-grok/c28fc475-fea8-4036-9480-2cdf25b8caf8.jsonl",
+      "records": 8
+    },
+    {
+      "bytes_read": 2,
+      "key_count": 0,
+      "keys": [],
+      "path": "~/.local/share/opencode/storage/session_diff/ses_fdaf21501ffey7n6m18hor86sD.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 300,
+      "key_count": 10,
+      "keys": [
+        "cline",
+        "lastUsedProvider",
+        "model",
+        "modes",
+        "provider",
+        "providers",
+        "settings",
+        "tokenSource",
+        "updatedAt",
+        "version"
+      ],
+      "path": "~/.cline/data/settings/providers.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 180,
+      "key_count": 7,
+      "keys": [
+        "ext-cline-pass",
+        "featureFlagPayloads",
+        "featureFlags",
+        "flagsPayload",
+        "updatedAt",
+        "userId",
+        "version"
+      ],
+      "path": "~/.cline/data/cache/feature-flags.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 396,
+      "key_count": 4,
+      "keys": [
+        "is_bash",
+        "prompt",
+        "session_id",
+        "timestamp"
+      ],
+      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/prompt_history.jsonl",
+      "records": 2
+    },
+    {
+      "bytes_read": 789,
+      "key_count": 19,
+      "keys": [
+        "agent_name",
+        "chat_format_version",
+        "created_at",
+        "current_model_id",
+        "cwd",
+        "git_remotes",
+        "git_root_dir",
+        "grok_home",
+        "head_branch",
+        "head_commit",
+        "id",
+        "info",
+        "last_active_at",
+        "next_trace_turn",
+        "num_chat_messages",
+        "num_messages",
+        "sandbox_profile",
+        "session_summary",
+        "updated_at"
+      ],
+      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/summary.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 394,
+      "key_count": 14,
+      "keys": [
+        "_meta",
+        "agentTimestampMs",
+        "elapsed_ms",
+        "eventId",
+        "event_name",
+        "method",
+        "name",
+        "params",
+        "runs",
+        "sessionId",
+        "sessionUpdate",
+        "status",
+        "timestamp",
+        "update"
+      ],
+      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/updates.jsonl",
+      "records": 1
+    },
+    {
+      "bytes_read": 946,
+      "key_count": 21,
+      "keys": [
+        "allow_fallbacks",
+        "api",
+        "apiKey",
+        "baseUrl",
+        "cacheRead",
+        "cacheWrite",
+        "compat",
+        "contextWindow",
+        "cost",
+        "id",
+        "input",
+        "maxTokens",
+        "models",
+        "name",
+        "only",
+        "openRouterRouting",
+        "openrouter",
+        "order",
+        "output",
+        "providers",
+        "reasoning"
+      ],
+      "path": "~/.pi/agent/models.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 2,
+      "key_count": 0,
+      "keys": [],
+      "path": "~/.pi/agent/models-store.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 900,
+      "key_count": 24,
+      "keys": [
+        "1",
+        "Pane",
+        "active",
+        "active_tab",
+        "collapsed_space_keys",
+        "custom_name",
+        "cwd",
+        "focused",
+        "id",
+        "identity_cwd",
+        "layout",
+        "next_public_pane_number",
+        "next_public_tab_number",
+        "panes",
+        "public_pane_numbers",
+        "public_tab_numbers",
+        "root_pane",
+        "selected",
+        "sidebar_section_split",
+        "sidebar_width",
+        "tabs",
+        "version",
+        "workspaces",
+        "zoomed"
+      ],
+      "path": "~/.config/herdr/session.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 653567,
+      "key_count": 22,
+      "keys": [
+        "command",
+        "content",
+        "description",
+        "glob",
+        "glob_pattern",
+        "head_limit",
+        "id",
+        "input",
+        "limit",
+        "merge",
+        "message",
+        "name",
+        "offset",
+        "path",
+        "pattern",
+        "role",
+        "status",
+        "target_directory",
+        "text",
+        "todos",
+        "type",
+        "working_directory"
+      ],
+      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl",
+      "records": 8
+    },
+    {
+      "bytes_read": 151,
+      "key_count": 3,
+      "keys": [
+        "didAskForNotificationPermission",
+        "ide-install-wizard-shown",
+        "lastCreatedProjectId"
+      ],
+      "path": "~/Library/Application Support/Antigravity/app_storage.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 48,
+      "key_count": 2,
+      "keys": [
+        "cwd",
+        "schemaVersion"
+      ],
+      "path": "~/.cursor/acp-sessions/17f910c6-3f28-47b6-867f-b0028ad2db00/meta.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 48,
+      "key_count": 2,
+      "keys": [
+        "cwd",
+        "schemaVersion"
+      ],
+      "path": "~/.cursor/acp-sessions/c4e2ec4a-bb8c-4f43-a02d-0bef967eed29/meta.json",
+      "records": 1
+    },
+    {
+      "bytes_read": 48,
+      "key_count": 2,
+      "keys": [
+        "cwd",
+        "schemaVersion"
+      ],
+      "path": "~/.cursor/acp-sessions/723fce81-06fe-4751-b876-59d1e10f5aab/meta.json",
+      "records": 1
+    }
+  ],
+  "note": "JSON samples are key names only; tokenish basenames skipped; no live fleet writes.",
+  "sqlite_schema_samples": [
+    {
+      "columns": {
+        "message": [
+          "id",
+          "session_id",
+          "time_created",
+          "time_updated",
+          "data"
+        ],
+        "part": [
+          "id",
+          "message_id",
+          "session_id",
+          "time_created",
+          "time_updated",
+          "data"
+        ],
+        "project": [
+          "id",
+          "worktree",
+          "vcs",
+          "name",
+          "icon_url",
+          "icon_url_override",
+          "icon_color",
+          "time_created",
+          "time_updated",
+          "time_initialized",
+          "sandboxes",
+          "commands"
+        ],
+        "session": [
+          "id",
+          "project_id",
+          "workspace_id",
+          "parent_id",
+          "slug",
+          "directory",
+          "path",
+          "title",
+          "version",
+          "share_url",
+          "summary_additions",
+          "summary_deletions",
+          "summary_files",
+          "summary_diffs",
+          "metadata",
+          "cost",
+          "tokens_input",
+          "tokens_output",
+          "tokens_reasoning",
+          "tokens_cache_read",
+          "tokens_cache_write",
+          "revert",
+          "permission",
+          "agent",
+          "model",
+          "time_created",
+          "time_updated",
+          "time_compacting",
+          "time_archived"
+        ],
+        "session_context_epoch": [
+          "session_id",
+          "baseline",
+          "snapshot",
+          "baseline_seq"
+        ],
+        "session_input": [
+          "id",
+          "session_id",
+          "prompt",
+          "delivery",
+          "admitted_seq",
+          "promoted_seq",
+          "time_created"
+        ],
+        "session_message": [
+          "id",
+          "session_id",
+          "type",
+          "seq",
+          "time_created",
+          "time_updated",
+          "data"
+        ],
+        "session_share": [
+          "session_id",
+          "id",
+          "secret",
+          "url",
+          "time_created",
+          "time_updated"
+        ],
+        "todo": [
+          "session_id",
+          "content",
+          "status",
+          "priority",
+          "position",
+          "time_created",
+          "time_updated"
+        ],
+        "workspace": [
+          "id",
+          "type",
+          "name",
+          "branch",
+          "directory",
+          "extra",
+          "project_id",
+          "time_used"
+        ]
+      },
+      "path": "~/.local/share/opencode/opencode.db",
+      "sessionish_tables": [
+        "message",
+        "part",
+        "project",
+        "session",
+        "session_context_epoch",
+        "session_input",
+        "session_message",
+        "session_share",
+        "todo",
+        "workspace"
+      ]
+    },
+    {
+      "detail": "unable to open database file",
+      "error": "OperationalError",
+      "path": "~/.grok/sessions/session_search.sqlite"
+    }
+  ],
+  "started_utc": "2026-08-28T03:17:31Z",
+  "versions": {
+    "agy": {
+      "absent": false,
+      "argv": [
+        "~/.local/bin/agy",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 7,
+      "stdout_head": "1.1.22\n",
+      "stdout_sha256": "9b3b81e5314efb5d2f9c0897cfd1621c3aaa2b83e900ad599d07a28b314b5b80",
+      "timed_out": false
+    },
+    "claude": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 22,
+      "stdout_head": "2.1.231 (Claude Code)\n",
+      "stdout_sha256": "6220c2a7dbd3dd819ca057957744532f271788bb2de7ba59d4bbbe6847d44fc2",
+      "timed_out": false
+    },
+    "cline": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cline",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 7,
+      "stdout_head": "3.0.60\n",
+      "stdout_sha256": "f5f15202f18fd38a2a332fd2e44ee6e4fc2357a69b2db25580ccc242b2688a5e",
+      "timed_out": false
+    },
+    "codex": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 18,
+      "stdout_head": "codex-cli 0.150.0\n",
+      "stdout_sha256": "22c3a470a09f98a30e23cb3eac0efb697a01d2ae8869f49660550ed599648961",
+      "timed_out": false
+    },
+    "cursor-agent": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cursor-agent",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 1,
+      "help_hits": [
+        "</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value)"
+      ],
+      "stderr_bytes": 65536,
+      "stderr_head": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e",
+      "stderr_sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+      "stdout_bytes": 0,
+      "stdout_head": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "devin": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/devin",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 27,
+      "stdout_head": "devin 3000.2.17 (2c489dfc)\n",
+      "stdout_sha256": "b79046fab74f7d3a767fe786e50c011d79b7a1a55dfaf8a9dca04db9d939c52f",
+      "timed_out": false
+    },
+    "grok": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 35,
+      "stdout_head": "grok 1.0.5 (5115b46bc909) [stable]\n",
+      "stdout_sha256": "8d21e37ac44a7c832d1be0ba517a6c47518ca703ba49cd868329e2652b55cef6",
+      "timed_out": false
+    },
+    "herdr": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 12,
+      "stdout_head": "herdr 0.8.2\n",
+      "stdout_sha256": "9654e7f916941ff3f48a0b7bdf19110ce63a11880765fc8e362a94472bc948b3",
+      "timed_out": false
+    },
+    "opencode": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 8,
+      "stdout_head": "1.18.23\n",
+      "stdout_sha256": "158df2ced2a9bded1cde05ac10469495bf85814fab7c7606a0720f6d01bde5ee",
+      "timed_out": false
+    },
+    "pi": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/pi",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 7,
+      "stdout_head": "0.84.3\n",
+      "stdout_sha256": "e470244f5d207065cacf7314a910c7cff5fc8334840dc42426d62da3e661f580",
+      "timed_out": false
+    },
+    "t3": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/t3",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "help_hits": [],
+      "stderr_bytes": 0,
+      "stderr_head": "",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 11,
+      "stdout_head": "t3 v0.0.35\n",
+      "stdout_sha256": "610a294a2246e84be6500cb811c83619559693dd1f5bf1cee6b54bc626be2ac8",
+      "timed_out": false
+    }
+  },
+  "which": {
+    "agy": "~/.local/bin/agy",
+    "antigravity": "",
+    "claude": "/opt/homebrew/bin/claude",
+    "cline": "/opt/homebrew/bin/cline",
+    "codex": "/opt/homebrew/bin/codex",
+    "cursor": "",
+    "cursor-agent": "/opt/homebrew/bin/cursor-agent",
+    "devin": "/opt/homebrew/bin/devin",
+    "grok": "/opt/homebrew/bin/grok",
+    "grok-build": "",
+    "herdr": "/opt/homebrew/bin/herdr",
+    "opencode": "/opt/homebrew/bin/opencode",
+    "pi": "/opt/homebrew/bin/pi",
+    "t3": "/opt/homebrew/bin/t3"
+  }
+}

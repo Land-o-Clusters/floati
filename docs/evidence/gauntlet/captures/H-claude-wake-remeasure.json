@@ -1,0 +1,495 @@
+{
+  "claude_code_hooks": {
+    "Notification": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "PermissionDenied": {
+      "command_basenames": [
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "PermissionRequest": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ],
+        [
+          "puddlectl"
+        ]
+      ],
+      "timeouts": [
+        86400,
+        600,
+        300
+      ]
+    },
+    "PostCompact": {
+      "command_basenames": [
+        [
+          "python3",
+          "compaction_protection.py"
+        ],
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        15,
+        600
+      ]
+    },
+    "PostToolUse": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "PostToolUseFailure": {
+      "command_basenames": [
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "PreCompact": {
+      "command_basenames": [
+        [
+          "python3",
+          "compaction_protection.py"
+        ],
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        15,
+        600
+      ]
+    },
+    "PreToolUse": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "SessionEnd": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "SessionStart": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ],
+        [
+          "architect_watchers_reminder.sh"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "Stop": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "StopFailure": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "SubagentStart": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "SubagentStop": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    },
+    "UserPromptSubmit": {
+      "command_basenames": [
+        [
+          "sh",
+          "vibe-island-bridge",
+          "vibe-island-bridge"
+        ],
+        [
+          "Application",
+          "AgentPeekBridge"
+        ]
+      ],
+      "timeouts": [
+        600
+      ]
+    }
+  },
+  "depth2_already_gated": "docs/evidence/gauntlet/T1-depth2.md",
+  "identity_sessions": {
+    "files": [
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-22T12:38:44Z",
+        "name": "alice3-opencode-0822a.json",
+        "node": "alice3"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T14:33:02Z",
+        "name": "alice3-opencode-0823a.json",
+        "node": "alice3"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T02:56:57Z",
+        "name": "alice4-opencode-0823a.json",
+        "node": "alice4"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T02:51:11Z",
+        "name": "alice5-opencode-0823a.json",
+        "node": "alice5"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T02:50:40Z",
+        "name": "alice6-opencode-0823a.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T15:00:17Z",
+        "name": "alice6-opencode-0823b.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T16:25:22Z",
+        "name": "alice6-opencode-0823c.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T16:40:52Z",
+        "name": "alice6-opencode-0823d.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T18:21:34Z",
+        "name": "alice6-opencode-0823e.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T19:42:44Z",
+        "name": "alice6-opencode-0823f.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T20:34:35Z",
+        "name": "alice6-opencode-0823g.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T21:36:01Z",
+        "name": "alice6-opencode-0823h.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-23T21:48:51Z",
+        "name": "alice6-opencode-0823i.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "opencode-desktop",
+        "issued_at": "2026-08-24T00:24:41Z",
+        "name": "alice6-opencode-0823j.json",
+        "node": "alice6"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-11T02:29:33Z",
+        "name": "architect-claude-0811a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-12T17:36:26Z",
+        "name": "architect-claude-0812a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-13T14:03:45Z",
+        "name": "architect-claude-0813a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-13T23:28:16Z",
+        "name": "architect-claude-0813b.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-14T11:04:21Z",
+        "name": "architect-claude-0814a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-14T21:45:00Z",
+        "name": "architect-claude-0814b.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-15T03:04:32Z",
+        "name": "architect-claude-0815a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-15T22:51:21Z",
+        "name": "architect-claude-0815b.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-18T01:43:50Z",
+        "name": "architect-claude-0816a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-08-18T21:35:21Z",
+        "name": "architect-claude-0818a.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-07-30T02:49:20Z",
+        "name": "architect-claude-3cfc1e22.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-07-30T03:22:18Z",
+        "name": "architect-claude-3cfc1e22b.json",
+        "node": "architect"
+      },
+      {
+        "harness": "claude-code",
+        "issued_at": "2026-07-30T01:16:44Z",
+        "name": "architect-claude-737847e2.json",
+        "node": "architect"
+      },
+      {
+        "harness": "codex",
+        "issued_at": "2026-07-27T23:35:19Z",
+        "name": "sol-codex-019fa42b.json",
+        "node": "sol"
+      },
+      {
+        "harness": "codex",
+        "issued_at": "2026-08-27T04:09:08Z",
+        "name": "sol-codex-01a03bb6-r2.json",
+        "node": "sol"
+      },
+      {
+        "harness": "codex",
+        "issued_at": "2026-08-26T04:05:35Z",
+        "name": "sol-codex-01a03bb6.json",
+        "node": "sol"
+      }
+    ],
+    "harness_counts": {
+      "claude-code": 13,
+      "codex": 3,
+      "opencode-desktop": 14
+    },
+    "issued_at_max": "2026-08-27T04:09:08Z",
+    "issued_at_min": "2026-07-27T23:35:19Z",
+    "node_counts": {
+      "alice3": 2,
+      "alice4": 1,
+      "alice5": 1,
+      "alice6": 10,
+      "architect": 13,
+      "sol": 3
+    }
+  },
+  "incumbent_bus": "<redacted>",
+  "live_3cycle": {
+    "ran": false,
+    "reason": "this grok seat is Cursor; claude print-mode previously OAuth-expired (C2); not retried; no Claude TUI launched"
+  },
+  "mail_engineer_seats": {
+    "to_cis.jsonl": {
+      "bytes": 1494998,
+      "lines": 687,
+      "ts_max": "2026-08-15T23:53:12Z",
+      "ts_min": "2026-06-24T20:56:28Z"
+    },
+    "to_ghops.jsonl": {
+      "bytes": 2251037,
+      "lines": 1055,
+      "ts_max": "2026-08-22T13:50:54Z",
+      "ts_min": "2026-06-24T20:56:28Z"
+    },
+    "to_ohe.jsonl": {
+      "bytes": 999799,
+      "lines": 485,
+      "ts_max": "2026-08-15T23:53:12Z",
+      "ts_min": "2026-06-24T20:56:28Z"
+    },
+    "to_sre.jsonl": {
+      "bytes": 2739283,
+      "lines": 1141,
+      "ts_max": "2026-08-22T13:50:54Z",
+      "ts_min": "2026-06-24T20:56:28Z"
+    }
+  },
+  "started_utc": "2026-08-28T04:04:08Z",
+  "wake_hook_journal": {
+    "bytes": 1453806,
+    "claude_harness_rows": 0,
+    "lines": 4860,
+    "lines_mentioning_claude": 98,
+    "lines_mentioning_engineer_nodes": 0,
+    "note": "journal is cursor/codex waiters; zero claude/sre/ghops rows",
+    "substring_claude_hits": 98,
+    "substring_claude_hits_are": "codex_bus_wait exit_empty with incidental 'claude' substring; harness and node null; not Claude-harness wakes"
+  },
+  "wrote": false
+}

@@ -1,0 +1,575 @@
+{
+  "H1_onboard": {
+    "init": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "init",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "--solo",
+        "grok-h",
+        "--harness",
+        "Codex"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.081,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"init\",\"evidence\":{\"root\":\"~/Projects/floati-grok/.gauntlet-scratch/h20260828004028\",\"solo\":{\"authority_epoch\":1,\"authority_subject\":\"solo-work\",\"expires_at\":\"2026-08-29T00:40:28.209Z\",\"harness\":\"Codex\",\"kind\":\"solo_configuration\",\"node_id\":\"grok-h\",\"schema_version\":0},\"tenant_id\":\"h20260828004028\"},\"status\":\"ok\"}\n",
+      "stdout_bytes": 367,
+      "stdout_sha256": "cb354ccf68925661e7663245858ef5d6971b7907014bd09c27ffa4d524a93e31",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "register": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "register",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "peer-h1",
+        "--harness",
+        "Codex"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.068,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"register\",\"evidence\":{\"id\":\"registry-01a045cf99777973879b91357abbe2dc\",\"kind\":\"registry_entry\",\"node_id\":\"peer-h1\",\"role\":\"Codex\",\"schema_version\":0,\"state\":\"active\",\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:28.279Z\"},\"status\":\"ok\"}\n",
+      "stdout_bytes": 284,
+      "stdout_sha256": "8b73e043a3ba496c893ddcac0c0414b3f6eb7b9fbd859107344ff8491e9177b9",
+      "timed_out": false,
+      "timeout_s": 30.0
+    }
+  },
+  "H2_round_trip": {
+    "ack": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "ack",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "--as",
+        "grok-h",
+        "--id",
+        "msg-01a045cf99bd705eb30547678f7d1541"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.073,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"ack\",\"evidence\":{\"id\":\"ack-01a045cf9a587930b8388ea7dc15066f\",\"item_ids\":[\"msg-01a045cf99bd705eb30547678f7d1541\"],\"kind\":\"ack_receipt\",\"recipient\":\"grok-h\",\"schema_version\":0,\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:28.504Z\"},\"status\":\"ok\"}\n",
+      "stdout_bytes": 292,
+      "stdout_sha256": "5a051a576f836440c326a6800aaadc0441ff3e8d0ccf16aa615f40c5bf772742",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "inbox": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "inbox",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "--as",
+        "grok-h"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.08,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"inbox\",\"evidence\":{\"messages\":[{\"attempt_binding\":\"absent_legacy\",\"doc\":\"docs/status/WEEKEND_PROGRAM_2026-08-28.md\",\"id\":\"msg-01a045cf99bd705eb30547678f7d1541\",\"idempotency_key\":\"idempotency-01a045cf99bd7b4fbce566078df9099d\",\"kind\":\"message_envelope\",\"note\":\"H2 gauntlet round-trip\",\"recipient\":\"grok-h\",\"repo\":\"floati\",\"schema_version\":0,\"sender\":\"grok-h\",\"sha\":\"c4dd4a164328f91407e4103562a0e6308d573f73\",\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:28.349Z\"}],\"receipt\":{\"id\":\"delivery-01a045cf9a0e7cf5af6d32b1a8c27cb4\",\"item_ids\":[\"msg-01a045cf99bd705eb30547678f7d1541\"],\"kind\":\"delivery_receipt\",\"presentation_count\":1,\"recipient\":\"grok-h\",\"schema_version\":0,\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:28.430Z\"}},\"status\":\"ok\"}\n",
+      "stdout_bytes": 797,
+      "stdout_sha256": "6b7b8e7b76fe6d0505047c40ef6a9e48d2d4988defbd1fb0b3f099c4aeba8bde",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "inbox_after_ack": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "inbox",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "--as",
+        "grok-h"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.074,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 31,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "{\"artifact_version\":0,\"command\":\"inbox\",\"evidence\":{\"messages\":[],\"receipt\":null},\"status\":\"intentional_silence\"}\n",
+      "stderr_bytes": 114,
+      "stderr_sha256": "f00226041e5d0332fe21a75e19555d3a961f966fd06e15defd6b1cc886122600",
+      "stdout": "",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "item_id": "msg-01a045cf99bd705eb30547678f7d1541",
+    "send": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "send",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "--from",
+        "grok-h",
+        "--to",
+        "grok-h",
+        "--repo",
+        "floati",
+        "--sha",
+        "c4dd4a164328f91407e4103562a0e6308d573f73",
+        "--doc",
+        "docs/status/WEEKEND_PROGRAM_2026-08-28.md",
+        "--note",
+        "H2 gauntlet round-trip"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.072,
+      "ended_utc": "2026-08-28T00:40:28Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"send\",\"evidence\":{\"attempt_binding\":\"absent_legacy\",\"doc\":\"docs/status/WEEKEND_PROGRAM_2026-08-28.md\",\"id\":\"msg-01a045cf99bd705eb30547678f7d1541\",\"idempotency_key\":\"idempotency-01a045cf99bd7b4fbce566078df9099d\",\"kind\":\"message_envelope\",\"note\":\"H2 gauntlet round-trip\",\"recipient\":\"grok-h\",\"repo\":\"floati\",\"schema_version\":0,\"sender\":\"grok-h\",\"sha\":\"c4dd4a164328f91407e4103562a0e6308d573f73\",\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:28.349Z\"},\"status\":\"ok\"}\n",
+      "stdout_bytes": 510,
+      "stdout_sha256": "8061d24b2c46d14edb0880110648d4558a19d4696383c9cb40b73c242acf90fd",
+      "timed_out": false,
+      "timeout_s": 30.0
+    }
+  },
+  "H3_kill_resume": {
+    "kill_result": {
+      "alive_after_cleanup": [],
+      "controller_exit_codes": [
+        0,
+        0,
+        0
+      ],
+      "controller_pids": [
+        56932,
+        56933,
+        56934
+      ],
+      "drills": [
+        {
+          "mode": "kill_worker",
+          "node": "lane-a",
+          "outcome": "process_cancelled",
+          "triggered": true
+        }
+      ],
+      "elapsed_seconds": 0.289424,
+      "final_work": [
+        {
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-a",
+          "holder": "lane-a",
+          "id": "work-01a045cf9acf720390004ead3ffde56b",
+          "last_activity": "2026-08-28T00:40:28.637Z",
+          "needs": [],
+          "owner": "lane-a",
+          "readiness": "claimed",
+          "state": "claimed",
+          "title": "Create A.txt",
+          "workspace": "/private/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+        },
+        {
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-b",
+          "holder": "lane-b",
+          "id": "work-01a045cf9ad072e8a4f16a47476b858d",
+          "last_activity": "2026-08-28T00:40:28.637Z",
+          "needs": [],
+          "owner": "lane-b",
+          "readiness": "claimed",
+          "state": "claimed",
+          "title": "Create B.txt",
+          "workspace": "/private/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+        },
+        {
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-c",
+          "holder": "lane-c",
+          "id": "work-01a045cf9ad07c8e96d7fa674c621dd5",
+          "last_activity": "2026-08-28T00:40:28.637Z",
+          "needs": [],
+          "owner": "lane-c",
+          "readiness": "claimed",
+          "state": "claimed",
+          "title": "Create C.txt",
+          "workspace": "/private/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+        },
+        {
+          "artifact_bindings": [],
+          "authority_epoch": null,
+          "authority_subject": null,
+          "holder": null,
+          "id": "work-01a045cf9ad170d1a6e65930029ef690",
+          "last_activity": "2026-08-28T00:40:28.625Z",
+          "needs": [
+            "work-01a045cf9acf720390004ead3ffde56b",
+            "work-01a045cf9ad072e8a4f16a47476b858d",
+            "work-01a045cf9ad07c8e96d7fa674c621dd5"
+          ],
+          "owner": "lane-a",
+          "readiness": "blocked",
+          "state": "open",
+          "title": "Create D.txt",
+          "workspace": "/private/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+        }
+      ],
+      "item_count": 4,
+      "process_audits": [
+        {
+          "adapter_pid": 56935,
+          "alive_after_cleanup": [],
+          "isolation_backend": null,
+          "node_id": "lane-a",
+          "registered_process_groups": [],
+          "work_item_id": "work-01a045cf9acf720390004ead3ffde56b"
+        },
+        {
+          "adapter_pid": 56936,
+          "alive_after_cleanup": [],
+          "isolation_backend": null,
+          "node_id": "lane-c",
+          "registered_process_groups": [],
+          "work_item_id": "work-01a045cf9ad07c8e96d7fa674c621dd5"
+        },
+        {
+          "adapter_pid": 56937,
+          "alive_after_cleanup": [],
+          "isolation_backend": null,
+          "node_id": "lane-b",
+          "registered_process_groups": [],
+          "work_item_id": "work-01a045cf9ad072e8a4f16a47476b858d"
+        }
+      ],
+      "receipt_chains": {
+        "worker-01a045cf9adf7b35ae0f5c730ddc458e": [
+          "worker-receipt-01a045cf9adf745eaf9b3dcf0a4ba37b",
+          "worker-receipt-01a045cf9ae27b149e72c6d0ed8a4c55",
+          "worker-receipt-01a045cf9ae27da5b363ec48dc73a021",
+          "worker-receipt-01a045cf9b5a7af1883650044eec4b1a"
+        ],
+        "worker-01a045cf9aea7818a78c1393cb9b1881": [
+          "worker-receipt-01a045cf9aea7374ae2b78ad5013b3f2",
+          "worker-receipt-01a045cf9aee76059f6ebb52821f8d04",
+          "worker-receipt-01a045cf9aee70cda4c7575d5acdcff4",
+          "worker-receipt-01a045cf9bb77e5da7ceb360c395ea0f"
+        ],
+        "worker-01a045cf9af570e99f3ff807c41fbeb1": [
+          "worker-receipt-01a045cf9af67adfa2b8d3678edb235e",
+          "worker-receipt-01a045cf9af87cd9b91de9e300540297",
+          "worker-receipt-01a045cf9af97120a116166ca2812660",
+          "worker-receipt-01a045cf9bc273fd881abf577151dbc9"
+        ]
+      },
+      "return_code": 35,
+      "seeded_items": {
+        "a": "work-01a045cf9acf720390004ead3ffde56b",
+        "b": "work-01a045cf9ad072e8a4f16a47476b858d",
+        "c": "work-01a045cf9ad07c8e96d7fa674c621dd5",
+        "d": "work-01a045cf9ad170d1a6e65930029ef690"
+      },
+      "state": "degraded",
+      "terminal_sessions": [
+        {
+          "adapter": "fixture",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-a",
+          "last_activity": "2026-08-28T00:40:28.762Z",
+          "node_id": "lane-a",
+          "outcome_code": "process_cancelled",
+          "session_id": "worker-01a045cf9adf7b35ae0f5c730ddc458e",
+          "state": "degraded",
+          "transition": "degrade",
+          "work_item_id": "work-01a045cf9acf720390004ead3ffde56b"
+        },
+        {
+          "adapter": "fixture",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-c",
+          "last_activity": "2026-08-28T00:40:28.854Z",
+          "node_id": "lane-c",
+          "outcome_code": "process_cancelled",
+          "session_id": "worker-01a045cf9aea7818a78c1393cb9b1881",
+          "state": "degraded",
+          "transition": "degrade",
+          "work_item_id": "work-01a045cf9ad07c8e96d7fa674c621dd5"
+        },
+        {
+          "adapter": "fixture",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "work-lane-b",
+          "last_activity": "2026-08-28T00:40:28.865Z",
+          "node_id": "lane-b",
+          "outcome_code": "process_cancelled",
+          "session_id": "worker-01a045cf9af570e99f3ff807c41fbeb1",
+          "state": "degraded",
+          "transition": "degrade",
+          "work_item_id": "work-01a045cf9ad072e8a4f16a47476b858d"
+        }
+      ],
+      "worker_count": 3
+    },
+    "receipt_count": 12,
+    "second_orchestrate": {
+      "code": "orchestrate_root_not_empty",
+      "detail": "orchestration v0 requires an empty work ledger",
+      "refused": true
+    },
+    "session_count": 3,
+    "sessions": [
+      {
+        "adapter": "fixture",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-a",
+        "last_activity": "2026-08-28T00:40:28.762Z",
+        "node_id": "lane-a",
+        "outcome_code": "process_cancelled",
+        "session_id": "worker-01a045cf9adf7b35ae0f5c730ddc458e",
+        "state": "degraded",
+        "transition": "degrade",
+        "work_item_id": "work-01a045cf9acf720390004ead3ffde56b"
+      },
+      {
+        "adapter": "fixture",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-c",
+        "last_activity": "2026-08-28T00:40:28.854Z",
+        "node_id": "lane-c",
+        "outcome_code": "process_cancelled",
+        "session_id": "worker-01a045cf9aea7818a78c1393cb9b1881",
+        "state": "degraded",
+        "transition": "degrade",
+        "work_item_id": "work-01a045cf9ad07c8e96d7fa674c621dd5"
+      },
+      {
+        "adapter": "fixture",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-b",
+        "last_activity": "2026-08-28T00:40:28.865Z",
+        "node_id": "lane-b",
+        "outcome_code": "process_cancelled",
+        "session_id": "worker-01a045cf9af570e99f3ff807c41fbeb1",
+        "state": "degraded",
+        "transition": "degrade",
+        "work_item_id": "work-01a045cf9ad072e8a4f16a47476b858d"
+      }
+    ],
+    "work_after": [
+      {
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-a",
+        "holder": "lane-a",
+        "id": "work-01a045cf9acf720390004ead3ffde56b",
+        "last_activity": "2026-08-28T00:40:28.637Z",
+        "needs": [],
+        "owner": "lane-a",
+        "readiness": "claimed",
+        "state": "claimed",
+        "title": "Create A.txt",
+        "workspace": "/private/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+      },
+      {
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-b",
+        "holder": "lane-b",
+        "id": "work-01a045cf9ad072e8a4f16a47476b858d",
+        "last_activity": "2026-08-28T00:40:28.637Z",
+        "needs": [],
+        "owner": "lane-b",
+        "readiness": "claimed",
+        "state": "claimed",
+        "title": "Create B.txt",
+        "workspace": "/private/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+      },
+      {
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "work-lane-c",
+        "holder": "lane-c",
+        "id": "work-01a045cf9ad07c8e96d7fa674c621dd5",
+        "last_activity": "2026-08-28T00:40:28.637Z",
+        "needs": [],
+        "owner": "lane-c",
+        "readiness": "claimed",
+        "state": "claimed",
+        "title": "Create C.txt",
+        "workspace": "/private/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+      },
+      {
+        "artifact_bindings": [],
+        "authority_epoch": null,
+        "authority_subject": null,
+        "holder": null,
+        "id": "work-01a045cf9ad170d1a6e65930029ef690",
+        "last_activity": "2026-08-28T00:40:28.625Z",
+        "needs": [
+          "work-01a045cf9acf720390004ead3ffde56b",
+          "work-01a045cf9ad072e8a4f16a47476b858d",
+          "work-01a045cf9ad07c8e96d7fa674c621dd5"
+        ],
+        "owner": "lane-a",
+        "readiness": "blocked",
+        "state": "open",
+        "title": "Create D.txt",
+        "workspace": "/private/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+      }
+    ]
+  },
+  "H4_retire": {
+    "retire": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "retire",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+        "peer-h1"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.092,
+      "ended_utc": "2026-08-28T00:40:29Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:28Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"retire\",\"evidence\":{\"id\":\"registry-01a045cf9c537e2eb802292a9bc25f13\",\"kind\":\"registry_entry\",\"node_id\":\"peer-h1\",\"role\":\"Codex\",\"schema_version\":0,\"state\":\"retired\",\"tenant_id\":\"h20260828004028\",\"timestamp\":\"2026-08-28T00:40:29.011Z\"},\"status\":\"ok\"}\n",
+      "stdout_bytes": 283,
+      "stdout_sha256": "c8a485c8441879beef599d641473f29db94aaee49872166a6a2490be95c61b2e",
+      "timed_out": false,
+      "timeout_s": 30.0
+    }
+  },
+  "H5_uninstall_dry_run": {
+    "empty_dest_dry_run": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "uninstall",
+        "--destination",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install",
+        "--dry-run"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.073,
+      "ended_utc": "2026-08-28T00:40:29Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:29Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install\\njournal entries: 0\\n\\nWILL REMOVE:\\n  (nothing)\\nPRESERVED (user records \u2014 uninstall never touches):\\n  (no bus roots / state dirs recorded)\\nUNRESOLVED (journal corrupt at offset \u2014 fail-closed):\\n  - no wiring journal at ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\",\"unresolved\":[\"no wiring journal at ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\"]},\"status\":\"ok\"}\n",
+      "stdout_bytes": 866,
+      "stdout_sha256": "dd79228faa3b9311c60567f906429dca68c74ddc2118667916eb22c4a4415107",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "journaled_dry_run": {
+      "argv": [
+        "/usr/bin/python3",
+        "-m",
+        "floati",
+        "uninstall",
+        "--destination",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest",
+        "--dry-run",
+        "--root",
+        "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028"
+      ],
+      "cwd": "~/Projects/floati-grok",
+      "elapsed_s": 0.073,
+      "ended_utc": "2026-08-28T00:40:29Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T00:40:29Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest\\njournal entries: 2\\n\\nWILL REMOVE:\\n  - [file] ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest/shipped.txt (create)\\nPRESERVED (user records \u2014 uninstall never touches):\\n  - [bus_root] ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028\\n  - [bus_root] ~/Projects/floati-grok/.gauntlet-scratch/h20260828004028\",\"unresolved\":[]},\"status\":\"ok\"}\n",
+      "stdout_bytes": 661,
+      "stdout_sha256": "84e13d57e7a9ee822ff91e7e9f77c24b02ece40fd9892b8527402e5cd9cf90d9",
+      "timed_out": false,
+      "timeout_s": 30.0
+    },
+    "owned_bytes_after": 21,
+    "owned_bytes_before": 21,
+    "owned_path": "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest/shipped.txt",
+    "owned_unchanged": true
+  },
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.014,
+    "ended_utc": "2026-08-28T00:40:28Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T00:40:28Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "Python 3.9.6\n",
+    "stdout_bytes": 13,
+    "stdout_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+    "timed_out": false,
+    "timeout_s": 30.0
+  },
+  "ended_utc": "2026-08-28T00:40:29Z",
+  "live_fleet_refused": "~/.floati-bus/puddle-fleet",
+  "scratch": "~/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
+  "started_utc": "2026-08-28T00:40:28Z",
+  "trunk_sha": "c4dd4a164328f91407e4103562a0e6308d573f73",
+  "wake": {
+    "reason": "Wake drills wait for the WS-A controller; this seat does not simulate them.",
+    "status": "SKIP"
+  }
+}

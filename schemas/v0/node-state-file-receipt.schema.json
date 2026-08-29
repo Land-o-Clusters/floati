@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/node-state-file-receipt.schema.json",
+  "title": "Floati Node State File Flush Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "node_id",
+    "state_file",
+    "operation",
+    "observed_mtime_ns",
+    "observed_size_bytes",
+    "prior_mtime_ns"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^node-state-flush-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"},
+    "kind": {"const": "node_state_flush_receipt"},
+    "node_id": {"$ref": "#/$defs/identifier"},
+    "state_file": {"$ref": "#/$defs/absolute_path"},
+    "operation": {"const": "flush"},
+    "observed_mtime_ns": {"type": "integer", "minimum": 0},
+    "observed_size_bytes": {"type": "integer", "minimum": 0},
+    "prior_mtime_ns": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "absolute_path": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/",
+      "x-floati-terminal-unsafe": true
+    }
+  }
+}

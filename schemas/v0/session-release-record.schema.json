@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/session-release-record.schema.json",
+  "title": "Floati Session Release Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "session_id", "adoption_id", "manager_node_id", "lease_subject", "lease_epoch"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^release-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "session_release"},
+    "session_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "adoption_id": {"type": "string", "pattern": "^adoption-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "manager_node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "lease_subject": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "lease_epoch": {"type": "integer", "minimum": 1}
+  }
+}

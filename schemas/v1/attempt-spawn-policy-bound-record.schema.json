@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/attempt-spawn-policy-bound-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "parent_item_id",
+    "parent_attempt_id",
+    "parent_fence_token",
+    "parent_capability_set_bound_id",
+    "adapter",
+    "subagents_mode",
+    "max_children",
+    "max_depth",
+    "child_capability_ceiling",
+    "spawn_budget_ceiling",
+    "workspace_policies",
+    "bound_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^attempt-spawn-policy-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "kind": {
+      "const": "attempt_spawn_policy_bound"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_item_id": {
+      "type": "string",
+      "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_attempt_id": {
+      "type": "string",
+      "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_fence_token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_capability_set_bound_id": {
+      "type": "string",
+      "pattern": "^capability-set-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "adapter": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 128,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "subagents_mode": {
+      "enum": [
+        "disabled",
+        "observed_only",
+        "managed"
+      ]
+    },
+    "max_children": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16
+    },
+    "child_capability_ceiling": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/capability_set"
+    },
+    "spawn_budget_ceiling": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"
+    },
+    "workspace_policies": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/workspace_policies"
+    },
+    "bound_at_testimony": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "subagents_mode": {
+            "enum": [
+              "disabled",
+              "observed_only"
+            ]
+          }
+        },
+        "required": [
+          "subagents_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "max_children": {
+            "const": 0
+          },
+          "max_depth": {
+            "const": 0
+          },
+          "child_capability_ceiling": {
+            "maxItems": 0
+          },
+          "spawn_budget_ceiling": {
+            "maxItems": 0
+          },
+          "workspace_policies": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

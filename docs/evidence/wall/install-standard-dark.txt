@@ -1,0 +1,7 @@
+      ⊙
+      │
+     ╱ ╲
+    ╱───╲
+   ╱     ╲
+ ~~~~~~~~~~~
+{"artifact_version":0,"command":"install","evidence":{"status":"installed"},"status":"ok"}

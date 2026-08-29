@@ -1,0 +1,30 @@
+⊙ FLOATI // HARBOR BOARD
+OBSERVED 2026-07-31T12:00:10.000Z
+! DENIAL IDEMPOTENCY_CONFLICT fable → lane-floati
+! STALE AUTHORITY app-build holder:lane-app
+! STALE MUTEX fable-workspace holder:fable
+
+NODE               LIVE       AUTH       MUTEX      INBOX  LAST
+> fable              EXPIRED    NONE       EXPIRED        0  12:00:06.000
+  lane-app           SILENT     EXPIRED    ACTIVE         0  11:59:40.000
+  lane-floati        PRESENT    ACTIVE     NONE           1  12:00:09.000
+
+WORK DAG  [▓▓░░░░░░░░]  20%
+  READY     review provisional copy  holder:-
+  CLAIMED   polish harbor board  holder:lane-floati
+  DONE      verify protocol gate  holder:lane-floati
+  CLAIMED   claim worker item  holder:lane-floati
+  CLAIMED   drive worker item  holder:lane-floati
+
+CONSUMPTION  WORK AVAILABLE
+  coordinate: work/items.jsonl
+
+WORKERS
+  DEGRADED  lane-floati codex demo-work-2 PROCESS DIED
+  COMPLETE  lane-floati acp demo-work-3
+  CLAIM     lane-floati codex demo-work-4
+  DRIVING   lane-floati codex demo-work-5
+
+RECEIPTS
+  DELIVERY 1 ITEM
+↑/k ↓/j select  enter detail  a ack  q quit

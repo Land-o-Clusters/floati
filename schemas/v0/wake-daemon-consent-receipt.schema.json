@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/wake-daemon-consent-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "node_id", "harness", "coordinate_digest", "adapter_version", "adapter_digest", "min_poll_seconds", "max_poll_seconds", "max_backoff_seconds", "activation_epoch", "operation", "state", "predecessor_receipt_id", "idempotency_key"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 0},
+    "id": {"type": "string", "pattern": "^wake-daemon-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "wake_daemon_consent_receipt"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "harness": {"enum": ["codex", "cursor"]},
+    "coordinate_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "adapter_version": {"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"},
+    "adapter_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "min_poll_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "max_poll_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "max_backoff_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "activation_epoch": {"type": "integer", "minimum": 1},
+    "operation": {"enum": ["consent", "revoke"]},
+    "state": {"enum": ["active", "revoked"]},
+    "predecessor_receipt_id": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^wake-daemon-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}]},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

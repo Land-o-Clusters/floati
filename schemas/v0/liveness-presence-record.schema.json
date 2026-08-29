@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/liveness-presence-record.schema.json",
+  "title": "Floati Liveness Presence Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "node_id",
+    "observed_at",
+    "expires_at",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^presence-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "liveness_presence"},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "state": {"type": "string", "enum": ["present", "silent", "expired"]}
+  }
+}

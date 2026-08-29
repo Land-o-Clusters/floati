@@ -1,0 +1,57 @@
+FLOATI deterministic three-fault drill capture
+Status date: 2026-07-31 (timestamps are UTC on 2026-08-01)
+
+Plan: N=3 local fixture workers; M=5 items.
+Trigger boundary: each action waited for its exact durable DRIVE receipt.
+
+Final artifact:
+state=degraded return_code=35 elapsed_seconds=0.485799
+controller_exit_codes=[0,0,0]
+alive_after_cleanup=[]
+
+kill_worker floati-a triggered=true outcome=process_cancelled
+expire_authority floati-b triggered=true outcome=authority_expired_mid_claim
+hang_child floati-c triggered=true outcome=process_timeout
+
+Final board excerpt:
+WORKERS
+  DEGRADED floati-b fixture work-019fbb325d37772aac1ce1f0b917c1fb AUTHORITY EXPIRED
+  DEGRADED floati-c fixture work-019fbb325d387b9783a20c560fb47741 PROCESS TIMEOUT
+  DEGRADED floati-a fixture work-019fbb325d377788a5cc6322dbb31e09 PROCESS CANCELLED
+RECEIPTS
+  WORKER floati-c DEGRADE PROCESS TIMEOUT
+  WORKER floati-b DEGRADE AUTHORITY EXPIRED MID CLAIM
+  WORKER floati-a DEGRADE PROCESS CANCELLED
+  WORKER floati-a DRIVE
+
+Receipt chains:
+floati-a worker-019fbb325d417ebb98d4de769dc9e21d
+  worker-receipt-019fbb325d4177a5ac9e15c24a54e341
+  worker-receipt-019fbb325d4573c89d0af558195f4446
+  worker-receipt-019fbb325d467beda995ae08c420fd94
+  worker-receipt-019fbb325d4f7acc835b1f60126d1489
+floati-b worker-019fbb325d407b5ab855a39bde2c5640
+  worker-receipt-019fbb325d407a68b15ecae5ae8da266
+  worker-receipt-019fbb325d447fbeb2013dcdf8726a64
+  worker-receipt-019fbb325d4578d19ef0c7a66523935c
+  worker-receipt-019fbb325ddd7456b73c249431c122fe
+floati-c worker-019fbb325d4076219cd6e6d5110d5a92
+  worker-receipt-019fbb325d4177d5b5876fc1fc4ce6a1
+  worker-receipt-019fbb325d447033918126592e4d15b9
+  worker-receipt-019fbb325d4670739d940d2cf7a93b00
+  worker-receipt-019fbb325e7078079e6de2958e9d2f4b
+
+Process audits:
+floati-a adapter=26631 registered_groups=[] survivors=[]
+floati-b adapter=26629 registered_groups=[] survivors=[]
+floati-c adapter=26630 registered_groups=[26633] survivors=[]
+Controllers: 26626,26627,26628. Independent `kill -0` checks returned ABSENT
+for all seven controller, adapter, and registered-grandchild PIDs.
+
+Zero-delay bypass regression:
+tests.test_orchestrate.FleetFaultDrillTests.test_fast_worker_cannot_bypass_a_requested_drive_drill PASS
+Result contract: degraded/35, triggered=true, process_cancelled.
+
+Drain-audit regression:
+tests.test_orchestrate.FleetOrchestratorTests.test_drain_requires_complete_zero_survivor_process_audit PASS
+Missing audit coverage or any reported survivor prohibits drained/0.

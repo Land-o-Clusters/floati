@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/denial-receipt.schema.json",
+  "title": "Floati Denial Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "attempt_id",
+    "claimed_sender",
+    "claimed_recipient",
+    "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^denial-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "denial_receipt"},
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "claimed_sender": {"type": "string", "minLength": 1, "maxLength": 64},
+    "claimed_recipient": {"type": "string", "minLength": 1, "maxLength": 64},
+    "reason_code": {
+      "type": "string",
+      "enum": ["unknown_sender", "unknown_recipient", "idempotency_conflict", "reply_to_unknown", "reply_to_parties_mismatch"]
+    }
+  }
+}

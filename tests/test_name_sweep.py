@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import unittest
+from pathlib import Path
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+APPROVED_README_TOP = """<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-icon.svg#gh-dark-mode-only">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-icon.svg#gh-light-mode-only">
+    <img src="docs/assets/floati-icon.svg" alt="THE BUOY" width="180">
+  </picture>
+</p>
+
+<h1 align="center">Floati</h1>
+<p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
+<p align="center">Any harness, any mix — one bus, one board, one set of receipts.</p>
+
+"""
+
+APPROVED_HERO_LOOP = """<p align="center">
+  <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay" width="1400">
+</p>"""
+
+LIVING_PUBLIC_DOCS = (
+    "README.md",
+    "CONTRIBUTING.md",
+    "docs/CASE-LAW.md",
+    "docs/CONFLUENCE-v0.md",
+    "docs/CONFORMANCE.md",
+    "docs/COPY-LEDGER.md",
+    "docs/FLEET.md",
+    "docs/TRUTH-GUARANTEES.md",
+    "bundle/c7.1/README.md",
+    "bundle/c7.2/README.md",
+)
+
+ACCOUNT_NEUTRAL_PUBLIC_FILES = (
+    "docs/demo/corpus.v0.jsonl",
+    "docs/evidence/DEMO-UAT-CAPTURE-GIF-SET.md",
+)
+
+INSTALLER_SHADOW_PUBLIC_NOTE = "docs/evidence/FLEET-OPS-ISSUE-3-INSTALLER-SHADOW-PATH-DOCS.md"
+
+
+def _operator_account_name() -> str:
+    return os.environ.get("USER") or os.environ.get("LOGNAME") or Path.home().name
+
+
+PRIVATE_ACCOUNT_PATTERNS = (
+    re.compile(r"/Users/[^/\s`<>]+", re.IGNORECASE),
+    re.compile(re.escape(_operator_account_name()), re.IGNORECASE),
+)
+
+TENANT_PATTERNS = (
+    *PRIVATE_ACCOUNT_PATTERNS,
+    re.compile(r"CMs-M5", re.IGNORECASE),
+    re.compile(r"\.slipway-bus/puddle-fleet", re.IGNORECASE),
+    re.compile(r"puddle-fleet", re.IGNORECASE),
+    re.compile(r"~/Projects/puddle", re.IGNORECASE),
+    re.compile(r"/absolute/slipway", re.IGNORECASE),
+)
+
+RETIRED_PRODUCT_NAME = re.compile(
+    r"(?<![\w./-])(?:slipway|slip)(?!\w)",
+    re.IGNORECASE,
+)
+
+
+class NameSweepLauncherTests(unittest.TestCase):
+    def test_floati_is_canonical_regular_executable(self) -> None:
+        """Catches a missing, symlinked, or non-executable public launcher."""
+        launcher = REPOSITORY_ROOT / "scripts" / "floati"
+
+        self.assertTrue(launcher.is_file())
+        self.assertFalse(launcher.is_symlink())
+        self.assertTrue(launcher.stat().st_mode & 0o111)
+
+    def test_transition_alias_is_absent(self) -> None:
+        """Catches a retained compatibility launcher or symlink."""
+        launcher = REPOSITORY_ROOT / "scripts" / "slip"
+        self.assertFalse(os.path.lexists(launcher))
+
+    def test_public_help_uses_only_floati_command_token(self) -> None:
+        """Catches any public command example that still teaches the retired verb."""
+        launcher = REPOSITORY_ROOT / "scripts" / "floati"
+        self.assertTrue(launcher.is_file())
+
+        completed = subprocess.run(
+            [str(launcher), "--help"],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(0, completed.returncode)
+        self.assertIn("floati COMMAND [OPTIONS]", completed.stdout)
+        self.assertNotRegex(completed.stdout, r"(?<![./])\bslip\b")
+        self.assertNotIn("Slipway", completed.stdout)
+
+
+class NameSweepLivingDocumentationTests(unittest.TestCase):
+    def test_retired_product_name_detector_distinguishes_prose_from_ruled_coordinates(self) -> None:
+        """Catches punctuation-bound retired prose without rejecting ruled coordinates."""
+
+        for text in ("Slipway", "slip,", "SLIPWAY!"):
+            with self.subTest(text=text):
+                self.assertIsNotNone(RETIRED_PRODUCT_NAME.search(text))
+
+        for text in ("https://slipway.dev", ".slipway", "x-slipway-*"):
+            with self.subTest(text=text):
+                self.assertIsNone(RETIRED_PRODUCT_NAME.search(text))
+
+    def test_readme_begins_with_exact_fable_copy(self) -> None:
+        """Catches invented README voice on the ruled Fable-owned surface."""
+        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertTrue(readme.startswith(APPROVED_README_TOP))
+        self.assertEqual(1, readme.count(APPROVED_HERO_LOOP))
+        self.assertNotIn("[[readme.hero_loop]]", readme)
+
+    def test_readme_local_references_resolve(self) -> None:
+        """Catches a README link or image that points at an absent repository file."""
+        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+        references = re.findall(r"\]\(([^)]+)\)", readme)
+        references.extend(re.findall(r'\b(?:src|srcset)="([^"]+)"', readme))
+
+        local_paths = {
+            reference.split("#", 1)[0]
+            for reference in references
+            if not re.match(r"^[a-z][a-z0-9+.-]*:", reference, re.IGNORECASE)
+            and not reference.startswith("#")
+        }
+        missing = sorted(
+            relative
+            for relative in local_paths
+            if not (REPOSITORY_ROOT / relative).is_file()
+        )
+
+        self.assertEqual([], missing)
+
+    def test_living_public_docs_teach_floati_not_the_retired_name(self) -> None:
+        """Catches living product prose or public command examples left behind."""
+        for relative in LIVING_PUBLIC_DOCS:
+            with self.subTest(relative=relative):
+                text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+                self.assertNotIn("scripts/slip", text)
+                self.assertIsNone(RETIRED_PRODUCT_NAME.search(text))
+
+    def test_living_public_docs_are_tenant_neutral(self) -> None:
+        """Catches an owner path, host identity, or private fleet in public copy."""
+        for relative in LIVING_PUBLIC_DOCS:
+            text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            if relative == "README.md":
+                text = text.replace('"tenant_id":"puddle-fleet"', '"tenant_id":"real-receipt"')
+            for pattern in TENANT_PATTERNS:
+                with self.subTest(relative=relative, pattern=pattern.pattern):
+                    self.assertIsNone(pattern.search(text))
+
+    def test_public_capture_artifacts_do_not_expose_an_operator_account(self) -> None:
+        """Catches real macOS home paths without embedding an account literal."""
+        for relative in ACCOUNT_NEUTRAL_PUBLIC_FILES:
+            text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for pattern in PRIVATE_ACCOUNT_PATTERNS:
+                with self.subTest(relative=relative, pattern=pattern.pattern):
+                    self.assertIsNone(pattern.search(text))
+
+    def test_demo_uses_neutral_floati_lane(self) -> None:
+        """Catches synthetic public frames that expose the retired lane name."""
+        from floati.demo import capture_demo
+
+        frame = capture_demo(color=False)
+        self.assertIn("lane-floati", frame)
+        self.assertNotIn("lane-slipway", frame)
+
+
+class InstallerShadowDocumentationTests(unittest.TestCase):
+    """Issue #3: the installer-shadow scan-input requirement must be stated."""
+
+    def test_doctor_help_states_the_installer_shadow_path_requirement(self) -> None:
+        """Catches the PATH requirement being left only in the source."""
+        from floati.helptext import HELP
+
+        self.assertIn("install scripts directory", HELP["doctor"])
+        self.assertNotIn("[[", HELP["doctor"])
+
+    def test_retained_public_note_carries_the_installer_shadow_operator_rule(self) -> None:
+        """Catches the operator rule disappearing with the non-public design corpus."""
+        text = (REPOSITORY_ROOT / INSTALLER_SHADOW_PUBLIC_NOTE).read_text(encoding="utf-8")
+
+        self.assertEqual(0, text.count("[[design.doctor.installer_shadow_path]]"))
+        self.assertIn("not a shadow finding, not an all-clear", text)
+
+    def test_the_installer_shadow_documentation_is_written(self) -> None:
+        """The architect's prose landed on both surfaces; placeholders are a regression."""
+        from floati.helptext import HELP
+
+        text = (REPOSITORY_ROOT / INSTALLER_SHADOW_PUBLIC_NOTE).read_text(encoding="utf-8")
+        self.assertIn("installer-shadow", text)
+        self.assertNotIn("[[design.doctor.", text)
+        self.assertNotIn("[[help.doctor.", HELP["doctor"])
+
+if __name__ == "__main__":
+    unittest.main()

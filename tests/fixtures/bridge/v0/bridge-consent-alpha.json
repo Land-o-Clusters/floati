@@ -1,0 +1,13 @@
+{
+  "schema_version": 0,
+  "id": "bridge-consent-018f0f23abcd71238000000000000000",
+  "tenant_id": "alpha",
+  "timestamp": "2026-08-01T15:00:00.000Z",
+  "kind": "bridge_consent",
+  "bridge_id": "bridge-018f0f23abce71238000000000000000",
+  "peer_tenant_id": "beta",
+  "actor": "alice",
+  "direction": "bidirectional",
+  "state": "granted",
+  "scope": "advisory_not_consumption"
+}

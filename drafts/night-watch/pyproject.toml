@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "night-watch"
+version = "0.1.0+draft"
+description = "DRAFT - NOT WIRED. The Night Watch: budgets, loop detection, pause/resume, morning report. Pure fold; advisory directives only."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []

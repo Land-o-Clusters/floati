@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/run-admission-bound-record.schema.json",
+  "title": "Floati Run Admission Bound Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "run_id", "plan_digest", "policy_digest", "max_active_attempts", "workers", "budget_reservations", "items", "admission_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^run-admission-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "run_admission_bound"},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "max_active_attempts": {"type": "integer", "minimum": 1, "maximum": 64},
+    "workers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_id", "worker_profile"],
+        "properties": {
+          "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+          "worker_profile": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+        }
+      }
+    },
+    "budget_reservations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["budget_id", "amount"],
+        "properties": {
+          "budget_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+          "amount": {"type": "integer", "minimum": 1, "maximum": 1000000000}
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "workspace_key", "concurrency_key", "capability_selector"],
+        "properties": {
+          "item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "workspace_key": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+          "concurrency_key": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+          "capability_selector": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+        }
+      }
+    },
+    "admission_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

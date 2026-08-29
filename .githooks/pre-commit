@@ -1,0 +1,14 @@
+#!/bin/sh
+# SEAT IDENTITY FENCE. This is opt-in per worktree: absence of both local
+# coordinates bypasses the identity fence while preserving the manifest gate.
+seat_root=$(/usr/bin/git config --worktree --get floati.seatFenceRoot 2>/dev/null || true)
+seat_node=$(/usr/bin/git config --worktree --get floati.seatFenceNode 2>/dev/null || true)
+if [ -z "$seat_root" ] && [ -z "$seat_node" ]; then
+  exec "$PWD/scripts/pre-commit-manifest-guard"
+fi
+if [ -z "$seat_root" ] || [ -z "$seat_node" ]; then
+  echo "SEAT FENCE: worktree opt-in requires both root and node coordinates." >&2
+  exit 1
+fi
+python3 -m floati.seat_fence --root "$seat_root" --node "$seat_node" || exit 1
+exec "$PWD/scripts/pre-commit-manifest-guard"

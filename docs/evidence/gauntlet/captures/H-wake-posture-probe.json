@@ -1,0 +1,691 @@
+{
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "exit": 0,
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "Python 3.9.6\n",
+    "stdout_bytes": 13,
+    "stdout_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+    "timed_out": false,
+    "wake_term_lines": []
+  },
+  "harnesses": {
+    "claude": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/claude",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "2.1.231 (Claude Code)\n",
+          "stdout_bytes": 22,
+          "stdout_sha256": "6220c2a7dbd3dd819ca057957744532f271788bb2de7ba59d4bbbe6847d44fc2",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/claude",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "Usage: claude [options] [command] [prompt]\n\nClaude Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                Your prompt\n\nOptions:\n  --add-dir <directories...>            Additional directories to allow tool\n                                        access to\n  --agent <agent>                       Agent for the current session. Overrides\n                                        the 'agent' setting.\n  --agents <json>                       JSON object defining custom agents (e.g.\n                                        '{\"reviewer\": {\"description\": \"Reviews\n                                        code\", \"prompt\": \"You are a code\n                                        reviewer\"}}')\n  --allow-dangerously-skip-permissions  Enable bypassing all permission checks\n                                        as an option, without it being enabled\n                                        by default. Recommended only for\n                                        sandboxes with no internet access.\n  --allowedTools, --allowed-tools <tools...>\n      Comma or space-separated list of tool names to allow (e.g. \"Bash(git *)\n      Edit\")\n  --append-system-prompt <prompt>       Append a system prompt to the default\n                                        system prompt\n  --autocompact <auto|tokens>           Auto-compact window size (auto, or\n                                        100k\u20131M tokens)\n  --ax-screen-reader                    Render screen-reader friendly output\n                                        (flat text, no decorative borders or\n                                        animations).\n  --bg, --background                    Start the session as a background agent\n                                        and return immediately (manage with\n                                        `claude agents`)\n  --bare                                Minimal mode: skip hooks, LSP, plugin\n                                        sync, attribution, auto-memory,\n                                        background prefetches, keychain reads,\n                                        and CLAUDE.md auto-discovery. Sets\n                                        CLAUDE_CODE_SIMPLE=1. Anthropic auth is\n                                        strictly ANTHROPIC_API_KEY or\n                                        apiKeyHelper via --settings (OAuth and\n                                        keychain are never read). 3P providers\n                                        (Bedrock/Vertex/Foundry) use their own\n                                        credentials. Skills still resolve via\n                                        /skill-name. Explicitly provide context\n                                        via: --system-prompt[-file],\n                                        --append-system-prompt[-file], --add-dir\n                                        (CLAUDE.md dirs), --mcp-config,\n                                        --settings, --agents, --plugin-dir.\n  --betas <betas...>                    Beta headers to include in API requests\n                                        (API key users only)\n  --brief                               Enable SendUserMessage tool for\n                                        agent-to-user communication\n  --chrome                              Enable Claude in Chrome integration\n  --cloud [description|session_id|url]  Create a cloud session with the given\n                                        description, or attach to an existing\n                                        one by session ID or claude.ai/code URL\n  -c, --continue                        Continue the most recent conversation in\n                                        the current directory\n  --dangerously-skip-permissions        Bypass all permission checks.\n                                        Recommended only for sandboxes with no\n                                        internet access.\n  -d, --debug ",
+          "stdout_bytes": 16890,
+          "stdout_sha256": "71ad650f59e08ae40ede14c534db4f49d8590ee5a4f92f6da2882d3a5560fea6",
+          "timed_out": false,
+          "wake_term_lines": [
+            "Claude Code - starts an interactive session by default, use -p/--print for",
+            "--agent <agent>                       Agent for the current session. Overrides",
+            "--bg, --background                    Start the session as a background agent",
+            "--bare                                Minimal mode: skip hooks, LSP, plugin",
+            "--settings, --agents, --plugin-dir.",
+            "--cloud [description|session_id|url]  Create a cloud session with the given",
+            "one by session ID or claude.ai/code URL",
+            "filtering (e.g., \"api,hooks\" or",
+            "--effort <level>                      Effort level for the current session",
+            "--environment <environment_id>        Create a new cloud session that runs on",
+            "--fork-session                        When resuming, create a new session ID",
+            "--from-pr [value]                     Resume a session linked to a PR by PR",
+            "--include-hook-events                 Include all hook lifecycle events in the",
+            "--model <model>                       Model for the current session. Provide",
+            "-n, --name <name>                     Set a display name for this session",
+            "--no-session-persistence              Disable session persistence - sessions",
+            "--permission-mode <mode>              Permission mode to use for the session",
+            "--plugin-dir <path>                   Load a plugin from a directory or .zip",
+            "for this session only (repeatable:",
+            "--plugin-dir A --plugin-dir B.zip)",
+            "--plugin-url <url>                    Fetch a plugin .zip from a URL for this",
+            "session only (repeatable: --plugin-url A",
+            "--plugin-url B) (default: [])",
+            "--remote-control [name]               Start an interactive session with Remote",
+            "--remote-control-session-name-prefix <prefix>",
+            "Prefix for auto-generated Remote Control session names (default: hostname)",
+            "-r, --resume [value]                  Resume a conversation by session ID, or",
+            "(CLAUDE.md, skills, plugins, hooks, MCP",
+            "--session-id <uuid>                   Use a specific session ID for the",
+            "--system-prompt <prompt>              System prompt to use for the session",
+            "--teleport [session]                  Resume a teleport session, optionally",
+            "specify session ID",
+            "--tmux                                Create a tmux session for the worktree",
+            "session (optionally specify a name)",
+            "fix issues, run /doctor in a session.",
+            "plugin|plugins                        Manage Claude Code plugins"
+          ]
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/claude",
+            "hooks",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "Usage: claude [options] [command] [prompt]\n\nClaude Code - starts an interactive session by default, use -p/--print for\nnon-interactive output\n\nArguments:\n  prompt                                Your prompt\n\nOptions:\n  --add-dir <directories...>            Additional directories to allow tool\n                                        access to\n  --agent <agent>                       Agent for the current session. Overrides\n                                        the 'agent' setting.\n  --agents <json>                       JSON object defining custom agents (e.g.\n                                        '{\"reviewer\": {\"description\": \"Reviews\n                                        code\", \"prompt\": \"You are a code\n                                        reviewer\"}}')\n  --allow-dangerously-skip-permissions  Enable bypassing all permission checks\n                                        as an option, without it being enabled\n                                        by default. Recommended only for\n                                        sandboxes with no internet access.\n  --allowedTools, --allowed-tools <tools...>\n      Comma or space-separated list of tool names to allow (e.g. \"Bash(git *)\n      Edit\")\n  --append-system-prompt <prompt>       Append a system prompt to the default\n                                        system prompt\n  --autocompact <auto|tokens>           Auto-compact window size (auto, or\n                                        100k\u20131M tokens)\n  --ax-screen-reader                    Render screen-reader friendly output\n                                        (flat text, no decorative borders or\n                                        animations).\n  --bg, --background                    Start the session as a background agent\n                                        and return immediately (manage with\n                                        `claude agents`)\n  --bare                                Minimal mode: skip hooks, LSP, plugin\n                                        sync, attribution, auto-memory,\n                                        background prefetches, keychain reads,\n                                        and CLAUDE.md auto-discovery. Sets\n                                        CLAUDE_CODE_SIMPLE=1. Anthropic auth is\n                                        strictly ANTHROPIC_API_KEY or\n                                        apiKeyHelper via --settings (OAuth and\n                                        keychain are never read). 3P providers\n                                        (Bedrock/Vertex/Foundry) use their own\n                                        credentials. Skills still resolve via\n                                        /skill-name. Explicitly provide context\n                                        via: --system-prompt[-file],\n                                        --append-system-prompt[-file], --add-dir\n                                        (CLAUDE.md dirs), --mcp-config,\n                                        --settings, --agents, --plugin-dir.\n  --betas <betas...>                    Beta headers to include in API requests\n                                        (API key users only)\n  --brief                               Enable SendUserMessage tool for\n                                        agent-to-user communication\n  --chrome                              Enable Claude in Chrome integration\n  --cloud [description|session_id|url]  Create a cloud session with the given\n                                        description, or attach to an existing\n                                        one by session ID or claude.ai/code URL\n  -c, --continue                        Continue the most recent conversation in\n                                        the current directory\n  --dangerously-skip-permissions        Bypass all permission checks.\n                                        Recommended only for sandboxes with no\n                                        internet access.\n  -d, --debug ",
+          "stdout_bytes": 16890,
+          "stdout_sha256": "71ad650f59e08ae40ede14c534db4f49d8590ee5a4f92f6da2882d3a5560fea6",
+          "timed_out": false,
+          "wake_term_lines": [
+            "Claude Code - starts an interactive session by default, use -p/--print for",
+            "--agent <agent>                       Agent for the current session. Overrides",
+            "--bg, --background                    Start the session as a background agent",
+            "--bare                                Minimal mode: skip hooks, LSP, plugin",
+            "--settings, --agents, --plugin-dir.",
+            "--cloud [description|session_id|url]  Create a cloud session with the given",
+            "one by session ID or claude.ai/code URL",
+            "filtering (e.g., \"api,hooks\" or",
+            "--effort <level>                      Effort level for the current session",
+            "--environment <environment_id>        Create a new cloud session that runs on",
+            "--fork-session                        When resuming, create a new session ID",
+            "--from-pr [value]                     Resume a session linked to a PR by PR",
+            "--include-hook-events                 Include all hook lifecycle events in the",
+            "--model <model>                       Model for the current session. Provide",
+            "-n, --name <name>                     Set a display name for this session",
+            "--no-session-persistence              Disable session persistence - sessions",
+            "--permission-mode <mode>              Permission mode to use for the session",
+            "--plugin-dir <path>                   Load a plugin from a directory or .zip",
+            "for this session only (repeatable:",
+            "--plugin-dir A --plugin-dir B.zip)",
+            "--plugin-url <url>                    Fetch a plugin .zip from a URL for this",
+            "session only (repeatable: --plugin-url A",
+            "--plugin-url B) (default: [])",
+            "--remote-control [name]               Start an interactive session with Remote",
+            "--remote-control-session-name-prefix <prefix>",
+            "Prefix for auto-generated Remote Control session names (default: hostname)",
+            "-r, --resume [value]                  Resume a conversation by session ID, or",
+            "(CLAUDE.md, skills, plugins, hooks, MCP",
+            "--session-id <uuid>                   Use a specific session ID for the",
+            "--system-prompt <prompt>              System prompt to use for the session",
+            "--teleport [session]                  Resume a teleport session, optionally",
+            "specify session ID",
+            "--tmux                                Create a tmux session for the worktree",
+            "session (optionally specify a name)",
+            "fix issues, run /doctor in a session.",
+            "plugin|plugins                        Manage Claude Code plugins"
+          ]
+        }
+      ],
+      "identities": {
+        "~/.local/bin/claude": {
+          "path": "~/.local/bin/claude",
+          "present": true,
+          "realpath": "~/.local/share/claude/versions/2.1.238",
+          "size": 321263536
+        },
+        "/opt/homebrew/bin/claude": {
+          "path": "/opt/homebrew/bin/claude",
+          "present": true,
+          "realpath": "/opt/homebrew/Caskroom/claude-code/2.1.231/claude",
+          "size": 294720528
+        }
+      },
+      "which": {
+        "claude": "/opt/homebrew/bin/claude"
+      }
+    },
+    "cline": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/cline",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "3.0.60\n",
+          "stdout_bytes": 7,
+          "stdout_sha256": "f5f15202f18fd38a2a332fd2e44ee6e4fc2357a69b2db25580ccc242b2688a5e",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/cline",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "Usage: cline [options] [command] [prompt]\n\nCline CLI - AI coding assistant in your terminal\n\nArguments:\n  prompt                        Your prompt. Default to start in act mode with\n                                auto-approve enabled.\n\nOptions:\n  -V, --version                 Output the version number\n  -p, --plan                    Run in plan mode\n  --json                        Output messages as JSON instead of styled text\n  --auto-approve <boolean>      Set tool auto-approval for all tools (default:\n                                true)\n  -c, --cwd <path>              Working directory\n  --thinking <level>            Set reasoning effort:\n                                none|low|medium|high|xhigh. Bare --thinking uses\n                                medium; omitted leaves provider default.\n  --compaction <mode>           Context compaction mode: agentic|basic|off\n                                (default: agentic)\n  -i, --tui                     Open the terminal user interface (TUI) for\n                                interactive sessions\n  --id <session-id>             Resume an existing session by ID\n  -P, --provider <id>           Provider id (default: cline)\n  -k, --key <api-key>           API key override for this run\n  -m, --model <model-id>        Model to use for the session with the selected\n                                provider\n  -s, --system <system-prompt>  Override the default system prompt\n  -z, --zen                     Start a session that runs in the background hub\n  --retries [value]             Number of maximum consecutive mistakes (retries)\n                                before exiting (default: 6)\n  -t, --timeout <seconds>       Optional timeout in seconds (default: 0 for no\n                                timeout)\n  --acp                         Run in Agent Client Protocol (ACP) mode for\n                                editor integration\n  --config <path>               Configuration directory (default: ~/.cline)\n  --data-dir <path>             Use isolated local state at this directory path\n                                (default: ~/.cline/data)\n  --hooks-dir <path>            Directory path to additional hooks for runtime\n                                hook injection (default: ~/.cline/hooks)\n  --worktree                    Auto-create a detached git worktree under\n                                ~/.cline/worktrees/ and run the task there\n  --update                      Check for updates and install if available\n  --kanban                      Run the kanban app\n  -v, --verbose                 Show verbose output\n  -h, --help                    display help for command\n\nCommands:\n  auth [options] [provider]     Authenticate a provider and configure what model\n                                is used\n  config [options]              Show current configuration\n  plugin                        Manage Cline Plugins\n  skill [args...]               Manage Cline Skills via the open skills CLI (npx\n                                skills)\n  connect [options] [channel]   Connect to an external channel\n  mcp                           Manage MCP servers\n  doctor                        Diagnose and fix configuration issues\n  history|h [options]           List session history or manage saved sessions\n  hook                          Handle a hook payload from stdin\n  schedule                      Manage scheduled tasks\n  hub                           Manage the local hub daemon\n  dashboard [options]           Start the Cline Hub dashboard and open it in a\n                                browser\n  update [options]              Check for updates and install if available\n  version                       Show Cline CLI version number\n  kanban                        Run the kanban app\n",
+          "stdout_bytes": 3768,
+          "stdout_sha256": "5eb3b0a80e8dd33501f32f4b4d8996390d21604e8719f39caee8e3ecb1c06242",
+          "timed_out": false,
+          "wake_term_lines": [
+            "interactive sessions",
+            "--id <session-id>             Resume an existing session by ID",
+            "-m, --model <model-id>        Model to use for the session with the selected",
+            "-z, --zen                     Start a session that runs in the background hub",
+            "--hooks-dir <path>            Directory path to additional hooks for runtime",
+            "hook injection (default: ~/.cline/hooks)",
+            "plugin                        Manage Cline Plugins",
+            "history|h [options]           List session history or manage saved sessions",
+            "hook                          Handle a hook payload from stdin",
+            "hub                           Manage the local hub daemon"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/cline": {
+          "path": "/opt/homebrew/bin/cline",
+          "present": true,
+          "realpath": "/opt/homebrew/lib/node_modules/cline/bin/cline",
+          "size": 4446
+        }
+      },
+      "which": {
+        "cline": "/opt/homebrew/bin/cline"
+      }
+    },
+    "codex": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/codex",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "codex-cli 0.150.0\n",
+          "stdout_bytes": 18,
+          "stdout_sha256": "22c3a470a09f98a30e23cb3eac0efb697a01d2ae8869f49660550ed599648961",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/codex",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "Codex CLI\n\nIf no subcommand is specified, options will be forwarded to the interactive CLI.\n\nUsage: codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]\n\nCommands:\n  agents            Browse all agent sessions on the shared local app-server daemon\n  exec              Run Codex non-interactively [aliases: e]\n  review            Run a code review non-interactively\n  login             Manage login\n  logout            Remove stored authentication credentials\n  mcp               Manage external MCP servers for Codex\n  plugin            Manage Codex plugins\n  mcp-server        Start Codex as an MCP server (stdio)\n  app-server        [experimental] Run the app server or related tooling\n  remote-control    [experimental] Manage the app-server daemon with remote control enabled\n  app               Launch the Desktop app (opens the app installer if missing)\n  completion        Generate shell completion scripts\n  update            Update Codex to the latest version\n  doctor            Diagnose local Codex installation, config, auth, and runtime health\n  sandbox           Run commands within a Codex-provided sandbox\n  debug             Debugging tools\n  apply             Apply the latest diff produced by Codex agent as a `git apply` to your local\n                    working tree [aliases: a]\n  resume            Resume a previous interactive session (picker by default; use --last to continue\n                    the most recent)\n  queue             Queue a message for an existing session\n  archive           Archive a saved session by id or session name\n  delete            Permanently delete a saved session by id or session name\n  migrate-rollouts  Inspect or migrate legacy local sessions to paginated thread history\n  unarchive         Unarchive a saved session by id or session name\n  fork              Fork a previous interactive session (picker by default; use --last to fork the\n                    most recent)\n  cloud             [EXPERIMENTAL] Browse tasks from Codex Cloud and apply changes locally\n  exec-server       [EXPERIMENTAL] Run the standalone exec-server service\n  features          Inspect feature flags\n  help              Print this message or the help of the given subcommand(s)\n\nArguments:\n  [PROMPT]\n          Optional user prompt to start the session\n\nOptions:\n  -c, --config <key=value>\n          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.\n          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed\n          as TOML. If it fails to parse as TOML, the raw string is used as a literal.\n          \n          Examples: - `-c model=\"o3\"` - `-c 'sandbox_permissions=[\"disk-full-read-access\"]'` - `-c\n          shell_environment_policy.inherit=all`\n\n      --enable <FEATURE>\n          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`\n\n      --disable <FEATURE>\n          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`\n\n      --remote <ADDR>\n          Connect the TUI to a remote app server endpoint.\n          \n          Accepted forms: `ws://host:port`, `wss://host:port`, `unix://`, or `unix://PATH`.\n\n      --remote-auth-token-env <ENV_VAR>\n          Name of the environment variable containing the bearer token to send to a remote app\n          server websocket\n\n      --strict-config\n          Error out when config.toml contains fields that are not recognized by this version of\n          Codex\n\n  -i, --image <FILE>...\n          Optional image(s) to attach to the initial prompt\n\n  -m, --model <MODEL>\n          Model the agent should use\n\n      --oss\n          Use open-source provider\n\n      --local-provider <OSS_PROVIDER>\n          Specify which local provider to use (lmstudio or ollama). If not specified with --oss,\n          will use config default or show selection\n\n  -p, --profile <CONFIG_PROFILE_V2>\n          Layer $CODEX_HOME/<name>.config.toml on top of the base user config\n\n  -s, --sandbox <",
+          "stdout_bytes": 5731,
+          "stdout_sha256": "e8ecd554e6e3e870a55e540f1a21598c085cfee237f9c735ff9b5ba4ac4cf08a",
+          "timed_out": false,
+          "wake_term_lines": [
+            "agents            Browse all agent sessions on the shared local app-server daemon",
+            "plugin            Manage Codex plugins",
+            "remote-control    [experimental] Manage the app-server daemon with remote control enabled",
+            "resume            Resume a previous interactive session (picker by default; use --last to continue",
+            "queue             Queue a message for an existing session",
+            "archive           Archive a saved session by id or session name",
+            "delete            Permanently delete a saved session by id or session name",
+            "migrate-rollouts  Inspect or migrate legacy local sessions to paginated thread history",
+            "unarchive         Unarchive a saved session by id or session name",
+            "fork              Fork a previous interactive session (picker by default; use --last to fork the",
+            "Optional user prompt to start the session",
+            "--dangerously-bypass-hook-trust",
+            "Run enabled hooks without requiring persisted hook trust for this invocation. DANGEROUS.",
+            "Intended only for automation that already vets hook sources"
+          ]
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/codex",
+            "help",
+            "hooks"
+          ],
+          "exit": 2,
+          "stderr": "error: unrecognized subcommand 'hooks'\n\nUsage: codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]\n\nFor more information, try '--help'.\n",
+          "stderr_bytes": 149,
+          "stderr_sha256": "9c82237bf4ae14263600b379c539764fff1c7557aa0b0866ba471b60350b2efc",
+          "stdout": "",
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wake_term_lines": [
+            "error: unrecognized subcommand 'hooks'"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/codex": {
+          "path": "/opt/homebrew/bin/codex",
+          "present": true,
+          "realpath": "/opt/homebrew/Caskroom/codex/0.150.0/bin/codex",
+          "size": 229004480
+        }
+      },
+      "which": {
+        "codex": "/opt/homebrew/bin/codex"
+      }
+    },
+    "cursor": {
+      "commands": [
+        {
+          "argv": [
+            "~/.local/bin/cursor-agent",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "2026.07.09-a3815c0\n",
+          "stdout_bytes": 19,
+          "stdout_sha256": "add3a08b4243bd9cd89531b2e5580e3e12d4d41d0a8540947b950a50ef4061bc",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/cursor-agent",
+            "--help"
+          ],
+          "exit": 1,
+          "stderr": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};const m=\"CURSOR_AGENT_DISABLE_DEBUG_LOG\";let f=null,p=null,A=0,g=[],h=[];function y(e){return e.map((e=>{if(\"string\"==typeof e)return e;try{return JSON.stringify(e)}catch(t){return String(e)}})).join(\" \")}function C(e=new Date,t=process.pid){return A+=1,`session-${e.toISOString().replace(/[:.]/g,\"-\")}-${t}-${A}.log`}function v(){return(0,c.join)((0,o.tmpdir)(),`cursor-agent-logs-${function(){try{const{uid:e,username:t}=(0,o.userInfo)();if(e>=0)return String(e);if(t)return t.replace(/[^A-Za-z0-9._-]/g,\"_\")}catch(e){}return\"default\"}()}`)}function _(){return!!process.env[m]}function E(){return I().logFile}function w(e){return null!=e?e:\"disabled\"}function T(e){return d(this,arguments,void 0,(function*({directory:e,liveLogFile:t,now:n=new Date,keepNewest:r=50,maxAgeMs:s=6048e5}){try{const a=[];for(const t of yield(0,i.readdir)(e)){if(!t.startsWith(\"session-\")||!t.endsWith(\".log\"))continue;const n=(0,c.join)(e,t);try{a.push({path:n,mtimeMs:(yield(0,i.stat)(n)).mtimeMs})}catch(e){}}a.sort(((e,t)=>t.mtimeMs-e.mtimeMs));for(const[e,o]of a.entries()){if(o.path===t)continue;if(n.getTime()-o.mtimeMs>s||e>=r)try{yield(0,i.unlink)(o.path)}catch(e){}}}catch(e){}}))}function k(e){return{directory:v(),logFile:null,persistence:e,lineEmitter:new r.EventEmitter,append:()=>{},log:()=>{},close:()=>d(this,void 0,void 0,(function*(){}))}}function I(){if(p)return p;if(_())return p=k({kind:\"disabled\"}),p;try{p=function(){const e=v();(0,s.mkdirSync)(e,{recursive:!0,mode:448});const t=(0,c.join)(e,C());(0,s.closeSync)((0,s.openSync)(t,\"a\",384));const n=(0,s.createWriteStream)(t,",
+          "stderr_bytes": 65536,
+          "stderr_sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+          "stdout": "",
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wake_term_lines": [
+            "</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};const m=\"CURSOR_AGENT_DISABLE_DEBUG_LOG\";let f=null,p=null,A=0,g=[],h=[];function y(e){return e.map((e=>{if(\"string\"==typeof e)return e;try{return JSON.stringify(e)}catch(t){return String(e)}})).join(\" \")}function C(e=new Date,t=process.pid){return A+=1,`session-${e.toISOString().replace(/[:.]/g,\"-\")}-${t}-${A}.log`}function v(){return(0,c.join)((0,o.tmpdir)(),`cursor-agent-logs-${function(){try{const{uid:e,username:t}=(0,o.userInfo)();if(e>=0)return String(e);if(t)return t.replace(/[^A-Za-z0-9._-]/g,\"_\")}catch(e){}return\"default\"}()}`)}function _(){return!!process.env[m]}function E(){return I().logFile}function w(e){return null!=e?e:\"disabled\"}function T(e){return d(this,arguments,void 0,(function*({directory:e,liveLogFile:t,now:n=new Date,keepNewest:r=50,maxAgeMs:s=6048e5}){try{const a=[];for(const t of yield(0,i.readdir)(e)){if(!t.startsWith(\"session-\")||!t.endsWith(\".log\"))continue;const n=(0,c.join)(e,t);try{a.push({path:n,mtimeMs:(yield(0,i.stat)(n)).mtimeMs})}catch(e){}}a.sort(((e,t)=>t.mtimeMs-e.mtimeMs));for(const[e,o]of a.entries()){if(o.path===t)continue;if(n.getTime()-o.mtimeMs>s||e>=r)try{yield(0,i.unlink)(o.path)}catch(e){}}}catch(e){}}))}function k(e){return{directory:v(),logFile:null,persistence:e,lineEmitter:new r.EventEmitter,append:()=>{},log:()=>{},close:()=>d(this,void 0,void 0,(function*(){}))}}function I(){if(p)return p;if(_())return p=k({kind:\"disabled\"}),p;try{p=function(){const e=v();(0,s.mkdirSync)(e,{recursive:!0,mode:448});const t=(0,c.join)(e,C());(0,s.closeSync)((0,s.openSync)(t,\"a\",384));const n=(0,s.createWriteStream)(t,{flags:\"a\",mode:384,encoding:\"utf8\"});n.on(\"error\",(()=>{}));const i=new r.EventEmitter;let a=!1;const l=e=>{const t=e.endsWith(\"\\n\")?e:`${e}\\n`;n.write(t),i.emit(\"line\",e)},u={directory:e,logFile:t,persistence:{kind:\"active\",logFile:t},lineEmitter:i,append:l,log:(...e)=>{l(`[${(new Date).toISOString()}] ${y(e)}`)},close:()=>d(this,void 0,void 0,(function*(){a||(a=!0,yield new Promise((e=>{n.end((()=>e()))})))}))};return T({directory:e,liveLogFile:t}),function(e,t){const n=(0,c.join)(e,\"latest.log\"),r=(0,c.join)(e,\"latest.txt\");if(\"win32\"!==(0,o.platform)()){try{(0,s.unlinkSync)(n)}catch(e){}try{(0,s.symlinkSync)(t,n);try{(0,s.unlinkSync)(r)}catch(e){}}catch(e){try{(0,s.writeFileSync)(r,`${t}\\n`,{encoding:\"utf8\",mode:384})}catch(e){}}}else try{(0,s.writeFileSync)(r,`${t}\\n`,{encoding:\"utf8\",mode:384})}catch(e){}}(e,t),l(`--- Cursor Agent Debug Session ${(new Date).toISOString()} ---`),l(JSON.stringify({event:\"debug-session-start\",directory:e,logFile:t,pid:process.pid,startTime:(new Date).toISOString()})),u}()}catch(e){p=k({kind:\"unavailable\"})}return g.length>0||(g=[{event:\"exit\",handler:()=>{L()}}],g.forEach((({event:e,handler:t})=>{process.once(e,t)}))),p}function S(){h.forEach((({event:e,handler:t})=>{process.off(e,t)})),h=[]}function b(){return d(this,void 0,void 0,(function*(){if(f)return f;const e=I(),t=(0,c.join)((0,o.tmpdir)(),\"cursor-agent-debug-\"),n=(0,s.mkdtempSync)(t),r=process.env.CURSOR_AGENT_DEBUG_PORT,i=r?Number(r):43111,p=(0,a.createServer)(((t,r)=>{try{if(!t.url)return r.statusCode=404,void r.end();if(\"/\"===t.url||t.url.startsWith(\"/index\"))return r.setHeader(\"Content-Type\",\"text/html; charset=utf-8\"),void r.end((A(),l));if(\"/log\"===t.url){if(r.setHeader(\"Content-Type\",\"text/plain; charset=utf-8\"),\"active\"!==e.persistence.kind)return void r.end(function(e){switch(e.kind){case\"disabled\":return`Debug logging is disabled by ${m}.\\n`;case\"unavailable\":return\"Debug log file is unavailable.\\n\"}}(e.persistence));try{r.end((0,s.readFileSync)(e.persistence.logFile,\"utf8\"))}catch(e){r.statusCode=500,r.end(String(e))}return}const i=new URL(t.url,A());if(i.pathname.startsWith(\"/artifacts/\")){const e=decodeURIComponent(i.pathname.slice(11));if(!e||\".\"===e||\"..\"===e||e!==(0,c.basename)(e))return r.statusCode=400,void r.end(\"Invalid artifact name\");try{const t=(0,s.readFileSync)((0,c.join)(n,e),\"utf8\");e.endsWith(\".html\")?r.setHeader(\"Content-Type\",\"text/html; charset=utf-8\"):e.endsWith(\".json\")?r.setHeader(\"Content-Type\",\"application/json; charset=utf-8\"):r.setHeader(\"Content-Type\",\"text/plain; charset=utf-8\"),r.end(t)}catch(e){r.statusCode=404,r.setHeader(\"Content-Type\",\"text/plain; charset=utf-8\"),r.end(\"Artifact not found\")}return}if(\"/events\"===t.url){r.writeHead(200,{\"Content-Type\":\"text/event-stream\",\"Cache-Control\":\"no-cache\",Connection:\"keep-alive\",\"Access-Control-Allow-Origin\":\"*\"});const n=e=>{r.write(`data: ${JSON.stringify(e)}\\n\\n`)};return e.lineEmitter.on(\"line\",n),void t.on(\"close\",(()=>e.lineEmitter.off(\"line\",n)))}r.statusCode=404,r.end(\"Not found\")}catch(e){r.statusCode=500,r.end(String(e))}}));function A(){const e=p.address();return e&&\"object\"==typeof e&&\"port\"in e?`http://127.0.0.1:${e.port}`:\"http://127.0.0.1:0\"}let g=0,y=!1;const C=yield new Promise((e=>{const t=n=>{p.once(\"error\",(n=>{\"EADDRINUSE\"===n.code&&g<50?(g++,t(i+g)):(y=!0,p.removeAllListeners(\"listening\"),p.listen(0,\"127.0.0.1\"),p.once(\"listening\",(()=>e(p.address().port))))})),p.once(\"listening\",(()=>{e(p.address().port)})),p.listen(n,\"127.0.0.1\")};t(i)}));if(f={enabled:!0,directory:n,logFile:e.logFile,serverPort:C,get serverUrl(){return A()},append:e.append,log:e.log,stop:()=>d(this,void 0,void 0,(function*(){yield new Promise((e=>p.close((()=>e())))),f=null,S()}))},e.append(JSON.stringify({event:\"debug-server-start\",port:C,basePort:i,attempts:g+1,ephemeralFallback:y,directory:n,logFile:e.logFile,pid:process.pid,startTime:(new Date).toISOString()})),function(e){if(h.length>0)return;const t=()=>{if(f){f=null;try{e.close()}catch(e){}}};h=[{event:\"exit\",handler:t},{event:\"SIGINT\",handler:t},{event:\"SIGTERM\",handler:t}],h.forEach((({event:e,handler:t})=>{process.once(e,t)}))}(p),process.stdout.isTTY)try{yield(0,u.ph)(f.serverUrl)}catch(e){}return f}))}function B(){return!!f}function Q(){return f}function R(...e){I().log(...e)}function P(...e){var t;const n=(null===(t=(new Error).stack)||void 0===t?void 0:t.split(\"\\n\").slice(1).join(\"\\n\"))||\"No stack trace available\";I().append(`[${(new Date).toISOString()}] ${y(e)}\\nStack trace:\\n${n}`)}function x(e){I().append(e)}function N(e,t,n=\"DEBUG\"){const r={event:e,level:n,data:t},s=I();try{s.append(JSON.stringify(r))}catch(t){s.append(`[${(new Date).toISOString()}] ${e} ${String(t)}`)}}function L(){return d(this,void 0,void 0,(function*(){const e=p;p=null,g.forEach((({event:e,handler:t})=>{process.off(e,t)})),g=[],e&&(yield e.close().catch((()=>{})))}))}function D(){return d(this,void 0,void 0,(function*(){const e=f;f=null,S(),e&&(yield e.stop().catch((()=>{}))),yield L()}))}},\"./src/ephemeral-bridge.ts\"(e,t,n){\"use strict\";n.d(t,{ET:()=>c,al:()=>a,vv:()=>l,x3:()=>o});var r=n(\"./src/debug.ts\");let s=null,i=null;function a(e){s=e}function o(e){i=e}function c(e,t){const n=function(e){if(Array.isArray(e)){const t=e[0];return t&&\"object\"==typeof t&&!Array.isArray(t)&&\"text\"in t?[e]:e}return[e]}(e);try{s&&s(n,t)}catch(e){}try{(0,r.debugLog)(\"ephemeral.push\",n.map((e=>\"string\"==typeof e?e:e.map((e=>e.text)).join(\"\"))))}catch(e){}}function l(){try{null==i||i()}catch(e){}try{(0,r.debugLog)(\"ephemeral.clear\")}catch(e){}}},\"./src/exit.ts\"(e,t,n){\"use strict\";n.d(t,{Aj:()=>p,GZ:()=>g,JZ:()=>h,jU:()=>m,rA:()=>d,yU:()=>A});var r=n(\"./src/debug.ts\"),s=n(\"./src/instrument.ts\"),i=n(\"./src/statsig.ts\"),a=n(\"./src/structured-log.ts\"),o=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};let c,l,u;function d(e){l=e}function m(e){u=e}function f(){return o(this,void 0,void 0,(function*(){const e=l;if(!e)return;const t=u;u=void 0,t&&(yield e.triggerSnapshot({type:\"AGENT_REQUEST_END\",requestId:t}).catch((()=>{}))),yield e.flush({drain:!0}).catch((()=>{}))}))}function p(e){c=e}const A={SUCCESS:0,SIGINT:130,SIGTERM:143};function g(){return o(this,arguments,void 0,(function*(e={}){const{code:t=A.SUCCESS,timeoutMs:n=500}=e;try{if(c){const e=new Promise((e=>{var t;const n=setTimeout(e,2e3);null===(t=n.unref)||void 0===t||t.call(n)}));yield Promise.race([c(),e])}}catch(e){}{let e;yield Promise.race([f(),new Promise((t=>{var n;e=setTimeout(t,1e4),null===(n=e.unref)||void 0===n||n.call(e)}))]).finally((()=>{void 0!==e&&clearTimeout(e)}))}yield function(){return o(this,arguments,void 0,(function*(e=500){try{const t=new Promise((t=>{var n;const r=setTimeout(t,e);null===(n=r.unref)||void 0===n||n.call(r)}));yield Promise.race([Promise.all([(0,a.DR)(e),(0,s.kB)(),(0,i.s0)()]),t])}catch(e){}}))}(n),yield(0,r.closeDebugLogSink)(),process.exit(t)}))}function h(e={}){const{code:t=A.SUCCESS,delayMs:n=10,timeoutMs:r=500}=e;setTimeout((()=>{g({code:t,timeoutMs:r})}),n)}},\"./src/index.tsx\"(e,t,n){\"use strict\";n.a(e,(async(e,r)=>{try{n.d(t,{w:()=>x}),n(\"./src/console-shim.ts\");var s=n(\"./src/console-io.ts\"),i=n(\"./src/debug.ts\"),a=n(\"node:dns/promises\"),o=n.n(a),c=n(\"node:fs\"),l=n(\"node:path\"),u=(n(\"node:url\"),n(\"../context/dist/index.js\")),d=n(\"../local-worker/dist/index.js\"),m=n(\"../shell-exec/dist/index.js\"),f=n(\"../utils/dist/index.js\"),p=n(\"./src/cli.ts\"),A=n(\"./src/exit.ts\"),g=n(\"./src/instrument.ts\"),h=n(\"./src/oom-diagnostics.ts\"),y=n(\"./src/startup-timing.ts\"),C=n(\"./src/utils/git.ts\"),v=n(\"./src/utils/suppress-max-listeners-warning.ts\"),_=n(\"./src/worker-manager.ts\"),E=e([p]),w=E.then?(await E)():E;p=w[0];var T=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};function k(e){if(e instanceof Error)return{message:e.message||String(e),stack:e.stack};if(\"string\"==typeof e)return{message:e};try{return{message:JSON.stringify(e)}}catch(t){return{message:String(e)}}}(0,s.VF)(i.debugLog),(0,s.uO)(),process.on(\"warning\",(e=>{(0,i.debugLog)(\"node.warning\",{name:e.name,message:e.message,stack:e.stack})})),\"true\"!==process.env.CURSOR_AGENT_CLI_AUTHLESS_MODE&&o().lookup(\"api2.cursor.sh\").catch((()=>{}));const I=!1;function S(){const e=\"cursorsandbox\",t=process.argv[1];if(void 0!==t){const n=(0,l.join)((0,l.dirname)(t),e);if((0,c.existsSync)(n))return{path:n,source:\"colocated\"}}try{const t=\"../sandbox-helper/package.json\",n=(0,l.dirname)(t),r=(0,l.join)(n,\"bin\",e);if((0,c.existsSync)(r))return{path:r,source:\"package\"}}catch(e){}}function b(){const e=process.argv[1];if(void 0!==e){const t=(0,l.join)((0,l.dirname)(e),\"rg\");if((0,c.existsSync)(t))return{path:t,source:\"colocated\"}}{const e=[\"/usr/bin/rg\",\"/usr/local/bin/rg\",\"/home/linuxbrew/.linuxbrew/bin/rg\",\"/opt/homebrew/bin/rg\"],t=process.env.HOME;t&&e.push((0,l.join)(t,\".cargo\",\"bin\",\"rg\"));for(const t of e)if((0,c.existsSync)(t))return{path:t,source:\"system\"}}try{const e=(0,f.findActualExecutable)(\"rg\",[]).cmd;if(\"rg\"!==e&&(0,c.existsSync)(e))return{path:e,source:\"path-lookup\"}}catch(e){}}function B(){const e=b();e?((0,m.J)(e.path),(0,i.debugTrace)(\"ripgrep.configureSuccess\",{ripgrepPath:e.path,ripgrepSource:e.source})):(0,i.debugTrace)(\"ripgrep.configureFailure\",{message:\"Could not find ripgrep (rg) binary\"})}function Q(){const e=S();if(e)try{(0,m.St)({sandboxBinaryPath:e.path}),(0,i.debugTrace)(\"sandbox.configureSuccess\",{sandboxBinary:e.path,sandboxSource:e.source})}catch(e){const{message:t}=k(e);(0,i.debugTrace)(\"sandbox.configureFailure\",{message:t})}else(0,i.debugTrace)(\"sandbox.configureFailure\",{message:\"Sandbox helper binary not found\"})}function R(e,t){return T(this,void 0,void 0,(function*(){try{const{message:n,stack:r}=k(t);(0,i.debugLogJSON)(e,{message:n,stack:r},\"ERROR\"),(0,i.debugTrace)(e,{message:n,stack:r})}catch(e){}}))}function P(){return T(this,arguments,void 0,(function*(e={}){(0,v.O)();try{(0,m.Ko)()}catch(e){(0,i.debugLogJSON)(\"rg.missing\",{message:\"Could not find ripgrep (rg) binary. Please install ripgrep.\"},\"ERROR\"),(0,s.uQ)(1,\"Could not find ripgrep (rg) binary. Please install ripgrep.\")}performance.mark(y.Yv.WILL_SETUP_CLI),yield(0,p.S)({localWorkerClientFactory:(e,t)=>{const n=(0,C.ky)(t),r=(0,_.Es)(n);return I||(0,c.mkdirSync)((0,l.dirname)(r),{recursive:!0}),(0,d.createClient)((0,_.zl)(n,r,(0,_.lc)(n),e),r)},localAgentRuntime:e.localAgentRuntime})}))}function x(e={}){P(e).catch((e=>T(this,void 0,void 0,(function*(){(0,g.Fb)(e),yield R(\"global.main.promiseCatch\",e);const{message:t}=k(e);(0,s.p2)(`Error: ${t}`),yield(0,A.GZ)({code:1})}))))}(0,u.i4)({log:(e,t)=>{try{(0,i.debugLog)(\"logger.default\",{level:t.level,message:t.message,metadata:t.metadata,error:t.error,contextPath:e.getPath()})}catch(e){}}}),B(),Q(),(0,h.setupOomDiagnostics)(),r()}catch(N){r(N)}}))},\"./src/instrument.ts\"(e,t,n){\"use strict\";n.d(t,{Fb:()=>Iu,kB:()=>Su,zi:()=>yu,ig:()=>Bu,Fj:()=>wu,an:()=>Qu,Ot:()=>Tu,OW:()=>ku});var r=n(\"../proto/dist/generated/aiserver/v1/dashboard_connect.js\"),s=n(\"../proto/dist/generated/aiserver/v1/dashboard_pb.js\"),i=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@connectrpc+connect@1.6.1_patch_hash=a4b9a5e69295313832387f25b708426bcf53041a2f50bc7b95_d0a2f6c9e28298af3d10922a7e4db69f/node_modules/@connectrpc/connect/dist/esm/promise-client.js\"),a=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@connectrpc+connect-node@1.6.1_@bufbuild+protobuf@1.10.1_@connectrpc+connect@1.6.1_patc_9bab583985fee5f125b6d3e9531066e1/node_modules/@connectrpc/connect-node/dist/esm/index.js\"),o=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/currentScopes.js\"),c=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/exports.js\"),l=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/hasSpansEnabled.js\"),u=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/version.js\");function d(e,t,n=[t],r=\"npm\"){const s=e._metadata||{};s.sdk||(s.sdk={name:`sentry.javascript.${t}`,packages:n.map((e=>({name:`${r}:@sentry/${e}`,version:u.M}))),version:u.M}),e._metadata=s}var m=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/debug-build.js\"),f=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/debug-logger.js\");const p=[];function A(e){const t=e.defaultIntegrations||[],n=e.integrations;let r;if(t.forEach((e=>{e.isDefaultInstance=!0})),Array.isArray(n))r=[...t,...n];else if(\"function\"==typeof n){const e=n(t);r=Array.isArray(e)?e:[e]}else r=t;return function(e){const t={};return e.forEach((e=>{const{name:n}=e,r=t[n];r&&!r.isDefaultInstance&&e.isDefaultInstance||(t[n]=e)})),Object.values(t)}(r)}function g(e,t){for(const n of t)n?.afterAllSetup&&n.afterAllSetup(e)}function h(e,t,n){if(n[t.name])m.T&&f.Yz.log(`Integration skipped because it was already installed: ${t.name}`);else{if(n[t.name]=t,-1===p.indexOf(t.name)&&\"function\"==typeof t.setupOnce&&(t.setupOnce(),p.push(t.name)),t.setup&&\"function\"==typeof t.setup&&t.setup(e),\"function\"==typeof t.preprocessEvent){const n=t.preprocessEvent.bind(t);e.on(\"preprocessEvent\",((t,r)=>n(t,r,e)))}if(\"function\"==typeof t.processEvent){const n=t.processEvent.bind(t),r=Object.assign(((t,r)=>n(t,r,e)),{id:t.name});e.addEventProcessor(r)}m.T&&f.Yz.log(`Integration installed: ${t.name}`)}}function y(e){const t=[];e.message&&t.push(e.message);try{const n=e.exception.values[e.exception.values.length-1];n?.value&&(t.push(n.value),n.type&&t.push(`${n.type}: ${n.value}`))}catch{}return t}var C=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/misc.js\"),v=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/string.js\");const _=[/^Script error\\.?$/,/^Javascript error: Script error\\.? on line 0$/,/^ResizeObserver loop completed with undelivered notifications.$/,/^Cannot redefine property: googletag$/,/^Can't find variable: gmo$/,/^undefined is not an object \\(evaluating 'a\\.[A-Z]'\\)$/,'can\\'t redefine non-configurable property \"solana\"',\"vv().getRestrictions is not a function. (In 'vv().getRestrictions(1,a)', 'vv().getRestrictions' is undefined)\",\"Can't find variable: _AutofillCallbackHandler\",/^Non-Error promise rejection captured with value: Object Not Found Matching Id:\\d+, MethodName:simulateEvent, ParamCount:\\d+$/,/^Java exception was raised during method invocation$/],E=(e={})=>{let t;return{name:\"EventFilters\",setup(n){const r=n.getOptions();t=T(e,r)},processEvent(n,r,s){if(!t){const n=s.getOptions();t=T(e,n)}return function(e,t){if(e.type){if(\"transaction\"===e.type&&function(e,t){if(!t?.length)return!1;const n=e.transaction;return!!n&&(0,v.Xr)(n,t)}(e,t.ignoreTransactions))return m.T&&f.Yz.warn(`Event dropped due to being matched by \\`ignoreTransactions\\` option.\\nEvent: ${(0,C.$X)(e)}`),!0}else{if(function(e,t){return!!t?.length&&y(e).some((e=>(0,v.Xr)(e,t)))}(e,t.ignoreErrors))return m.T&&f.Yz.warn(`Event dropped due to being matched by \\`ignoreErrors\\` option.\\nEvent: ${(0,C.$X)(e)}`),!0;if(function(e){return!!e.exception?.values?.length&&(!e.message&&!e.exception.values.some((e=>e.stacktrace||e.type&&\"Error\"!==e.type||e.value)))}(e))return m.T&&f.Yz.warn(`Event dropped due to not having an error message, error type or stacktrace.\\nEvent: ${(0,C.$X)(e)}`),!0;if(function(e,t){if(!t?.length)return!1;const n=k(e);return!!n&&(0,v.Xr)(n,t)}(e,t.denyUrls))return m.T&&f.Yz.warn(`Event dropped due to being matched by \\`denyUrls\\` option.\\nEvent: ${(0,C.$X)(e)}.\\nUrl: ${k(e)}`),!0;if(!function(e,t){if(!t?.length)return!0;const n=k(e);return!n||(0,v.Xr)(n,t)}(e,t.allowUrls))return m.T&&f.Yz.warn(`Event dropped due to not being matched by \\`allowUrls\\` option.\\nEvent: ${(0,C.$X)(e)}.\\nUrl: ${k(e)}`),!0}return!1}(n,t)?null:n}}},w=(e={})=>({...E(e),name:\"InboundFilters\"});function T(e={},t={}){return{allowUrls:[...e.allowUrls||[],...t.allowUrls||[]],denyUrls:[...e.denyUrls||[],...t.denyUrls||[]],ignoreErrors:[...e.ignoreErrors||[],...t.ignoreErrors||[],...e.disableErrorDefaults?[]:_],ignoreTransactions:[...e.ignoreTransactions||[],...t.ignoreTransactions||[]]}}function k(e){try{const t=[...e.exception?.values??[]].reverse().find((e=>void 0===e.mechanism?.parent_id&&e.stacktrace?.frames?.length)),n=t?.stacktrace?.frames;return n?function(e=[]){for(let t=e.length-1;t>=0;t--){const n=e[t];if(n&&\"<anonymous>\"!==n.filename&&\"[native code]\"!==n.filename)return n.filename||null}return null}(n):null}catch{return m.T&&f.Yz.error(`Cannot extract url for event ${(0,C.$X)(e)}`),null}}var I=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/object.js\");let S;const b=new WeakMap,B=()=>({name:\"FunctionToString\",setupOnce(){S=Function.prototype.toString;try{Function.prototype.toString=function(...e){const t=(0,I.sp)(this),n=b.has((0,o.KU)())&&void 0!==t?t:this;return S.apply(n,e)}}catch{}},setup(e){b.set(e,!0)}});var Q=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/is.js\");function R(e,t,n,r,s,i){if(!s.exception?.values||!i||!(0,Q.tH)(i.originalException,Error))return;const a=s.exception.values.length>0?s.exception.values[s.exception.values.length-1]:void 0;a&&(s.exception.values=P(e,t,r,i.originalException,n,s.exception.values,a,0))}function P(e,t,n,r,s,i,a,o){if(i.length>=n+1)return i;let c=[...i];if((0,Q.tH)(r[s],Error)){x(a,o);const i=e(t,r[s]),l=c.length;N(i,s,l,o),c=P(e,t,n,r[s],s,[i,...c],i,l)}return Array.isArray(r.errors)&&r.errors.forEach(((r,i)=>{if((0,Q.tH)(r,Error)){x(a,o);const l=e(t,r),u=c.length;N(l,`errors[${i}]`,u,o),c=P(e,t,n,r,s,[l,...c],l,u)}})),c}function x(e,t){e.mechanism=e.mechanism||{type:\"generic\",handled:!0},e.mechanism={...e.mechanism,...\"AggregateError\"===e.type&&{is_exception_group:!0},exception_id:t}}function N(e,t,n,r){e.mechanism=e.mechanism||{type:\"generic\",handled:!0},e.mechanism={...e.mechanism,type:\"chained\",source:t,exception_id:n,parent_id:r}}var L=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/normalize.js\");function D(e,t){return e(t.stack||\"\",1)}function J(e,t){const n={type:t.name||t.constructor.name,value:t.message},r=D(e,t);return r.length&&(n.stacktrace={frames:r}),n}function F(e,t,n,r){if((0,Q.bJ)(n))return[n,void 0];if(t.synthetic=!0,(0,Q.Qd)(n)){const t=e?.getOptions().normalizeDepth,s={__serialized__:(0,L.cd)(n,t)},i=function(e){for(const t in e)if(Object.prototype.hasOwnProperty.call(e,t)){const n=e[t];if(n instanceof Error)return n}}(n);if(i)return[i,s];const a=function(e){if(\"name\"in e&&\"string\"==typeof e.name){let t=`'${e.name}' captured as exception`;return\"message\"in e&&\"string\"==typeof e.message&&(t+=` with message '${e.message}'`),t}if(\"message\"in e&&\"string\"==typeof e.message)return e.message;const t=(0,I.HF)(e);if((0,Q.T2)(e))return`Event \\`ErrorEvent\\` captured as exception with message \\`${e.message}\\``;const n=function(e){try{const t=Object.getPrototypeOf(e);return t?t.constructor.name:void 0}catch{}}(e);return`${n&&\"Object\"!==n?`'${n}'`:\"Object\"} captured as exception with keys: ${t}`}(n),o=r?.syntheticException||new Error(a);return o.message=a,[o,s]}const s=r?.syntheticException||new Error(n);return s.message=`${n}`,[s,void 0]}const O=(e={})=>{const t=e.limit||5,n=e.key||\"cause\";return{name:\"LinkedErrors\",preprocessEvent(e,r,s){R(J,s.getOptions().stackParser,n,t,e,r)}}},j=[\"X-Client-IP\",\"X-Forwarded-For\",\"Fly-Client-IP\",\"CF-Connecting-IP\",\"Fastly-Client-Ip\",\"True-Client-Ip\",\"X-Real-IP\",\"X-Cluster-Client-IP\",\"X-Forwarded\",\"Forwarded-For\",\"Forwarded\",\"X-Vercel-Forwarded-For\"],M={cookies:!0,data:!0,headers:!0,query_string:!0,url:!0},U=(e={})=>{const t={...M,...e.include};return{name:\"RequestData\",processEvent(e,n,r){const{sdkProcessingMetadata:s={}}=e,{normalizedRequest:i,ipAddress:a}=s,o={...t,ip:t.ip??r.getOptions().sendDefaultPii};return i&&function(e,t,n,r){if(e.request={...e.request,...q(t,r)},r.ip){const r=t.headers&&(s=t.headers,j.map((e=>{const t=s[e],n=Array.isArray(t)?t.join(\";\"):t;return\"Forwarded\"===e?function(e){if(!e)return null;for(const t of e.split(\";\"))if(t.startsWith(\"for=\"))return t.slice(4);return null}(n):n?.split(\",\").map((e=>e.trim()))})).reduce(((e,t)=>t?e.concat(t):e),[]).find((e=>null!==e&&/(?:^(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}$)|(?:^(?:(?:[a-fA-F\\d]{1,4}:){7}(?:[a-fA-F\\d]{1,4}|:)|(?:[a-fA-F\\d]{1,4}:){6}(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|:[a-fA-F\\d]{1,4}|:)|(?:[a-fA-F\\d]{1,4}:){5}(?::(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,2}|:)|(?:[a-fA-F\\d]{1,4}:){4}(?:(?::[a-fA-F\\d]{1,4}){0,1}:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,3}|:)|(?:[a-fA-F\\d]{1,4}:){3}(?:(?::[a-fA-F\\d]{1,4}){0,2}:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,4}|:)|(?:[a-fA-F\\d]{1,4}:){2}(?:(?::[a-fA-F\\d]{1,4}){0,3}:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,5}|:)|(?:[a-fA-F\\d]{1,4}:){1}(?:(?::[a-fA-F\\d]{1,4}){0,4}:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,6}|:)|(?::(?:(?::[a-fA-F\\d]{1,4}){0,5}:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)(?:\\\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)){3}|(?::[a-fA-F\\d]{1,4}){1,7}|:)))(?:%[0-9a-zA-Z]{1,})?$)/.test(e)))||null)||n.ipAddress;r&&(e.user={...e.user,ip_address:r})}var s}(e,i,{ipAddress:a},o),e}}};function q(e,t){const n={},r={...e.headers};if(t.headers&&(n.headers=r,t.cookies||delete r.cookie,t.ip||j.forEach((e=>{delete r[e]}))),n.method=e.method,t.url&&(n.url=e.url),t.cookies){const t=e.cookies||(r?.cookie?function(e){const t={};let n=0;for(;n<e.length;){const r=e.indexOf(\"=\",n);if(-1===r)break;let s=e.indexOf(\";\",n);if(-1===s)s=e.length;else if(s<r){n=e.lastIndexOf(\";\",r-1)+1;continue}const i=e.slice(n,r).trim();if(void 0===t[i]){let n=e.slice(r+1,s).trim();34===n.charCodeAt(0)&&(n=n.slice(1,-1));try{t[i]=-1!==n.indexOf(\"%\")?decodeURIComponent(n):n}catch{t[i]=n}}n=s+1}return t}(r.cookie):void 0);n.cookies=t||{}}return t.query_string&&(n.query_string=e.query_string),t.data&&(n.data=e.data),n}var z=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/breadcrumbs.js\"),G=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/worldwide.js\"),H=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/stacktrace.js\");const Y={},V={};function W(e,t){Y[e]=Y[e]||[],Y[e].push(t)}function $(e,t){if(!V[e]){V[e]=!0;try{t()}catch(t){m.T&&f.Yz.error(`Error while instrumenting ${e}`,t)}}}function K(e,t){const n=e&&Y[e];if(n)for(const r of n)try{r(t)}catch(t){m.T&&f.Yz.error(`Error while triggering instrumentation handler.\\nType: ${e}\\nName: ${(0,H.qQ)(r)}\\nError:`,t)}}function Z(){\"console\"in G.O&&f.Ow.forEach((function(e){e in G.O.console&&(0,I.GS)(G.O.console,e,(function(t){return f.Z9[e]=t,function(...t){K(\"console\",{args:t,level:e});const n=f.Z9[e];n?.apply(G.O.console,t)}}))}))}function X(e){return\"warn\"===e?\"warning\":[\"fatal\",\"error\",\"warning\",\"log\",\"info\",\"debug\"].includes(e)?e:\"log\"}const ee=(e={})=>{const t=new Set(e.levels||f.Ow);return{name:\"Console\",setup(e){!function(){const n=\"console\";W(n,(({args:n,level:r})=>{(0,o.KU)()===e&&t.has(r)&&function(e,t){const n={category:\"console\",data:{arguments:t,logger:\"console\"},level:X(e),message:te(t)};if(\"assert\"===e){if(!1!==t[0])return;{const e=t.slice(1);n.message=e.length>0?`Assertion failed: ${te(e)}`:\"Assertion failed\",n.data.arguments=e}}(0,z.Z)(n,{input:t,level:e})}(r,n)})),$(n,Z)}()}}};function te(e){return\"util\"in G.O&&\"function\"==typeof G.O.util.format?G.O.util.format(...e):(0,v.gt)(e,\" \")}var ne=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/tracing.js\"),re=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+semantic-conventions@1.36.0/node_modules/@opentelemetry/semantic-conventions/build/esm/stable_attributes.js\"),se=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+semantic-conventions@1.36.0/node_modules/@opentelemetry/semantic-conventions/build/esm/trace/SemanticAttributes.js\");function ie(e){if(!e)return{};const t=e.match(/^(([^:/?#]+):)?(\\/\\/([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?$/);if(!t)return{};const n=t[6]||\"\",r=t[8]||\"\";return{host:t[4],path:t[5],protocol:t[2],search:n,hash:r,relative:t[5]+n+r}}function ae(e){return e.split(/[?#]/,1)[0]}function oe(e){const{protocol:t,host:n,path:r}=e;return`${t?`${t}://`:\"\"}${n?.replace(/^.*@/,\"[filtered]:[filtered]@\").replace(/(:80)$/,\"\").replace(/(:443)$/,\"\")||\"\"}${r}`}var ce=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/baggage.js\"),le=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/semanticAttributes.js\"),ue=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/spanUtils.js\");class de{constructor(e){this._maxSize=e,this._cache=new Map}get size(){return this._cache.size}get(e){const t=this._cache.get(e);if(void 0!==t)return this._cache.delete(e),this._cache.set(e,t),t}set(e,t){this._cache.size>=this._maxSize&&this._cache.delete(this._cache.keys().next().value),this._cache.set(e,t)}remove(e){const t=this._cache.get(e);return t&&this._cache.delete(e),t}clear(){this._cache.clear()}keys(){return Array.from(this._cache.keys())}values(){const e=[];return this._cache.forEach((t=>e.push(t))),e}}var me=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/tracing/dynamicSamplingContext.js\");function fe(e,t,n=()=>{}){let r;try{r=e()}catch(e){throw t(e),n(),e}return function(e,t,n){return(0,Q.Qg)(e)?e.then((e=>(n(),e)),(e=>{throw t(e),n(),e})):(n(),e)}(r,t,n)}var pe=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/tracing/utils.js\"),Ae=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/defaultScopes.js\"),ge=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/asyncContext/index.js\"),he=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/tracing/spanstatus.js\");function ye(e){if(!e||0===e.length)return;const t={};return e.forEach((e=>{const n=e.attributes||{},r=n[le.Sn],s=n[le.xc];\"string\"==typeof r&&\"number\"==typeof s&&(t[e.name]={value:s,unit:r})})),t}function Ce(e){if(!m.T)return;const{description:t=\"< unknown name >\",op:n=\"< unknown op >\",parent_span_id:r}=(0,ue.et)(e),{spanId:s}=e.spanContext(),i=(0,ue.pK)(e),a=(0,ue.zU)(e),o=a===e,c=`[Tracing] Starting ${i?\"sampled\":\"unsampled\"} ${o?\"root \":\"\"}span`,l=[`op: ${n}`,`name: ${t}`,`ID: ${s}`];if(r&&l.push(`parent ID: ${r}`),!o){const{op:e,description:t}=(0,ue.et)(a);l.push(`root ID: ${a.spanContext().spanId}`),e&&l.push(`root op: ${e}`),t&&l.push(`root description: ${t}`)}f.Yz.log(`${c}\\n  ${l.join(\"\\n  \")}`)}function ve(e){if(!m.T)return;const{description:t=\"< unknown name >\",op:n=\"< unknown op >\"}=(0,ue.et)(e),{spanId:r}=e.spanContext(),s=`[Tracing] Finishing \"${n}\" ${(0,ue.zU)(e)===e?\"root \":\"\"}span \"${t}\" with ID ${r}`;f.Yz.log(s)}var _e=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@sentry+core@10.1.0/node_modules/@sentry/core/build/esm/utils/parseSampleRate.js\");function Ee(e,t,n){if(!(0,l.f)(e))return[!1];let r,s;\"function\"==typeof e.tracesSampler?(s=e.tracesSampler({...t,inheritOrSampleWith:e=>\"number\"==typeof t.parentSampleRate?t.parentSampleRate:\"boolean\"==typeof t.parentSampled?Number(t.parentSampled):e}),r=!0):void 0!==t.parentSampled?s=t.parentSampled:void 0!==e.tracesSampleRate&&(s=e.tracesSampleRate,r=!0);const i=(0,_e.i)(s);if(void 0===i)return m.T&&f.Yz.warn(`[Tracing] Discarding root span because of invalid sample rate. Sample rate must be a boolean or a number between 0 and 1. Got ${JSON.stringify(s)} of type ${JSON.stringify(typeof s)}.`),[!1];if(!i)return m.T&&f.Yz.log(\"[Tracing] Discarding transaction because \"+(\"function\"==typeof e.tracesSampler?\"tracesSampler returned 0 or false\":\"a negative sampling decision was inherited or tracesSampleRate is set to 0\")),[!1,i,r];const a=n<i;return a||m.T&&f.Yz.log(`[Tracing] Discarding transaction because it's not included in the random sample (sampling rate = ${Number(s)})`),[a,i,r]}var we=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/context-api.js\"),Te=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace-api.js\"),ke=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace/span_kind.js\"),Ie=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/context/context.js\"),Se=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace/trace_flags.js\"),be=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/propagation-api.js\"),Be=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace/invalid-span-constants.js\"),Qe=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace/status.js\"),Re=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+api@1.9.0/node_modules/@opentelemetry/api/build/esm/trace/spancontext-utils.js\"),Pe=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+core@2.6.1_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/core/build/esm/trace/TraceState.js\"),xe=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+core@2.6.1_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/core/build/esm/baggage/propagation/W3CBaggagePropagator.js\"),Ne=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+core@2.6.1_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/core/build/esm/trace/suppress-tracing.js\"),Le=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+sdk-trace-base@2.6.1_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/sdk-trace-base/build/esm/Sampler.js\");const De=\"sentry.parentIsRemote\",Je=\"sentry.graphql.operation\";function Fe(e){return\"parentSpanId\"in e?e.parentSpanId:\"parentSpanContext\"in e?e.parentSpanContext?.spanId:void 0}function Oe(e){const t=e;return!!t.attributes&&\"object\"==typeof t.attributes}function je(e){return!!e.name}const Me=\"sentry-trace\",Ue=\"baggage\",qe=\"sentry.dsc\",ze=\"sentry.sampled_not_recording\",Ge=\"sentry.url\",He=(0,Ie.n)(\"sentry_scopes\"),Ye=(0,Ie.n)(\"sentry_fork_isolation_scope\"),Ve=(0,Ie.n)(\"sentry_fork_set_scope\"),We=(0,Ie.n)(\"sentry_fork_set_isolation_scope\"),$e=\"_scopeContext\";function Ke(e){return e.getValue(He)}function Ze(e,t){return e.setValue(He,t)}function Xe(e){return e[$e]}function et(e){const{traceFlags:t,traceState:n}=e,r=!!n&&\"1\"===n.get(ze);if(t===Se.X.SAMPLED)return!0;if(r)return!1;const s=n?n.get(qe):void 0,i=s?(0,ce.yD)(s):void 0;return\"true\"===i?.sampled||\"false\"!==i?.sampled&&void 0}function tt(e,t,n){const r=t[re.n4]||t[se.vof];if(r)return function({name:e,kind:t,attributes:n},r){const s=[\"http\"];switch(t){case ke.v.CLIENT:s.push(\"client\");break;case ke.v.SERVER:s.push(\"server\")}n[\"sentry.http.prefetch\"]&&s.push(\"prefetch\");const{urlPath:i,url:a,query:o,fragment:c,hasRoute:l}=function(e,t){const n=e[se.fub],r=e[se.vSt]||e[re.WQ],s=e[re.DR],i=\"string\"==typeof r?ie(r):void 0,a=i?oe(i):void 0,o=i?.search||void 0,c=i?.hash||void 0;return\"string\"==typeof s?{urlPath:s,url:a,query:o,fragment:c,hasRoute:!0}:t===ke.v.SERVER&&\"string\"==typeof n?{urlPath:ae(n),url:a,query:o,fragment:c,hasRoute:!1}:i?{urlPath:a,url:a,query:o,fragment:c,hasRoute:!1}:\"string\"==typeof n?{urlPath:ae(n),url:a,query:o,fragment:c,hasRoute:!1}:{urlPath:void 0,url:a,query:o,fragment:c,hasRoute:!1}}(n,t);if(!i)return{...rt(e,n),op:s.join(\".\")};const u=n[Je],d=`${r} ${i}`,m=u?`${d} (${function(e){if(Array.isArray(e)){const t=e.slice().sort();return t.length<=5?t.join(\", \"):`${t.slice(0,5).join(\", \")}, +${t.length-5}`}return`${e}`}(u)})`:d,f=l||\"/\"===i?\"route\":\"url\",p={};a&&(p.url=a),o&&(p[\"http.query\"]=o),c&&(p[\"http.fragment\"]=c);const A=t===ke.v.CLIENT||t===ke.v.SERVER,g=!`${n[le.JD]||\"manual\"}`.startsWith(\"auto\"),h=\"custom\"===n[le.i_],y=n[le.Le],C=!h&&null==y&&(A||!g),{description:v,source:_}=C?{description:m,source:f}:rt(e,n);return{op:s.join(\".\"),description:v,source:_,data:p}}({attributes:t,name:e,kind:n},r);const s=t[se.V0Q],i=\"string\"==typeof t[le.uT]&&t[le.uT].startsWith(\"cache.\");if(s&&!i)return function({attributes:e,name:t}){const n=e[le.Le];if(\"string\"==typeof n)return{op:\"db\",description:n,source:e[le.i_]||\"custom\"};if(\"custom\"===e[le.i_])return{op:\"db\",description:t,source:\"custom\"};const r=e[se.FoJ];return{op:\"db\",description:r?r.toString():t,source:\"task\"}}({attributes:t,name:e});const a=\"custom\"===t[le.i_]?\"custom\":\"route\";if(t[se.GOV])return{...rt(e,t,\"route\"),op:\"rpc\"};if(t[se.zBy])return{...rt(e,t,a),op:\"message\"};const o=t[se.bes];return o?{...rt(e,t,a),op:o.toString()}:{op:void 0,description:e,source:\"custom\"}}function nt(e){const t=Oe(e)?e.attributes:{},n=je(e)?e.name:\"<unknown>\",r=function(e){return function(e){return\"number\"==typeof e.kind}(e)?e.kind:ke.v.INTERNAL}(e);return tt(n,t,r)}function rt(e,t,n=\"custom\"){const r=t[le.i_]||n,s=t[le.Le];return s&&\"string\"==typeof s?{description:s,source:r}:{description:e,source:r}}function st(){return Te.u.getActiveSpan()}const it=\"undefined\"==typeof __SENTRY_DEBUG__||__SENTRY_DEBUG__;function at({dsc:e,sampled:t}){const n=e?(0,ce.De)(e):void 0,r=new Pe.n,s=n?r.set(qe,n):r;return!1===t?s.set(ze,\"1\"):s}const ot=new Set;function ct(e){ot.add(e)}class lt extends xe.t{constructor(){super(),ct(\"SentryPropagator\"),this._urlMatchesTargetsMap=new de(100)}inject(e,t,n){if((0,Ne.Zf)(e))return void(it&&f.Yz.log(\"[Tracing] Not injecting trace data for url because tracing is suppressed.\"));const r=Te.u.getSpan(e),s=r&&function(e){const t=(0,ue.et)(e).data,n=t[se.vSt]||t[re.WQ];if(\"string\"==typeof n)return n;const r=e.spanContext().traceState?.get(Ge);return r||void 0}(r),i=(0,o.KU)()?.getOptions()?.tracePropagationTargets;if(!dt(s,i,this._urlMatchesTargetsMap))return void(it&&f.Yz.log(\"[Tracing] Not injecting trace data for url because it does not match tracePropagationTargets:\",s));const a=function(e){try{const t=e[Ue];return Array.isArray(t)?t.join(\",\"):t}catch{return}}(t);let c=be.$.getBaggage(e)||be.$.createBaggage({});const{dynamicSamplingContext:l,traceId:u,spanId:d,sampled:m}=mt(e);if(a){const e=(0,ce.D0)(a);e&&Object.entries(e).forEach((([e,t])=>{c=c.setEntry(e,{value:t})}))}l&&(c=Object.entries(l).reduce(((e,[t,n])=>n?e.setEntry(`${ce.sv}${t}`,{value:n}):e),c)),u&&u!==Be.RH&&n.set(t,Me,(0,ne.TC)(u,d,m)),super.inject(be.$.setBaggage(e,c),t,n)}extract(e,t,n){const r=n.get(t,Me),s=n.get(t,Ue);return pt(ft(e,{sentryTrace:r?Array.isArray(r)?r[0]:r:void 0,baggage:s}))}fields(){return[Me,Ue]}}const ut=\"[Tracing] Not injecting trace data for url because it does not match tracePropagationTargets:\";function dt(e,t,n){if(\"string\"!=typeof e||!t)return!0;const r=n?.get(e);if(void 0!==r)return it&&!r&&f.Yz.log(ut,e),r;const s=(0,v.Xr)(e,t);return n?.set(e,s),it&&!s&&f.Yz.log(ut,e),s}function mt(e,t={}){const n=Te.u.getSpan(e);if(n?.spanContext().isRemote){const e=n.spanContext();return{dynamicSamplingContext:(0,me.k1)(n),traceId:e.traceId,spanId:void 0,sampled:et(e)}}if(n){const e=n.spanContext();return{dynamicSamplingContext:(0,me.k1)(n),traceId:e.traceId,spanId:e.spanId,sampled:et(e)}}const r=t.scope||Ke(e)?.scope||(0,o.o5)(),s=t.client||(0,o.KU)(),i=r.getPropagationContext();return{dynamicSamplingContext:s?(0,me.ao)(s,r):void 0,traceId:i.traceId,spanId:i.propagationSpanId,sampled:i.sampled}}function ft(e,{sentryTrace:t,baggage:n}){const r=(0,ne.kM)(t,n),{traceId:s,parentSpanId:i,sampled:a,dsc:c}=r,l=(0,o.KU)(),u=(0,ce.yD)(n);if(!i||l&&!(0,ne.A9)(l,u?.org_id))return e;const d=function({spanId:e,traceId:t,sampled:n,dsc:r}){const s=at({dsc:r,sampled:n});return{traceId:t,spanId:e,isRemote:!0,traceFlags:n?Se.X.SAMPLED:Se.X.NONE,traceState:s}}({traceId:s,spanId:i,sampled:a,dsc:c});return Te.u.setSpanContext(e,d)}function pt(e){const t=Ke(e);return Ze(e,{scope:t?t.scope:(0,o.o5)().clone(),isolationScope:t?t.isolationScope:(0,o.rm)()})}function At(e,t){const n=Ct(),{name:r,parentSpan:s}=e;return wt(s)((()=>{const s=_t(e.scope,e.forceTransaction),i=e.onlyIfParent&&!Te.u.getSpan(s)?(0,Ne.M1)(s):s,a=vt(e);return n.startActiveSpan(r,a,i,(e=>fe((()=>t(e)),(()=>{void 0===(0,ue.et)(e).status&&e.setStatus({code:Qe.s.ERROR})}),(()=>e.end()))))}))}function gt(e,t){const n=Ct(),{name:r,parentSpan:s}=e;return wt(s)((()=>{const s=_t(e.scope,e.forceTransaction),i=e.onlyIfParent&&!Te.u.getSpan(s)?(0,Ne.M1)(s):s,a=vt(e);return n.startActiveSpan(r,a,i,(e=>fe((()=>t(e,(()=>e.end()))),(()=>{void 0===(0,ue.et)(e).status&&e.setStatus({code:Qe.s.ERROR})}))))}))}function ht(e){const t=Ct(),{name:n,parentSpan:r}=e;return wt(r)((()=>{const r=_t(e.scope,e.forceTransaction),s=e.onlyIfParent&&!Te.u.getSpan(r)?(0,Ne.M1)(r):r,i=vt(e);return t.startSpan(n,i,s)}))}function yt(e,t){const n=e?Te.u.setSpan(we._.active(),e):Te.u.deleteSpan(we._.active());return we._.with(n,(()=>t((0,o.o5)())))}function Ct(){const e=(0,o.KU)();return e?.tracer||Te.u.getTracer(\"@sentry/opentelemetry\",u.M)}function vt(e){const{startTime:t,attributes:n,kind:r,op:s,links:i}=e,a=\"number\"==typeof t?(o=t)<9999999999?1e3*o:o:t;var o;return{attributes:s?{[le.uT]:s,...n}:n,kind:r,links:i,startTime:a}}function _t(e,t){const n=function(e){if(e){const t=Xe(e);if(t)return t}return we._.active()}(e),r=Te.u.getSpan(n);if(!r)return n;if(!t)return n;const s=Te.u.deleteSpan(n),{spanId:i,traceId:a}=r.spanContext(),o=et(r.spanContext()),c=(0,ue.zU)(r),l=at({dsc:(0,me.k1)(c),sampled:o}),u={traceId:a,spanId:i,isRemote:!0,traceFlags:o?Se.X.SAMPLED:Se.X.NONE,traceState:l};return Te.u.setSpanContext(s,u)}function Et(e,t){return function(e,t,n){const r=pt(ft(e,t));return we._.with(r,n)}(we._.active(),e,t)}function wt(e){return void 0!==e?t=>yt(e,t):e=>e()}function Tt(e){const t=(0,Ne.M1)(we._.active());return we._.with(t,e)}function kt({span:e,scope:t,client:n}={}){let r=(t&&Xe(t))??we._.active();if(e){const{scope:t}=(0,pe.L)(e);r=t&&Xe(t)||Te.u.setSpan(we._.active(),e)}const{traceId:s,spanId:i,sampled:a,dynamicSamplingContext:o}=mt(r,{scope:t,client:n});return{\"sentry-trace\":(0,ne.TC)(s,i,a),baggage:(0,ce.De)(o)}}function It(e){return!0===e.attributes[De]?void 0:Fe(e)}function St(e,t){const n=t.spanContext().spanId,r=It(t);if(!r)return void bt(e,{id:n,span:t,children:[]});const s=function(e,t){const n=e.get(t);return n||bt(e,{id:t,children:[]})}(e,r),i=bt(e,{id:n,span:t,parentNode:s,children:[]});s.children.push(i)}function bt(e,t){const n=e.get(t.id);return n?.span?n:n&&!n.span?(n.span=t.span,n.parentNode=t.parentNode,n):(e.set(t.id,t),t)}const Bt={1:\"cancelled\",2:\"unknown_error\",3:\"invalid_argument\",4:\"deadline_exceeded\",5:\"not_found\",6:\"already_exists\",7:\"permission_denied\",8:\"resource_exhausted\",9:\"failed_precondition\",10:\"aborted\",11:\"out_of_range\",12:\"unimplemented\",13:\"internal_error\",14:\"unavailable\",15:\"data_loss\",16:\"unauthenticated\"};function Qt(e){const t=Oe(e)?e.attributes:{},n=function(e){return!!e.status}(e)?e.status:void 0;if(n){if(n.code===Qe.s.OK)return{code:he.F3};if(n.code===Qe.s.ERROR){if(void 0===n.message){const e=Rt(t);if(e)return e}return n.message&&(r=n.message,Object.values(Bt).includes(r))?{code:he.TJ,message:n.message}:{code:he.TJ,message:\"unknown_error\"}}}var r;return Rt(t)||(n?.code===Qe.s.UNSET?{code:he.F3}:{code:he.TJ,message:\"unknown_error\"})}function Rt(e){const t=e[re.OR]||e[se.W_O],n=e[se.C2y],r=\"number\"==typeof t?t:\"string\"==typeof t?parseInt(t):void 0;return\"number\"==typeof r?(0,he.AJ)(r):\"string\"==typeof n?{code:he.TJ,message:Bt[n]||\"unknown_error\"}:void 0}class Pt{constructor(e){this._finishedSpanBucketSize=e?.timeout||300,this._finishedSpanBuckets=new Array(this._finishedSpanBucketSize).fill(void 0),this._lastCleanupTimestampInS=Math.floor(Date.now()/1e3),this._spansToBucketEntry=new WeakMap,this._sentSpans=new Map,this._debouncedFlush=function(e,t,n){let r,s,i;const a=n?.maxWait?Math.max(n.maxWait,1):0,o=n?.setTimeoutImpl||setTimeout;function c(){return l(),r=e(),r}function l(){void 0!==s&&clearTimeout(s),void 0!==i&&clearTimeout(i),s=i=void 0}function u(){return s&&clearTimeout(s),s=o(c,1),a&&void 0===i&&(i=o(c,a)),r}return u.cancel=l,u.flush=function(){return void 0!==s||void 0!==i?c():r},u}(this.flush.bind(this),0,{maxWait:100})}export(e){const t=Math.floor(Date.now()/1e3);if(this._lastCleanupTimestampInS!==t){let e=0;this._finishedSpanBuckets.forEach(((n,r)=>{n&&n.timestampInS<=t-this._finishedSpanBucketSize&&(e+=n.spans.size,this._finishedSpanBuckets[r]=void 0)})),e>0&&it&&f.Yz.log(`SpanExporter dropped ${e} spans because they were pending for more than ${this._finishedSpanBucketSize} seconds.`),this._lastCleanupTimestampInS=t}const n=t%this._finishedSpanBucketSize,r=this._finishedSpanBuckets[n]||{timestampInS:t,spans:new Set};this._finishedSpanBuckets[n]=r,r.spans.add(e),this._spansToBucketEntry.set(e,r);const s=It(e);s&&!this._sentSpans.has(s)||this._debouncedFlush()}flush(){const e=this._finishedSpanBuckets.flatMap((e=>e?Array.from(e.spans):[]));this._flushSentSpanCache();const t=this._maybeSend(e),n=t.size,r=e.length-n;it&&f.Yz.log(`SpanExporter exported ${n} spans, ${r} spans are waiting for their parent spans to finish`);const s=Date.now()+3e5;for(const e of t){this._sentSpans.set(e.spanContext().spanId,s);const t=this._spansToBucketEntry.get(e);t&&t.spans.delete(e)}this._debouncedFlush.cancel()}clear(){this._finishedSpanBuckets=this._finishedSpanBuckets.fill(void 0),this._sentSpans.clear(),this._debouncedFlush.cancel()}_maybeSend(e){const t=function(e){const t=new Map;for(const n of e)St(t,n);return Array.from(t,(function([e,t]){return t}))}(e),n=new Set,r=this._getCompletedRootNodes(t);for(const e of r){const t=e.span;n.add(t);const r=xt(t);if(e.parentNode&&this._sentSpans.has(e.parentNode.id)){const e=r.contexts?.trace?.data;e&&(e[\"sentry.parent_span_already_sent\"]=!0)}const s=r.spans||[];for(const t of e.children)Nt(t,s,n);r.spans=s.length>1e3?s.sort(((e,t)=>e.start_timestamp-t.start_timestamp)).slice(0,1e3):s;const i=ye(t.events);i&&(r.measurements=i),(0,c.r)(r)}return n}_flushSentSpanCache(){const e=Date.now();for(const[t,n]of this._sentSpans.entries())n<=e&&this._sentSpans.delete(t)}_nodeIsCompletedRootNodeOrHasSentParent(e){return!!e.span&&(!e.parentNode||this._sentSpans.has(e.parentNode.id))}_getCompletedRootNodes(e){return e.filter((e=>this._nodeIsCompletedRootNodeOrHasSentParent(e)))}}function xt(e){const{op:t,description:n,data:r,origin:s=\"manual\",source:i}=Lt(e),a=(0,pe.L)(e),o=e.attributes[le.sy],c={[le.i_]:i,[le.sy]:o,[le.uT]:t,[le.JD]:s,...r,...Dt(e.attributes)},{links:l}=e,{traceId:u,spanId:d}=e.spanContext(),m=Fe(e),f=Qt(e),p={parent_span_id:m,span_id:d,trace_id:u,data:c,origin:s,op:t,status:(0,ue.yW)(f),links:(0,ue.uU)(l)},A=c[re.OR],g=\"number\"==typeof A?{response:{status_code:A}}:void 0;return{contexts:{trace:p,otel:{resource:e.resource.attributes},...g},spans:[],start_timestamp:(0,ue.cI)(e.startTime),timestamp:(0,ue.cI)(e.endTime),transaction:n,type:\"transaction\",sdkProcessingMetadata:{capturedSpanScope:a.scope,capturedSpanIsolationScope:a.isolationScope,sampleRate:o,dynamicSamplingContext:(0,me.k1)(e)},...i&&{transaction_info:{source:i}}}}function Nt(e,t,n){const r=e.span;if(r&&n.add(r),!r)return void e.children.forEach((e=>{Nt(e,t,n)}));const s=r.spanContext().spanId,i=r.spanContext().traceId,a=Fe(r),{attributes:o,startTime:c,endTime:l,links:u}=r,{op:d,description:m,data:f,origin:p=\"manual\"}=Lt(r),A={[le.JD]:p,[le.uT]:d,...Dt(o),...f},g=Qt(r),h={span_id:s,trace_id:i,data:A,description:m,parent_span_id:a,start_timestamp:(0,ue.cI)(c),timestamp:(0,ue.cI)(l)||void 0,status:(0,ue.yW)(g),op:d,origin:p,measurements:ye(r.events),links:(0,ue.uU)(u)};t.push(h),e.children.forEach((e=>{Nt(e,t,n)}))}function Lt(e){const{op:t,source:n,origin:r}=function(e){const t=e.attributes;return{origin:t[le.JD],op:t[le.uT],source:t[le.i_]}}(e),{op:s,description:i,source:a,data:o}=nt(e);return{op:t||s,description:i,source:n||a,origin:r,data:{...o,...Jt(e)}}}function Dt(e){const t={...e};return delete t[le.sy],delete t[De],delete t[le.Le],t}function Jt(e){const t=e.attributes,n={};e.kind!==ke.v.INTERNAL&&(n[\"otel.kind\"]=ke.v[e.kind]);const r=t[se.W_O];r&&(n[re.OR]=r);const s=function(e){if(!Oe(e))return{};const t=e.attributes[re.WQ]||e.attributes[se.vSt],n={url:t,\"http.method\":e.attributes[re.n4]||e.attributes[se.vof]};!n[\"http.method\"]&&n.url&&(n[\"http.method\"]=\"GET\");try{if(\"string\"==typeof t){const e=ie(t);n.url=oe(e),e.search&&(n[\"http.query\"]=e.search),e.hash&&(n[\"http.fragment\"]=e.hash)}}catch{}return n}(e);return s.url&&(n.url=s.url),s[\"http.query\"]&&(n[\"http.query\"]=s[\"http.query\"].slice(1)),s[\"http.fragment\"]&&(n[\"http.fragment\"]=s[\"http.fragment\"].slice(1)),n}class Ft{constructor(e){ct(\"SentrySpanProcessor\"),this._exporter=new Pt(e)}async forceFlush(){this._exporter.flush()}async shutdown(){this._exporter.clear()}onStart(e,t){!function(e,t){const n=Te.u.getSpan(t);let r=Ke(t);n&&!n.spanContext().isRemote&&(0,ue.Hu)(n,e),n?.spanContext().isRemote&&e.setAttribute(De,!0),t===Ie.l&&(r={scope:(0,Ae.r)(),isolationScope:(0,Ae.q)()}),r&&(0,pe.d)(e,r.scope,r.isolationScope),Ce(e);const s=(0,o.KU)();s?.emit(\"spanStart\",e)}(e,t)}onEnd(e){!function(e){ve(e);const t=(0,o.KU)();t?.emit(\"spanEnd\",e)}(e),this._exporter.export(e)}}class Ot{constructor(e){this._client=e,ct(\"SentrySampler\")}shouldSample(e,t,n,r,s,i){const a=this._client.getOptions(),o=function(e){const t=Te.u.getSpan(e);return t&&(0,Re.YA)(t.spanContext())?t:void 0}(e),c=o?.spanContext();if(!(0,l.f)(a))return jt({decision:void 0,context:e,spanAttributes:s});const u=s[se.vof]||s[re.n4];if(r===ke.v.CLIENT&&u&&(!o||c?.isRemote))return jt({decision:void 0,context:e,spanAttributes:s});const d=o?function(e,t,n){const r=e.spanContext();if((0,Re.YA)(r)&&r.traceId===t){if(r.isRemote){const t=et(e.spanContext());return it&&f.Yz.log(`[Tracing] Inheriting remote parent's sampled decision for ${n}: ${t}`),t}const t=et(r);return it&&f.Yz.log(`[Tracing] Inheriting parent's sampled decision for ${n}: ${t}`),t}}(o,t,n):void 0;if(o&&!c?.isRemote)return jt({decision:d?Le.i.RECORD_AND_SAMPLED:Le.i.NOT_RECORD,context:e,spanAttributes:s});const{description:m,data:p,op:A}=tt(n,s,r),g={...p,...s};A&&(g[le.uT]=A);const h={decision:!0};if(this._client.emit(\"beforeSampling\",{spanAttributes:g,spanName:m,parentSampled:d,parentContext:c},h),!h.decision)return jt({decision:void 0,context:e,spanAttributes:s});const{isolationScope:y}=Ke(e)??{},C=c?.traceState?c.traceState.get(qe):void 0,v=C?(0,ce.yD)(C):void 0,_=(0,_e.i)(v?.sample_rand)??Math.random(),[E,w,T]=Ee(a,{name:m,attributes:g,normalizedRequest:y?.getScopeData().sdkProcessingMetadata.normalizedRequest,parentSampled:d,parentSampleRate:(0,_e.i)(v?.sample_rate)},_),k=`${u}`.toUpperCase();return\"OPTIONS\"===k||\"HEAD\"===k?(it&&f.Yz.log(`[Tracing] Not sampling span because HTTP method is '${k}' for ${n}`),jt({decision:Le.i.NOT_RECORD,context:e,spanAttributes:s,sampleRand:_,downstreamTraceSampleRate:0})):(E||void 0!==d||(it&&f.Yz.log(\"[Tracing] Discarding root span because its trace was not chosen to be sampled.\"),this._client.recordDroppedEvent(\"sample_rate\",\"transaction\")),{...jt({decision:E?Le.i.RECORD_AND_SAMPLED:Le.i.NOT_RECORD,context:e,spanAttributes:s,sampleRand:_,downstreamTraceSampleRate:T?w:void 0}),attributes:{[le.sy]:T?w:void 0}})}toString(){return\"SentrySampler\"}}function jt({decision:e,context:t,spanAttributes:n,sampleRand:r,downstreamTraceSampleRate:s}){let i=function(e,t){const n=Te.u.getSpan(e),r=n?.spanContext();let s=r?.traceState||new Pe.n;const i=t[se.vSt]||t[re.WQ];return i&&\"string\"==typeof i&&(s=s.set(Ge,i)),s}(t,n);return void 0!==s&&(i=i.set(\"sentry.sample_rate\",`${s}`)),void 0!==r&&(i=i.set(\"sentry.sample_rand\",`${r}`)),null==e?{decision:Le.i.NOT_RECORD,traceState:i}:e===Le.i.NOT_RECORD?{decision:e,traceState:i.set(ze,\"1\")}:{decision:e,traceState:i}}const Mt=\"undefined\"==typeof __SENTRY_DEBUG__||__SENTRY_DEBUG__;var Ut=n(\"node:diagnostics_channel\");const qt=(e={})=>({name:\"ChildProcess\",setup(){Ut.channel(\"child_process\").subscribe((t=>{t&&\"object\"==typeof t&&\"process\"in t&&function(e,t){let n,r=!1;e.on(\"spawn\",(()=>{\"/usr/bin/sw_vers\"!==e.spawnfile?(n={spawnfile:e.spawnfile},t.includeChildProcessArgs&&(n.spawnargs=e.spawnargs)):r=!0})).on(\"exit\",(e=>{r||(r=!0,null!==e&&0!==e&&(0,z.Z)({category:\"child_process\",message:`Child process exited with code '${e}'`,level:0===e?\"info\":\"warning\",data:n}))})).on(\"error\",(e=>{r||(r=!0,(0,z.Z)({category:\"child_process\",message:`Child process errored with '${e.message}'`,level:\"error\",data:n}))}))}(t.process,e)})),Ut.channel(\"worker_threads\").subscribe((t=>{t&&\"object\"==typeof t&&\"worker\"in t&&function(e,t){let n;e.on(\"online\",(()=>{n=e.threadId})).on(\"error\",(e=>{!1!==t.captureWorkerErrors?(0,c.Cp)(e,{mechanism:{type:\"instrument\",handled:!1,data:{threadId:String(n)}}}):(0,z.Z)({category:\"worker_thread\",message:`Worker thread errored with '${e.message}'`,level:\"error\",data:{threadId:n}})}))}(t.worker,e)}))}});var zt=n(\"node:child_process\"),Gt=n(\"node:fs\"),Ht=n(\"node:os\"),Yt=n(\"node:path\"),Vt=n(\"node:util\");const Wt=(0,Vt.promisify)(Gt.readFile),$t=(0,Vt.promisify)(Gt.readdir),Kt=(e={})=>{let t;const n={app:!0,os:!0,device:!0,culture:!0,cloudResource:!0,...e};return{name:\"Context\",processEvent:e=>async function(e){void 0===t&&(t=async function(){const e={};if(n.os&&(e.os=await async function(){const e=Ht.platform();switch(e){case\"darwin\":return async function(){const e={kernel_version:Ht.release(),name:\"Mac OS X\",version:\"10.\"+(Number(Ht.release().split(\".\")[0])-4)};try{const t=await new Promise(((e,t)=>{(0,zt.execFile)(\"/usr/bin/sw_vers\",((n,r)=>{n?t(n):e(r)}))}));e.name=tn(/^ProductName:\\s+(.*)$/m,t),e.version=tn(/^ProductVersion:\\s+(.*)$/m,t),e.build=tn(/^BuildVersion:\\s+(.*)$/m,t)}catch{}return e}();case\"linux\":return async function(){const e={kernel_version:Ht.release(),name:\"Linux\"};try{const t=await $t(\"/etc\"),n=Xt.find((e=>t.includes(e.name)));if(!n)return e;const r=(0,Yt.join)(\"/etc\",n.name),s=(await Wt(r,{encoding:\"utf-8\"})).toLowerCase(),{distros:i}=n;e.name=i.find((e=>s.indexOf(nn(e))>=0))||i[0];const a=nn(e.name);e.version=en[a]?.(s)}catch{}return e}();default:return{name:Zt[e]||e,version:Ht.release()}}}()),n.app&&(e.app=function(){const e=process.memoryUsage().rss,t={app_start_time:new Date(Date.now()-1e3*process.uptime()).toISOString(),app_memory:e};if(\"function\"==typeof process.availableMemory){const e=process.availableMemory?.();null!=e&&(t.free_memory=e)}return t}()),n.device&&(e.device=function(e){const t={};let n;try{n=Ht.uptime()}catch{}if(\"number\"==typeof n&&(t.boot_time=new Date(Date.now()-1e3*n).toISOString()),t.arch=Ht.arch(),(!0===e||e.memory)&&(t.memory_size=Ht.totalmem(),t.free_memory=Ht.freemem()),!0===e||e.cpu){const e=Ht.cpus(),n=e?.[0];n&&(t.processor_count=e.length,t.cpu_description=n.model,t.processor_frequency=n.speed)}return t}(n.device)),n.culture){const t=function(){try{if(\"string\"!=typeof process.versions.icu)return;const e=new Date(9e8);if(\"enero\"===new Intl.DateTimeFormat(\"es\",{month:\"long\"}).format(e)){const e=Intl.DateTimeFormat().resolvedOptions();return{locale:e.locale,timezone:e.timeZone}}}catch{}}();t&&(e.culture=t)}return n.cloudResource&&(e.cloud_resource=process.env.VERCEL?{\"cloud.provider\":\"vercel\",\"cloud.region\":process.env.VERCEL_REGION}:process.env.AWS_REGION?{\"cloud.provider\":\"aws\",\"cloud.region\":process.env.AWS_REGION,\"cloud.platform\":process.env.AWS_EXECUTION_ENV}:process.env.GCP_PROJECT?{\"cloud.provider\":\"gcp\"}:process.env.ALIYUN_REGION_ID?{\"cloud.provider\":\"alibaba_cloud\",\"cloud.region\":process.env.ALIYUN_REGION_ID}:process.env.WEBSITE_SITE_NAME&&process.env.REGION_NAME?{\"cloud.provider\":\"azure\",\"cloud.region\":process.env.REGION_NAME}:process.env.IBM_CLOUD_REGION?{\"cloud.provider\":\"ibm_cloud\",\"cloud.region\":process.env.IBM_CLOUD_REGION}:process.env.TENCENTCLOUD_REGION?{\"cloud.provider\":\"tencent_cloud\",\"cloud.region\":process.env.TENCENTCLOUD_REGION,\"cloud.account.id\":process.env.TENCENTCLOUD_APPID,\"cloud.availability_zone\":process.env.TENCENTCLOUD_ZONE}:process.env.NETLIFY?{\"cloud.provider\":\"netlify\"}:process.env.FLY_REGION?{\"cloud.provider\":\"fly.io\",\"cloud.region\":process.env.FLY_REGION}:process.env.DYNO?{\"cloud.provider\":\"heroku\"}:void 0),e}());const r=function(e){if(e.app?.app_memory&&(e.app.app_memory=process.memoryUsage().rss),e.app?.free_memory&&\"function\"==typeof process.availableMemory){const t=process.availableMemory?.();null!=t&&(e.app.free_memory=t)}return e.device?.free_memory&&(e.device.free_memory=Ht.freemem()),e}(await t);return e.contexts={...e.contexts,app:{...r.app,...e.contexts?.app},os:{...r.os,...e.contexts?.os},device:{...r.device,...e.contexts?.device},culture:{...r.culture,...e.contexts?.culture},cloud_resource:{...r.cloud_resource,...e.contexts?.cloud_resource}},e}(e)}},Zt={aix:\"IBM AIX\",freebsd:\"FreeBSD\",openbsd:\"OpenBSD\",sunos:\"SunOS\",win32:\"Windows\"},Xt=[{name:\"fedora-release\",distros:[\"Fedora\"]},{name:\"redhat-release\",distros:[\"Red Hat Linux\",\"Centos\"]},{name:\"redhat_version\",distros:[\"Red Hat Linux\"]},{name:\"SuSE-release\",distros:[\"SUSE Linux\"]},{name:\"lsb-release\",distros:[\"Ubuntu Linux\",\"Arch Linux\"]},{name:\"debian_version\",distros:[\"Debian\"]},{name:\"debian_release\",distros:[\"Debian\"]},{name:\"arch-release\",distros:[\"Arch Linux\"]},{name:\"gentoo-release\",distros:[\"Gentoo Linux\"]},{name:\"novell-release\",distros:[\"SUSE Linux\"]},{name:\"alpine-release\",distros:[\"Alpine Linux\"]}],en={alpine:e=>e,arch:e=>tn(/distrib_release=(.*)/,e),centos:e=>tn(/release ([^ ]+)/,e),debian:e=>e,fedora:e=>tn(/release (..)/,e),mint:e=>tn(/distrib_release=(.*)/,e),red:e=>tn(/release ([^ ]+)/,e),suse:e=>tn(/VERSION = (.*)\\n/,e),ubuntu:e=>tn(/distrib_release=(.*)/,e)};function tn(e,t){const n=e.exec(t);return n?n[1]:void 0}function nn(e){return e.split(\" \")[0].toLowerCase()}var rn=n(\"node:readline\");const sn=new de(10),an=new de(20);function on(e,t,n){const r=e.get(t);return void 0===r?(e.set(t,n),n):r}function cn(e){return void 0!==e.lineno&&e.lineno>1e4||void 0!==e.colno&&e.colno>1e3}function ln(e,t){const n=sn.get(e);if(void 0===n)return!1;for(let e=t[0];e<=t[1];e++)if(void 0===n[e])return!1;return!0}function un(e,t){if(!e.length)return[];let n=0;const r=e[0];if(\"number\"!=typeof r)return[];let s=hn(r,t);const i=[];for(;;){if(n===e.length-1){i.push(s);break}const r=e[n+1];if(\"number\"!=typeof r)break;r<=s[1]?s[1]=r+t:(i.push(s),s=hn(r,t)),n++}return i}function dn(e,t,n){return new Promise(((r,s)=>{const i=(0,Gt.createReadStream)(e),a=(0,rn.createInterface)({input:i});function o(){i.destroy(),r()}let c=0,l=0;const u=t[l];if(void 0===u)return void o();let d=u[0],m=u[1];function p(t){an.set(e,1),Mt&&f.Yz.error(`Failed to read file: ${e}. Error: ${t}`),a.close(),a.removeAllListeners(),o()}i.on(\"error\",p),a.on(\"error\",p),a.on(\"close\",o),a.on(\"line\",(e=>{if(c++,!(c<d)&&(n[c]=(0,v.nC)(e,0),c>=m)){if(l===t.length-1)return a.close(),void a.removeAllListeners();l++;const e=t[l];if(void 0===e)return a.close(),void a.removeAllListeners();d=e[0],m=e[1]}}))}))}function mn(e,t,n){for(const r of e)if(r.filename&&void 0===r.context_line&&\"number\"==typeof r.lineno){const e=n.get(r.filename);if(void 0===e)continue;pn(r.lineno,r,t,e)}}function fn(e){delete e.pre_context,delete e.context_line,delete e.post_context}function pn(e,t,n,r){if(void 0===t.lineno||void 0===r)return void(Mt&&f.Yz.error(\"Cannot resolve context for frame with no lineno or file contents\"));t.pre_context=[];for(let s=An(e,n);s<e;s++){const e=r[s];if(void 0===e)return fn(t),void(Mt&&f.Yz.error(`Could not find line ${s} in file ${t.filename}`));t.pre_context.push(e)}if(void 0===r[e])return fn(t),void(Mt&&f.Yz.error(`Could not find line ${e} in file ${t.filename}`));t.context_line=r[e];const s=gn(e,n);t.post_context=[];for(let n=e+1;n<=s;n++){const e=r[n];if(void 0===e)break;t.post_context.push(e)}}function An(e,t){return Math.max(1,e-t)}function gn(e,t){return e+t}function hn(e,t){return[An(e,t),gn(e,t)]}const yn=(e={})=>{const t=void 0!==e.frameContextLines?e.frameContextLines:7;return{name:\"ContextLines\",processEvent:e=>async function(e,t){const n={};if(t>0&&e.exception?.values)for(const t of e.exception.values)if(t.stacktrace?.frames?.length)for(let e=t.stacktrace.frames.length-1;e>=0;e--){const s=t.stacktrace.frames[e],i=s?.filename;!s||\"string\"!=typeof i||\"number\"!=typeof s.lineno||((r=i).startsWith(\"node:\")||r.endsWith(\".min.js\")||r.endsWith(\".min.cjs\")||r.endsWith(\".min.mjs\")||r.startsWith(\"data:\"))||cn(s)||(n[i]||(n[i]=[]),n[i].push(s.lineno))}var r;const s=Object.keys(n);if(0==s.length)return e;const i=[];for(const e of s){if(an.get(e))continue;const r=n[e];if(!r)continue;r.sort(((e,t)=>e-t));const s=un(r,t);if(s.every((t=>ln(e,t))))continue;const a=on(sn,e,{});i.push(dn(e,s,a))}if(await Promise.all(i).catch((()=>{Mt&&f.Yz.log(\"Failed to read one or more source files and resolve context lines\")})),t>0&&e.exception?.values)for(const n of e.exception.values)n.stacktrace?.frames&&n.stacktrace.frames.length>0&&mn(n.stacktrace.frames,t,sn);return e}(e,t)}};var Cn=n(\"../../../../var/folders/gy/wcfhjzc55d96bnvx1zv223lc0000gn/T/agent-cli-mac-macos-arm64-019f4933-2c84-47c5-80c6-8513f384d287.ekQPhryL/pnpm-virtual-store/@opentelemetry+instrumentation@0.203.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/autoLoader.js\");const vn={};function _n(e,t,n){return n?function(e,t,n){return Object.assign((r=>{const s=n(r),i=vn[e];if(i)return i.setConfig(s),i;const a=new t(s);return vn[e]=a,(0,Cn.R)({instrumentations:[a]}),a}),{id:e})}(e,t,n):function(e,t){return Object.assign((n=>{const r=vn[e];if(r)return n&&r.setConfig(n),r;const s=t(n);return vn[e]=s,(0,Cn.R)({instrumentations:[s]}),s}),{id:e})}(e,t)}function En(e){let t=!1,n=[];if(function(e){return\"function\"==typeof e._wrap}(e)){const r=e"
+          ]
+        },
+        {
+          "argv": [
+            "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "3.17.21\n8f2a112cb2845a97b75fd932ea5c470579ca4060\narm64\n",
+          "stdout_bytes": 55,
+          "stdout_sha256": "e98c6b2668aa199ac7e2319b97ac9c02cf72ecf02177d204bd8f9c2524b5df1d",
+          "timed_out": false,
+          "wake_term_lines": []
+        }
+      ],
+      "identities": {
+        "/Applications/Cursor.app/Contents/Resources/app/bin/cursor": {
+          "path": "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+          "present": true,
+          "realpath": "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+          "size": 4798
+        },
+        "~/.local/bin/cursor-agent": {
+          "path": "~/.local/bin/cursor-agent",
+          "present": true,
+          "realpath": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+          "size": 1074
+        },
+        "/opt/homebrew/bin/cursor-agent": {
+          "path": "/opt/homebrew/bin/cursor-agent",
+          "present": true,
+          "realpath": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/cursor-agent",
+          "size": 1074
+        }
+      },
+      "which": {
+        "cursor": "",
+        "cursor-agent": "/opt/homebrew/bin/cursor-agent"
+      }
+    },
+    "grok-build": {
+      "commands": [
+        {
+          "absent": true,
+          "argv": [
+            "/opt/homebrew/bin/grok-build",
+            "--version"
+          ],
+          "exit": null,
+          "stderr": "",
+          "stdout": "",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/grok",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "grok 1.0.5 (5115b46bc909)\n",
+          "stdout_bytes": 26,
+          "stdout_sha256": "0e600840edc731ab0a2370fb49ff7b499f128daab9c4971a0e39c58da205d959",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/grok",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "Grok Build TUI\n\nUsage: grok [OPTIONS] [PROMPT] [COMMAND]\n\nArguments:\n  [PROMPT]\n          Initial prompt for the interactive session, e.g. `grok \"fix the bug\"` or `grok --worktree=feat \"create this feature\"`\n\nOptions:\n      --agent <NAME>\n          Agent name or definition file path\n\n      --agents <JSON>\n          Inline subagent definitions as JSON\n\n      --allow <RULE>\n          Permission allow rule (compat alias: --allowedTools)\n\n      --always-approve\n          Auto-approve all tool executions\n\n  -c, --continue\n          Continue the most recent session for the current working directory\n\n      --cwd <CWD>\n          Working directory\n\n      --debug\n          Enable debug logging\n\n      --debug-file <FILE>\n          Write debug logs to FILE\n\n      --deny <RULE>\n          Permission deny rule (compat alias: --disallowedTools)\n\n      --disable-web-search\n          Disable web search and web fetch tools\n\n      --disallowed-tools <TOOLS>\n          Built-in tools to remove (comma-separated)\n\n      --fork-session\n          When resuming (`--resume` / `--continue`), create a new session ID instead of reusing the original (optionally set via `--session-id`)\n\n      --fullscreen\n          Open in the standard fullscreen TUI for this session, overriding a config `[ui] screen_mode = \"minimal\"` preference. Session-scoped only \u2014 does not write config. Fullscreen-vs-inline still follows the alt-screen policy (--no-alt-screen, [terminal] alt_screen, terminal auto-detection)\n\n  -h, --help\n          Print help (see a summary with '-h')\n\n      --include-partial-messages\n          Emit incremental `stream_event` lines (text/thinking deltas) alongside whole messages. Only affects `--output-format streaming-messages-json`\n\n      --json-schema <SCHEMA>\n          JSON Schema for structured output. When set, the model is constrained to produce JSON matching this schema. Implies --output-format json. Example: --json-schema '{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}'\n\n      --leader-socket <PATH>\n          Use a custom leader socket path instead of the default `~/.grok/leader.sock`\n\n  -m, --model <MODEL>\n          Model ID to use\n\n      --max-turns <N>\n          Maximum number of agent turns\n\n      --minimal\n          Experimental: scrollback-native rendering. Finalized blocks are printed into the terminal's native scrollback (use the terminal's own scroll / selection); a small pinned region holds the prompt + running turn. Session-scoped only \u2014 does not write config. To default plain `grok` to minimal, set `[ui] screen_mode = \"minimal\"` in ~/.grok/config.toml\n\n      --no-alt-screen\n          Run inline instead of using the terminal alternate screen\n\n      --no-plan\n          Disable plan mode\n\n      --no-subagents\n          Disable subagent spawning\n\n      --oauth\n          Use OAuth when the welcome screen starts authentication\n\n      --output-format <OUTPUT_FORMAT>\n          Output format for headless mode\n\n          Possible values:\n          - plain\n          - json\n          - streaming-json:          NDJSON of the agent native ACP session updates\n          - streaming-messages-json: NDJSON in the Anthropic Messages API wire format\n          \n          [default: plain]\n\n  -p, --single <PROMPT>\n          Single-turn prompt. Prints the response to stdout and exits\n\n      --permission-mode <MODE>\n          Permission mode\n          \n          [possible values: default, acceptEdits, auto, dontAsk, bypassPermissions, plan]\n\n      --prompt-file <PATH>\n          Single-turn prompt from a file\n\n      --prompt-json <JSON>\n          Single-turn prompt as JSON content blocks\n\n  -r, --resume [<SESSION_ID_OR_TITLE>]\n          Resume a session by ID or title, or the most recent if omitted. Non-ID values match session titles for the current directory (ignoring letter case; a sole renamed match wins among duplicates, otherwise ambiguity errors; UUID-shaped values always mean IDs)\n\n      --reasoning-effort <EFFORT>\n          Reasoning effort fo",
+          "stdout_bytes": 6959,
+          "stdout_sha256": "a0e05fe31356e5c06d79354c19bc9a2d7a8abeaef6de15dc3287c7194a4cad9e",
+          "timed_out": false,
+          "wake_term_lines": [
+            "Initial prompt for the interactive session, e.g. `grok \"fix the bug\"` or `grok --worktree=feat \"create this feature\"`",
+            "Continue the most recent session for the current working directory",
+            "--fork-session",
+            "When resuming (`--resume` / `--continue`), create a new session ID instead of reusing the original (optionally set via `--session-id`)",
+            "Open in the standard fullscreen TUI for this session, overriding a config `[ui] screen_mode = \"minimal\"` preference. Session-scoped only \u2014 does not write config. Fullscreen-vs-inline still follows the alt-screen policy (--no-alt-screen, [terminal] alt_screen, terminal auto-detection)",
+            "Emit incremental `stream_event` lines (text/thinking deltas) alongside whole messages. Only affects `--output-format streaming-messages-json`",
+            "Experimental: scrollback-native rendering. Finalized blocks are printed into the terminal's native scrollback (use the terminal's own scroll / selection); a small pinned region holds the prompt + running turn. Session-scoped only \u2014 does not write config. To default plain `grok` to minimal, set `[ui] screen_mode = \"minimal\"` in ~/.grok/config.toml",
+            "- streaming-json:          NDJSON of the agent native ACP session updates",
+            "-r, --resume [<SESSION_ID_OR_TITLE>]",
+            "Resume a session by ID or title, or the most recent if omitted. Non-ID values match session titles for the current directory (ignoring letter case; a sole renamed match wins among duplicates, otherwise ambiguity errors; UUID-shaped values always mean IDs)",
+            "Restore the original session's repository snapshot when resuming. Remote sessions require `--worktree` (never checks out into the current directory). Without this flag, resume restores conversation only",
+            "-s, --session-id <SESSION_ID>",
+            "Use a specific session UUID for a **new** conversation (must be a valid UUID and must not already exist under the target session directory). With `--resume`/`--continue`, only valid together with `--fork-session` (names the forked session). Does not resume existing sessions \u2014 use `--resume` / `--continue` instead",
+            "Start the session in a new git worktree, optionally named. With `--resume` of a remote session, pass `--restore-code` to apply the snapshot codebase (conversation is restored either way). Headless (`-p`) does not create a worktree from this flag",
+            "export       Export a session transcript as Markdown",
+            "memory       Manage cross-session memory",
+            "plugin       Manage plugins and marketplace sources",
+            "sessions     List, search, or restore sessions",
+            "trace        Export or upload session trace data"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/grok": {
+          "path": "/opt/homebrew/bin/grok",
+          "present": true,
+          "realpath": "/opt/homebrew/lib/node_modules/@xai-official/grok/bin/grok",
+          "size": 5672
+        },
+        "/opt/homebrew/bin/grok-build": {
+          "path": "/opt/homebrew/bin/grok-build",
+          "present": false
+        }
+      },
+      "which": {
+        "grok": "/opt/homebrew/bin/grok",
+        "grok-build": ""
+      }
+    },
+    "herdr": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/herdr",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "herdr 0.8.2\n",
+          "stdout_bytes": 12,
+          "stdout_sha256": "9654e7f916941ff3f48a0b7bdf19110ce63a11880765fc8e362a94472bc948b3",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/herdr",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "herdr \u2014 terminal workspace manager for AI coding agents\n\nUsage: herdr [options]\n       herdr --session <name> [options]\n       herdr --remote <ssh-target> [--session <name>]\n       herdr session attach <name>\n       herdr completion zsh\n       herdr update [--handoff]\n       herdr channel set <stable|preview>\n       herdr server stop\n       herdr server reload-config\n       herdr api <subcommand> ...\n       herdr completion <shell>\n       herdr config <subcommand> ...\n       herdr channel <subcommand> ...\n       herdr workspace <subcommand> ...\n       herdr worktree <subcommand> ...\n       herdr tab <subcommand> ...\n       herdr notification <subcommand> ...\n       herdr agent <subcommand> ...\n       herdr pane <subcommand> ...\n       herdr session <subcommand> ...\n       herdr integration <subcommand> ...\n\nCommon commands:\n  herdr                            Launch or attach to the persistent session\n  herdr status [server|client]     Show local client and running server status\n  herdr update                     Download and install the latest version\n  herdr completion zsh             Generate shell completions for zsh\n  herdr server stop                Stop the running server via the API socket\n  herdr channel set <stable|preview> Choose the stable or preview update channel\n  herdr server reload-config       Reload config.toml in the running server\n  herdr config reset-keys          Back up config.toml and remove custom keybindings\n  herdr channel <subcommand>       Manage the stable or preview update channel\n  herdr api <subcommand>           Inspect socket API metadata and live runtime state\n  herdr workspace <subcommand>     Workspace helpers over the socket API\n  herdr worktree <subcommand>      Git worktree helpers over the socket API\n  herdr tab <subcommand>           Tab helpers over the socket API\n  herdr notification <subcommand>  Notification helpers over the socket API\n  herdr agent <subcommand>         Agent/terminal helpers over the socket API\n  herdr pane <subcommand>          Pane control helpers over the socket API\n  herdr session <subcommand>       Manage named persistent sessions\n  herdr integration <subcommand>   Manage built-in agent integrations\n\nAdvanced commands:\n  herdr server                     Run as headless server\n\nOptions:\n  --no-session        Run monolithically (no server/client, escape hatch)\n  --session <name>    Use or create a named persistent session\n  --remote <target>   Attach through SSH to a remote Herdr server\n  --remote-keybindings <local|server>\n                      Keybindings for --remote app attach (default: local)\n  --handoff           Opt into live handoff for update or remote attach\n  --default-config    Print default configuration and exit\n  --skill             Print the agent skill file and exit\n  --version, -V       Print version and exit\n  --help, -h          Show this help\n\nConfig: ~/.config/herdr/config.toml\nLogs:   ~/.config/herdr/herdr.log (plus herdr-client.log, herdr-server.log)\nEnv:    HERDR_CONFIG_PATH overrides config file path\nHome:   https://herdr.dev\n\nAre you an AI? Use these resources ONLY IF your task specifically asks you to:\n  Help a human understand or set up Herdr for the first time:\n    https://herdr.dev/agent-guide.md\n  Debug or investigate a problem with Herdr:\n    https://herdr.dev/llms.txt\n  Control Herdr panes, agents, or workspaces:\n    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill\n",
+          "stdout_bytes": 3498,
+          "stdout_sha256": "198d82d8e313e4a8394d2bae801eb0077584359c10bb366bd59c6eb3efe1b97a",
+          "timed_out": false,
+          "wake_term_lines": [
+            "herdr --session <name> [options]",
+            "herdr --remote <ssh-target> [--session <name>]",
+            "herdr session attach <name>",
+            "herdr server stop",
+            "herdr session <subcommand> ...",
+            "herdr                            Launch or attach to the persistent session",
+            "herdr server stop                Stop the running server via the API socket",
+            "herdr session <subcommand>       Manage named persistent sessions",
+            "--no-session        Run monolithically (no server/client, escape hatch)",
+            "--session <name>    Use or create a named persistent session"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/herdr": {
+          "path": "/opt/homebrew/bin/herdr",
+          "present": true,
+          "realpath": "/opt/homebrew/Cellar/herdr/0.8.2/bin/herdr",
+          "size": 20222544
+        }
+      },
+      "which": {
+        "herdr": "/opt/homebrew/bin/herdr"
+      }
+    },
+    "opencode": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/opencode",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "1.18.9\n",
+          "stdout_bytes": 7,
+          "stdout_sha256": "13d998dc1d8d8589fdf6090020f5e59ec9875126beda74ef6e81f6e9c638697c",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/opencode",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "\u2800                                \u2584     \n\u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2584 \u2588\u2580\u2580\u2580 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2588\n\u2588  \u2588 \u2588  \u2588 \u2588\u2580\u2580\u2580 \u2588  \u2588 \u2588    \u2588  \u2588 \u2588  \u2588 \u2588\u2580\u2580\u2580\n\u2580\u2580\u2580\u2580 \u2588\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580  \u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580 \u2580\u2580\u2580\u2580\n\nCommands:\n  opencode completion          generate shell completion script\n  opencode acp                 start ACP (Agent Client Protocol) server\n  opencode mcp                 manage MCP (Model Context Protocol) servers\n  opencode [project]           start opencode tui                                          [default]\n  opencode attach <url>        attach to a running opencode server\n  opencode run [message..]     run opencode with a message\n  opencode debug               debugging and troubleshooting tools\n  opencode providers           manage AI providers and credentials                   [aliases: auth]\n  opencode agent               manage agents\n  opencode upgrade [target]    upgrade opencode to the latest or a specific version\n  opencode uninstall           uninstall opencode and remove all related files\n  opencode serve               starts a headless opencode server\n  opencode web                 start opencode server and open web interface\n  opencode models [provider]   list all available models\n  opencode stats               show token usage and cost statistics\n  opencode export [sessionID]  export session data as JSON\n  opencode import <file>       import session data from JSON file or URL\n  opencode github              manage GitHub agent\n  opencode pr <number>         fetch and checkout a GitHub PR branch, then run opencode\n  opencode session             manage sessions\n  opencode plugin <module>     install plugin and update config                      [aliases: plug]\n  opencode db                  database tools\n\nPositionals:\n  project  path to start opencode in                                                        [string]\n\nOptions:\n  -h, --help          show help                                                            [boolean]\n  -v, --version       show version number                 ",
+          "stderr_bytes": 4285,
+          "stderr_sha256": "b594ad32674bf8008017157833ab87316170523ed23dbd10c37ae9931d2ba178",
+          "stdout": "",
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wake_term_lines": [
+            "opencode export [sessionID]  export session data as JSON",
+            "opencode import <file>       import session data from JSON file or URL",
+            "opencode session             manage sessions",
+            "opencode plugin <module>     install plugin and update config                      [aliases: plug]",
+            "--pure          run without external plugins                                         [boolean]",
+            "-c, --continue      continue the last session                                            [boolean]",
+            "-s, --session       session id to continue                                                [string]",
+            "--fork          fork the session when continuing (use with --continue or --session)  [boolean]",
+            "--no-replay     disable mini session history replay on resume and after resize       [boolean]"
+          ]
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/opencode",
+            "serve",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "opencode serve\n\nstarts a headless opencode server\n\nOptions:\n  -h, --help         show help                                                             [boolean]\n  -v, --version      show version number                                                   [boolean]\n      --print-logs   print logs to stderr                                                  [boolean]\n      --log-level    log level                  [string] [choices: \"DEBUG\", \"INFO\", \"WARN\", \"ERROR\"]\n      --pure         run without external plugins                                          [boolean]\n      --port         port to listen on                                         [number] [default: 0]\n      --hostname     hostname to listen on                           [string] [default: \"127.0.0.1\"]\n      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)\n                                                                          [boolean] [default: false]\n      --mdns-domain  custom domain name for mDNS service (default: opencode.local)\n                                                                [string] [default: \"opencode.local\"]\n      --cors         additional domains to allow for CORS                      [array] [default: []]",
+          "stderr_bytes": 1234,
+          "stderr_sha256": "6855794f108c83a3a32b03efcc36a9a62c83093d8f065cd740475092f839684e",
+          "stdout": "",
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wake_term_lines": [
+            "--pure         run without external plugins                                          [boolean]"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/opencode": {
+          "path": "/opt/homebrew/bin/opencode",
+          "present": true,
+          "realpath": "/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode.exe",
+          "size": 138509666
+        }
+      },
+      "which": {
+        "opencode": "/opt/homebrew/bin/opencode"
+      }
+    },
+    "pi": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/pi",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "0.84.3\n",
+          "stdout_bytes": 7,
+          "stdout_sha256": "e470244f5d207065cacf7314a910c7cff5fc8334840dc42426d62da3e661f580",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/pi",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "pi - AI coding assistant with read, bash, edit, write tools\n\nUsage:\n  pi [options] [--] [@files...] [messages...]\n\nCommands:\n  pi install <source> [-l]     Install extension source and add to settings\n  pi remove <source> [-l]      Remove extension source from settings\n  pi uninstall <source> [-l]   Alias for remove\n  pi update [source|self|pi]   Update pi, extensions, or model catalogs\n  pi list                      List installed extensions from settings\n  pi config [-l]               Open TUI to enable/disable package resources (Tab switches scope)\n  pi auth <command>            Print credentials or check provider readiness\n  pi <command> --help          Show help for install/remove/uninstall/update/list/config/auth\n\nOptions:\n  --provider <name>              Provider name (default: google)\n  --model <pattern>              Model pattern or ID (supports \"provider/id\" and optional \":<thinking>\")\n  --api-key <key>                API key (defaults to env vars)\n  --system-prompt <text>         System prompt (default: coding assistant prompt)\n  --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)\n  --mode <mode>                  Output mode: text (default), json, or rpc\n  --print, -p                    Non-interactive mode: process prompt and exit\n  --continue, -c                 Continue previous session\n  --resume, -r                   Select a session to resume\n  --session <path|id>            Use specific session file or partial UUID\n  --session-id <id>              Use exact project session ID, creating it if missing\n  --fork <path|id>               Fork specific session file or partial UUID into a new session\n  --session-dir <dir>            Directory for session storage and lookup\n  --no-session                   Don't save session (ephemeral)\n  --name, -n <name>              Set session display name\n  --models <patterns>            Comma-separated model patterns for Ctrl+P cycling\n                                 Supports globs (anthropic/*, *sonnet*) and fuzzy matching\n  --no-tools, -nt                Disable all tools by default (built-in and extension)\n  --no-builtin-tools, -nbt       Disable built-in tools by default but keep extension/custom tools enabled\n  --tools, -t <tools>            Comma-separated allowlist of tool names to enable\n                                 Applies to built-in, extension, and custom tools\n  --exclude-tools, -xt <tools>   Comma-separated denylist of tool names to disable\n                                 Applies to built-in, extension, and custom tools\n  --thinking <level>             Set thinking level: off, minimal, low, medium, high, xhigh, max\n  --extension, -e <path>         Load an extension file (can be used multiple times)\n  --no-extensions, -ne           Disable extension discovery (explicit -e paths still work)\n  --skill <path>                 Load a skill file or directory (can be used multiple times)\n  --no-skills, -ns               Disable skills discovery and loading\n  --prompt-template <path>       Load a prompt template file or directory (can be used multiple times)\n  --no-prompt-templates, -np     Disable prompt template discovery and loading\n  --theme <path>                 Load a theme file or directory (can be used multiple times)\n  --use-theme <name[/name]>      Set the initial interactive theme for this run\n  --no-themes                    Disable theme discovery and loading\n  --no-context-files, -nc        Disable AGENTS.md and CLAUDE.md discovery and loading\n  --export <file>                Export session file to HTML and exit\n  --list-models [search]         List available models (with optional fuzzy search)\n  --verbose                      Force verbose startup (overrides quietStartup setting)\n  --tui-mode <mode>              TUI mode: regular (default) or fullscreen\n  --approve, -a                  Trust project-local files for this run\n  --no-approve, -na              Ignore project-local files for this run\n",
+          "stdout_bytes": 10120,
+          "stdout_sha256": "894957a01dfbf97ec0723edadbbc95094e0f216fc735705f47b94c2ddcb0962a",
+          "timed_out": false,
+          "wake_term_lines": [
+            "--continue, -c                 Continue previous session",
+            "--resume, -r                   Select a session to resume",
+            "--session <path|id>            Use specific session file or partial UUID",
+            "--session-id <id>              Use exact project session ID, creating it if missing",
+            "--fork <path|id>               Fork specific session file or partial UUID into a new session",
+            "--session-dir <dir>            Directory for session storage and lookup",
+            "--no-session                   Don't save session (ephemeral)",
+            "--name, -n <name>              Set session display name",
+            "--export <file>                Export session file to HTML and exit",
+            "# Continue previous session",
+            "# Start a named session",
+            "# Export a session file to HTML",
+            "pi --export ~/.pi/agent/sessions/--path--/session.jsonl",
+            "pi --export session.jsonl output.html",
+            "PI_CODING_AGENT_SESSION_DIR      - Session storage directory (overridden by --session-dir)",
+            "PI_SHARE_VIEWER_URL              - Base URL for /share command (default: https://pi.dev/session/)"
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/pi": {
+          "path": "/opt/homebrew/bin/pi",
+          "present": true,
+          "realpath": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+          "size": 629
+        }
+      },
+      "which": {
+        "pi": "/opt/homebrew/bin/pi"
+      }
+    },
+    "t3": {
+      "commands": [
+        {
+          "argv": [
+            "/opt/homebrew/bin/t3",
+            "--version"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "t3 v0.0.35\n",
+          "stdout_bytes": 11,
+          "stdout_sha256": "610a294a2246e84be6500cb811c83619559693dd1f5bf1cee6b54bc626be2ac8",
+          "timed_out": false,
+          "wake_term_lines": []
+        },
+        {
+          "argv": [
+            "/opt/homebrew/bin/t3",
+            "--help"
+          ],
+          "exit": 0,
+          "stderr": "",
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "DESCRIPTION\n  Run the T3 Code server.\n\nUSAGE\n  t3 <subcommand> [flags] [<cwd>]\n\nARGUMENTS\n  cwd string    Working directory for provider sessions (defaults to the current directory). (optional)\n\nFLAGS\n  --mode choice                              Runtime mode. `desktop` keeps loopback defaults unless overridden. (choices: web, desktop)\n  --port integer                             Port for the HTTP/WebSocket server.\n  --host string                              Host/interface to bind (for example 127.0.0.1, 0.0.0.0, or a Tailnet IP).\n  --base-dir string                          Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME).\n  --dev-url string                           Dev web URL to proxy/redirect to (equivalent to VITE_DEV_SERVER_URL).\n  --no-browser                               Disable automatic browser opening.\n  --bootstrap-fd integer                     Read one-time bootstrap secrets from the given file descriptor.\n  --auto-bootstrap-project-from-cwd          Create a project for the current working directory on startup when missing.\n  --log-websocket-events, --log-ws-events    Emit server-side logs for outbound WebSocket push traffic (equivalent to T3CODE_LOG_WS_EVENTS).\n  --tailscale-serve                          Configure Tailscale Serve to expose this backend over HTTPS on the Tailnet.\n  --tailscale-serve-port integer             HTTPS port for Tailscale Serve when --tailscale-serve is enabled.\n\nGLOBAL FLAGS\n  --help, -h                                                          Show help information\n  --version, -v                                                       Show version information\n  --wizard                                                            Start wizard mode for a command\n  --completions <bash|zsh|fish|sh>                                    Print shell completion script (choices: bash, zsh, fish, sh)\n  --log-level <all|trace|debug|info|warn|warning|error|fatal|none>    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)\n\nSUBCOMMANDS\n  start      Run the T3 Code server.\n  serve      Run the T3 Code server without opening a browser and print headless pairing details.\n  pair       Mint a pairing token for a running T3 Code server and print it as a QR code.\n  auth       Manage the local auth control plane for headless deployments.\n  project    Manage projects.\n  service    Manage the T3 Code background service.\n  triage     Investigate a T3 Code problem on this machine with claude or codex, and help file a good issue.\n  connect    Set up T3 Connect for this machine.\n",
+          "stdout_bytes": 2635,
+          "stdout_sha256": "f226c0a3da52e556ff009afe81751b4c09aadb8a9dc17c41f82e09ca53ede63c",
+          "timed_out": false,
+          "wake_term_lines": [
+            "cwd string    Working directory for provider sessions (defaults to the current directory). (optional)",
+            "--log-websocket-events, --log-ws-events    Emit server-side logs for outbound WebSocket push traffic (equivalent to T3CODE_LOG_WS_EVENTS)."
+          ]
+        }
+      ],
+      "identities": {
+        "/opt/homebrew/bin/t3": {
+          "path": "/opt/homebrew/bin/t3",
+          "present": true,
+          "realpath": "/opt/homebrew/lib/node_modules/t3/dist/bin.mjs",
+          "size": 7008453
+        }
+      },
+      "which": {
+        "t3": "/opt/homebrew/bin/t3"
+      }
+    }
+  },
+  "started_utc": "2026-08-28T02:21:25Z"
+}

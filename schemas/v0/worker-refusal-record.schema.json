@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/worker-refusal-record.schema.json",
+  "title": "Floati Worker Refusal Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "node_id", "adapter", "work_item_id", "reason_code"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^worker-refusal-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "worker_refusal"},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "adapter": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"},
+    "work_item_id": {
+      "type": ["string", "null"],
+      "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "authority_state_unavailable", "consumption_state_unavailable",
+        "worker_adapter_absent",
+        "worker_authority_changed", "worker_authority_ambiguous",
+        "worker_authority_missing", "worker_claim_lost",
+        "worker_node_inactive", "worker_work_absent", "worker_work_blocked",
+        "worker_workspace_missing"
+      ]
+    }
+  }
+}

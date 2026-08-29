@@ -1,0 +1,460 @@
+{
+  "schema_version": "c7.1-candidate",
+  "kind": "c7_schema_catalog",
+  "projection_schema": {
+    "id": "https://landoclusters.com/floati/schemas/c7.1/canonical-projection.schema.json",
+    "version": "c7.1-candidate",
+    "file": "schemas/canonical-projection.schema.json",
+    "sha256": "a4f1886cf156bd510cf5030eae63d25a413a272e9b2edcbcf640a837bf0ced1b"
+  },
+  "entries": [
+    {
+      "family": "run",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-created-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-created-record.schema.json",
+          "sha256": "b64536b38b3feec9e3720c37c64ffe3c74804c0ff24cbfdef9d1e5bb51c3f664",
+          "pointers": [
+            "/run_id", "/plan_digest", "/item_ids", "/dependency_edges",
+            "/dependency_edges/n/source", "/dependency_edges/n/target",
+            "/dependency_edges/n/requires", "/dependency_edges/n/failure_policy"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-policy-bound-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-policy-bound-record.schema.json",
+          "sha256": "26a4b07e6c6fa6e8fe6e891eb1184a5dc7923c0a9b2a76de1d5017e1941771a4",
+          "pointers": ["/run_id", "/policy_digest"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-worker-pool-bound-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-worker-pool-bound-record.schema.json",
+          "sha256": "a42aad1149c82b04501d7071689fc7a4e171e5c108f3968b99dd3a233817b336",
+          "pointers": ["/run_id", "/worker_ids"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-dispatch-decision-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-dispatch-decision-record.schema.json",
+          "sha256": "339ca1f9bdad96e4988a5cf38e8b9306f48d4fc160ccc92a2a830e64feb0c2d5",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/eligible_workers",
+            "/chosen_worker", "/capability_digest", "/reason_code",
+            "/policy_digest", "/routing_rank", "/scheduler_epoch"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-terminal-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-terminal-record.schema.json",
+          "sha256": "e82aefa713a2889bfdd00e35b9ea60e7d3011a63653a079d9da8f9f968bc35fc",
+          "pointers": ["/run_id", "/outcome"]
+        }
+      ]
+    },
+    {
+      "family": "work_item",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-created-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-created-record.schema.json",
+          "sha256": "b64536b38b3feec9e3720c37c64ffe3c74804c0ff24cbfdef9d1e5bb51c3f664",
+          "pointers": ["/run_id", "/item_ids"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/work-item-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/work-item-record.schema.json",
+          "sha256": "be26a743b9706811e9859247a45157f7159fb5d32d6221f1a9be32b70f8ef96d",
+          "ledger": "work/items.jsonl",
+          "state_role": "context_only_no_causal_merge",
+          "pointers": ["/id", "/title", "/owner", "/artifact_bindings"]
+        }
+      ]
+    },
+    {
+      "family": "worker_receipt_evidence",
+      "ledger": "raw/receipts/workers.jsonl",
+      "representation": "evidence_only_no_causal_merge",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/worker-receipt-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/worker-receipt-record.schema.json",
+          "sha256": "7f5f3231d21d4961d91cc08124fa0dc1b93386e5474b41874d4461014d160201",
+          "ledger": "raw/receipts/workers.jsonl",
+          "state_role": "evidence_only_no_causal_merge",
+          "pointers": [
+            "/id", "/session_id", "/work_item_id", "/node_id", "/adapter",
+            "/transition", "/outcome_code", "/artifact_bindings"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "attempt",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-opened-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-opened-record.schema.json",
+          "sha256": "d1a6df2abe1267dbe8aa6f02f73eea14d878ce86edccfbe28813bada5feeaa84",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/ordinal", "/scheduler_epoch",
+            "/fence_token", "/max_attempts", "/backoff"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-started-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-started-record.schema.json",
+          "sha256": "0c9be201d63e4d2455355fdac6f65e637f647016929316da22d3f88d45fbcc3c",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/ordinal", "/attempt_opened_id",
+            "/dispatch_decision_id", "/fence_token"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-terminal-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-terminal-record.schema.json",
+          "sha256": "0632f4ed2eafb05a184a4b2fc34c12000438d959d7685236732011515599f6cd",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/ordinal", "/attempt_started_id",
+            "/fence_token", "/terminal_state", "/policy_class", "/reason_code",
+            "/effect_safety", "/retry_disposition", "/retry_record_id", "/next_attempt_id",
+            "/next_ordinal", "/retry_delay_ms", "/next_scheduler_epoch", "/next_fence_token"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "claim",
+      "representation": "opaque_reference",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "sha256": "50c85aedd42ce2d0c863bd6634d169efa4e35373a1672fd410fcba927c5f89ae",
+          "pointers": ["/claim_id", "/attempt_id", "/worker_session_id"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/supervisor-orphaned-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/supervisor-orphaned-record.schema.json",
+          "sha256": "9be26f1de3e12784a670d5a7aaa4dc477b5338d85e093c93439f230d3072da6a",
+          "pointers": ["/claim_id", "/attempt_id", "/worker_session_id"]
+        }
+      ]
+    },
+    {
+      "family": "lease",
+      "representation": "opaque_reference",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "sha256": "50c85aedd42ce2d0c863bd6634d169efa4e35373a1672fd410fcba927c5f89ae",
+          "pointers": ["/lease_id", "/attempt_id", "/worker_session_id"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/supervisor-orphaned-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/supervisor-orphaned-record.schema.json",
+          "sha256": "9be26f1de3e12784a670d5a7aaa4dc477b5338d85e093c93439f230d3072da6a",
+          "pointers": ["/lease_id", "/attempt_id", "/worker_session_id"]
+        }
+      ]
+    },
+    {
+      "family": "retry",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/retry-scheduled-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/retry-scheduled-record.schema.json",
+          "sha256": "9a013220c1c0854465e29556916da65a37b6ee6285fc2d1579d781abb101d61e",
+          "pointers": [
+            "/run_id", "/item_id", "/previous_attempt_id", "/attempt_terminal_id",
+            "/next_attempt_id", "/next_ordinal", "/delay_ms", "/scheduler_epoch",
+            "/next_fence_token"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/retry-exhausted-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/retry-exhausted-record.schema.json",
+          "sha256": "037f844e8e0bd81f80e2e02278c42f7793a2007116c1d756019462e50a594305",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/ordinal", "/attempt_terminal_id",
+            "/max_attempts", "/reason_code"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "approval",
+      "representation": "excluded-c7.1",
+      "reason": "no durable run-item-attempt-claim-lease approval join is declared",
+      "sources": []
+    },
+    {
+      "family": "cancellation",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-requested-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-requested-record.schema.json",
+          "sha256": "49af3175351d2d8fa9b515f202122cb1828c8a5971dba59f9f5065c4fef300ed",
+          "pointers": ["/run_id", "/scope", "/item_id", "/requested_by"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-scope-resolved-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-scope-resolved-record.schema.json",
+          "sha256": "832354daeb1e524b7f22f4f6c81fa8ae0bfa376c632b828604142463aa127b1c",
+          "pointers": ["/run_id", "/cancel_request_id", "/scope", "/item_id", "/item_ids", "/attempt_ids"]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-observed-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-observed-record.schema.json",
+          "sha256": "3c37ffe16d8829045515d9092f7d3a03fb8cbccd5229f2ba3fb9fd2ee6df033c",
+          "pointers": [
+            "/run_id", "/cancel_scope_resolved_id", "/item_id", "/attempt_id",
+            "/fence_token", "/adapter", "/cancel_mode"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-signal-sent-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-signal-sent-record.schema.json",
+          "sha256": "c31d31d31582e516fa84ca9019c3e13cc9ae703af64955d6b886b8870a92392e",
+          "pointers": [
+            "/run_id", "/cancel_scope_resolved_id", "/item_id", "/attempt_id",
+            "/fence_token", "/adapter", "/cancel_mode"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-terminal-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-terminal-record.schema.json",
+          "sha256": "dfece6f90d6db120a5c4c7c0034a58e99b6c389f64280c815a9cce0431f99bd1",
+          "pointers": [
+            "/run_id", "/cancel_scope_resolved_id", "/item_id", "/attempt_id",
+            "/fence_token", "/adapter", "/cancel_mode"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/cancel-unconfirmed-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/cancel-unconfirmed-record.schema.json",
+          "sha256": "97b66324c33dec76794bf90d5efecb3ed0cb8bd92da57bcdd6b195f0d02a5816",
+          "pointers": [
+            "/run_id", "/cancel_scope_resolved_id", "/item_id", "/attempt_id",
+            "/fence_token", "/adapter", "/cancel_mode"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/stale-attempt-evidence-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/stale-attempt-evidence-record.schema.json",
+          "sha256": "d42955986e159be3a041af8f325042ea05f142ca980c58cbe73e7a839a7b71f5",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/worker_receipt_ids",
+            "/presented_fence_token", "/current_attempt_id", "/current_fence_token"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/stale-evidence-adopted-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/stale-evidence-adopted-record.schema.json",
+          "sha256": "d72e575c411374433bf183baf2c61fcfcdf3578ffd986bb596761de39edbcf06",
+          "pointers": [
+            "/run_id", "/item_id", "/stale_evidence_id", "/current_attempt_id",
+            "/current_fence_token", "/operator_id", "/authority_subject", "/authority_epoch",
+            "/capability_record_id"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "result_phase",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-result-produced-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-result-produced-record.schema.json",
+          "sha256": "c974a5023a2c92936e8db43d46c12b5b375e280a32bf1a4c6958583726e05498",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/dispatch_decision_id", "/worker_receipt_ids"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-result-verified-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-result-verified-record.schema.json",
+          "sha256": "027494b950f76f434aa53048e27c14a6815b930ec1b4e74971f45eb2a9e788c7",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/result_produced_id", "/worker_receipt_ids"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/run-result-accepted-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/run-result-accepted-record.schema.json",
+          "sha256": "f5a775265af9a20c8e28fc78385fc0b0ef0da11324f4ec98fbc20df609a39bcb",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/predecessor_result_id",
+            "/acceptance_mode", "/acceptance_receipt_id", "/worker_receipt_ids"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "logical_outcome",
+      "ledger": "families/run-projection.json",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/c7.1/canonical-projection.schema.json",
+          "version": "c7.1-candidate",
+          "file": "schemas/canonical-projection.schema.json",
+          "sha256": "a4f1886cf156bd510cf5030eae63d25a413a272e9b2edcbcf640a837bf0ced1b",
+          "pointers": [
+            "/families/logical_outcomes/value/<run_id:item_id>/outcome",
+            "/families/logical_outcomes/value/<run_id:item_id>/raw_fallback"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "run_outcome",
+      "ledger": "families/run-projection.json",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/c7.1/canonical-projection.schema.json",
+          "version": "c7.1-candidate",
+          "file": "schemas/canonical-projection.schema.json",
+          "sha256": "a4f1886cf156bd510cf5030eae63d25a413a272e9b2edcbcf640a837bf0ced1b",
+          "pointers": [
+            "/families/run_outcomes/value/<run_id>/outcome",
+            "/families/run_outcomes/value/<run_id>/raw_fallback"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "task_contract",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/task-contract-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/task-contract-record.schema.json",
+          "sha256": "1d0500e15ed0099bb05f04bd946f81be5512dd323e88754336cba22b3e8bd542",
+          "pointers": [
+            "/run_id", "/item_id", "/objective", "/non_goals", "/areas_to_avoid",
+            "/input_hashes", "/acceptance_checks", "/constraints", "/risk_class",
+            "/retry_policy", "/dependencies", "/contract_digest"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/plan-amendment-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/plan-amendment-record.schema.json",
+          "sha256": "5da5ef85accefa85c311e6578f7cbef46d34a02807283a2968a3b8b3fd458cea",
+          "pointers": [
+            "/run_id", "/item_id", "/task_contract_id", "/previous_digest",
+            "/replacement_fields", "/contract_digest"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/acceptance-receipt-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/acceptance-receipt-record.schema.json",
+          "sha256": "84e19159a16a573231a758abc4752f4fca0077f704c2026fa19be390068b11f6",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/contract_digest", "/check_ids",
+            "/reviewer", "/evidence_bindings", "/deviations", "/result"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "worker_harness_binding",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/attempt-harness-session-bound-record.schema.json",
+          "sha256": "50c85aedd42ce2d0c863bd6634d169efa4e35373a1672fd410fcba927c5f89ae",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/fence_token", "/claim_id",
+            "/lease_id", "/worker_session_id", "/harness_segments",
+            "/harness_segments/n/ordinal", "/harness_segments/n/harness_session_id"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "supervisor_orphan_receipt",
+      "ledger": "raw/runs/events.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/supervisor-orphaned-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/supervisor-orphaned-record.schema.json",
+          "sha256": "9be26f1de3e12784a670d5a7aaa4dc477b5338d85e093c93439f230d3072da6a",
+          "pointers": [
+            "/run_id", "/item_id", "/attempt_id", "/claim_id", "/lease_id",
+            "/worker_session_id", "/supervisor_id", "/orphan_class", "/authority_subject",
+            "/authority_epoch", "/capability_record_id"
+          ]
+        },
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/registry-entry.schema.json",
+          "version": 0,
+          "file": "schemas/v0/registry-entry.schema.json",
+          "sha256": "92dbbc728dcddd4d0ad974b64d51b85a5429492fd5b75bddbd2e4d2ef7452294",
+          "ledger": "raw/registry/entries.jsonl",
+          "state_role": "registration_lineage_only_no_causal_merge",
+          "pointers": ["/id", "/node_id", "/role", "/state"]
+        }
+      ]
+    },
+    {
+      "family": "decision_record",
+      "ledger_template": "raw/repositories/<repository-coordinate>/decisions.jsonl",
+      "sources": [
+        {
+          "id": "https://landoclusters.com/floati/schemas/v0/decision-record.schema.json",
+          "version": 0,
+          "file": "schemas/v0/decision-record.schema.json",
+          "sha256": "5cfb95ffa7bbf0dec82d78ac43778d9f9cb15c3aa4d503bef3a50851472836a6",
+          "pointers": [
+            "/repository", "/decision_id", "/scope", "/statement", "/status",
+            "/author_authority", "/source_artifact_ids", "/task_contract_id", "/decided_by",
+            "/supersedes", "/decision_digest"
+          ]
+        }
+      ],
+      "exposure": "raw_read_only_no_consolidation"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+ROOT=/private/tmp/floati-captures.LtNmwM/other5/flight-recorder
+$ floati log --root $ROOT --replay --speed 4
+
+FLOATI // FLIGHT RECORDER
+[####################] 14/14
+
+[38;5;208m◆[0m +0000.000s  CLAIM    WORK    builder-claude work-01a04a684c3e73efb84a158cee506107 claim
+[38;5;208m◆[0m +0006.000s  COMPLETE WORK    builder-claude work-01a04a684c3e73efb84a158cee506107 complete
+[38;5;208m◆[0m +0008.000s  CLAIM    WORK    builder-claude work-01a04a684c42718baf8dfba9200bf499 claim
+[38;5;208m◆[0m +0010.000s  COMPLETE WORK    builder-claude work-01a04a684c42718baf8dfba9200bf499 complete
+│ +0010.000s  CLAIM    WORKER  builder-claude work-01a04a684c3e73efb84a158cee506107 claim
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c3e73efb84a158cee506107 spawn
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c3e73efb84a158cee506107 drive
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c3e73efb84a158cee506107 bind_artifact
+│ +0010.000s  COMPLETE WORKER  builder-claude work-01a04a684c3e73efb84a158cee506107 complete
+│ +0010.000s  CLAIM    WORKER  builder-claude work-01a04a684c42718baf8dfba9200bf499 claim
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c42718baf8dfba9200bf499 spawn
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c42718baf8dfba9200bf499 drive
+│ +0010.000s  TURN     WORKER  builder-claude work-01a04a684c42718baf8dfba9200bf499 bind_artifact
+│ +0010.000s  COMPLETE WORKER  builder-claude work-01a04a684c42718baf8dfba9200bf499 complete
+
+[38;5;208m      ⊙[0m
+[38;5;208m      │[0m
+[38;5;208m     ╱ ╲[0m
+[38;5;208m    ╱[0m[38;5;245m───[0m[38;5;208m╲[0m
+[38;5;208m   ╱     ╲[0m
+[38;5;245m ~~~~~~~~~~~[0m
+REPLAY COMPLETE

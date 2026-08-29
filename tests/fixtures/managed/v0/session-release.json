@@ -1,0 +1,12 @@
+{
+  "schema_version": 0,
+  "id": "release-018f0f23abce71238000000000000000",
+  "tenant_id": "alpha",
+  "timestamp": "2026-08-01T12:01:00.000Z",
+  "kind": "session_release",
+  "session_id": "hm-session-1",
+  "adoption_id": "adoption-018f0f23abcd71238000000000000000",
+  "manager_node_id": "observer-manager",
+  "lease_subject": "managed-mode",
+  "lease_epoch": 1
+}

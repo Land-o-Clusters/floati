@@ -1,0 +1,10 @@
+{
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "clientInfo": {
+      "name": "puddle",
+      "version": "1.2.3"
+    }
+  }
+}

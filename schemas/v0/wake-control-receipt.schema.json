@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/wake-control-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind", "node_id",
+    "session_digest", "operation", "state", "predecessor_receipt_id", "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 0},
+    "id": {"type": "string", "pattern": "^wake-control-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "wake_control_receipt"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "session_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "operation": {"enum": ["pause", "resume"]},
+    "state": {"enum": ["paused", "resume_requested"]},
+    "predecessor_receipt_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^wake-control-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+      ]
+    },
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "pause"}}},
+      "then": {"properties": {"state": {"const": "paused"}, "predecessor_receipt_id": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "resume"}}},
+      "then": {"properties": {"state": {"const": "resume_requested"}, "predecessor_receipt_id": {"type": "string"}}}
+    }
+  ]
+}

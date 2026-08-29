@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/node-lease.schema.json",
+  "title": "Floati Node Lease v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "node_id", "workspace", "state"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^lease-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "node_lease"},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "workspace": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "predecessor_lease_id": {"type": "string", "pattern": "^lease-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "state": {"enum": ["active", "retired"]}
+  },
+  "oneOf": [
+    {"required": ["expires_at"], "properties": {"state": {"const": "active"}}, "not": {"required": ["predecessor_lease_id"]}},
+    {"required": ["predecessor_lease_id"], "properties": {"state": {"const": "retired"}}, "not": {"required": ["expires_at"]}}
+  ]
+}

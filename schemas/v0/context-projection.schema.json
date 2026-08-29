@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/context-projection.schema.json",
+  "title": "Floati Context Projection v0",
+  "oneOf": [
+    {"$ref": "#/$defs/status"},
+    {"$ref": "#/$defs/turnover"}
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1, "maxLength": 4096}
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "node_id",
+        "harness",
+        "dataset",
+        "remaining_context",
+        "read_only"
+      ],
+      "properties": {
+        "schema_version": {"const": 0},
+        "kind": {"const": "context_status_projection"},
+        "node_id": {"$ref": "#/$defs/identifier"},
+        "harness": {
+          "enum": ["claude", "cline", "codex", "cursor", "grok-build", "herdr", "opencode", "pi"]
+        },
+        "dataset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "source_commit"],
+          "properties": {
+            "id": {"const": "e1-context-absence-v1"},
+            "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+          }
+        },
+        "remaining_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["access_class", "state", "message", "receipt"],
+          "properties": {
+            "access_class": {"const": "A"},
+            "state": {"const": "not_exposed"},
+            "message": {
+              "enum": [
+                "remaining context: not exposed to external probes by claude",
+                "remaining context: not exposed to external probes by cline",
+                "remaining context: not exposed to external probes by codex",
+                "remaining context: not exposed to external probes by cursor",
+                "remaining context: not exposed to external probes by grok-build",
+                "remaining context: not exposed to external probes by herdr",
+                "remaining context: not exposed to external probes by opencode",
+                "remaining context: not exposed to external probes by pi"
+              ]
+            },
+            "receipt": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "sha256": {"$ref": "#/$defs/sha256"}
+              }
+            }
+          }
+        },
+        "read_only": {"const": true}
+      }
+    },
+    "turnover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "node_id",
+        "harness",
+        "state_file",
+        "inputs",
+        "role_provenance",
+        "steps",
+        "read_only"
+      ],
+      "properties": {
+        "schema_version": {"const": 0},
+        "kind": {"const": "context_turnover_projection"},
+        "node_id": {"$ref": "#/$defs/identifier"},
+        "harness": {"$ref": "#/$defs/identifier"},
+        "state_file": {"type": "string", "pattern": "^/", "maxLength": 4096},
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "values"],
+          "properties": {
+            "source": {"const": "operator_supplied"},
+            "values": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "declared_roots",
+                "managed_executable",
+                "profile",
+                "prior_mtime_ns"
+              ],
+              "properties": {
+                "declared_roots": {"const": "<DECLARED_ROOTS_FILE>"},
+                "managed_executable": {"const": "<MANAGED_EXECUTABLE>"},
+                "profile": {"const": "<PROFILE>"},
+                "prior_mtime_ns": {"const": "<PRIOR_MTIME_NS>"}
+              }
+            }
+          }
+        },
+        "role_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role_record_id",
+            "template_role",
+            "template_version",
+            "template_sha256"
+          ],
+          "properties": {
+            "role_record_id": {
+              "type": "string",
+              "pattern": "^registry-role-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+            },
+            "template_role": {"$ref": "#/$defs/identifier"},
+            "template_version": {"type": "integer", "minimum": 1},
+            "template_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {"$ref": "#/$defs/teardown_step"},
+            {"$ref": "#/$defs/flush_step"},
+            {"$ref": "#/$defs/boot_step"}
+          ],
+          "items": false
+        },
+        "read_only": {"const": true}
+      }
+    },
+    "step_common": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifact_kind", "argv", "optional_argv"],
+      "properties": {
+        "kind": {"type": "string"},
+        "artifact_kind": {"type": "string"},
+        "argv": {"$ref": "#/$defs/argv"},
+        "optional_argv": {"$ref": "#/$defs/argv"}
+      }
+    },
+    "teardown_step": {
+      "allOf": [
+        {"$ref": "#/$defs/step_common"},
+        {
+          "properties": {
+            "kind": {"const": "teardown_projection"},
+            "artifact_kind": {"const": "node_teardown_projection"}
+          }
+        }
+      ]
+    },
+    "flush_step": {
+      "allOf": [
+        {"$ref": "#/$defs/step_common"},
+        {
+          "properties": {
+            "kind": {"const": "state_flush_receipt"},
+            "artifact_kind": {"const": "node_state_flush_receipt"}
+          }
+        }
+      ]
+    },
+    "boot_step": {
+      "allOf": [
+        {"$ref": "#/$defs/step_common"},
+        {
+          "properties": {
+            "kind": {"const": "boot_projection"},
+            "artifact_kind": {"const": "node_boot_projection"}
+          }
+        }
+      ]
+    }
+  }
+}

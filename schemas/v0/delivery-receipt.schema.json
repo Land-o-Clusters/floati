@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/delivery-receipt.schema.json",
+  "title": "Floati Delivery Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "recipient",
+    "item_ids",
+    "presentation_count"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^delivery-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "delivery_receipt"},
+    "recipient": {"type": "string", "minLength": 1, "maxLength": 64},
+    "item_ids": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+    },
+    "presentation_count": {"type": "integer", "minimum": 1}
+  }
+}

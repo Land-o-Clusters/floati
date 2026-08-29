@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/c7.1/canonical-projection.schema.json",
+  "title": "Floati C7.1 Canonical Projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "tenant_id", "repository", "raw_source", "raw_source_digest", "source_frames",
+    "families", "auxiliary_sources", "cross_ledger_rule", "semantic_digest", "self_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": "c7.1-candidate"},
+    "kind": {"const": "c7_canonical_projection"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "repository": {"type": "string", "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?$"},
+    "raw_source": {"const": "raw/runs/events.jsonl"},
+    "raw_source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_frames": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ordinal", "record_id", "kind"],
+        "properties": {
+          "ordinal": {"type": "integer", "minimum": 1},
+          "record_id": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "families": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runs", "work_items", "attempts", "claims", "leases", "retries",
+        "cancellations", "result_phases", "logical_outcomes", "run_outcomes",
+        "task_contracts", "session_bindings", "supervisor_orphans", "decisions"
+      ],
+      "properties": {
+        "runs": {"$ref": "#/$defs/family"},
+        "work_items": {"$ref": "#/$defs/family"},
+        "attempts": {"$ref": "#/$defs/family"},
+        "claims": {"$ref": "#/$defs/family"},
+        "leases": {"$ref": "#/$defs/family"},
+        "retries": {"$ref": "#/$defs/family"},
+        "cancellations": {"$ref": "#/$defs/family"},
+        "result_phases": {"$ref": "#/$defs/family"},
+        "logical_outcomes": {"$ref": "#/$defs/family"},
+        "run_outcomes": {"$ref": "#/$defs/family"},
+        "task_contracts": {"$ref": "#/$defs/family"},
+        "session_bindings": {"$ref": "#/$defs/session_binding_family"},
+        "supervisor_orphans": {"$ref": "#/$defs/supervisor_orphan_family"},
+        "decisions": {"$ref": "#/$defs/decision_family"}
+      }
+    },
+    "auxiliary_sources": {"$ref": "#/$defs/auxiliary_sources"},
+    "cross_ledger_rule": {"const": "no_timestamp_merge"},
+    "semantic_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "self_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "frame_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger", "first_frame", "last_frame"],
+      "properties": {
+        "ledger": {"type": "string", "minLength": 1},
+        "first_frame": {"type": "integer", "minimum": 0},
+        "last_frame": {"type": "integer", "minimum": 0}
+      }
+    },
+    "absent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason", "raw_fallback"],
+      "properties": {
+        "state": {"const": "absent"},
+        "reason": {"type": "string", "minLength": 1},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"}
+      }
+    },
+    "error_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code", "offending_frame_range"],
+      "properties": {
+        "kind": {"const": "error"},
+        "code": {"type": "string", "minLength": 1},
+        "offending_frame_range": {"$ref": "#/$defs/frame_range"}
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "raw_fallback"],
+      "properties": {
+        "state": {"$ref": "#/$defs/error_state"},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"}
+      }
+    },
+    "present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "value"],
+      "properties": {
+        "state": {"const": "present"},
+        "value": {"type": "object"}
+      }
+    },
+    "family": {
+      "oneOf": [
+        {"$ref": "#/$defs/present"},
+        {"$ref": "#/$defs/absent"},
+        {"$ref": "#/$defs/error"}
+      ]
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_record_id", "ordinal"],
+      "properties": {
+        "binding_record_id": {"type": "string", "minLength": 1},
+        "ordinal": {"type": "integer", "minimum": 1}
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref", "harness_session_id", "segment_kind", "predecessor_segment_id"
+      ],
+      "properties": {
+        "source_ref": {"$ref": "#/$defs/source_ref"},
+        "harness_session_id": {"type": "string", "minLength": 1},
+        "segment_kind": {"$ref": "#/$defs/absent"},
+        "predecessor_segment_id": {"$ref": "#/$defs/absent"}
+      }
+    },
+    "supersession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "superseded_binding_record_ids"],
+      "properties": {
+        "rule": {"const": "physical_binding_frame_order"},
+        "superseded_binding_record_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_record_id", "frame", "run_id", "item_id", "claim_id", "lease_id",
+        "worker_session_id", "segments"
+      ],
+      "properties": {
+        "binding_record_id": {"type": "string", "minLength": 1},
+        "frame": {"type": "integer", "minimum": 1},
+        "run_id": {"type": "string", "minLength": 1},
+        "item_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "lease_id": {"type": "string", "minLength": 1},
+        "worker_session_id": {"type": "string", "minLength": 1},
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/segment"}
+        },
+        "supersession": {"$ref": "#/$defs/supersession"}
+      }
+    },
+    "conflicting_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "raw_fallback", "candidates"],
+      "properties": {
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "code", "offending_frame_range"],
+          "properties": {
+            "kind": {"const": "error"},
+            "code": {"const": "conflicting_binding"},
+            "offending_frame_range": {"$ref": "#/$defs/frame_range"}
+          }
+        },
+        "raw_fallback": {"$ref": "#/$defs/frame_range"},
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/binding"}
+        }
+      }
+    },
+    "session_binding_map": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"$ref": "#/$defs/binding"},
+          {"$ref": "#/$defs/conflicting_binding"}
+        ]
+      }
+    },
+    "segment_relation_vocabulary": {
+      "const": ["resume", "fork", "handoff"]
+    },
+    "session_binding_present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "value", "segment_relation_vocabulary"],
+      "properties": {
+        "state": {"const": "present"},
+        "value": {"$ref": "#/$defs/session_binding_map"},
+        "segment_relation_vocabulary": {"$ref": "#/$defs/segment_relation_vocabulary"}
+      }
+    },
+    "session_binding_absent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason", "raw_fallback", "segment_relation_vocabulary"],
+      "properties": {
+        "state": {"const": "absent"},
+        "reason": {"type": "string", "minLength": 1},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"},
+        "segment_relation_vocabulary": {"$ref": "#/$defs/segment_relation_vocabulary"}
+      }
+    },
+    "session_binding_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "raw_fallback", "segment_relation_vocabulary"],
+      "properties": {
+        "state": {"$ref": "#/$defs/error_state"},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"},
+        "segment_relation_vocabulary": {"$ref": "#/$defs/segment_relation_vocabulary"}
+      }
+    },
+    "session_binding_family": {
+      "oneOf": [
+        {"$ref": "#/$defs/session_binding_present"},
+        {"$ref": "#/$defs/session_binding_absent"},
+        {"$ref": "#/$defs/session_binding_error"}
+      ]
+    },
+    "registration_lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger", "frame", "record_id", "node_id", "role", "state"],
+      "properties": {
+        "ledger": {"const": "raw/registry/entries.jsonl"},
+        "frame": {"type": "integer", "minimum": 1},
+        "record_id": {"type": "string", "minLength": 1},
+        "node_id": {"const": "floati-supervisor"},
+        "role": {"type": "string", "minLength": 1},
+        "state": {"type": "string", "minLength": 1}
+      }
+    },
+    "orphan_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id", "frame", "run_id", "item_id", "attempt_id", "claim_id", "lease_id",
+        "worker_session_id", "orphan_class", "supervisor_id", "registration_lineage"
+      ],
+      "properties": {
+        "record_id": {"type": "string", "minLength": 1},
+        "frame": {"type": "integer", "minimum": 1},
+        "run_id": {"type": "string", "minLength": 1},
+        "item_id": {"type": "string", "minLength": 1},
+        "attempt_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "lease_id": {"type": "string", "minLength": 1},
+        "worker_session_id": {"type": "string", "minLength": 1},
+        "orphan_class": {"enum": ["owner_loss", "unregister", "lease_abandonment"]},
+        "supervisor_id": {"const": "floati-supervisor"},
+        "registration_lineage": {
+          "oneOf": [
+            {"$ref": "#/$defs/registration_lineage"},
+            {"$ref": "#/$defs/absent"},
+            {"$ref": "#/$defs/error"}
+          ]
+        }
+      }
+    },
+    "supervisor_orphan_present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "value"],
+      "properties": {
+        "state": {"const": "present"},
+        "value": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/orphan_entry"}
+        }
+      }
+    },
+    "supervisor_orphan_family": {
+      "oneOf": [
+        {"$ref": "#/$defs/supervisor_orphan_present"},
+        {"$ref": "#/$defs/absent"},
+        {"$ref": "#/$defs/error"}
+      ]
+    },
+    "decision_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frame", "record_id", "decision_id", "status"],
+      "properties": {
+        "frame": {"type": "integer", "minimum": 1},
+        "record_id": {"type": "string", "minLength": 1},
+        "decision_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["proposed", "accepted", "rejected"]}
+      }
+    },
+    "decision_present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "value"],
+      "properties": {
+        "state": {"const": "present"},
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ledger", "frames", "consolidation"],
+          "properties": {
+            "ledger": {"type": "string", "minLength": 1},
+            "frames": {"type": "array", "items": {"$ref": "#/$defs/decision_frame"}},
+            "consolidation": {"const": "excluded-c7.1"}
+          }
+        }
+      }
+    },
+    "decision_family": {
+      "oneOf": [
+        {"$ref": "#/$defs/decision_present"},
+        {"$ref": "#/$defs/absent"},
+        {"$ref": "#/$defs/error"}
+      ]
+    },
+    "auxiliary_present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger", "raw_source_digest", "source_frames", "state", "value"],
+      "properties": {
+        "ledger": {"type": "string", "minLength": 1},
+        "raw_source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_frames": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ordinal", "record_id", "kind"],
+            "properties": {
+              "ordinal": {"type": "integer", "minimum": 1},
+              "record_id": {"type": "string", "minLength": 1},
+              "kind": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "state": {"const": "present"},
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_count"],
+          "properties": {"frame_count": {"type": "integer", "minimum": 0}}
+        }
+      }
+    },
+    "auxiliary_absent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger", "raw_source_digest", "source_frames", "state", "reason", "raw_fallback"],
+      "properties": {
+        "ledger": {"type": "string", "minLength": 1},
+        "raw_source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_frames": {"type": "array", "maxItems": 100000},
+        "state": {"const": "absent"},
+        "reason": {"type": "string", "minLength": 1},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"}
+      }
+    },
+    "auxiliary_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger", "raw_source_digest", "source_frames", "state", "raw_fallback"],
+      "properties": {
+        "ledger": {"type": "string", "minLength": 1},
+        "raw_source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_frames": {"type": "array", "maxItems": 100000},
+        "state": {"$ref": "#/$defs/error_state"},
+        "raw_fallback": {"$ref": "#/$defs/frame_range"}
+      }
+    },
+    "auxiliary_source": {
+      "oneOf": [
+        {"$ref": "#/$defs/auxiliary_present"},
+        {"$ref": "#/$defs/auxiliary_absent"},
+        {"$ref": "#/$defs/auxiliary_error"}
+      ]
+    },
+    "auxiliary_sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker_receipts", "registry", "decisions", "work_items"],
+      "properties": {
+        "worker_receipts": {"$ref": "#/$defs/auxiliary_source"},
+        "registry": {"$ref": "#/$defs/auxiliary_source"},
+        "decisions": {"$ref": "#/$defs/auxiliary_source"},
+        "work_items": {"$ref": "#/$defs/auxiliary_source"}
+      }
+    }
+  }
+}

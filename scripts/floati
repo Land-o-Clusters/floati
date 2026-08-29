@@ -1,0 +1,8 @@
+#!/bin/sh
+if [ -L "$0" ]; then
+  printf '%s\n' 'floati: refused: symlinked invoked entry point' >&2
+  exit 20
+fi
+SCRIPT_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P) || exit 1
+cd "$SCRIPT_DIR/.." || exit 1
+exec python3 -m floati "$@"

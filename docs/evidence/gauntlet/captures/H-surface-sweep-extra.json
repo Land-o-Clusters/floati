@@ -1,0 +1,427 @@
+{
+  "agy_help_tail": {
+    "argv": [
+      "/opt/homebrew/bin/agy",
+      "--help"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.038,
+    "ended_utc": "2026-08-28T02:53:16Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T02:53:15Z",
+    "stderr": "Usage of agy:\n  --add-dir                       Add a directory to the workspace (repeatable) (default [])\n  --agent                         Agent for the current CLI session\n  -c                              Short alias for --continue\n  --continue                      Continue the most recent conversation\n  --conversation                  Resume a previous conversation by ID\n  --dangerously-skip-permissions  Auto-approve all tool permission requests without prompting\n  --effort                        Reasoning effort for the current CLI session (low|medium|high)\n  -i                              Short alias for --prompt-interactive\n  --log-file                      Override CLI log file path\n  --mode                          Set the agent execution mode for this session (accept-edits, plan)\n  --model                         Model for the current CLI session\n  --new-project                   Create a new project for this session\n  -p                              Short alias for --print\n  --print                         Run a single prompt non-interactively and print the response\n  --print-timeout                 Timeout for print mode wait (default 5m0s)\n  --project                       Project ID for the current CLI session\n  --prompt                        Alias for --print\n  --prompt-interactive            Run an initial prompt interactively and continue the session\n  --sandbox                       Run in a sandbox with terminal restrictions enabled\n\nAvailable subcommands:\n  agent           List available agents\n  agents          List available agents\n  changelog       Show changelog and release notes\n  help            Show help for subcommands\n  install         Configure environment paths and shell settings\n  models          List available models\n  plugin          Manage plugins (install, uninstall, list, enable, disable)\n  plugins         Alias for plugin\n  update          Update CLI\n",
+    "stderr_bytes": 1924,
+    "stderr_sha256": "61c94e66fc8e651d997c51989dfe411559ebff4630301daa20d41bf8b6d71d88",
+    "stdout": "",
+    "stdout_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "timeout_s": 8.0
+  },
+  "antigravity_macos": {
+    "exists": true,
+    "file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Applications/Antigravity.app/Contents/MacOS/Antigravity"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.002,
+      "ended_utc": "2026-08-28T02:53:16Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T02:53:16Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "/Applications/Antigravity.app/Contents/MacOS/Antigravity: Mach-O 64-bit executable arm64\n",
+      "stdout_bytes": 89,
+      "stdout_sha256": "bfa67c4172507e463cd59f7a4ea8b642077dbb7d6a9945e4071805a61fa9dc27",
+      "timed_out": false,
+      "timeout_s": 3.0
+    },
+    "path": "/Applications/Antigravity.app/Contents/MacOS/Antigravity",
+    "size": 52880
+  },
+  "brew_agy": {
+    "argv": [
+      "/opt/homebrew/bin/agy",
+      "--version"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.064,
+    "ended_utc": "2026-08-28T02:53:15Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T02:53:15Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "1.1.5\n",
+    "stdout_bytes": 6,
+    "stdout_sha256": "1c60df040a80b6d2e3f56442b17d127d8620cd773873e6e1353362f989b1deca",
+    "timed_out": false,
+    "timeout_s": 8.0
+  },
+  "brew_agy_realpath": "/opt/homebrew/Caskroom/antigravity-cli/1.1.5,5958982624477184/antigravity",
+  "bundle_hook_json_hits": {
+    "/Applications/Antigravity.app": {
+      "exit": 1,
+      "hits": [],
+      "stderr_bytes": 0
+    },
+    "/Applications/ChatGPT.app": {
+      "exit": 0,
+      "hits": [
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/classic-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/classic-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/abstract-level/CHANGELOG.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/abstract-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/abstract-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/classic-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/classic-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/abstract-level/CHANGELOG.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/abstract-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/abstract-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/classic-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/classic-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/abstract-level/README.md",
+        "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/abstract-level/UPGRADING.md",
+        "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/npm/node_modules/exponential-backoff/package.json"
+      ],
+      "stderr_bytes": 0
+    },
+    "/Applications/Claude.app": {
+      "exit": 0,
+      "hits": [
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/es-ES.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/ja-JP.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/id-ID.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/es-419.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/pt-BR.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/de-DE.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/fr-FR.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/en-US.json",
+        "/Applications/Claude.app/Contents/Resources/ion-dist/i18n/hi-IN.json"
+      ],
+      "stderr_bytes": 0
+    },
+    "/Applications/Cursor.app": {
+      "exit": 0,
+      "hits": [
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@azure/msal-node/node_modules/uuid/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@sentry/opentelemetry/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@sentry/node-core/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@sentry/node/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/ip-address/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/resolve/lib/core.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-redis/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-hapi/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-connect/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-express/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-mysql/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-fs/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-http/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/instrumentation-tedious/package.json",
+        "/Applications/Cursor.app/Contents/Resources/app/node_modules/@opentelemetry/sdk-trace-node/package.json"
+      ],
+      "stderr_bytes": 0
+    },
+    "/Applications/OpenCode.app": {
+      "exit": 1,
+      "hits": [],
+      "stderr_bytes": 0
+    },
+    "/Applications/T3 Code (Nightly).app": {
+      "exit": 1,
+      "hits": [],
+      "stderr_bytes": 0
+    }
+  },
+  "chatgpt_classic": {
+    "id": "com.openai.chat",
+    "name": "ChatGPT",
+    "version": "1.2026.160"
+  },
+  "chatgpt_macos": {
+    "exists": true,
+    "file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.005,
+      "ended_utc": "2026-08-28T02:53:16Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T02:53:16Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT: Mach-O 64-bit executable arm64\n",
+      "stdout_bytes": 81,
+      "stdout_sha256": "60cca65cc8601957f99c4367ba7802bdf35f054b8446f2548a62b651bdb54418",
+      "timed_out": false,
+      "timeout_s": 3.0
+    },
+    "path": "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+    "size": 69984
+  },
+  "claude_macos": {
+    "exists": true,
+    "file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Applications/Claude.app/Contents/MacOS/Claude"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.004,
+      "ended_utc": "2026-08-28T02:53:16Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T02:53:16Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "/Applications/Claude.app/Contents/MacOS/Claude: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]\n/Applications/Claude.app/Contents/MacOS/Claude (for architecture x86_64):\tMach-O 64-bit executable x86_64\n/Applications/Claude.app/Contents/MacOS/Claude (for architecture arm64):\tMach-O 64-bit executable arm64\n",
+      "stdout_bytes": 384,
+      "stdout_sha256": "aea9bf0d7ec27a0345231fa3232bbe8f5bd65e7a8302931bc0bafbe61b70659e",
+      "timed_out": false,
+      "timeout_s": 3.0
+    },
+    "path": "/Applications/Claude.app/Contents/MacOS/Claude",
+    "size": 120064
+  },
+  "config_devin": {
+    "names": [
+      "cli",
+      "config.json",
+      "config.json.backup",
+      "config.json.backup.2026-07-29T01-57-01Z"
+    ],
+    "path": "~/.config/devin",
+    "present": true
+  },
+  "config_opencode": {
+    "names": [
+      ".gitignore",
+      "node_modules",
+      "opencode.jsonc",
+      "package-lock.json",
+      "package.json",
+      "plugins"
+    ],
+    "path": "~/.config/opencode",
+    "present": true
+  },
+  "devin_plugins_help": {
+    "argv": [
+      "/opt/homebrew/bin/devin",
+      "plugins",
+      "--help"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.006,
+    "ended_utc": "2026-08-28T02:53:15Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T02:53:15Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "Manage plugins (install, list, info, update, remove)\n\nUsage: devin plugins <COMMAND>\n\nCommands:\n  install  Install a plugin from a source (auto-installs its required plugins)\n  list     List installed plugins with their version and blocked status\n  info     Show a plugin's skills and its required/optional/forbidden lists\n  update   Re-fetch and re-install a plugin (or all plugins) at the latest HEAD\n  remove   Remove an installed plugin (auto-installed requireds are left in place)\n  prune    Prune plugin requirements from repos that no longer exist on disk, then garbage-collect any plugin content no live scope still requires\n  help     Print this message or the help of the given subcommand(s)\n\nOptions:\n  -h, --help  Print help\n",
+    "stdout_bytes": 737,
+    "stdout_sha256": "ff99fce1cd2a05e8176e4fc4a16cd0c61da4e33a16f093a425ca1f31b5d8547b",
+    "timed_out": false,
+    "timeout_s": 8.0
+  },
+  "local_agy_exists": true,
+  "local_agy_realpath": "~/.local/bin/agy",
+  "local_agy_version": {
+    "argv": [
+      "~/.local/bin/agy",
+      "--version"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.264,
+    "ended_utc": "2026-08-28T02:53:15Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T02:53:15Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "1.1.22\n",
+    "stdout_bytes": 7,
+    "stdout_sha256": "9b3b81e5314efb5d2f9c0897cfd1621c3aaa2b83e900ad599d07a28b314b5b80",
+    "timed_out": false,
+    "timeout_s": 8.0
+  },
+  "opencode_macos": {
+    "exists": true,
+    "file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Applications/OpenCode.app/Contents/MacOS/OpenCode"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.002,
+      "ended_utc": "2026-08-28T02:53:16Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T02:53:16Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "/Applications/OpenCode.app/Contents/MacOS/OpenCode: Mach-O 64-bit executable arm64\n",
+      "stdout_bytes": 83,
+      "stdout_sha256": "8654728471076b7709488bec648e6774db3480e78abd6cb893e98c4f4052333c",
+      "timed_out": false,
+      "timeout_s": 3.0
+    },
+    "path": "/Applications/OpenCode.app/Contents/MacOS/OpenCode",
+    "size": 53216
+  },
+  "support_antigravity": {
+    "names": [
+      ".updaterId",
+      "Cache",
+      "Code Cache",
+      "Cookies",
+      "Cookies-journal",
+      "DIPS",
+      "DIPS-wal",
+      "DawnGraphiteCache",
+      "DawnWebGPUCache",
+      "DevToolsActivePort",
+      "GPUCache",
+      "Local Storage",
+      "Network Persistent State",
+      "Preferences",
+      "Session Storage",
+      "Shared Dictionary",
+      "SharedStorage",
+      "SharedStorage-wal",
+      "SingletonCookie",
+      "SingletonLock",
+      "SingletonSocket",
+      "Trust Tokens",
+      "Trust Tokens-journal",
+      "app_storage.json",
+      "bin",
+      "blob_storage"
+    ],
+    "path": "~/Library/Application Support/Antigravity",
+    "present": true
+  },
+  "support_claude": {
+    "names": [
+      "Cache",
+      "Code Cache",
+      "Cookies",
+      "Cookies-journal",
+      "Crashpad",
+      "DIPS",
+      "DIPS-wal",
+      "DawnGraphiteCache",
+      "DawnWebGPUCache",
+      "GPUCache",
+      "IndexedDB",
+      "InterestGroups",
+      "Local State",
+      "Local Storage",
+      "Network Persistent State",
+      "Partitions",
+      "Preferences",
+      "Session Storage",
+      "Shared Dictionary",
+      "SharedStorage",
+      "SharedStorage-wal",
+      "TransportSecurity",
+      "Trust Tokens",
+      "Trust Tokens-journal",
+      "VideoDecodeStats",
+      "WebStorage",
+      "ant-device-registry.json",
+      "ant-did",
+      "blob_storage",
+      "bridge-state.json",
+      "bridge-state.json.bak-20260717",
+      "buddy-tokens.json",
+      "claude-code",
+      "claude-code-sessions",
+      "claude-code-vm",
+      "claude_desktop_config.json",
+      "config.json",
+      "cowork-enabled-cli-ops.json",
+      "extensions-blocklist.json",
+      "fcache"
+    ],
+    "path": "~/Library/Application Support/Claude",
+    "present": true
+  },
+  "support_codex": {
+    "names": [
+      "ActorSafetyLists",
+      "AmountExtractionHeuristicRegexes",
+      "BrowserMetrics-spare.pma",
+      "CaptchaProviders",
+      "CertificateRevocation",
+      "ChromeFeatureState",
+      "Crashpad",
+      "Crowd Deny",
+      "Default",
+      "FileTypePolicies",
+      "FirstPartySetsPreloaded",
+      "GPUPersistentCache",
+      "GraphiteDawnCache",
+      "Last Version",
+      "Local State",
+      "MEIPreload",
+      "OnDeviceHeadSuggestModel",
+      "OptimizationHints",
+      "OriginTrials",
+      "PKIMetadata",
+      "PrivacySandboxAttestationsPreloaded",
+      "RunningChromeVersion",
+      "SSLErrorAssistant",
+      "Safe Browsing",
+      "SafetyTips",
+      "SingletonCookie",
+      "SingletonLock",
+      "SingletonSocket",
+      "Subresource Filter",
+      "TrustTokenKeyCommitments",
+      "WasmTtsEngine",
+      "WidevineCdm",
+      "ZxcvbnData",
+      "browser-sidebar-page-states.json",
+      "codex-browser-app",
+      "component_crx_cache",
+      "extensions_crx_cache",
+      "first_party_sets.db",
+      "first_party_sets.db-journal",
+      "owl-feature-bootstrap-cache.json"
+    ],
+    "path": "~/Library/Application Support/Codex",
+    "present": true
+  },
+  "t3_macos": {
+    "exists": true,
+    "file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Applications/T3 Code (Nightly).app/Contents/MacOS/T3 Code (Nightly)"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.002,
+      "ended_utc": "2026-08-28T02:53:16Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T02:53:16Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "/Applications/T3 Code (Nightly).app/Contents/MacOS/T3 Code (Nightly): Mach-O 64-bit executable arm64\n",
+      "stdout_bytes": 101,
+      "stdout_sha256": "4d8c97f6fcd7ad2b1fdd240a01a2539a04139147068d9ce041be16361c824124",
+      "timed_out": false,
+      "timeout_s": 3.0
+    },
+    "path": "/Applications/T3 Code (Nightly).app/Contents/MacOS/T3 Code (Nightly)",
+    "size": 53328
+  }
+}

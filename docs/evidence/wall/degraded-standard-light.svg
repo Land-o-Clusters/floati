@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="412" viewBox="0 0 1280 412" role="img">
+  <title>FLOATI degraded standard light</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="412" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">FLOATI // HARBOR BOARD</tspan>
+    <tspan x="28" dy="18" fill="#20252c">OBSERVED 2026-08-01T12:00:10.000Z</tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">! DENIAL UNKNOWN_RECIPIENT solo → missing</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">UNSATISFIED WAKE</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">NODE               LIVE       AUTH       MUTEX      INBOX  LAST</tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">&gt;</tspan> solo               <tspan fill="#853d07">SILENT</tspan>     <tspan fill="#853d07">EXPIRED</tspan>    NONE           0  12:00:10.000</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">WORK DAG  [░░░░░░░░░░]   0%</tspan>
+    <tspan x="28" dy="18" fill="#20252c">  CLAIMED   Record this session  holder:solo</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">CONSUMPTION  CAUGHT UP</tspan>
+    <tspan x="28" dy="18" fill="#20252c">  coordinate: work/items.jsonl</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">WORKERS</tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">  DEGRADED  solo codex Record this session [work-wall] PROCESS TIMEOUT</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">RECEIPTS</tspan>
+    <tspan x="28" dy="18" fill="#20252c">  WORKER   solo DEGRADE</tspan>
+    <tspan x="28" dy="18" fill="#20252c">↑/k ↓/j select  enter detail  a ack  q quit</tspan>
+  </text>
+</svg>

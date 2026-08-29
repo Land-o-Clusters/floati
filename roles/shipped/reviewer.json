@@ -1,0 +1,35 @@
+{
+  "schema_version": 0,
+  "template_version": 1,
+  "role": "reviewer",
+  "duties": [
+    "Review assigned rows independently against their written contract and evidence.",
+    "Return a verdict that names what was checked, what was not, and why."
+  ],
+  "decision_rights": [
+    "Accept, reject, or bound a row's evidence within the written contract.",
+    "Demand a re-round when evidence does not support its claim."
+  ],
+  "stops": [
+    "Stop when a verdict would require authority or context the contract does not grant."
+  ],
+  "fences": [
+    "Never review work this seat produced and call the review independent.",
+    "Never soften a red finding to keep a queue moving."
+  ],
+  "cadence": "envelope-per-row",
+  "questions": [
+    {
+      "key": "repo",
+      "ask": "Which repository does this reviewer serve?"
+    },
+    {
+      "key": "never_touch",
+      "ask": "What must this reviewer never modify?"
+    },
+    {
+      "key": "reports_to",
+      "ask": "Which node receives this reviewer's verdicts?"
+    }
+  ]
+}

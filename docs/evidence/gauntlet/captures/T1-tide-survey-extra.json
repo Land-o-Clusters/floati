@@ -1,0 +1,52 @@
+{
+  "codex_jsonl_first_line": {
+    "file_bytes": 22224,
+    "first_line_bytes": 18589,
+    "has_context_window_field": true,
+    "keys": [
+      "base_instructions",
+      "branch",
+      "cli_version",
+      "commit_hash",
+      "context_window",
+      "cwd",
+      "git",
+      "history_mode",
+      "id",
+      "model_provider",
+      "originator",
+      "payload",
+      "repository_url",
+      "session_id",
+      "source",
+      "text",
+      "thread_source",
+      "timestamp",
+      "type",
+      "window_id"
+    ],
+    "note": "keys only; values not copied",
+    "path": "~/.codex/sessions/2026/08/09/rollout-2026-08-09T01-17-48-019fe4f4-aeca-7e33-b884-db3a7671b317.jsonl"
+  },
+  "cursor_agent_local_version": {
+    "exit": 0,
+    "path": "~/.local/bin/cursor-agent",
+    "stdout": "2026.07.09-a3815c0\n"
+  },
+  "grok_slash_doc": {
+    "auto_compact_note": "vendor doc: auto-compacts at 85% via [session] auto_compact_threshold_percent",
+    "commands_named": [
+      "/compact",
+      "/context",
+      "/session-info",
+      "/status",
+      "/usage",
+      "/cost",
+      "/new",
+      "/export"
+    ],
+    "path": "~/.grok/docs/user-guide/04-slash-commands.md",
+    "present": true
+  },
+  "started_utc": "2026-08-28T03:18:21Z"
+}

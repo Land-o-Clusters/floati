@@ -1,0 +1,348 @@
+{
+  "adapter_default_paths": {
+    "claude": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787794293,
+      "lstat_size": 49,
+      "path": "/opt/homebrew/bin/claude",
+      "readlink": "/opt/homebrew/Caskroom/claude-code/2.1.231/claude",
+      "realpath": "/opt/homebrew/Caskroom/claude-code/2.1.231/claude",
+      "realpath_sha256": "ba790279cab6ef77b713864d4bf5f764fcea87d3a3eb7591a41f741e45212b5c",
+      "realpath_size": 294720528
+    },
+    "cline": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/cline"
+    },
+    "codex": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787794301,
+      "lstat_size": 46,
+      "path": "/opt/homebrew/bin/codex",
+      "readlink": "/opt/homebrew/Caskroom/codex/0.150.0/bin/codex",
+      "realpath": "/opt/homebrew/Caskroom/codex/0.150.0/bin/codex",
+      "realpath_sha256": "27cc146d8a5781350e232998e12c52e35fe03d5eac945d38d11ca2bb35854c97",
+      "realpath_size": 229004480
+    },
+    "cursor": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1784173639,
+      "lstat_size": 78,
+      "path": "/opt/homebrew/bin/cursor-agent",
+      "readlink": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/cursor-agent",
+      "realpath": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/cursor-agent",
+      "realpath_sha256": "eed61c5224668c9236334c4c68936a16aecc37374b592f59e31eb50433817831",
+      "realpath_size": 1074
+    },
+    "grok-build": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/grok-build"
+    },
+    "herdr": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/herdr"
+    },
+    "opencode": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1785298567,
+      "lstat_size": 48,
+      "path": "/opt/homebrew/bin/opencode",
+      "readlink": "../lib/node_modules/opencode-ai/bin/opencode.exe",
+      "realpath": "/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode.exe",
+      "realpath_sha256": "2348bf6751a04498090b2a301afcae4ff55785e0502ba76a42acba6617f3a7ea",
+      "realpath_size": 138509666
+    },
+    "pi": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/pi"
+    }
+  },
+  "brew_list": {
+    "cask_exit": 0,
+    "cask_hits": [
+      "claude-code",
+      "codex",
+      "cursor-cli"
+    ],
+    "casks_count": 7,
+    "formula_exit": 0,
+    "formula_hits": [],
+    "formulae_count": 70
+  },
+  "cargo_bin_exists": false,
+  "cargo_bin_names": [],
+  "caskroom_hits": [
+    "claude-code",
+    "codex",
+    "cursor-cli"
+  ],
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "elapsed_s": 0.012,
+    "exit": 0,
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "utf8_preview_200": ""
+    },
+    "stdout": {
+      "bytes": 13,
+      "sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+      "utf8_preview_200": "Python 3.9.6\n"
+    },
+    "timed_out": false,
+    "timeout_s": 5
+  },
+  "extension_hits": {
+    "~/.cursor/extensions": {
+      "entry_count": 18,
+      "exists": true,
+      "hits": []
+    },
+    "~/.vscode/extensions": {
+      "entry_count": 0,
+      "exists": false,
+      "hits": []
+    }
+  },
+  "extra_paths": {
+    "/Applications/Cursor.app/Contents/Resources/app/bin/code": {
+      "exists": true,
+      "is_symlink": false,
+      "lstat_mode": "0o100755",
+      "lstat_mtime": 1787636362,
+      "lstat_size": 4798,
+      "path": "/Applications/Cursor.app/Contents/Resources/app/bin/code",
+      "realpath_sha256": "de63d7265e20da15329ee70250c8596851e39d08cfdc814d5f73c00b8c7962a1",
+      "realpath_size": 4798
+    },
+    "/Applications/Cursor.app/Contents/Resources/app/bin/cursor": {
+      "exists": true,
+      "is_symlink": false,
+      "lstat_mode": "0o100755",
+      "lstat_mtime": 1787636362,
+      "lstat_size": 4798,
+      "path": "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+      "realpath_sha256": "de63d7265e20da15329ee70250c8596851e39d08cfdc814d5f73c00b8c7962a1",
+      "realpath_size": 4798
+    },
+    "~/.cargo/bin/herdr": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.cargo/bin/herdr"
+    },
+    "~/.cargo/bin/pi": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.cargo/bin/pi"
+    },
+    "~/.local/bin/claude": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1787262376,
+      "lstat_size": 57,
+      "path": "~/.local/bin/claude",
+      "readlink": "~/.local/share/claude/versions/2.1.238",
+      "realpath": "~/.local/share/claude/versions/2.1.238",
+      "realpath_sha256": "1c196c456373b57818ae87df84aecee96cb659448c0d6a6bbb401ac5758431b2",
+      "realpath_size": 321263536
+    },
+    "~/.local/bin/cline": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/cline"
+    },
+    "~/.local/bin/codex": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/codex"
+    },
+    "~/.local/bin/cursor-agent": {
+      "exists": true,
+      "is_symlink": true,
+      "lstat_mode": "0o120755",
+      "lstat_mtime": 1784173718,
+      "lstat_size": 87,
+      "path": "~/.local/bin/cursor-agent",
+      "readlink": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "realpath": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "realpath_sha256": "eed61c5224668c9236334c4c68936a16aecc37374b592f59e31eb50433817831",
+      "realpath_size": 1074
+    },
+    "~/.local/bin/grok-build": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/grok-build"
+    },
+    "~/.local/bin/herdr": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/herdr"
+    },
+    "~/.local/bin/opencode": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/opencode"
+    },
+    "~/.local/bin/pi": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "~/.local/bin/pi"
+    },
+    "/opt/homebrew/bin/cursor": {
+      "exists": false,
+      "is_symlink": false,
+      "path": "/opt/homebrew/bin/cursor"
+    }
+  },
+  "herdr_paths": {
+    "~/.config/herdr": {
+      "exists": false,
+      "path": "~/.config/herdr"
+    },
+    "~/.config/herdr/herdr.sock": {
+      "exists": false,
+      "path": "~/.config/herdr/herdr.sock"
+    }
+  },
+  "npm_root": "/opt/homebrew/lib/node_modules",
+  "started_utc": "2026-08-27T21:48:21Z",
+  "versions": {
+    "claude": {
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "--version"
+      ],
+      "elapsed_s": 0.586,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "stdout": {
+        "bytes": 22,
+        "sha256": "6220c2a7dbd3dd819ca057957744532f271788bb2de7ba59d4bbbe6847d44fc2",
+        "utf8_preview_200": "2.1.231 (Claude Code)\n"
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    },
+    "claude-local": {
+      "argv": [
+        "~/.local/bin/claude",
+        "--version"
+      ],
+      "elapsed_s": 0.482,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "stdout": {
+        "bytes": 22,
+        "sha256": "afc426728194e396ec8d2c3fe6c72a2e5b41150d73c798897705ad0f1ec9be29",
+        "utf8_preview_200": "2.1.238 (Claude Code)\n"
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    },
+    "codex": {
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "--version"
+      ],
+      "elapsed_s": 0.036,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "stdout": {
+        "bytes": 18,
+        "sha256": "22c3a470a09f98a30e23cb3eac0efb697a01d2ae8869f49660550ed599648961",
+        "utf8_preview_200": "codex-cli 0.150.0\n"
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    },
+    "cursor-agent-homebrew": {
+      "argv": [
+        "/opt/homebrew/bin/cursor-agent",
+        "--version"
+      ],
+      "elapsed_s": 0.115,
+      "exit": 1,
+      "stderr": {
+        "bytes": 65536,
+        "sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+        "utf8_preview_200": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a("
+      },
+      "stdout": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    },
+    "cursor-agent-local": {
+      "argv": [
+        "~/.local/bin/cursor-agent",
+        "--version"
+      ],
+      "elapsed_s": 0.448,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "stdout": {
+        "bytes": 19,
+        "sha256": "add3a08b4243bd9cd89531b2e5580e3e12d4d41d0a8540947b950a50ef4061bc",
+        "utf8_preview_200": "2026.07.09-a3815c0\n"
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    },
+    "opencode": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "--version"
+      ],
+      "elapsed_s": 0.28,
+      "exit": 0,
+      "stderr": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_preview_200": ""
+      },
+      "stdout": {
+        "bytes": 7,
+        "sha256": "13d998dc1d8d8589fdf6090020f5e59ec9875126beda74ef6e81f6e9c638697c",
+        "utf8_preview_200": "1.18.9\n"
+      },
+      "timed_out": false,
+      "timeout_s": 8
+    }
+  }
+}

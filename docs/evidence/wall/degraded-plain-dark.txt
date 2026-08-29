@@ -1,0 +1,19 @@
+PLAIN DUMP
+OBSERVED 2026-08-01T12:00:10.000Z
+! DENIAL UNKNOWN_RECIPIENT solo → missing
+UNSATISFIED WAKE
+
+NODE               LIVE       AUTH       MUTEX      INBOX  LAST
+> solo               SILENT     EXPIRED    NONE           0  12:00:10.000
+
+WORK DAG  [░░░░░░░░░░]   0%
+  CLAIMED   Record this session  holder:solo
+
+CONSUMPTION  CAUGHT UP
+  coordinate: work/items.jsonl
+
+WORKERS
+  DEGRADED  solo codex Record this session [work-wall] PROCESS TIMEOUT
+
+RECEIPTS
+  WORKER   solo DEGRADE

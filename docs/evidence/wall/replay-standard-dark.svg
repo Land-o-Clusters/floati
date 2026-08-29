@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="304" viewBox="0 0 1280 304" role="img">
+  <title>FLOATI replay standard dark</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="304" fill="#12161c"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#d8dee9">FLOATI // FLIGHT RECORDER</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">[####################] 3/3</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"><tspan fill="#ff9f43">◆</tspan> +0000.000s  CLAIM    WORK    solo work-a claim</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"><tspan fill="#ff9f43">│</tspan> +0001.000s  TURN     WORKER  solo work-a drive</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"><tspan fill="#ff9f43">│</tspan> +0003.000s  COMPLETE WORKER  solo work-a complete</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">      <tspan fill="#ff9f43">⊙</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">      <tspan fill="#ff9f43">│</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">     <tspan fill="#ff9f43">╱</tspan> <tspan fill="#ff9f43">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">    <tspan fill="#ff9f43">╱</tspan><tspan fill="#9aa6b2">───</tspan><tspan fill="#ff9f43">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">   <tspan fill="#ff9f43">╱</tspan>     <tspan fill="#ff9f43">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"> <tspan fill="#9aa6b2">~~~~~~~~~~~</tspan></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">REPLAY COMPLETE</tspan>
+  </text>
+</svg>

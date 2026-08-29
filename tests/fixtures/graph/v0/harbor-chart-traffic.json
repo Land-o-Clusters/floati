@@ -1,0 +1,13 @@
+{
+  "schema_version": 0,
+  "tenant_id": "alpha",
+  "pairs": [
+    {
+      "sender": "lane-a",
+      "recipient": "lane-b",
+      "envelope_count": 2,
+      "denial_count": 1
+    }
+  ],
+  "unrecognized_kinds": []
+}

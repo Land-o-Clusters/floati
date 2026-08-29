@@ -1,0 +1,62 @@
+{
+  "schema_version": 0,
+  "kind": "receipts_read_bundle",
+  "tenant_id": "fleet",
+  "snapshot_at": "2026-08-01T12:00:10.000Z",
+  "entries": [
+    {
+      "sequence": 1,
+      "source": "work/items.jsonl",
+      "source_ordinal": 1,
+      "record": {
+        "schema_version": 0,
+        "id": "work-018f0f23abcd71238000000000000000",
+        "tenant_id": "fleet",
+        "timestamp": "2026-08-01T12:00:00.000Z",
+        "kind": "work_item",
+        "title": "Record the session",
+        "owner": "solo",
+        "artifact_bindings": []
+      }
+    },
+    {
+      "sequence": 2,
+      "source": "work/items.jsonl",
+      "source_ordinal": 2,
+      "record": {
+        "schema_version": 0,
+        "id": "transition-018f0f23abcd71238000000000000000",
+        "tenant_id": "fleet",
+        "timestamp": "2026-08-01T12:00:01.000Z",
+        "kind": "work_transition",
+        "work_item_id": "work-018f0f23abcd71238000000000000000",
+        "action": "claim",
+        "actor": "solo",
+        "authority_subject": "solo-work",
+        "authority_epoch": 1,
+        "artifact_bindings": []
+      }
+    },
+    {
+      "sequence": 3,
+      "source": "receipts/workers.jsonl",
+      "source_ordinal": 1,
+      "record": {
+        "schema_version": 0,
+        "id": "worker-receipt-018f0f23abcd71238000000000000000",
+        "tenant_id": "fleet",
+        "timestamp": "2026-08-01T12:00:02.000Z",
+        "kind": "worker_receipt",
+        "session_id": "worker-018f0f23abcd71238000000000000000",
+        "work_item_id": "work-018f0f23abcd71238000000000000000",
+        "node_id": "solo",
+        "adapter": "codex",
+        "transition": "claim",
+        "outcome_code": null,
+        "authority_subject": "solo-work",
+        "authority_epoch": 1,
+        "artifact_bindings": []
+      }
+    }
+  ]
+}

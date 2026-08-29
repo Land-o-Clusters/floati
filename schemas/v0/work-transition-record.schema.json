@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/work-transition-record.schema.json",
+  "title": "Floati Work Transition Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "work_item_id", "action", "actor", "authority_subject",
+    "authority_epoch", "artifact_bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^transition-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "work_transition"},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "action": {"type": "string", "enum": ["claim", "complete"]},
+    "actor": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authority_subject": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authority_epoch": {"type": "integer", "minimum": 1},
+    "artifact_bindings": {
+      "type": "array", "maxItems": 32, "uniqueItems": true,
+      "items": {"$ref": "work-item-record.schema.json#/$defs/artifact_binding"}
+    }
+  }
+}

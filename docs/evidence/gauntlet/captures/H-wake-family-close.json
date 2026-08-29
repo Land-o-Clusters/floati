@@ -1,0 +1,499 @@
+{
+  "branch_tip_note": "lane/grok-gauntlet off main; fixtures under .gauntlet-scratch",
+  "control": {
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "cwd": null,
+    "elapsed_s": 0.024,
+    "ended_utc": "2026-08-28T13:14:45Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T13:14:45Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "Python 3.9.6\n",
+    "stdout_bytes": 13,
+    "stdout_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+    "timed_out": false,
+    "timeout_s": 3.0
+  },
+  "desktop_surfaces": {
+    "apps": {
+      "antigravity_desktop": {
+        "CFBundleExecutable": "Antigravity",
+        "CFBundleIdentifier": "com.google.antigravity",
+        "CFBundleName": "Antigravity",
+        "CFBundleShortVersionString": "2.11.0",
+        "CFBundleVersion": "2.11.0",
+        "app": "/Applications/Antigravity.app",
+        "plist_present": true,
+        "present": true
+      },
+      "claude_desktop_chat": {
+        "CFBundleExecutable": "Claude",
+        "CFBundleIdentifier": "com.anthropic.claudefordesktop",
+        "CFBundleName": "Claude",
+        "CFBundleShortVersionString": "1.37937.3",
+        "CFBundleVersion": "1.37937.3",
+        "app": "/Applications/Claude.app",
+        "plist_present": true,
+        "present": true
+      },
+      "codex_desktop": {
+        "CFBundleExecutable": "ChatGPT",
+        "CFBundleIdentifier": "com.openai.codex",
+        "CFBundleName": "ChatGPT",
+        "CFBundleShortVersionString": "26.820.80927",
+        "CFBundleVersion": "7271",
+        "app": "/Applications/ChatGPT.app",
+        "plist_present": true,
+        "present": true
+      },
+      "cursor_desktop": {
+        "CFBundleExecutable": "Cursor",
+        "CFBundleIdentifier": "com.todesktop.230313mzl4w4u92",
+        "CFBundleName": "Cursor",
+        "CFBundleShortVersionString": "3.17.21",
+        "CFBundleVersion": "3.17.21",
+        "app": "/Applications/Cursor.app",
+        "plist_present": true,
+        "present": true
+      },
+      "grok_desktop": {
+        "CFBundleExecutable": "Grok Bot",
+        "CFBundleIdentifier": "com.anysphere.sand",
+        "CFBundleName": "Grok Bot",
+        "CFBundleShortVersionString": "0.29.0",
+        "CFBundleVersion": "0.29.0",
+        "app": "/Applications/Grok Bot.app",
+        "plist_present": true,
+        "present": true
+      },
+      "opencode_desktop": {
+        "CFBundleExecutable": "OpenCode",
+        "CFBundleIdentifier": "ai.opencode.desktop",
+        "CFBundleName": "OpenCode",
+        "CFBundleShortVersionString": "1.18.23",
+        "CFBundleVersion": "1.18.23",
+        "app": "/Applications/OpenCode.app",
+        "plist_present": true,
+        "present": true
+      },
+      "t3_desktop": {
+        "CFBundleExecutable": "T3 Code (Nightly)",
+        "CFBundleIdentifier": "com.t3tools.t3code",
+        "CFBundleName": "T3 Code (Nightly)",
+        "CFBundleShortVersionString": "0.0.35-nightly.20260826.1195",
+        "CFBundleVersion": "0.0.35-nightly.20260826.1195",
+        "app": "/Applications/T3 Code (Nightly).app",
+        "plist_present": true,
+        "present": true
+      }
+    },
+    "bundle_hook_filenames": {
+      "antigravity_desktop": {
+        "app": "/Applications/Antigravity.app",
+        "hit_count": 1,
+        "hits": [
+          "Contents/Frameworks/Antigravity Helper (Plugin).app/Contents/MacOS/Antigravity Helper (Plugin)"
+        ],
+        "present": true,
+        "truncated": false
+      },
+      "claude_desktop_chat": {
+        "app": "/Applications/Claude.app",
+        "hit_count": 1,
+        "hits": [
+          "Contents/Frameworks/Claude Helper (Plugin).app/Contents/MacOS/Claude Helper (Plugin)"
+        ],
+        "present": true,
+        "truncated": false
+      },
+      "codex_desktop": {
+        "app": "/Applications/ChatGPT.app",
+        "hit_count": 39,
+        "hits": [
+          "Contents/PlugIns/CodexDockTilePlugin.docktileplugin/Contents/MacOS/CodexDockTilePlugin",
+          "Contents/Resources/plugins/openai-bundled/plugins/messages/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/latex/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/deep-research/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/visualize/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/sites/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/abstract-level/test/hooks/postopen.js",
+          "Contents/Resources/plugins/openai-bundled/plugins/browser/node_modules/abstract-level/lib/hooks.js",
+          "Contents/Resources/plugins/openai-bundled/plugins/browser/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/codex-app-tools/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/abstract-level/test/hooks/postopen.js",
+          "Contents/Resources/plugins/openai-bundled/plugins/chrome/node_modules/abstract-level/lib/hooks.js",
+          "Contents/Resources/plugins/openai-bundled/plugins/chrome/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/computer-history/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/computer-use/.codex-plugin/plugin.json",
+          "Contents/Resources/plugins/openai-bundled/plugins/record-and-replay/.codex-plugin/plugin.json",
+          "Contents/Resources/cua_node/lib/node_modules/playwright/lib/plugins/webServerPlugin.js",
+          "Contents/Resources/cua_node/lib/node_modules/playwright/lib/plugins/gitCommitInfoPlugin.js",
+          "Contents/Resources/cua_node/lib/node_modules/abstract-level/test/hooks/postopen.js",
+          "Contents/Resources/cua_node/lib/node_modules/abstract-level/lib/hooks.js",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/sky/dist/project/cua/sky_js/src/types/window2/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/sky/dist/project/cua/sky_js/src/types/full-desktop/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/sky/dist/project/cua/sky_js/src/types/window/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/sky/Codex Computer Use.app/Contents/SharedSupport/Codex Computer Use Installer.app/Contents/Resources/CodexComputerUseAuthorizationPluginInstallerTool",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/sky/Codex Computer Use.app/Contents/SharedSupport/Codex Computer Use Installer.app/Contents/Resources/CodexComputerUseAuthorizationPlugin.bundle/Contents/MacOS/CodexComputerUseAuthorizationPlugin",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/_virtual/StatsigPlugin.js",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/node_modules/.pnpm/@statsig_client-core@3.32.6/node_modules/@statsig/client-core/src/StatsigPlugin.js",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/project/cua/sky_js/src/types/window2/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/project/cua/sky_js/src/types/full-desktop/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/project/cua/sky_js/src/types/window/StopAudioRecording.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/lib/js/oai_js_browser/dist/skill/node_modules/abstract-level/test/hooks/postopen.js",
+          "Contents/Resources/cua_node/lib/node_modules/@oai/cua/dist/lib/js/oai_js_browser/dist/skill/node_modules/abstract-level/lib/hooks.js",
+          "Contents/Resources/cua_node/lib/node_modules/@statsig/client-core/src/StatsigPlugin.d.ts",
+          "Contents/Resources/cua_node/lib/node_modules/@statsig/client-core/src/StatsigPlugin.js",
+          "Contents/Resources/cua_node/lib/node_modules/npm/man/man1/npm-stop.1",
+          "Contents/Resources/cua_node/lib/node_modules/npm/node_modules/node-gyp/src/win_delay_load_hook.cc",
+          "Contents/Resources/cua_node/lib/node_modules/npm/docs/output/commands/npm-stop.html",
+          "Contents/Resources/cua_node/lib/node_modules/npm/docs/content/commands/npm-stop.md",
+          "Contents/Resources/cua_node/lib/node_modules/npm/lib/commands/stop.js"
+        ],
+        "present": true,
+        "truncated": false
+      },
+      "cursor_desktop": {
+        "app": "/Applications/Cursor.app",
+        "hit_count": 40,
+        "hits": [
+          "Contents/Resources/app/out/vs/platform/accessibilitySignal/browser/media/voiceRecordingStopped.mp3",
+          "Contents/Resources/app/out/vs/workbench/contrib/debug/browser/media/stop-tb.png",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/workerd/msal/nodeFlows/msalPlugins.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/workerd/credentials/visualStudioCodeCredentialPlugin.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/esm/msal/nodeFlows/msalPlugins.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/esm/credentials/visualStudioCodeCredentialPlugin.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/browser/msal/nodeFlows/msalPlugins.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/browser/credentials/visualStudioCodeCredentialPlugin.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/commonjs/msal/nodeFlows/msalPlugins.js",
+          "Contents/Resources/app/node_modules/@azure/identity/dist/commonjs/credentials/visualStudioCodeCredentialPlugin.js",
+          "Contents/Resources/app/node_modules/@azure/msal-node/dist/cache/distributed/DistributedCachePlugin.mjs",
+          "Contents/Resources/app/node_modules/@bufbuild/protobuf/dist/esm/google/protobuf/compiler/plugin_pb.js",
+          "Contents/Resources/app/node_modules/@bufbuild/protobuf/dist/cjs/google/protobuf/compiler/plugin_pb.js",
+          "Contents/Resources/app/node_modules/@sentry/node-core/build/import-hook.mjs",
+          "Contents/Resources/app/node_modules/@sentry/node-core/build/loader-hook.mjs",
+          "Contents/Resources/app/node_modules/@sentry/node/build/import-hook.mjs",
+          "Contents/Resources/app/node_modules/@sentry/node/build/loader-hook.mjs",
+          "Contents/Resources/app/node_modules/@opentelemetry/instrumentation/hook.mjs",
+          "Contents/Resources/app/node_modules/@opentelemetry/context-async-hooks/build/src/AbstractAsyncHooksContextManager.js",
+          "Contents/Resources/app/node_modules/@opentelemetry/context-async-hooks/build/src/AsyncHooksContextManager.js",
+          "Contents/Resources/app/node_modules/import-in-the-middle/hook.js",
+          "Contents/Resources/app/node_modules/import-in-the-middle/hook.mjs",
+          "Contents/Resources/app/node_modules/@apm-js-collab/tracing-hooks/hook.mjs",
+          "Contents/Resources/app/node_modules/hono/dist/helper/ssg/plugins.js",
+          "Contents/Resources/app/node_modules/hono/dist/cjs/helper/ssg/plugins.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/config/plugin.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/config/files/plugins.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/config/validation/plugins.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/transformation/block-hoist-plugin.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/transformation/plugin-pass.js",
+          "Contents/Resources/app/node_modules/@babel/core/lib/parser/util/missing-plugin-helper.js",
+          "Contents/Resources/app/node_modules/@babel/traverse/lib/path/lib/removal-hooks.js",
+          "Contents/Resources/app/node_modules/@babel/compat-data/plugin-bugfixes.js",
+          "Contents/Resources/app/node_modules/@babel/compat-data/overlapping-plugins.js",
+          "Contents/Resources/app/node_modules/@babel/compat-data/plugins.js",
+          "Contents/Resources/app/node_modules/@babel/compat-data/data/overlapping-plugins.json",
+          "Contents/Resources/app/node_modules/@babel/compat-data/data/plugin-bugfixes.json",
+          "Contents/Resources/app/node_modules/@babel/compat-data/data/plugins.json",
+          "Contents/Resources/app/node_modules/@prisma/instrumentation/node_modules/@opentelemetry/instrumentation/hook.mjs",
+          "Contents/Resources/app/node_modules/jotai/esm/babel/plugin-debug-label.mjs"
+        ],
+        "present": true,
+        "truncated": true
+      },
+      "grok_desktop": {
+        "app": "/Applications/Grok Bot.app",
+        "hit_count": 1,
+        "hits": [
+          "Contents/Frameworks/Grok Bot Helper (Plugin).app/Contents/MacOS/Grok Bot Helper (Plugin)"
+        ],
+        "present": true,
+        "truncated": false
+      },
+      "opencode_desktop": {
+        "app": "/Applications/OpenCode.app",
+        "hit_count": 1,
+        "hits": [
+          "Contents/Frameworks/OpenCode Helper (Plugin).app/Contents/MacOS/OpenCode Helper (Plugin)"
+        ],
+        "present": true,
+        "truncated": false
+      },
+      "t3_desktop": {
+        "app": "/Applications/T3 Code (Nightly).app",
+        "hit_count": 1,
+        "hits": [
+          "Contents/Frameworks/T3 Code (Nightly) Helper (Plugin).app/Contents/MacOS/T3 Code (Nightly) Helper (Plugin)"
+        ],
+        "present": true,
+        "truncated": false
+      }
+    },
+    "claude_code_cursor_extensions": [
+      "anthropic.claude-code-2.1.246-darwin-arm64",
+      "anthropic.claude-code-2.1.247-darwin-arm64"
+    ],
+    "configs": {
+      "claude_settings": {
+        "exists": true,
+        "is_dir": false,
+        "is_file": true,
+        "is_symlink": false,
+        "path": "~/.claude/settings.json",
+        "realpath": "~/.claude/settings.json"
+      },
+      "codex_hooks": {
+        "exists": true,
+        "is_dir": false,
+        "is_file": true,
+        "is_symlink": false,
+        "path": "~/.codex/hooks.json",
+        "realpath": "~/.codex/hooks.json"
+      },
+      "cursor_hooks": {
+        "exists": true,
+        "is_dir": false,
+        "is_file": true,
+        "is_symlink": false,
+        "path": "~/.cursor/hooks.json",
+        "realpath": "~/.cursor/hooks.json"
+      },
+      "herdr_config": {
+        "exists": true,
+        "is_dir": true,
+        "is_file": false,
+        "is_symlink": false,
+        "path": "~/.config/herdr",
+        "realpath": "~/.config/herdr"
+      },
+      "opencode_plugins": {
+        "exists": true,
+        "is_dir": true,
+        "is_file": false,
+        "is_symlink": false,
+        "path": "~/.config/opencode/plugins",
+        "realpath": "~/.config/opencode/plugins"
+      }
+    },
+    "gui_open_invoked": false,
+    "sign_in_invoked": false
+  },
+  "ended_utc": "2026-08-28T13:15:30Z",
+  "event_driven_push": {
+    "opencode_cli_serve_3cycle": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "serve",
+        "--port",
+        "63714"
+      ],
+      "cycles": [
+        {
+          "bytes": 2884,
+          "elapsed_s": 0.356,
+          "error": null,
+          "http_status": 200,
+          "i": 1,
+          "url": "http://127.0.0.1:63714/"
+        },
+        {
+          "bytes": 2884,
+          "elapsed_s": 0.002,
+          "error": null,
+          "http_status": 200,
+          "i": 2,
+          "url": "http://127.0.0.1:63714/"
+        },
+        {
+          "bytes": 2884,
+          "elapsed_s": 0.002,
+          "error": null,
+          "http_status": 200,
+          "i": 3,
+          "url": "http://127.0.0.1:63714/"
+        }
+      ],
+      "port": 63714,
+      "ready": true,
+      "ready_substr": "listening on http://127.0.0.1:63714",
+      "returncode": -15,
+      "server_output": "Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\nopencode server listening on http://127.0.0.1:63714\n",
+      "started_utc": "2026-08-28T13:14:45Z"
+    },
+    "pi_cli_extension_rpc_surface": {
+      "help": {
+        "exit": 0,
+        "has_extension_flags": true,
+        "has_mode_rpc": true,
+        "has_no_session": true,
+        "has_session_flags": true,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "894957a01dfbf97ec0723edadbbc95094e0f216fc735705f47b94c2ddcb0962a"
+      },
+      "list_extensions": {
+        "argv": [
+          "/opt/homebrew/bin/pi",
+          "list"
+        ],
+        "cwd": null,
+        "elapsed_s": 0.248,
+        "ended_utc": "2026-08-28T13:15:29Z",
+        "exit": 0,
+        "started_utc": "2026-08-28T13:15:29Z",
+        "stderr": "",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout": "No packages installed.\n",
+        "stdout_bytes": 23,
+        "stdout_sha256": "97b79322c8820b3eb74b04575cf8151359ba74ba5bec6bf48ce26480414de561",
+        "timed_out": false,
+        "timeout_s": 12.0
+      },
+      "version": {
+        "argv": [
+          "/opt/homebrew/bin/pi",
+          "--version"
+        ],
+        "cwd": null,
+        "elapsed_s": 2.538,
+        "ended_utc": "2026-08-28T13:15:29Z",
+        "exit": 0,
+        "started_utc": "2026-08-28T13:15:26Z",
+        "stderr": "",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout": "0.84.3\n",
+        "stdout_bytes": 7,
+        "stdout_sha256": "e470244f5d207065cacf7314a910c7cff5fc8334840dc42426d62da3e661f580",
+        "timed_out": false,
+        "timeout_s": 8.0
+      }
+    },
+    "t3_cli_serve_3cycle": {
+      "argv": [
+        "/opt/homebrew/bin/t3",
+        "serve",
+        "--no-browser",
+        "--port",
+        "63733",
+        "--base-dir",
+        "~/Projects/floati-grok/.gauntlet-scratch/wake-family-t3-home"
+      ],
+      "cycles": [
+        {
+          "bytes": 19884,
+          "elapsed_s": 0.062,
+          "error": null,
+          "http_status": 200,
+          "i": 1,
+          "url": "http://127.0.0.1:63733/"
+        },
+        {
+          "bytes": 19884,
+          "elapsed_s": 0.002,
+          "error": null,
+          "http_status": 200,
+          "i": 2,
+          "url": "http://127.0.0.1:63733/"
+        },
+        {
+          "bytes": 19884,
+          "elapsed_s": 0.002,
+          "error": null,
+          "http_status": 200,
+          "i": 3,
+          "url": "http://127.0.0.1:63733/"
+        }
+      ],
+      "port": 63733,
+      "ready": true,
+      "ready_substr": "Listening on http://127.0.0.1:63733",
+      "returncode": 130,
+      "server_output": "[09:14:55.707] INFO (#5): Migrations ran successfully\n  migrations: [\n    '1_OrchestrationEvents',\n    '2_OrchestrationCommandReceipts',\n    '3_CheckpointDiffBlobs',\n    '4_ProviderSessionRuntime',\n    '5_Projections',\n    '6_ProjectionThreadSessionRuntimeModeColumns',\n    '7_ProjectionThreadMessageAttachments',\n    '8_ProjectionThreadActivitySequence',\n    '9_ProviderSessionRuntimeMode',\n    '10_ProjectionThreadsRuntimeMode',\n    '11_OrchestrationThreadCreatedRuntimeMode',\n    '12_ProjectionThreadsInteractionMode',\n    '13_ProjectionThreadProposedPlans',\n    '14_ProjectionThreadProposedPlanImplementation',\n    '15_ProjectionTurnsSourceProposedPlan',\n    '16_CanonicalizeModelSelections',\n    '17_ProjectionThreadsArchivedAt',\n    '18_ProjectionThreadsArchivedAtIndex',\n    '19_ProjectionSnapshotLookupIndexes',\n    '20_AuthAccessManagement',\n    '21_AuthSessionClientMetadata',\n    '22_AuthSessionLastConnectedAt',\n    '23_ProjectionThreadShellSummary',\n    '24_BackfillProjectionThreadShellSummary',\n    '25_CleanupInvalidProjectionPendingApprovals',\n    '26_CanonicalizeModelSelectionOptions',\n    '27_ProviderSessionRuntimeInstanceId',\n    '28_ProjectionThreadSessionInstanceId',\n    '29_ProjectionThreadDetailOrderingIndexes',\n    '30_ProjectionThreadShellArchiveIndexes',\n    '31_AuthAuthorizationScopes',\n    '32_AuthPairingProofKeyThumbprint',\n    '33_ProjectionThreadsSettled',\n    '34_ProjectionThreadsSnoozed',\n    '35_ProjectionThreadTitleRegeneration',\n    '36_ProjectionThreadsPinned',\n    '37_ProjectionTurnsKeysetIndex',\n    '38_ProjectionThreadsPinOrderKey',\n    '39_ProjectionProjectsDefaultThreadEnvMode',\n    '40_ProjectionProjectFaviconPath',\n    '41_AuthSessionClientConnection',\n    '42_ProjectionThreadLinkedPullRequest',\n    '43_ProjectionThreadsUnsettledAt'\n  ]\n[09:14:57.576] INFO (#358): Listening on http://127.0.0.1:63733\n[09:14:57.594] INFO (#357): agent activity publishing standby; waiting for T3 Connect link reconciliation\n[09:14:57.595] INFO (#357): provider.session.reaper.started\n  { inactivityThresholdMs: 1800000, sweepIntervalMs: 300000 }\nT3 Code server is ready.\nConnection string: http://localhost:63733\nToken: B9NXBQXJNK52\nPairing URL: http://localhost:63733/pair#token=B9NXBQXJNK52\n\n                                     \n  \u2588\u2580\u2580\u2580\u2580\u2580\u2588 \u2580 \u2580\u2584\u2584  \u2588\u2580  \u2580\u2584 \u2584\u2580\u2584 \u2588\u2580\u2580\u2580\u2580\u2580\u2588  \n  \u2588 \u2588\u2588\u2588 \u2588   \u2584\u2580\u2580\u2580\u2584\u2588\u2580\u2584\u2584\u2580\u2584\u2588\u2584\u2584\u2588 \u2588 \u2588\u2588\u2588 \u2588  \n  \u2588 \u2580\u2580\u2580 \u2588 \u2588 \u2580\u2584\u2584\u2588  \u2588\u2584\u2584\u2580\u2584 \u2588   \u2588 \u2580\u2580\u2580 \u2588  \n  \u2580\u2580\u2580\u2580\u2580\u2580\u2580 \u2580 \u2588\u2584\u2588 \u2580\u2584\u2580 \u2580\u2584\u2580\u2584\u2588 \u2588 \u2580\u2580\u2580\u2580\u2580\u2580\u2580  \n   \u2580\u2588\u2588\u2588\u2580\u2580\u2588  \u2588\u2588 \u2588\u2580\u2588\u2580\u2580\u2588\u2588\u2580 \u2588\u2588\u2580 \u2584\u2580\u2580\u2584\u2584 \u2588  \n  \u2584\u2584\u2584 \u2584\u2584\u2580\u2584  \u2580\u2588 \u2584\u2584\u2580 \u2580\u2588\u2584\u2588\u2588  \u2580\u2584\u2588 \u2588\u2584\u2588\u2588   \n  \u2588 \u2580\u2580\u2584\u2588\u2580\u2588\u2584\u2584\u2588 \u2580\u2588\u2584\u2584\u2588\u2584\u2588 \u2584\u2588\u2580\u2588\u2584\u2580\u2584\u2580\u2580\u2580 \u2584\u2584  \n  \u2580 \u2580\u2580  \u2580 \u2580\u2580\u2584\u2588  \u2584\u2580\u2584\u2580\u2584\u2584\u2584\u2584\u2584\u2584\u2588\u2580\u2580 \u2588\u2588\u2588\u2580   \n   \u2588\u2584\u2584\u2580\u2584\u2580 \u2580\u2584\u2580\u2588\u2584\u2580 \u2584\u2584\u2588 \u2588\u2580\u2584\u2588\u2584\u2580\u2580\u2584\u2588\u2580\u2588\u2584 \u2588  \n  \u2588\u2588 \u2580\u2584\u2584\u2580\u2588\u2588 \u2580\u2584\u2584\u2588\u2584  \u2584\u2580\u2584\u2580\u2584  \u2584\u2588  \u2588\u2584\u2588\u2580   \n  \u2588\u2580\u2580\u2580\u2584\u2588\u2580\u2580\u2580\u2584\u2588\u2588\u2584 \u2580\u2588\u2588\u2588  \u2584\u2588\u2588 \u2580\u2580\u2584\u2580\u2580\u2580\u2584 \u2584  \n  \u2588 \u2584  \u2584\u2580\u2584\u2584\u2580\u2588 \u2588\u2584\u2584\u2580\u2580\u2584\u2588\u2584 \u2588\u2580  \u2588\u2588\u2580  \u2584\u2580\u2584  \n  \u2580 \u2580 \u2580 \u2580 \u2584\u2588\u2580\u2580\u2588\u2588\u2588\u2580\u2588 \u2580\u2588\u2580\u2584\u2584\u2580\u2588\u2580\u2580\u2580\u2588 \u2584\u2588\u2588  \n  \u2588\u2580\u2580\u2580\u2580\u2580\u2588 \u2588\u2580\u2588 \u2580\u2588\u2580\u2584\u2584\u2584 \u2584\u2584\u2588\u2584\u2588\u2588 \u2580 \u2588 \u2588\u2588\u2584  \n  \u2588 \u2588\u2588\u2588 \u2588 \u2588 \u2584\u2580\u2588\u2580\u2580\u2588  \u2580 \u2584\u2580\u2588\u2584\u2580\u2588\u2580\u2588\u2588\u2580\u2584\u2580\u2588  \n  \u2588 \u2580\u2580\u2580 \u2588 \u2588 \u2580 \u2584 \u2584\u2580\u2580 \u2584  \u2584 \u2584\u2580\u2584\u2588\u2588\u2584\u2588\u2584    \n  \u2580\u2580\u2580\u2580\u2580\u2580\u2580  \u2580 \u2580    \u2580\u2580 \u2580\u2580   \u2580 \u2580\u2580\u2580\u2580 \u2580   \n                                     \n\n",
+      "started_utc": "2026-08-28T13:14:50Z"
+    }
+  },
+  "gui_apps_opened": false,
+  "herdr_not_applicable": {
+    "help": {
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--help"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.009,
+      "ended_utc": "2026-08-28T13:15:30Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T13:15:29Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "herdr \u2014 terminal workspace manager for AI coding agents\n\nUsage: herdr [options]\n       herdr --session <name> [options]\n       herdr --remote <ssh-target> [--session <name>]\n       herdr session attach <name>\n       herdr completion zsh\n       herdr update [--handoff]\n       herdr channel set <stable|preview>\n       herdr server stop\n       herdr server reload-config\n       herdr api <subcommand> ...\n       herdr completion <shell>\n       herdr config <subcommand> ...\n       herdr channel <subcommand> ...\n       herdr workspace <subcommand> ...\n       herdr worktree <subcommand> ...\n       herdr tab <subcommand> ...\n       herdr notification <subcommand> ...\n       herdr agent <subcommand> ...\n       herdr pane <subcommand> ...\n       herdr session <subcommand> ...\n       herdr integration <subcommand> ...\n\nCommon commands:\n  herdr                            Launch or attach to the persistent session\n  herdr status [server|client]     Show local client and running server status\n  herdr update                     Download and install the latest version\n  herdr completion zsh             Generate shell completions for zsh\n  herdr server stop                Stop the running server via the API socket\n  herdr channel set <stable|preview> Choose the stable or preview update channel\n  herdr server reload-config       Reload config.toml in the running server\n  herdr config reset-keys          Back up config.toml and remove custom keybindings\n  herdr channel <subcommand>       Manage the stable or preview update channel\n  herdr api <subcommand>           Inspect socket API metadata and live runtime state\n  herdr workspace <subcommand>     Workspace helpers over the socket API\n  herdr worktree <subcommand>      Git worktree helpers over the socket API\n  herdr tab <subcommand>           Tab helpers over the socket API\n  herdr notification <subcommand>  Notification helpers over the socket API\n  herdr agent <subcommand>         Agent/terminal helpers over the socket API\n  herdr pane <subcommand>          Pane control helpers over the socket API\n  herdr session <subcommand>       Manage named persistent sessions\n  herdr integration <subcommand>   Manage built-in agent integrations\n\nAdvanced commands:\n  herdr server                     Run as headless server\n\nOptions:\n  --no-session        Run monolithically (no server/client, escape hatch)\n  --session <name>    Use or create a named persistent session\n  --remote <target>   Attach through SSH to a remote Herdr server\n  --remote-keybindings <local|server>\n                      Keybindings for --remote app attach (default: local)\n  --handoff           Opt into live handoff for update or remote attach\n  --default-config    Print default configuration and exit\n  --skill             Print the agent skill file and exit\n  --version, -V       Print version and exit\n  --help, -h          Show this help\n\nConfig: ~/.config/herdr/config.toml\nLogs:   ~/.config/herdr/herdr.log (plus herdr-client.log, herdr-server.log)\nEnv:    HERDR_CONFIG_PATH overrides config file path\nHome:   https://herdr.dev\n\nAre you an AI? Use these resources ONLY IF your task specifically asks you to:\n  Help a human understand or set up Herdr for the first time:\n    https://herdr.dev/agent-guide.md\n  Debug or investigate a problem with Herdr:\n    https://herdr.dev/llms.txt\n  Control Herdr panes, agents, or workspaces:\n    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill\n",
+      "stdout_bytes": 3498,
+      "stdout_sha256": "198d82d8e313e4a8394d2bae801eb0077584359c10bb366bd59c6eb3efe1b97a",
+      "timed_out": false,
+      "timeout_s": 8.0
+    },
+    "help_mentions_llm_turn": true,
+    "help_names_workspace_manager": true,
+    "server_running": true,
+    "status": {
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "status"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.009,
+      "ended_utc": "2026-08-28T13:15:30Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T13:15:30Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout_bytes": 221,
+      "stdout_sha256": "2480e044fa8ab0d61a228dae986138a2932517bdf74d0ba9421d55eb89415f1a",
+      "timed_out": false,
+      "timeout_s": 8.0
+    },
+    "version": {
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--version"
+      ],
+      "cwd": null,
+      "elapsed_s": 0.013,
+      "ended_utc": "2026-08-28T13:15:29Z",
+      "exit": 0,
+      "started_utc": "2026-08-28T13:15:29Z",
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "herdr 0.8.2\n",
+      "stdout_bytes": 12,
+      "stdout_sha256": "9654e7f916941ff3f48a0b7bdf19110ce63a11880765fc8e362a94472bc948b3",
+      "timed_out": false,
+      "timeout_s": 8.0
+    }
+  },
+  "live_fleet_root_used": false,
+  "organic_cursor_desktop": {
+    "harness_surface": "cursor/desktop",
+    "hooks_json": {
+      "exists": true,
+      "is_dir": false,
+      "is_file": true,
+      "is_symlink": false,
+      "path": "~/.cursor/hooks.json",
+      "realpath": "~/.cursor/hooks.json"
+    },
+    "note": "This grok seat is a live Cursor desktop agent session; daemon acceptance already witnessed production wakes on this coordinate. This row does not re-open ChatGPT.app / Claude.app / OpenCode.app / T3.app / Antigravity.app / Grok Bot.app.",
+    "seat": "grok"
+  },
+  "started_utc": "2026-08-28T13:14:58Z"
+}

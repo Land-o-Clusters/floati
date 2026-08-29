@@ -1,0 +1,649 @@
+{
+  "applications_all": [
+    "Affinity.app",
+    "AgentPeek.app",
+    "Amphetamine.app",
+    "Antigravity.app",
+    "App Cleaner 9.app",
+    "ChatGPT Classic.app",
+    "ChatGPT.app",
+    "Claude.app",
+    "CodexBar.app",
+    "Cursor.app",
+    "Dia.app",
+    "Discord.app",
+    "Firefox.app",
+    "Ghostty.app",
+    "GitHub Desktop.app",
+    "Google Chrome.app",
+    "Grok Bot.app",
+    "Helium.app",
+    "Hidden Bar.app",
+    "Magnet.app",
+    "Microsoft Excel.app",
+    "Microsoft PowerPoint.app",
+    "Microsoft Word.app",
+    "Mimestream.app",
+    "OnyX.app",
+    "OpenCode.app",
+    "OpenRouterUsageMonitor.app",
+    "OpenUsage.app",
+    "Puddle.app",
+    "Rancher Desktop.app",
+    "Safari.app",
+    "Spotify.app",
+    "Stats.app",
+    "T3 Code (Nightly).app",
+    "Tailscale.app",
+    "Telegram.app",
+    "Thaw.app",
+    "Unclutter.app",
+    "Vibe Island.app",
+    "Warp.app",
+    "WhatsApp.app",
+    "Windscribe.app",
+    "XDeck.app",
+    "Xcode.app",
+    "iTerm.app"
+  ],
+  "applications_name_hits": [
+    "Antigravity.app",
+    "ChatGPT Classic.app",
+    "ChatGPT.app",
+    "Claude.app",
+    "CodexBar.app",
+    "Cursor.app",
+    "Grok Bot.app",
+    "OpenCode.app",
+    "T3 Code (Nightly).app"
+  ],
+  "apps": [
+    {
+      "CFBundleExecutable": "Claude",
+      "CFBundleIdentifier": "com.anthropic.claudefordesktop",
+      "CFBundleName": "Claude",
+      "CFBundleShortVersionString": "1.37937.3",
+      "CFBundleVersion": "1.37937.3",
+      "app": "/Applications/Claude.app",
+      "macos_names": [
+        "Claude"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "CFBundleExecutable": "OpenCode",
+      "CFBundleIdentifier": "ai.opencode.desktop",
+      "CFBundleName": "OpenCode",
+      "CFBundleShortVersionString": "1.18.23",
+      "CFBundleVersion": "1.18.23",
+      "app": "/Applications/OpenCode.app",
+      "macos_names": [
+        "OpenCode"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "CFBundleExecutable": "Cursor",
+      "CFBundleIdentifier": "com.todesktop.230313mzl4w4u92",
+      "CFBundleName": "Cursor",
+      "CFBundleShortVersionString": "3.17.21",
+      "CFBundleVersion": "3.17.21",
+      "app": "/Applications/Cursor.app",
+      "macos_names": [
+        "Cursor"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "CFBundleExecutable": "Grok Bot",
+      "CFBundleIdentifier": "com.anysphere.sand",
+      "CFBundleName": "Grok Bot",
+      "CFBundleShortVersionString": "0.29.0",
+      "CFBundleVersion": "0.29.0",
+      "app": "/Applications/Grok Bot.app",
+      "macos_names": [
+        "Grok Bot"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "CFBundleExecutable": "T3 Code (Nightly)",
+      "CFBundleIdentifier": "com.t3tools.t3code",
+      "CFBundleName": "T3 Code (Nightly)",
+      "CFBundleShortVersionString": "0.0.35-nightly.20260826.1195",
+      "CFBundleVersion": "0.0.35-nightly.20260826.1195",
+      "app": "/Applications/T3 Code (Nightly).app",
+      "macos_names": [
+        "T3 Code (Nightly)"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "CFBundleExecutable": "Antigravity",
+      "CFBundleIdentifier": "com.google.antigravity",
+      "CFBundleName": "Antigravity",
+      "CFBundleShortVersionString": "2.11.0",
+      "CFBundleVersion": "2.11.0",
+      "app": "/Applications/Antigravity.app",
+      "macos_names": [
+        "Antigravity"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "app": "/Applications/Codex.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "CFBundleExecutable": "ChatGPT",
+      "CFBundleIdentifier": "com.openai.codex",
+      "CFBundleName": "ChatGPT",
+      "CFBundleShortVersionString": "26.820.60940",
+      "CFBundleVersion": "7119",
+      "app": "/Applications/ChatGPT.app",
+      "macos_names": [
+        "ChatGPT"
+      ],
+      "plist_present": true,
+      "present": true
+    },
+    {
+      "app": "/Applications/Devin.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "app": "/Applications/Cline.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "app": "/Applications/Pi.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "app": "/Applications/Herdr.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "app": "/Applications/Windsurf.app",
+      "plist_present": false,
+      "present": false
+    },
+    {
+      "app": "/Applications/Visual Studio Code.app",
+      "plist_present": false,
+      "present": false
+    }
+  ],
+  "brew_cask": {
+    "absent": false,
+    "argv": [
+      "/opt/homebrew/bin/brew",
+      "list",
+      "--cask"
+    ],
+    "auth_prompt_suspected": false,
+    "exit": 0,
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "antigravity\nantigravity-cli\nclaude-code\ncodex\ncursor-cli\ndevin-cli\nxdeck\n",
+    "stdout_bytes": 73,
+    "stdout_sha256": "5e086ed7b8dd19a87a37f411e0a6d6b32b34957241e793e5c870c7b648c0f141",
+    "timed_out": false
+  },
+  "cli_help": {
+    "agy": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/agy",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "Usage of agy:\n  --add-dir                       Add a directory to the workspace (repeatable) (default [])\n  --agent                         Agent for the current CLI session\n  -c                              Short alias for --continue\n  --continue                      Continue the most recent conversation\n  --conversation                  Resume a previous conversation by ID\n  --dangerously-skip-permissions  Auto-approve all tool permission requests without prompting\n  --effort                        Reasoning effort for the current CLI session (low|medium|high)\n  -i                              Short alias for --prompt-interactive\n  --log-file                      Override CLI log file path\n  --mode                          Set the agent execution mode for this session (accept-edits, plan)\n  --model                         Model for the current CLI session\n  --new-project                   Create a new project for this session\n  -p                              Short alias for --print\n  --print                         Run a single prompt non-interactively and print the response\n  --print-timeout                 Timeout for print mode wait (default 5m0s)\n  --project                       Project ID for the current CLI session\n  --prompt                        Alias for --print\n  --prompt-interactive            Run an initial prompt interactively and continue the session\n  --sandbox                       Run in a sandbox with terminal restrictions enabled\n\nAvailable subcommand",
+      "stderr_bytes": 1924,
+      "stderr_sha256": "61c94e66fc8e651d997c51989dfe411559ebff4630301daa20d41bf8b6d71d88",
+      "stdout": "",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "antigravity": {
+      "absent": true,
+      "path": ""
+    },
+    "devin": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/devin",
+        "--help"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "A fast and minimal agent that lives both in your terminal and in the cloud.\n\nUsage: devin [OPTIONS] [-- <PROMPT>...] [COMMAND]\n\nCommands:\n  auth       Authentication related commands\n  mcp        Connect and log in to Model Context Protocol servers\n  models     List the models available to your account\n  rules      Manage agent rules (always-on context blobs)\n  skills     Manage agent skills (slash commands and agent-triggered context blobs)\n  plugins    Manage plugins (install, list, info, update, remove)\n  cloud      Manage Devin Cloud resources (environment setup, sandbox sessions, builds)\n  list       List sessions in the current directory [aliases: ls]\n  update     Check for updates and optionally install them\n  version    Print the current version\n  migrate    Migrate configuration from other tools\n  sandbox    [Research Preview] Process sandboxing for the exec tool\n  setup      Interactive setup wizard\n  uninstall  Uninstall and remove data\n  acp        Run as an ACP (Agent Client Protocol) server over stdio\n  shell      [Feature preview] Integrate with your shell to instantly launch devin with relevant context\n  help       Print this message or the help of the given subcommand(s)\n\nArguments:\n  [PROMPT]...\n          Your prompt (use -- before the prompt)\n          \n          Starts an interactive session. Use -p/--print for non-interactive mode.\n\nOptions:\n      --prompt-file <FILE>\n          Load the initial prompt from a file\n\n      --config <PATH>\n          Configuration file path\n          \n          Override the default user config file (~/.config/devin/config.json).\n\n      --permission-mode <PERMISSION_MODE>\n          Permission mode\n          \n          Modes: \"auto\" auto-approves read-only tools, \"accept-edits\" also auto-approves workspace edits, \"smart\" additionally auto-runs actions a fast model judges safe, \"dangerous\" auto-approves all tools.\n          \n          [env: DEVIN_PERMISSION_MODE=]\n          [default: auto]\n\n      --sandbox\n          [Research Preview] Sandbox exec-tool processes (macOS seatbelt / Linux bwrap+seccomp)\n          \n          When passed, the sandbox enforces the active Read/Write permission scopes at the OS level. Writable roots come from granted `Write(...)` scopes, readable roots come from granted `Read(...)` scopes.\n          \n          [env: DEVIN_SANDBOX=]\n\n      --model <MODEL>\n          Model to use (e.g. \"claude-sonnet-4\", \"claude-opus-4.6\", \"opus\", \"codex\")\n          \n          [env: DEVIN_MODEL=]\n\n  -p, ",
+      "stdout_bytes": 3834,
+      "stdout_sha256": "8f1e72f43a88affa36050f2cc0d5fd9aaf47abc6e2f616495b5e689d6016f557",
+      "timed_out": false
+    }
+  },
+  "config_presence": [
+    {
+      "exists": true,
+      "is_dir": false,
+      "is_file": true,
+      "is_symlink": false,
+      "path": "~/.codex/hooks.json"
+    },
+    {
+      "exists": true,
+      "is_dir": false,
+      "is_file": true,
+      "is_symlink": false,
+      "path": "~/.claude/settings.json"
+    },
+    {
+      "exists": true,
+      "is_dir": false,
+      "is_file": true,
+      "is_symlink": false,
+      "path": "~/.cursor/hooks.json"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/opencode"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.cline/hooks"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/herdr"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.devin"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/devin"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.antigravity"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/.config/antigravity"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Claude"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Codex"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/OpenCode"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Cursor"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Antigravity"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Devin"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/T3 Code"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/t3code"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "~/Library/Application Support/Grok"
+    }
+  ],
+  "control": {
+    "absent": false,
+    "argv": [
+      "/usr/bin/python3",
+      "--version"
+    ],
+    "auth_prompt_suspected": false,
+    "exit": 0,
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "Python 3.9.6\n",
+    "stdout_bytes": 13,
+    "stdout_sha256": "fd0fd4290ad100adc37e4a82e45f821faeacbecae70f4d3eba08e85be138c632",
+    "timed_out": false
+  },
+  "cursor_extensions": {
+    "count": 18,
+    "names": [
+      ".95b2685b-7775-4337-b44a-6265cc22f953",
+      ".a0e31925-b42a-498f-b513-09f5506c835e",
+      ".obsolete",
+      "amazonwebservices.aws-toolkit-vscode-4.14.0-universal",
+      "amazonwebservices.aws-toolkit-vscode-4.15.0-universal",
+      "anthropic.claude-code-2.1.246-darwin-arm64",
+      "anthropic.claude-code-2.1.247-darwin-arm64",
+      "anysphere.cursorpyright-1.0.12",
+      "anysphere.remote-containers-1.0.39",
+      "anysphere.remote-ssh-1.1.14",
+      "extensions.json",
+      "ms-python.debugpy-2026.6.0-darwin-arm64",
+      "ms-python.python-2025.6.1-darwin-arm64",
+      "msjsdiag.vscode-react-native-1.13.0-universal",
+      "openai.chatgpt-26.820.60940-darwin-arm64",
+      "openai.chatgpt-26.820.71523-darwin-arm64",
+      "typescriptteam.native-preview-0.20260826.1-darwin-arm64",
+      "typescriptteam.native-preview-0.20260827.1-darwin-arm64"
+    ],
+    "path": "~/.cursor/extensions",
+    "present": true,
+    "truncated": false
+  },
+  "started_utc": "2026-08-28T02:52:23Z",
+  "versions": {
+    "agy": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/agy",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "1.1.5\n",
+      "stdout_bytes": 6,
+      "stdout_sha256": "1c60df040a80b6d2e3f56442b17d127d8620cd773873e6e1353362f989b1deca",
+      "timed_out": false
+    },
+    "antigravity": {
+      "absent": true,
+      "argv": [
+        "antigravity",
+        "--version"
+      ]
+    },
+    "claude": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/claude",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "2.1.231 (Claude Code)\n",
+      "stdout_bytes": 22,
+      "stdout_sha256": "6220c2a7dbd3dd819ca057957744532f271788bb2de7ba59d4bbbe6847d44fc2",
+      "timed_out": false
+    },
+    "cline": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cline",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "3.0.60\n",
+      "stdout_bytes": 7,
+      "stdout_sha256": "f5f15202f18fd38a2a332fd2e44ee6e4fc2357a69b2db25580ccc242b2688a5e",
+      "timed_out": false
+    },
+    "codex": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/codex",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "codex-cli 0.150.0\n",
+      "stdout_bytes": 18,
+      "stdout_sha256": "22c3a470a09f98a30e23cb3eac0efb697a01d2ae8869f49660550ed599648961",
+      "timed_out": false
+    },
+    "cursor": {
+      "absent": true,
+      "argv": [
+        "cursor",
+        "--version"
+      ]
+    },
+    "cursor-agent": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/cursor-agent",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 1,
+      "stderr": "/opt/homebrew/Caskroom/cursor-cli/2026.07.09-a3815c0/dist-package/index.js:414\n</html>`;var u=n(\"./src/utils/open-browser.ts\"),d=function(e,t,n,r){return new(n||(n=Promise))((function(s,i){function a(e){try{c(r.next(e))}catch(e){i(e)}}function o(e){try{c(r.throw(e))}catch(e){i(e)}}function c(e){var t;e.done?s(e.value):(t=e.value,t instanceof n?t:new n((function(e){e(t)}))).then(a,o)}c((r=r.apply(e,t||[])).next())}))};const m=\"CURSOR_AGENT_DISABLE_DEBUG_LOG\";let f=null,p=null,A=0,g=[],h=[];function y(e){return e.map((e=>{if(\"string\"==typeof e)return e;try{return JSON.stringify(e)}catch(t){return String(e)}})).join(\" \")}function C(e=new Date,t=process.pid){return A+=1,`session-${e.toISOString().replace(/[:.]/g,\"-\")}-${t}-${A}.log`}function v(){return(0,c.join)((0,o.tmpdir)(),`cursor-agent-logs-${function(){try{const{uid:e,username:t}=(0,o.userInfo)();if(e>=0)return String(e);if(t)return t.replace(/[^A-Za-z0-9._-]/g,\"_\")}catch(e){}return\"default\"}()}`)}function _(){return!!process.env[m]}function E(){return I().logFile}function w(e){return null!=e?e:\"disabled\"}function T(e){return d(this,arguments,void 0,(function*({directory:e,liveLogFile:t,now:n=new Date,keepNewest:r=50,maxAgeMs:s=6048e5}){try{const a=[];for(const t of yield(0,i.readdir)(e)){if(!t.startsWith(\"session-\")||!t.endsWith(\".log\"))continue;const n=(0,c.join)(e,t);try{a.push({path:n,mtimeMs:(yield(0,i.stat)(n)).mtimeMs})}catch(e){}}a.sort(((e,t)=>t.mtimeMs-e.mtimeMs));for(const[e,o]of a.entries()){if(o.path===t)contin",
+      "stderr_bytes": 65536,
+      "stderr_sha256": "a7c510e602fa83bb53ce59e555acf3f39627a29d38920d58a96aa7094c5b1b25",
+      "stdout": "",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "devin": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/devin",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "devin 3000.2.17 (2c489dfc)\n",
+      "stdout_bytes": 27,
+      "stdout_sha256": "b79046fab74f7d3a767fe786e50c011d79b7a1a55dfaf8a9dca04db9d939c52f",
+      "timed_out": false
+    },
+    "devin-cli": {
+      "absent": true,
+      "argv": [
+        "devin-cli",
+        "--version"
+      ]
+    },
+    "grok": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/grok",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "grok 1.0.5 (5115b46bc909) [stable]\n",
+      "stdout_bytes": 35,
+      "stdout_sha256": "8d21e37ac44a7c832d1be0ba517a6c47518ca703ba49cd868329e2652b55cef6",
+      "timed_out": false
+    },
+    "grok-build": {
+      "absent": true,
+      "argv": [
+        "grok-build",
+        "--version"
+      ]
+    },
+    "herdr": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/herdr",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "herdr 0.8.2\n",
+      "stdout_bytes": 12,
+      "stdout_sha256": "9654e7f916941ff3f48a0b7bdf19110ce63a11880765fc8e362a94472bc948b3",
+      "timed_out": false
+    },
+    "opencode": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "1.18.9\n",
+      "stdout_bytes": 7,
+      "stdout_sha256": "13d998dc1d8d8589fdf6090020f5e59ec9875126beda74ef6e81f6e9c638697c",
+      "timed_out": false
+    },
+    "pi": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/pi",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "0.84.3\n",
+      "stdout_bytes": 7,
+      "stdout_sha256": "e470244f5d207065cacf7314a910c7cff5fc8334840dc42426d62da3e661f580",
+      "timed_out": false
+    },
+    "t3": {
+      "absent": false,
+      "argv": [
+        "/opt/homebrew/bin/t3",
+        "--version"
+      ],
+      "auth_prompt_suspected": false,
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "t3 v0.0.35\n",
+      "stdout_bytes": 11,
+      "stdout_sha256": "610a294a2246e84be6500cb811c83619559693dd1f5bf1cee6b54bc626be2ac8",
+      "timed_out": false
+    }
+  },
+  "vscode_extensions": {
+    "names": [],
+    "path": "~/.vscode/extensions",
+    "present": false
+  },
+  "which": {
+    "agy": "/opt/homebrew/bin/agy",
+    "antigravity": "",
+    "claude": "/opt/homebrew/bin/claude",
+    "cline": "/opt/homebrew/bin/cline",
+    "codex": "/opt/homebrew/bin/codex",
+    "cursor": "",
+    "cursor-agent": "/opt/homebrew/bin/cursor-agent",
+    "devin": "/opt/homebrew/bin/devin",
+    "devin-cli": "",
+    "grok": "/opt/homebrew/bin/grok",
+    "grok-build": "",
+    "herdr": "/opt/homebrew/bin/herdr",
+    "opencode": "/opt/homebrew/bin/opencode",
+    "pi": "/opt/homebrew/bin/pi",
+    "t3": "/opt/homebrew/bin/t3"
+  }
+}

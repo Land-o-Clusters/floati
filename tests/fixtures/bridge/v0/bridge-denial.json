@@ -1,0 +1,13 @@
+{
+  "schema_version": 0,
+  "id": "bridge-denial-018f0f23abd371238000000000000000",
+  "tenant_id": "alpha",
+  "timestamp": "2026-08-01T15:00:02.000Z",
+  "kind": "bridge_denial",
+  "bridge_id": "bridge-018f0f23abce71238000000000000000",
+  "source_tenant_id": "alpha",
+  "destination_tenant_id": "beta",
+  "direction": "left_to_right",
+  "reason_code": "bridge_consent_missing",
+  "stamp": "advisory_not_consumption"
+}

@@ -1,0 +1,29 @@
+[38;5;208m[48;5;236mFLOATI // HARBOR BOARD[0m
+OBSERVED 2026-07-31T12:00:10.000Z
+[38;5;208m! DENIAL UNKNOWN_SENDER ghost → lane-slipway[0m
+[38;5;208m! STALE AUTHORITY app-build holder:lane-app[0m
+[38;5;208m! STALE MUTEX fable-workspace holder:fable[0m
+
+NODE               LIVE       AUTH       MUTEX      INBOX  LAST
+> fable              EXPIRED    NONE       EXPIRED        0  12:00:06.000
+  lane-app           SILENT     EXPIRED    ACTIVE         0  11:59:40.000
+  lane-slipway       PRESENT    ACTIVE     NONE           1  12:00:09.000
+
+WORK LOG  [▓▓░░░░░░░░]  20%
+  OPEN      review provisional copy  holder:-
+  CLAIMED   polish harbor board  holder:lane-slipway
+  COMPLETED verify protocol gate  holder:lane-slipway
+  CLAIMED   claim worker item  holder:lane-slipway
+  CLAIMED   drive worker item  holder:lane-slipway
+
+WORKERS
+  DEGRADED  lane-slipway codex PROCESS DIED
+  COMPLETE  lane-slipway acp
+  CLAIM     lane-slipway codex
+  DRIVING   lane-slipway codex
+
+RECEIPTS
+  DELIVERY 1 ITEM
+  ACK      1 ITEM
+  DELIVERY 1 ITEM
+↑/k ↓/j select  enter detail  a ack  q quit

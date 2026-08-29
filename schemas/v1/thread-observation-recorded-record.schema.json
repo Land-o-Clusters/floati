@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/thread-observation-recorded-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "attachment_id",
+    "provider",
+    "provider_thread_id",
+    "provider_status",
+    "active_flags",
+    "provider_updated_at",
+    "attention",
+    "observation_outcome",
+    "observation_reason",
+    "observation_digest",
+    "observed_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^thread-observation-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "x-floati-terminal-unsafe": true},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "thread_observation_recorded"},
+    "attachment_id": {"type": "string", "pattern": "^thread-attachment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "provider": {"const": "codex_local"},
+    "provider_thread_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "x-floati-terminal-unsafe": true},
+    "provider_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "evidence_class"],
+      "properties": {
+        "value": {"enum": ["not_loaded", "idle", "system_error", "active", "unknown"]},
+        "evidence_class": {"enum": ["measured", "unknown"]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"enum": ["not_loaded", "idle", "system_error", "active"]}, "evidence_class": {"const": "measured"}}},
+        {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}}
+      ]
+    },
+    "active_flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "evidence_class"],
+      "properties": {
+        "value": {"type": ["array", "null"], "maxItems": 2, "uniqueItems": true, "items": {"enum": ["waiting_on_approval", "waiting_on_user_input"]}},
+        "evidence_class": {"enum": ["measured", "unknown"]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"oneOf": [
+          {"const": []},
+          {"const": ["waiting_on_approval"]},
+          {"const": ["waiting_on_user_input"]},
+          {"const": ["waiting_on_approval", "waiting_on_user_input"]}
+        ]}, "evidence_class": {"const": "measured"}}},
+        {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}}
+      ]
+    },
+    "provider_updated_at": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "evidence_class"],
+      "properties": {
+        "value": {"type": ["integer", "null"], "minimum": 0, "maximum": 253402300799},
+        "evidence_class": {"enum": ["measured", "unknown"]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "integer", "minimum": 0, "maximum": 253402300799}, "evidence_class": {"const": "measured"}}},
+        {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}}
+      ]
+    },
+    "attention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "evidence_class"],
+      "properties": {
+        "value": {"enum": ["none", "waiting_on_approval", "waiting_on_user_input", "multiple", "unknown"]},
+        "evidence_class": {"enum": ["derived", "unknown"]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"enum": ["none", "waiting_on_approval", "waiting_on_user_input", "multiple"]}, "evidence_class": {"const": "derived"}}},
+        {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}}
+      ]
+    },
+    "observation_outcome": {"enum": ["observed", "unknown"]},
+    "observation_reason": {"enum": ["exact_thread_read", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+    "observation_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "x-floati-terminal-unsafe": true},
+    "observed_at_testimony": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"observation_outcome": {"const": "observed"}}, "required": ["observation_outcome"]},
+      "then": {
+        "properties": {
+          "observation_reason": {"const": "exact_thread_read"},
+          "provider_status": {"properties": {"evidence_class": {"const": "measured"}}},
+          "active_flags": {"properties": {"evidence_class": {"const": "measured"}}},
+          "provider_updated_at": {"properties": {"evidence_class": {"const": "measured"}}},
+          "attention": {"properties": {"evidence_class": {"const": "derived"}}}
+        }
+      },
+      "else": {
+        "properties": {
+          "observation_reason": {"enum": ["provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+          "provider_status": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
+          "active_flags": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
+          "provider_updated_at": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
+          "attention": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"active_flags": {"properties": {"value": {"const": []}}}}},
+      "then": {"properties": {"attention": {"properties": {"value": {"const": "none"}}}}}
+    },
+    {
+      "if": {"properties": {"active_flags": {"properties": {"value": {"const": ["waiting_on_approval"]}}}}},
+      "then": {"properties": {"attention": {"properties": {"value": {"const": "waiting_on_approval"}}}}}
+    },
+    {
+      "if": {"properties": {"active_flags": {"properties": {"value": {"const": ["waiting_on_user_input"]}}}}},
+      "then": {"properties": {"attention": {"properties": {"value": {"const": "waiting_on_user_input"}}}}}
+    },
+    {
+      "if": {"properties": {"active_flags": {"properties": {"value": {"const": ["waiting_on_approval", "waiting_on_user_input"]}}}}},
+      "then": {"properties": {"attention": {"properties": {"value": {"const": "multiple"}}}}}
+    },
+    {
+      "if": {"properties": {"active_flags": {"properties": {"value": {"const": null}}}}},
+      "then": {"properties": {"attention": {"properties": {"value": {"const": "unknown"}}}}}
+    },
+    {
+      "if": {"properties": {"provider_status": {"properties": {"value": {"enum": ["not_loaded", "idle", "system_error"]}}}}},
+      "then": {"properties": {"active_flags": {"properties": {"value": {"const": []}}}}}
+    }
+  ]
+}

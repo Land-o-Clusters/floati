@@ -1,0 +1,77 @@
+{
+  "opencode_run_help_cycles": [
+    {
+      "exit": 0,
+      "stderr_bytes": 3053,
+      "timed_out": false
+    },
+    {
+      "exit": 0,
+      "stderr_bytes": 3053,
+      "timed_out": false
+    },
+    {
+      "exit": 0,
+      "stderr_bytes": 3053,
+      "timed_out": false
+    }
+  ],
+  "opencode_serve": {
+    "exit": 124,
+    "stderr": "",
+    "stdout": "Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\nopencode server listening on http://127.0.0.1:4097\n",
+    "timed_out": true
+  },
+  "plugin_session_help": {
+    "--help": {
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stdout": "pi - AI coding assistant with read, bash, edit, write tools\n\nUsage:\n  pi [options] [--] [@files...] [messages...]\n\nCommands:\n  pi install <source> [-l]     Install extension source and add to settings\n  pi remove <source> [-l]      Remove extension source from settings\n  pi uninstall <source> [-l]   Alias for remove\n  pi update [source|self|pi]   Update pi, extensions, or model catalogs\n  pi list                      List installed extensions from settings\n  pi config [-l]               Open TUI to enable/disable package resources (Tab switches scope)\n  pi auth <command>            Print credentials or check provider readiness\n  pi <command> --help          Show help for install/remove/uninstall/update/list/config/auth\n\nOptions:\n  --provider <name>              Provider name (default: google)\n  --model <pattern>              Model pattern or ID (supports \"provider/id\" and optional \":<thinking>\")\n  --api-key <key>                API key (defaults to env vars)\n  --system-prompt <text>         System prompt (default: coding assistant prompt)\n  --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)\n  --mode <mode>                  Output mode: text (default), json, or rpc\n  --print, -p                    Non-interactive mode: process prompt and exit\n  --continue, -c                 Continue previous session\n  --resume, -r                   Select a session to resume\n  --session <path|id>            Use specific session file or partial UUID\n  --session-id <id>              Use exact project session ID, creating it if missing\n  --fork <path|id>               Fork specific session file or partial UUID into a new session\n  --session-dir <dir>            Directory for session storage and lookup\n  --no-session                   Don't save session (ephemeral)\n  --name, -n <name>              Set session display name\n  --models <patterns>            Comma-separated model patterns for Ctrl+P cycling\n                                 Supports globs (anthropic/*, *sonnet*) and fuzzy matching\n  --no-tools, -nt                Disable all tools by default (built-in and extension)\n  --no-builtin-tools, -nbt       Disable built-in tools by default but keep extension/custom tools enabled\n  --tools, -t <tools>            Comma-separated allowlist of tool names to enable\n                                 Applies to built-in, extension, and custom tools\n  --exclude-tools, -xt <tools>   Comma-separated denylist of tool names to ",
+      "stdout_bytes": 10120
+    },
+    "hook --help": {
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stdout": "Usage: cline hook [options]\n\nHandle a hook payload from stdin\n\nOptions:\n  -h, --help  display help for command\n",
+      "stdout_bytes": 111
+    },
+    "hub --help": {
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stdout": "Usage: cline hub [options]\n\nManage the local hub daemon\n\nOptions:\n  -h, --help  display help for command\n",
+      "stdout_bytes": 105
+    },
+    "plugin --help": {
+      "exit": 0,
+      "stderr": "opencode plugin <module>\n\ninstall plugin and update config\n\nPositionals:\n  module  npm module name                                                        [string] [required]\n\nOptions:\n  -h, --help        show help                                                              [boolean]\n  -v, --version     show version number                                                    [boolean]\n      --print-logs  print logs to stderr                                                   [boolean]\n      --log-level   log level                   [string] [choices: \"DEBUG\", \"INFO\", \"WARN\", \"ERROR\"]\n      --pure        run without external plugins                                           [boolean]\n  -g, --global      install in global config                              [boolean] [default: false]\n  -f, --force       replace existing plugin version                       [boolean] [default: false]",
+      "stderr_bytes": 890,
+      "stdout": "",
+      "stdout_bytes": 0
+    },
+    "run --help": {
+      "exit": 0,
+      "stderr": "opencode run [message..]\n\nrun opencode with a message\n\nPositionals:\n  message  message to send                                                     [array] [default: []]\n\nOptions:\n  -h, --help         show help                                                             [boolean]\n  -v, --version      show version number                                                   [boolean]\n      --print-logs   print logs to stderr                                                  [boolean]\n      --log-level    log level                  [string] [choices: \"DEBUG\", \"INFO\", \"WARN\", \"ERROR\"]\n      --pure         run without external plugins                                          [boolean]\n      --command      the command to run, use message for args                               [string]\n  -c, --continue     continue the last session                                             [boolean]\n  -s, --session      session id to continue                                                 [string]\n      --fork         fork the session before continuing (requires --continue or --session) [boolean]\n      --share        share the session                                                     [boolean]\n  -m, --model        model to use in the format of provider/model                           [string]\n      --agent        agent to use                                                           [string]\n      --format       format: default (formatted) or json (raw JSON events)\n                                          [string] [choices: \"default\", \"json\"] [default: \"default\"]\n  -f, --file         file(s) to attach to message                                            [array]\n      --title        title for the session (uses truncated prompt if no value provided)     [string]\n      --attach       attach to a running opencode server (e.g., http://localhost:4096)      [string]\n  -p, --password     basic auth password (defaults to OPENCODE_SERVER_PASSWORD)             [string]\n  -u, --username     basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')\n                                                                                            [string]\n      --dir          directory to run in, path on remote server if attaching                [string]\n      --port         port for the local server (defaults to random port if no value provided)\n                                                                                            [number]\n      --variant      model variant (pr",
+      "stderr_bytes": 3053,
+      "stdout": "",
+      "stdout_bytes": 0
+    },
+    "session --help": {
+      "exit": 0,
+      "stderr": "opencode session\n\nmanage sessions\n\nCommands:\n  opencode session list                list sessions\n  opencode session delete <sessionID>  delete a session\n\nOptions:\n  -h, --help        show help                                                              [boolean]\n  -v, --version     show version number                                                    [boolean]\n      --print-logs  print logs to stderr                                                   [boolean]\n      --log-level   log level                   [string] [choices: \"DEBUG\", \"INFO\", \"WARN\", \"ERROR\"]\n      --pure        run without external plugins                                           [boolean]",
+      "stderr_bytes": 668,
+      "stdout": "",
+      "stdout_bytes": 0
+    },
+    "status": {
+      "exit": 0,
+      "stderr": "",
+      "stderr_bytes": 0,
+      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout_bytes": 221
+    }
+  },
+  "started_utc": "2026-08-28T02:23:04Z"
+}

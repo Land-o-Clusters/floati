@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/run-created-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "plan_digest",
+    "item_ids",
+    "dependency_edges"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 0
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^run-created-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "kind": {
+      "const": "run_created"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+      }
+    },
+    "dependency_edges": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8192,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "target",
+          "requires"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+          },
+          "requires": {
+            "enum": [
+              "produced",
+              "verified",
+              "accepted"
+            ]
+          },
+          "failure_policy": {
+            "enum": [
+              "fail_run",
+              "skip_dependent",
+              "continue"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

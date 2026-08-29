@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="178" viewBox="0 0 1280 178" role="img">
+  <title>FLOATI install standard light</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="178" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">      <tspan fill="#853d07">⊙</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">      <tspan fill="#853d07">│</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">     <tspan fill="#853d07">╱</tspan> <tspan fill="#853d07">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">    <tspan fill="#853d07">╱</tspan><tspan fill="#55636f">───</tspan><tspan fill="#853d07">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">   <tspan fill="#853d07">╱</tspan>     <tspan fill="#853d07">╲</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"> <tspan fill="#55636f">~~~~~~~~~~~</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">{&quot;artifact_version&quot;:0,&quot;command&quot;:&quot;install&quot;,&quot;evidence&quot;:{&quot;status&quot;:&quot;installed&quot;},&quot;status&quot;:&quot;ok&quot;}</tspan>
+  </text>
+</svg>

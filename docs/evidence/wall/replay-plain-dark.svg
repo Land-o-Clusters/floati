@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="142" viewBox="0 0 1280 142" role="img">
+  <title>FLOATI replay plain dark</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="142" fill="#12161c"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#d8dee9">PLAIN REPLAY // v0</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">◆ +0000.000s  CLAIM    WORK    solo work-a claim</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">│ +0001.000s  TURN     WORKER  solo work-a drive</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">│ +0003.000s  COMPLETE WORKER  solo work-a complete</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">REPLAY COMPLETE // 3 EVENTS // 3000 MS</tspan>
+  </text>
+</svg>

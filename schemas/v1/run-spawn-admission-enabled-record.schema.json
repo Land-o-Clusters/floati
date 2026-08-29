@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/run-spawn-admission-enabled-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "run_admission_binding_id",
+    "admission_digest",
+    "policy_digest",
+    "base_plan",
+    "base_plan_digest",
+    "enabled_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^run-spawn-admission-enabled-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "kind": {
+      "const": "run_spawn_admission_enabled"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "run_admission_binding_id": {
+      "type": "string",
+      "pattern": "^run-admission-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "admission_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "policy_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "base_plan": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/admission_plan"
+    },
+    "base_plan_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "enabled_at_testimony": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    }
+  }
+}

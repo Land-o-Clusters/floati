@@ -1,0 +1,55 @@
+# Finite repository policy.  This file is repository-owned, not bundle-owned.
+schema_version = 0
+capability_registry = ["review", "workspace_write"]
+
+[limits]
+max_items = 64
+max_depth = 16
+max_fan_out = 8
+max_active_attempts = 8
+
+[budgets.build]
+unit = "attempts"
+limit = 32
+
+[worker_profiles.codex]
+capabilities = ["review", "workspace_write"]
+cancel_mode = "native"
+callback_support = true
+max_concurrency = 1
+
+[capability_selectors.review_write]
+all_of = ["review", "workspace_write"]
+
+[routing.review_write_codex]
+worker_profile = "codex"
+capability_selector = "review_write"
+rank = 0
+
+[retry_classes.transient]
+automatic = true
+[retry_classes.permanent]
+automatic = false
+[retry_classes.operator_required]
+automatic = false
+[retry_classes.policy_refusal]
+automatic = false
+[retry_classes.cancelled]
+automatic = false
+[retry_classes.unknown_effect]
+automatic = false
+
+[approval_requirements.low]
+required = false
+[approval_requirements.medium]
+required = false
+[approval_requirements.high]
+required = true
+[approval_requirements.critical]
+required = true
+
+[verification.unit]
+argv = ["python3", "-m", "unittest", "tests.test_policy"]
+
+[merge_gates.local]
+verification_ids = ["unit"]

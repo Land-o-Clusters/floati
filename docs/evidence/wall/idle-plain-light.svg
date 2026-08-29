@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="178" viewBox="0 0 1280 178" role="img">
+  <title>FLOATI idle plain light</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="178" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">PLAIN DUMP</tspan>
+    <tspan x="28" dy="18" fill="#20252c">OBSERVED 2026-08-01T12:00:10.000Z</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">NODE               LIVE       AUTH       MUTEX      INBOX  LAST</tspan>
+    <tspan x="28" dy="18" fill="#20252c">  NO NODES</tspan>
+    <tspan x="28" dy="18" fill="#20252c"></tspan>
+    <tspan x="28" dy="18" fill="#20252c">WORK DAG  [░░░░░░░░░░]   0%  CONSUMPTION CAUGHT UP  WORKERS NONE  RECEIPTS NONE</tspan>
+  </text>
+</svg>

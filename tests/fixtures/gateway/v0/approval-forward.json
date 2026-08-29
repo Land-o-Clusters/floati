@@ -1,0 +1,15 @@
+{
+  "schema_version": 0,
+  "id": "gateway-approval-019fbb00000070008000000000000013",
+  "tenant_id": "puddle-fleet",
+  "timestamp": "2026-08-01T15:00:00.000Z",
+  "kind": "gateway_approval_forward",
+  "gateway_version": 0,
+  "session_id": "session-019fbb00000070008000000000000011",
+  "request_id": "approval-request-019fbb00000070008000000000000012",
+  "capability": "workspace.write",
+  "scope": [
+    "PROOF.txt"
+  ],
+  "state": "forwarded_unresolved"
+}

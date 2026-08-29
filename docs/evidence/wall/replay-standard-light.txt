@@ -1,0 +1,14 @@
+FLOATI // FLIGHT RECORDER
+[####################] 3/3
+
+◆ +0000.000s  CLAIM    WORK    solo work-a claim
+│ +0001.000s  TURN     WORKER  solo work-a drive
+│ +0003.000s  COMPLETE WORKER  solo work-a complete
+
+      ⊙
+      │
+     ╱ ╲
+    ╱───╲
+   ╱     ╲
+ ~~~~~~~~~~~
+REPLAY COMPLETE

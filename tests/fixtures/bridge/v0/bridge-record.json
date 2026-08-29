@@ -1,0 +1,15 @@
+{
+  "schema_version": 0,
+  "id": "bridge-record-018f0f23abcf71238000000000000000",
+  "tenant_id": "alpha",
+  "timestamp": "2026-08-01T15:00:00.000Z",
+  "kind": "bridge_record",
+  "bridge_id": "bridge-018f0f23abce71238000000000000000",
+  "left_tenant_id": "alpha",
+  "right_tenant_id": "beta",
+  "left_consent_id": "bridge-consent-018f0f23abcd71238000000000000000",
+  "right_consent_id": "bridge-consent-018f0f23abd071238000000000000000",
+  "transport": "local_filesystem",
+  "scope": "advisory_not_consumption",
+  "state": "active"
+}

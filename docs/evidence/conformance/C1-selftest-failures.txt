@@ -1,0 +1,28 @@
+# C1 selftest failures (headers only)
+
+Untruncated source: `.conformance-scratch/c1/selftest.full.txt` (local)
+- bytes: 264828
+- sha256: `c19258f3f483bc667de557a9e74451369587b703e3df4387109bf9a4dfdcd8b4`
+- executable: `/usr/bin/python3 -m floati.selftest`
+- cwd: `~/Projects/floati-grok`
+- exit: 10 (`TEST_FAILURE`; manifest verify not reached)
+
+```
+Ran 1519 tests in 260.981s
+FAILED (failures=3)
+```
+
+FAIL names (exactly three; zero ERROR):
+
+1. `test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims` (`test_hm3i_contract.HM3IContractTests`)
+   - AssertionError: `'tenant-default neutralization + migration alias' not found` in `docs/PUBLICATION-CHECKLIST.md`
+2. `test_living_public_docs_are_tenant_neutral` (`test_name_sweep.NameSweepLivingDocumentationTests`) `(relative='docs/PUBLICATION-CHECKLIST.md', pattern='puddle-fleet')`
+   - AssertionError: `'puddle-fleet' unexpectedly found` in `docs/PUBLICATION-CHECKLIST.md`
+3. `test_generated_repository_artifacts_are_scrubbed` (`test_source_scrub.SourceScrubTests`)
+   - AssertionError: expected `[]`, got 6 paths (recounted via `floati.scrub.scan_generated_tree(Path.cwd())`, count=6):
+     - `docs/NORTH_STAR.md`
+     - `docs/design/brief-grok-ws-c-conformance-2026-08-27.md`
+     - `docs/design/brief-lane-floati-train-p0-2026-08-27.md`
+     - `docs/design/brief-lane-puddle-ws-b-2026-08-27.md`
+     - `docs/evidence/conformance/C0-machine-harness-inventory.md`
+     - `docs/status/WEEKEND_PROGRAM_2026-08-28.md`

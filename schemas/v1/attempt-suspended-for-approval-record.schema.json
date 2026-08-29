@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/attempt-suspended-for-approval-record.schema.json",
+  "title": "Floati Attempt Suspended For Approval Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "run_id", "item_id", "attempt_id", "attempt_started_id", "fence_token", "adapter", "approval_request_id", "exact_action_digest", "requested_scope", "resume_mode", "provider_session_or_thread_id", "workspace", "workspace_checkpoint", "execution_authority_subject", "execution_authority_holder", "authority_epoch_at_request", "approval_expiry"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^attempt-suspended-approval-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\r\n]"}},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\r\n]"}},
+    "kind": {"const": "attempt_suspended_for_approval"},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "attempt_started_id": {"type": "string", "pattern": "^attempt-started-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "fence_token": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "[\r\n]"}},
+    "adapter": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$", "not": {"pattern": "[\r\n]"}},
+    "approval_request_id": {"type": "string", "pattern": "^approval-request-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "exact_action_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "[\r\n]"}},
+    "requested_scope": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$", "not": {"pattern": "[\\u0000-\\u001F\\u007F]"}},
+    "resume_mode": {"type": "string", "enum": ["native", "checkpoint_restart", "unsupported"]},
+    "provider_session_or_thread_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 512, "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+    "workspace": {"type": "string", "pattern": "^/private/tmp/floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\r\n]"}},
+    "workspace_checkpoint": {
+      "allOf": [
+        {"$ref": "../v0/work-item-record.schema.json#/$defs/artifact_binding"},
+        {"type": "object", "properties": {
+          "repo": {"type": "string", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+          "sha": {"type": "string", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}},
+          "doc": {"type": "string", "not": {"pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"}}
+        }}
+      ]
+    },
+    "execution_authority_subject": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\r\n]"}},
+    "execution_authority_holder": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\r\n]"}},
+    "authority_epoch_at_request": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "approval_expiry": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\r\n]"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"adapter": {"const": "codex"}}, "required": ["adapter"]},
+      "then": {"properties": {"resume_mode": {"const": "checkpoint_restart"}}},
+      "else": {"properties": {"resume_mode": {"const": "unsupported"}}}
+    },
+    {
+      "properties": {"provider_session_or_thread_id": {"type": "null"}}
+    }
+  ]
+}

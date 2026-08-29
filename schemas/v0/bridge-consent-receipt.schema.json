@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/bridge-consent-receipt.schema.json",
+  "title": "Floati Bridge Consent Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "bridge_id", "peer_tenant_id", "actor", "direction", "state", "scope"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^bridge-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "bridge_consent"},
+    "bridge_id": {"type": "string", "pattern": "^bridge-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "peer_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "actor": {"type": "string", "minLength": 1, "maxLength": 64},
+    "direction": {"const": "bidirectional"},
+    "state": {"enum": ["granted", "revoked"]},
+    "scope": {"const": "advisory_not_consumption"}
+  }
+}

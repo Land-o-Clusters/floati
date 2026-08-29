@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_version", "command", "status", "evidence"],
+  "allOf": [
+    {
+      "if": {"properties": {"command": {"const": "threads"}}},
+      "then": {
+        "properties": {
+          "evidence": {
+            "properties": {
+              "attachments": {
+                "items": {
+                  "allOf": [
+                    {"not": {"required": ["provider"]}},
+                    {"not": {"required": ["provider_thread_id"]}}
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"command": {"const": "thread"}, "status": {"const": "ok"}}},
+      "then": {
+        "properties": {
+          "evidence": {
+            "properties": {
+              "attachments": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {"required": ["provider", "provider_thread_id"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "no_result"}}},
+      "then": {
+        "properties": {"evidence": {"properties": {"attachments": {"maxItems": 0}}}}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "ok"}}},
+      "then": {
+        "properties": {"evidence": {"properties": {"attachments": {"minItems": 1}}}}
+      }
+    }
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "artifact_version": {"type": "integer", "const": 0},
+    "command": {"enum": ["threads", "thread"]},
+    "status": {"enum": ["ok", "no_result"]},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_schema_version", "kind", "observed_at", "attachments"],
+      "properties": {
+        "status_schema_version": {"type": "integer", "const": 1},
+        "kind": {"const": "thread_observation_status"},
+        "observed_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+        "attachments": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "oneOf": [
+              {"required": ["provider", "provider_thread_id"]},
+              {"allOf": [{"not": {"required": ["provider"]}}, {"not": {"required": ["provider_thread_id"]}}]}
+            ],
+            "allOf": [
+              {
+                "if": {"properties": {"subject_kind": {"const": "work_item"}}},
+                "then": {"properties": {"run_id": {"type": "null"}, "attempt_id": {"type": "null"}}},
+                "else": {"properties": {"run_id": {"type": "string"}, "attempt_id": {"type": "string"}}}
+              },
+              {
+                "if": {"properties": {"observation_outcome": {"const": "unknown"}}},
+                "then": {
+                  "properties": {
+                    "provider_status": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
+                    "active_flags": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
+                    "provider_updated_at": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
+                    "attention": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
+                    "observation_reason": {"enum": ["not_observed", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]}
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "provider_status": {"properties": {"value": {"enum": ["not_loaded", "idle", "system_error", "active"]}, "evidence_class": {"const": "measured"}}},
+                    "active_flags": {"properties": {"value": {"type": "array"}, "evidence_class": {"const": "measured"}}},
+                    "provider_updated_at": {"properties": {"value": {"type": "integer"}, "evidence_class": {"const": "measured"}}},
+                    "attention": {"properties": {"evidence_class": {"const": "derived"}}},
+                    "observation_reason": {"const": "exact_thread_read"}
+                  },
+                  "oneOf": [
+                    {"properties": {"active_flags": {"properties": {"value": {"const": []}}}, "attention": {"properties": {"value": {"const": "none"}}}}},
+                    {"properties": {"provider_status": {"properties": {"value": {"const": "active"}}}, "active_flags": {"properties": {"value": {"const": ["waiting_on_approval"]}}}, "attention": {"properties": {"value": {"const": "waiting_on_approval"}}}}},
+                    {"properties": {"provider_status": {"properties": {"value": {"const": "active"}}}, "active_flags": {"properties": {"value": {"const": ["waiting_on_user_input"]}}}, "attention": {"properties": {"value": {"const": "waiting_on_user_input"}}}}},
+                    {"properties": {"provider_status": {"properties": {"value": {"const": "active"}}}, "active_flags": {"properties": {"value": {"const": ["waiting_on_approval", "waiting_on_user_input"]}}}, "attention": {"properties": {"value": {"const": "multiple"}}}}}
+                  ]
+                }
+              }
+            ],
+            "required": ["attachment_id", "subject_kind", "work_item_id", "run_id", "attempt_id", "provider_status", "active_flags", "provider_updated_at", "attention", "observation_outcome", "observation_reason", "detached"],
+            "properties": {
+              "attachment_id": {"type": "string", "pattern": "^thread-attachment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+              "subject_kind": {"enum": ["work_item", "attempt"]},
+              "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+              "run_id": {"type": ["string", "null"], "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+              "attempt_id": {"type": ["string", "null"], "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+              "provider_status": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"enum": ["not_loaded", "idle", "system_error", "active", "unknown"]}, "evidence_class": {"enum": ["measured", "unknown"]}}},
+              "active_flags": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"oneOf": [{"type": "null"}, {"type": "array", "maxItems": 2, "uniqueItems": true, "items": {"enum": ["waiting_on_approval", "waiting_on_user_input"]}}]}, "evidence_class": {"enum": ["measured", "unknown"]}}},
+              "provider_updated_at": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"type": ["integer", "null"], "minimum": 0, "maximum": 253402300799}, "evidence_class": {"enum": ["measured", "unknown"]}}},
+              "attention": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"enum": ["waiting_on_approval", "waiting_on_user_input", "multiple", "unknown", "none"]}, "evidence_class": {"enum": ["derived", "unknown"]}}},
+              "observation_outcome": {"enum": ["observed", "unknown"]},
+              "observation_reason": {"enum": ["not_observed", "exact_thread_read", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+              "detached": {"type": "boolean"},
+              "provider": {"const": "codex_local"},
+              "provider_thread_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "x-floati-terminal-unsafe": true}
+            }
+          }
+        }
+      }
+    }
+  }
+}

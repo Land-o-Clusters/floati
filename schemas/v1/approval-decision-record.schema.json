@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/approval-decision-record.schema.json",
+  "title": "Floati Approval Decision Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "request_id", "decider", "decision", "granted_scope", "granted_ttl_seconds", "reason_code", "decided_at", "expires_at", "authority_subject", "authority_epoch", "exact_action_digest"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^approval-decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\r\\n]"}},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}},
+    "kind": {"const": "approval_decision"},
+    "request_id": {"type": "string", "pattern": "^approval-request-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\r\\n]"}},
+    "decider": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "decision": {"type": "string", "enum": ["approved", "denied"]},
+    "granted_scope": {"type": ["string", "null"], "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$", "not": {"type": "string", "pattern": "[\\r\\n]"}},
+    "granted_ttl_seconds": {"type": ["integer", "null"], "minimum": 1, "maximum": 86400},
+    "reason_code": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "decided_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}},
+    "expires_at": {"type": ["string", "null"], "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"type": "string", "pattern": "[\\r\\n]"}},
+    "authority_subject": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "authority_epoch": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "exact_action_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "[\\r\\n]"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "approved"}}, "required": ["decision"]},
+      "then": {
+        "properties": {
+          "granted_scope": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$", "not": {"pattern": "[\\u0000-\\u001F\\u007F]"}},
+          "granted_ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+          "reason_code": {"type": "null"},
+          "expires_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}}
+        }
+      },
+      "else": {
+        "properties": {
+          "granted_scope": {"type": "null"},
+          "granted_ttl_seconds": {"type": "null"},
+          "reason_code": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB\\uD800-\\uDFFF]*$", "not": {"pattern": "[\\r\\n]"}},
+          "expires_at": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

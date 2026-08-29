@@ -1,0 +1,154 @@
+{
+  "ended_utc": "2026-08-28T00:45:06Z",
+  "help": {
+    "log": {
+      "exit": 0,
+      "replay_count": 6,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati log - read mail or replay orchestration evidence\n\nSYNOPSIS\n    floati log --root ROOT [--replay [--speed X] [--plain]]\n\nDESCRIPTION\n    Read canonical ledgers. Replay renders receipt-derived orchestration events in deterministic order.\n\nOPTIONS AND ARGUMENTS\n    --root ROOT   Explicit fleet root.\n    --replay      Render claims, turns, degradations, denials, and completions.\n    --speed X     Interactive playback speed from 0.1 through 100; default 1.\n    --plain       Emit one faithful append-only timeline without sleeping.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati log --root /var/tmp/fleet\n    floati log --root /var/tmp/fleet --replay --speed 4\n    floati log --root /var/tmp/fleet --replay --plain\n",
+      "stdout_bytes": 899,
+      "stdout_sha256": "6e67713ea157141247a07ddeff0922bb86af381ed1aae60969cff58d6fcd4a4a"
+    },
+    "orchestrate": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati orchestrate - seed and run a worker fleet\n\nSYNOPSIS\n    floati orchestrate --root ROOT --plan PLAN --adapter codex --deadline SECONDS [--no-animation]\n\nDESCRIPTION\n    Seed a bounded work DAG, launch at least three workers, stream the receipt-derived board, and emit one final artifact.\n\nOPTIONS AND ARGUMENTS\n    --root ROOT       Explicit prepared fleet root with registrations and authority.\n    --plan PLAN       Absolute version-zero orchestration plan path.\n    --adapter codex   Exact governed live-worker adapter.\n    --deadline SECONDS  Overall deadline from 0.1 through 3600.\n    --no-animation    Stream distinguishable plain text frames.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati orchestrate --root /var/tmp/fleet --plan /var/tmp/plan.json --adapter codex --deadline 120\n",
+      "stdout_bytes": 973,
+      "stdout_sha256": "bda65fdec13e97a3454a4f230526030169ff142cda4b694f8cad85422b61b677"
+    },
+    "root": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati - inspect and operate an explicit fleet root\n\nSYNOPSIS\n    floati COMMAND [OPTIONS]\n\nDESCRIPTION\n    Operate the local receipt-ledger bus and orchestration log. Every durable command requires an explicit root.\n\nOPTIONS AND ARGUMENTS\n    Commands: init, register, retire, send, inbox, ack, log, status, effects, effect,\n    threads, thread, graph, plan, doctor, watch, receipts, work, worker,\n    sequencer, supervise, board, orchestrate, install, update. Use COMMAND --help for its contract.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati status --root /absolute/fleet\n    floati effects --root /absolute/fleet\n    floati work --help\n",
+      "stdout_bytes": 819,
+      "stdout_sha256": "5394ca19b797f661e012518fd4b84596b7f327973ab757537f9ac8c32a743872"
+    },
+    "sequencer": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati sequencer - manage the optional local writer\n\nSYNOPSIS\n    floati sequencer {status|serve|direct} [OPTIONS]\n\nDESCRIPTION\n    Observe or explicitly transition the host-local run sequencer. No raw record operation exists.\n\nOPTIONS AND ARGUMENTS\n    Subcommands: status, serve, direct. Use a subcommand --help for its exact contract.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati sequencer status --root /var/tmp/fleet\n",
+      "stdout_bytes": 602,
+      "stdout_sha256": "9cdba67fe3cccc21a15ef07ed70e2a62147b85983d0a5842a00df835d686e3ad"
+    },
+    "sequencer serve": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati sequencer serve - run the local managed writer\n\nSYNOPSIS\n    floati sequencer serve --root ROOT --as ID [--takeover]\n\nDESCRIPTION\n    Hold one exclusive owner lease for the service lifetime and release it on graceful shutdown.\n\nOPTIONS AND ARGUMENTS\n    --root ROOT   Explicit direct-home fleet root.\n    --as ID       Bounded sequencer identity.\n    --takeover    Required only when open durable evidence remains after owner absence.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati sequencer serve --root /var/tmp/fleet --as local-writer\n",
+      "stdout_bytes": 723,
+      "stdout_sha256": "9850f8acaa607c247817c9ed0fed7c2fc8ad43b2f6cc58d5fb2115cefd819d23"
+    },
+    "worker": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati worker - run one authority-checked worker\n\nSYNOPSIS\n    floati worker run --root ROOT --as NODE --adapter claude|codex|pi\n\nDESCRIPTION\n    Claim one owned open work item and record every worker transition as durable evidence.\n\nOPTIONS AND ARGUMENTS\n    Use worker run for the exact command contract.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati worker run --root /var/tmp/fleet --as lane-a --adapter claude\n",
+      "stdout_bytes": 594,
+      "stdout_sha256": "076a4c3a68d2b362da9ed6d3243d7bc4f2acee72916ca8c9a6b2a88dba6e3bc2"
+    },
+    "worker run": {
+      "exit": 0,
+      "replay_count": 0,
+      "resume_count": 0,
+      "stdout": "NAME\n    floati worker run - run one authority-checked worker\n\nSYNOPSIS\n    floati worker run --root ROOT --as NODE --adapter claude|codex|pi\n\nDESCRIPTION\n    Claim one owned open work item and record typed degradation without silent fallback.\n\nOPTIONS AND ARGUMENTS\n    --root ROOT      Explicit fleet root.\n    --as NODE        Exact registered worker node.\n    --adapter claude|codex|pi  Exact governed adapter.\n\nEXIT STATUS\n    0 success; 20 refusal; 31 intentional silence; 32 no result;\n    33 malformed evidence; 34 orchestration deadline; 35 degraded.\n    The artifact process status is authoritative.\n\nEXAMPLES\n    floati worker run --root /var/tmp/fleet --as lane-a --adapter claude\n",
+      "stdout_bytes": 693,
+      "stdout_sha256": "5ddb6a233d9f2d641ee03f867f123bcc64350c793b1047820e0a22ea7ea5844b"
+    }
+  },
+  "kill": {
+    "drills": [
+      {
+        "mode": "kill_worker",
+        "node": "lane-a",
+        "outcome": "process_cancelled",
+        "triggered": true
+      }
+    ],
+    "receipt_count": 12,
+    "return_code": 35,
+    "second_orchestrate": {
+      "code": "orchestrate_root_not_empty",
+      "detail": "orchestration v0 requires an empty work ledger",
+      "refused": true
+    },
+    "state": "degraded",
+    "work_n": 4
+  },
+  "log_replay_plain": {
+    "argv": [
+      "/usr/bin/python3",
+      "-m",
+      "floati",
+      "log",
+      "--root",
+      "~/Projects/floati-grok/.gauntlet-scratch/h3b20260828004505",
+      "--replay",
+      "--plain"
+    ],
+    "cwd": "~/Projects/floati-grok",
+    "elapsed_s": 0.087,
+    "ended_utc": "2026-08-28T00:45:06Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T00:45:06Z",
+    "stderr": "PLAIN REPLAY // v0\n\u25c6 +0000.000s  CLAIM    WORK    lane-b work-01a045d3d59878bb845ed10ea4881d18 claim\n\u25c6 +0000.001s  CLAIM    WORK    lane-c work-01a045d3d5987368a8f0b68170507ca4 claim\n\u25c6 +0000.001s  CLAIM    WORK    lane-a work-01a045d3d59775398c4cd7b91ecdfa6b claim\n\u2502 +0000.002s  CLAIM    WORKER  lane-b work-01a045d3d59878bb845ed10ea4881d18 claim\n\u2502 +0000.002s  CLAIM    WORKER  lane-c work-01a045d3d5987368a8f0b68170507ca4 claim\n\u2502 +0000.005s  TURN     WORKER  lane-b work-01a045d3d59878bb845ed10ea4881d18 spawn\n\u2502 +0000.005s  TURN     WORKER  lane-c work-01a045d3d5987368a8f0b68170507ca4 spawn\n\u2502 +0000.006s  TURN     WORKER  lane-c work-01a045d3d5987368a8f0b68170507ca4 drive\n\u2502 +0000.013s  CLAIM    WORKER  lane-a work-01a045d3d59775398c4cd7b91ecdfa6b claim\n\u2502 +0000.015s  TURN     WORKER  lane-a work-01a045d3d59775398c4cd7b91ecdfa6b spawn\n\u2502 +0000.016s  TURN     WORKER  lane-a work-01a045d3d59775398c4cd7b91ecdfa6b drive\n\u2502 +0000.016s  TURN     WORKER  lane-b work-01a045d3d59878bb845ed10ea4881d18 drive\n\u2502 +0000.138s  DEGRADED WORKER  lane-a work-01a045d3d59775398c4cd7b91ecdfa6b process_cancelled\n\u2502 +0000.207s  DEGRADED WORKER  lane-b work-01a045d3d59878bb845ed10ea4881d18 process_cancelled\n\u2502 +0000.207s  DEGRADED WORKER  lane-c work-01a045d3d5987368a8f0b68170507ca4 process_cancelled\nREPLAY COMPLETE // 15 EVENTS // 207 MS\n",
+    "stderr_bytes": 1354,
+    "stderr_sha256": "22a4fc21762615c47d774fe69a4b3315624d2c710e5341c477c0a9c3b74f5455",
+    "stdout": "{\"artifact_version\":0,\"command\":\"log\",\"evidence\":{\"counts\":{\"claim\":6,\"completion\":0,\"degradation\":3,\"denial\":0,\"turn\":6},\"duration_ms\":207,\"events\":[{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":0,\"event_class\":\"claim\",\"node_id\":\"lane-b\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"transition-01a045d3d5a27f41a9b609312b0294c6\",\"record_kind\":\"work_transition\",\"sequence\":1,\"session_id\":null,\"source\":\"work/items.jsonl\",\"source_ordinal\":5,\"timestamp\":\"2026-08-28T00:45:05.824Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d59878bb845ed10ea4881d18\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":1,\"event_class\":\"claim\",\"node_id\":\"lane-c\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"transition-01a045d3d5a27ca28caa7c858a85835d\",\"record_kind\":\"work_transition\",\"sequence\":2,\"session_id\":null,\"source\":\"work/items.jsonl\",\"source_ordinal\":6,\"timestamp\":\"2026-08-28T00:45:05.825Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d5987368a8f0b68170507ca4\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":1,\"event_class\":\"claim\",\"node_id\":\"lane-a\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"transition-01a045d3d5ad79cc866f9c92a851ca29\",\"record_kind\":\"work_transition\",\"sequence\":3,\"session_id\":null,\"source\":\"work/items.jsonl\",\"source_ordinal\":7,\"timestamp\":\"2026-08-28T00:45:05.824Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":2,\"event_class\":\"claim\",\"node_id\":\"lane-b\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a27bdf970b1033460be7b1\",\"record_kind\":\"worker_receipt\",\"sequence\":4,\"session_id\":\"worker-01a045d3d5a27a42a9c459146356e800\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":1,\"timestamp\":\"2026-08-28T00:45:05.826Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d59878bb845ed10ea4881d18\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":2,\"event_class\":\"claim\",\"node_id\":\"lane-c\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a37adb8e6e598fe419b3ed\",\"record_kind\":\"worker_receipt\",\"sequence\":5,\"session_id\":\"worker-01a045d3d5a277d184005f7159a30a92\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":2,\"timestamp\":\"2026-08-28T00:45:05.826Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d5987368a8f0b68170507ca4\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":5,\"event_class\":\"turn\",\"node_id\":\"lane-b\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a57999a4cf881f6cf40496\",\"record_kind\":\"worker_receipt\",\"sequence\":6,\"session_id\":\"worker-01a045d3d5a27a42a9c459146356e800\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":3,\"timestamp\":\"2026-08-28T00:45:05.829Z\",\"transition\":\"spawn\",\"work_item_id\":\"work-01a045d3d59878bb845ed10ea4881d18\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":5,\"event_class\":\"turn\",\"node_id\":\"lane-c\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a6743e856ccfb4456b7f9f\",\"record_kind\":\"worker_receipt\",\"sequence\":7,\"session_id\":\"worker-01a045d3d5a277d184005f7159a30a92\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":4,\"timestamp\":\"2026-08-28T00:45:05.829Z\",\"transition\":\"spawn\",\"work_item_id\":\"work-01a045d3d5987368a8f0b68170507ca4\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":6,\"event_class\":\"turn\",\"node_id\":\"lane-c\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a77a8994226c3e354b0389\",\"record_kind\":\"worker_receipt\",\"sequence\":8,\"session_id\":\"worker-01a045d3d5a277d184005f7159a30a92\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":5,\"timestamp\":\"2026-08-28T00:45:05.830Z\",\"transition\":\"drive\",\"work_item_id\":\"work-01a045d3d5987368a8f0b68170507ca4\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":13,\"event_class\":\"claim\",\"node_id\":\"lane-a\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5ad72b68d1fdfa469387658\",\"record_kind\":\"worker_receipt\",\"sequence\":9,\"session_id\":\"worker-01a045d3d5ad7a5d97a580a1074fcbd8\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":6,\"timestamp\":\"2026-08-28T00:45:05.837Z\",\"transition\":\"claim\",\"work_item_id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":15,\"event_class\":\"turn\",\"node_id\":\"lane-a\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5b0763481cb640034756884\",\"record_kind\":\"worker_receipt\",\"sequence\":10,\"session_id\":\"worker-01a045d3d5ad7a5d97a580a1074fcbd8\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":7,\"timestamp\":\"2026-08-28T00:45:05.839Z\",\"transition\":\"spawn\",\"work_item_id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":16,\"event_class\":\"turn\",\"node_id\":\"lane-a\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5b1729e84b454609d8d2501\",\"record_kind\":\"worker_receipt\",\"sequence\":11,\"session_id\":\"worker-01a045d3d5ad7a5d97a580a1074fcbd8\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":8,\"timestamp\":\"2026-08-28T00:45:05.840Z\",\"transition\":\"drive\",\"work_item_id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":16,\"event_class\":\"turn\",\"node_id\":\"lane-b\",\"outcome_code\":null,\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d5a67bc99f35fa9c98785642\",\"record_kind\":\"worker_receipt\",\"sequence\":12,\"session_id\":\"worker-01a045d3d5a27a42a9c459146356e800\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":9,\"timestamp\":\"2026-08-28T00:45:05.830Z\",\"transition\":\"drive\",\"work_item_id\":\"work-01a045d3d59878bb845ed10ea4881d18\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":138,\"event_class\":\"degradation\",\"node_id\":\"lane-a\",\"outcome_code\":\"process_cancelled\",\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d62a7ae7be23b63dddd6b24d\",\"record_kind\":\"worker_receipt\",\"sequence\":13,\"session_id\":\"worker-01a045d3d5ad7a5d97a580a1074fcbd8\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":10,\"timestamp\":\"2026-08-28T00:45:05.962Z\",\"transition\":\"degrade\",\"work_item_id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":207,\"event_class\":\"degradation\",\"node_id\":\"lane-b\",\"outcome_code\":\"process_cancelled\",\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d66f70d8ad250052548a3cf4\",\"record_kind\":\"worker_receipt\",\"sequence\":14,\"session_id\":\"worker-01a045d3d5a27a42a9c459146356e800\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":11,\"timestamp\":\"2026-08-28T00:45:06.031Z\",\"transition\":\"degrade\",\"work_item_id\":\"work-01a045d3d59878bb845ed10ea4881d18\"},{\"claimed_recipient\":null,\"claimed_sender\":null,\"elapsed_ms\":207,\"event_class\":\"degradation\",\"node_id\":\"lane-c\",\"outcome_code\":\"process_cancelled\",\"process_id\":null,\"reason_code\":null,\"record_id\":\"worker-receipt-01a045d3d67077cb95c0fab534e30881\",\"record_kind\":\"worker_receipt\",\"sequence\":15,\"session_id\":\"worker-01a045d3d5a277d184005f7159a30a92\",\"source\":\"receipts/workers.jsonl\",\"source_ordinal\":12,\"timestamp\":\"2026-08-28T00:45:06.031Z\",\"transition\":\"degrade\",\"work_item_id\":\"work-01a045d3d5987368a8f0b68170507ca4\"}],\"replay_schema_version\":0,\"sources\":[\"receipts/workers.jsonl\",\"work/items.jsonl\"]},\"status\":\"ok\"}\n",
+    "stdout_bytes": 7558,
+    "stdout_sha256": "ccc0f80b4346128073ebe9620558bf7a31a4c9102c3dd29d41a69c43e1a5d96a",
+    "timed_out": false,
+    "timeout_s": 20.0
+  },
+  "log_without_replay": {
+    "argv": [
+      "/usr/bin/python3",
+      "-m",
+      "floati",
+      "log",
+      "--root",
+      "~/Projects/floati-grok/.gauntlet-scratch/h3b20260828004505"
+    ],
+    "cwd": "~/Projects/floati-grok",
+    "elapsed_s": 0.067,
+    "ended_utc": "2026-08-28T00:45:06Z",
+    "exit": 32,
+    "started_utc": "2026-08-28T00:45:06Z",
+    "stderr": "{\"artifact_version\":0,\"command\":\"log\",\"evidence\":{\"messages\":[]},\"status\":\"no_result\"}\n",
+    "stderr_bytes": 87,
+    "stderr_sha256": "011a3378e2e7e606fd5463eabe096ea90e66202f43895163b212679c45384f78",
+    "stdout": "",
+    "stdout_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false,
+    "timeout_s": 30.0
+  },
+  "scratch": "~/Projects/floati-grok/.gauntlet-scratch/h3b20260828004505",
+  "started_utc": "2026-08-28T00:45:06Z",
+  "work_show": {
+    "argv": [
+      "/usr/bin/python3",
+      "-m",
+      "floati",
+      "work",
+      "show",
+      "--root",
+      "~/Projects/floati-grok/.gauntlet-scratch/h3b20260828004505"
+    ],
+    "cwd": "~/Projects/floati-grok",
+    "elapsed_s": 0.065,
+    "ended_utc": "2026-08-28T00:45:06Z",
+    "exit": 0,
+    "started_utc": "2026-08-28T00:45:06Z",
+    "stderr": "",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout": "{\"artifact_version\":0,\"command\":\"work\",\"evidence\":{\"items\":[{\"artifact_bindings\":[],\"authority_epoch\":1,\"authority_subject\":\"work-lane-a\",\"holder\":\"lane-a\",\"id\":\"work-01a045d3d59775398c4cd7b91ecdfa6b\",\"last_activity\":\"2026-08-28T00:45:05.824Z\",\"needs\":[],\"owner\":\"lane-a\",\"readiness\":\"claimed\",\"state\":\"claimed\",\"title\":\"Create A.txt\",\"workspace\":\"/private/tmp/floati-work/work-01a045d3d59775398c4cd7b91ecdfa6b\"},{\"artifact_bindings\":[],\"authority_epoch\":1,\"authority_subject\":\"work-lane-b\",\"holder\":\"lane-b\",\"id\":\"work-01a045d3d59878bb845ed10ea4881d18\",\"last_activity\":\"2026-08-28T00:45:05.824Z\",\"needs\":[],\"owner\":\"lane-b\",\"readiness\":\"claimed\",\"state\":\"claimed\",\"title\":\"Create B.txt\",\"workspace\":\"/private/tmp/floati-work/work-01a045d3d59878bb845ed10ea4881d18\"},{\"artifact_bindings\":[],\"authority_epoch\":1,\"authority_subject\":\"work-lane-c\",\"holder\":\"lane-c\",\"id\":\"work-01a045d3d5987368a8f0b68170507ca4\",\"last_activity\":\"2026-08-28T00:45:05.825Z\",\"needs\":[],\"owner\":\"lane-c\",\"readiness\":\"claimed\",\"state\":\"claimed\",\"title\":\"Create C.txt\",\"workspace\":\"/private/tmp/floati-work/work-01a045d3d5987368a8f0b68170507ca4\"},{\"artifact_bindings\":[],\"authority_epoch\":null,\"authority_subject\":null,\"holder\":null,\"id\":\"work-01a045d3d59979ec93b2557144648e87\",\"last_activity\":\"2026-08-28T00:45:05.817Z\",\"needs\":[\"work-01a045d3d59775398c4cd7b91ecdfa6b\",\"work-01a045d3d59878bb845ed10ea4881d18\",\"work-01a045d3d5987368a8f0b68170507ca4\"],\"owner\":\"lane-a\",\"readiness\":\"blocked\",\"state\":\"open\",\"title\":\"Create D.txt\",\"workspace\":\"/private/tmp/floati-work/work-01a045d3d59979ec93b2557144648e87\"}]},\"status\":\"ok\"}\n",
+    "stdout_bytes": 1595,
+    "stdout_sha256": "dd4ddac655c8f609835a7ab7f1fa2166b998d894197db718d7cce762c7b81207",
+    "timed_out": false,
+    "timeout_s": 30.0
+  }
+}

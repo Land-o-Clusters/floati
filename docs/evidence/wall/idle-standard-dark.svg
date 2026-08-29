@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="196" viewBox="0 0 1280 196" role="img">
+  <title>FLOATI idle standard dark</title>
+  <desc>Deterministic synthetic TUI wall capture.</desc>
+  <rect width="1280" height="196" fill="#12161c"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#d8dee9">FLOATI // HARBOR BOARD</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">OBSERVED 2026-08-01T12:00:10.000Z</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">NODE               LIVE       AUTH       MUTEX      INBOX  LAST</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">  NO NODES</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9"></tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">WORK DAG  [░░░░░░░░░░]   0%  CONSUMPTION CAUGHT UP  WORKERS NONE  RECEIPTS NONE</tspan>
+    <tspan x="28" dy="18" fill="#d8dee9">↑/k ↓/j select  enter detail  a ack  q quit</tspan>
+  </text>
+</svg>

@@ -1,0 +1,50 @@
+{
+  "artifact_version": 0,
+  "command": "status",
+  "status": "ok",
+  "evidence": {
+    "status_schema_version": 0,
+    "kind": "fleet_status",
+    "root": "/private/tmp/floati-contract/fleet",
+    "tenant_id": "fleet",
+    "mode": "report_only",
+    "observed_at": "2026-08-01T12:00:10.000Z",
+    "nodes": [
+      {
+        "node_id": "solo",
+        "role": "Codex",
+        "liveness": "unknown",
+        "authority": "active",
+        "mutex": "none",
+        "inbox_depth": 0,
+        "last_activity": "2026-08-01T12:00:00.000Z"
+      }
+    ],
+    "stale_leases": [],
+    "stale_lease_count": 0,
+    "work_counts": {"open": 0, "claimed": 1, "completed": 0},
+    "receipt_counts": {"delivery": 0, "ack": 0, "denial": 0},
+    "consumption": {
+      "coordinate": "work/items.jsonl",
+      "state": "caught_up",
+      "wake_state": "none",
+      "counts": {"open": 0, "claimed": 1, "completed": 0}
+    },
+    "worker_refusals": [],
+    "workers": [
+      {
+        "session_id": "worker-018f0f23abcd71238000000000000000",
+        "work_item_id": "work-018f0f23abcd71238000000000000000",
+        "node_id": "solo",
+        "adapter": "codex",
+        "authority_subject": "solo-work",
+        "authority_epoch": 1,
+        "artifact_bindings": [],
+        "transition": "claim",
+        "state": "claim",
+        "outcome_code": null,
+        "last_activity": "2026-08-01T12:00:00.000Z"
+      }
+    ]
+  }
+}

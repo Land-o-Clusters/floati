@@ -1,0 +1,8 @@
+FLOATI // HARBOR BOARD
+OBSERVED 2026-08-01T12:00:10.000Z
+
+NODE               LIVE       AUTH       MUTEX      INBOX  LAST
+  NO NODES
+
+WORK DAG  [░░░░░░░░░░]   0%  CONSUMPTION CAUGHT UP  WORKERS NONE  RECEIPTS NONE
+↑/k ↓/j select  enter detail  a ack  q quit

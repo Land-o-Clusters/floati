@@ -1,0 +1,55 @@
+# EXCERPT of https://docs.mistral.ai/openapi.yaml (fetched 2026-08-22)
+# $defs relevant to the chat-completions usage surface (machine ground truth).
+# Full spec at the URL above; this excerpt is the cited evidence.
+                  CompletionTokensDetails:
+                    type: object
+                    properties:
+                      reasoning_tokens:
+                        type: integer
+                        title: Reasoning Tokens
+                        default: 0
+                    title: CompletionTokensDetails
+                    additionalProperties: false
+                    description: Token usage details for the completion.
+                  MessageTokens:
+                    type: object
+                    properties:
+                      role:
+                        $ref: '#/$defs/Roles'
+                      total_tokens:
+                        anyOf:
+                          - type: integer
+                          - type: 'null'
+                        title: Total Tokens
+                      truncated:
+                        type: boolean
+                        title: Truncated
+                        default: false
+                      usage_count:
+                        type: integer
+                        title: Usage Count
+                        default: 1
+                    title: MessageTokens
+                    required:
+                      - role
+                    additionalProperties: false
+                    description: Information on a single message included in a tokenized prompt as part of an InstructRequest.
+                  PromptTokensDetails:
+                    type: object
+                    properties:
+                      messages:
+                        type: array
+                        items:
+                          $ref: '#/$defs/MessageTokens'
+                        title: Messages
+                      cached_tokens:
+                        type: integer
+                        title: Cached Tokens
+                        default: 0
+                      audio_tokens:
+                        type: integer
+                        title: Audio Tokens
+                        default: 0
+                    title: PromptTokensDetails
+                    additionalProperties: false
+                    description: Token usage details for the prompt.

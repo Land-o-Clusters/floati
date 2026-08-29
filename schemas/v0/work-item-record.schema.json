@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/work-item-record.schema.json",
+  "title": "Floati Work Item Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "title", "owner", "artifact_bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "work_item"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "owner": {"type": "string", "minLength": 1, "maxLength": 64},
+    "workspace": {
+      "type": ["string", "null"],
+      "pattern": "^/private/tmp/floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "needs": {
+      "type": "array", "maxItems": 64, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+    },
+    "artifact_bindings": {
+      "type": "array", "maxItems": 32, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/artifact_binding"}
+    }
+  },
+  "$defs": {
+    "artifact_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repo", "sha", "doc"],
+      "properties": {
+        "repo": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?$"},
+        "sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "doc": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/]+(?:/[^/]+)*$"}
+      }
+    }
+  }
+}

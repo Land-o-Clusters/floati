@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/approval-request-record.schema.json",
+  "title": "Floati Approval Request Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "requester", "capability", "scope", "requested_ttl_seconds", "requested_at", "expires_at", "authority_subject", "authority_epoch", "exact_action_digest"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^approval-request-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "not": {"pattern": "[\\r\\n]"}},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}},
+    "kind": {"const": "approval_request"},
+    "requester": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "capability": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "scope": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F]*$", "not": {"pattern": "[\\u0000-\\u001F\\u007F]"}},
+    "requested_ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "requested_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}},
+    "expires_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$", "not": {"pattern": "[\\r\\n]"}},
+    "authority_subject": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "not": {"pattern": "[\\r\\n]"}},
+    "authority_epoch": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "exact_action_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"pattern": "[\\r\\n]"}}
+  }
+}

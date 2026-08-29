@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/gateway-session-ingress-record.schema.json",
+  "title": "Floati Gateway Session Ingress Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "gateway_version", "session_id", "actor", "workspace", "transport"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^gateway-ingress-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "gateway_session_ingress"},
+    "gateway_version": {"const": 0},
+    "session_id": {"type": "string", "pattern": "^session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "actor": {"type": "string", "minLength": 1, "maxLength": 64},
+    "workspace": {"type": "string", "minLength": 2, "maxLength": 1024, "pattern": "^/"},
+    "transport": {"const": "stdio"}
+  }
+}

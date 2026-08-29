@@ -1,0 +1,29 @@
+{
+  "schema_version": 0,
+  "topology_version": "0",
+  "tenant_id": "alpha",
+  "nodes": [
+    {"id": "lane-a", "kind": "node", "role": "Codex", "state": "active"}
+  ],
+  "workers": [
+    {
+      "id": "worker-018f0f23abcd71238000000000000000",
+      "kind": "worker",
+      "node_id": "lane-a",
+      "work_item_id": "work-018f0f23abce71238000000000000000",
+      "adapter": "codex",
+      "state": "claim",
+      "outcome_code": null
+    }
+  ],
+  "edges": [
+    {
+      "kind": "work_dependency",
+      "source": "work-018f0f23abce71238000000000000000",
+      "target": "work-018f0f23abcf71238000000000000000",
+      "requires": "accepted"
+    }
+  ],
+  "bridge_stubs": [],
+  "unrecognized_kinds": []
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 0,
+  "id": "bridge-forward-018f0f23abd171238000000000000000",
+  "tenant_id": "alpha",
+  "timestamp": "2026-08-01T15:00:01.000Z",
+  "kind": "bridge_forward",
+  "bridge_id": "bridge-018f0f23abce71238000000000000000",
+  "forward_id": "forward-018f0f23abd271238000000000000000",
+  "direction": "outbound",
+  "source_tenant_id": "alpha",
+  "destination_tenant_id": "beta",
+  "sender": "alice",
+  "recipient": "bob",
+  "repo": "slipway",
+  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "doc": "docs/evidence/bridge.md",
+  "note": "fixture round trip",
+  "source_consent_id": "bridge-consent-018f0f23abcd71238000000000000000",
+  "destination_consent_id": "bridge-consent-018f0f23abd071238000000000000000",
+  "stamp": "advisory_not_consumption"
+}
