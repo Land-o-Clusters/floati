@@ -90,6 +90,7 @@ REASON_CODES = frozenset({
     "observer_child_nonzero", "observer_result_missing", "observer_eof_missing",
     "observer_channel_invalid", "observer_result_binding_invalid",
     "observer_cleanup_failed", "observer_request_invalid", "protocol_error",
+    "effect_reconciliation_interpreter_untrusted",
 })
 
 _PARENT_UNKNOWN_REASONS = frozenset({
@@ -98,6 +99,7 @@ _PARENT_UNKNOWN_REASONS = frozenset({
     "observer_eof_missing", "observer_channel_invalid",
     "observer_result_binding_invalid", "observer_cleanup_failed",
     "observer_request_invalid", "protocol_error", "budget_claim_malformed",
+    "effect_reconciliation_interpreter_untrusted",
 })
 _LOCAL_UNKNOWN_REASONS = frozenset({
     "contract_invalid", "repository_fence_invalid", "repository_identity_changed",
