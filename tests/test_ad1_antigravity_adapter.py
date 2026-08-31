@@ -16,6 +16,7 @@ from unittest import mock
 from floati.adapters.headless_template import HarnessProfile, HeadlessProfileAdapter
 from floati.workers import WorkerAdapterFailure
 from tests.test_roster_adapters import ROSTER
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 AGY_CASK = Path("/opt/homebrew/bin/agy")
@@ -57,7 +58,7 @@ class AntigravityWorkAdapterTests(unittest.TestCase):
 
     def test_adapter_deadline_exceeded_uses_fixture_slow_binary(self) -> None:
         """Suite pins the adapter's bounded timeout, not a live agy quirk."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             script = root / "slow-agy"
             script.write_text(

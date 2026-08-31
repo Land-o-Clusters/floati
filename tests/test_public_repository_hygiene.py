@@ -142,7 +142,10 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
             [step["uses"] for step in selftest["steps"] if "uses" in step],
         )
         self.assertEqual(
-            ["python3 -m floati.selftest"],
+            [
+                'set -euo pipefail\npython3 -m pip install --disable-pip-version-check --quiet pillow jsonschema\nif [ "${RUNNER_OS}" = "Linux" ]; then\n  sudo apt-get update -qq\n  sudo apt-get install -y -qq minisign\nelse\n  brew install minisign\nfi\nminisign -v',
+                'python3 -m floati.selftest',
+            ],
             [step["run"] for step in selftest["steps"] if "run" in step],
         )
 

@@ -9,6 +9,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +29,7 @@ class CaptureReadmeRealLedgersTests(unittest.TestCase):
     def test_static_capture_refuses_governed_identity_before_writing(self) -> None:
         module = capture_module()
         governed = bytes.fromhex("2f707269766174652f746d70").decode("ascii")
-        with tempfile.TemporaryDirectory(dir="\x2ftmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             output = Path(temporary)
 
             with self.assertRaises(module.RenderedIdentityRefusal) as caught:
@@ -61,7 +62,7 @@ class CaptureReadmeRealLedgersTests(unittest.TestCase):
                 self.assertEqual("capture_rendered_identity_forbidden", caught.exception.code)
 
     def test_capture_selection_does_not_retake_unselected_frames(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2ftmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             base = Path(temporary)
             scratch = base / "scratch"
             output = base / "output"

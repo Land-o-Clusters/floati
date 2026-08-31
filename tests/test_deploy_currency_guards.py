@@ -12,13 +12,14 @@ from unittest.mock import patch
 
 from floati.deploy import DeploymentWriter
 from floati.errors import ProtocolRefusal
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class DeploymentCurrencyGuardTests(unittest.TestCase):
     """Deployment currency refusals must identify the exact inspected ref."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.source = self.base / "source"

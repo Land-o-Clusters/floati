@@ -22,6 +22,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from tests.temp_roots import REAL_TEMP_ROOT
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
 LAUNCHER = "scripts/floati"
@@ -30,7 +31,7 @@ LAUNCHER = "scripts/floati"
 class PackagedSmokeBattery(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        cls.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         cls.tree = Path(cls.temp.name) / "tree"
         cls.tree.mkdir()
         manifest = json.loads(

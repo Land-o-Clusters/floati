@@ -14,6 +14,7 @@ from floati.errors import ProtocolRefusal
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class _Runner:
@@ -37,7 +38,7 @@ class _Runner:
 
 class WakeDaemonAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
@@ -725,7 +726,7 @@ class ResumeProbeTests(unittest.TestCase):
     result validation. It exists only for costs_one_turn adapters."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)

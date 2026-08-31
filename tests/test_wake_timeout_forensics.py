@@ -12,6 +12,7 @@ from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.wake_daemon_contract import DaemonCoordinate
 from floati.wake_timeout_forensics import run_with_timeout_forensics
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 _HANGING_CHILD = """\
@@ -23,7 +24,7 @@ os.read(r, 1)
 
 class WakeTimeoutForensicsTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.cwd = self.base / "cwd"

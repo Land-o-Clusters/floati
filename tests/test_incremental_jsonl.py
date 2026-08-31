@@ -14,6 +14,7 @@ from floati.errors import IntegrityFailure
 from floati.events import EVENT_KINDS, EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 DOMAIN = "slipway-wake-hold-events-v1"
@@ -21,7 +22,7 @@ DOMAIN = "slipway-wake-hold-events-v1"
 
 class VerifiedLedgerCursorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         registry = Registry(self.root)

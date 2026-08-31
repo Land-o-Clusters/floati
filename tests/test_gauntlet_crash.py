@@ -44,6 +44,7 @@ from tests.test_spawn_groups import (
     _Task3Case,
 )
 from tests.test_effect_controller import _EffectCase
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 CRASH_EXIT = 91
@@ -1162,7 +1163,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
 
         for mode in ("timeout", "crash"):
             with self.subTest(mode=mode):
-                directory = Path(tempfile.mkdtemp(dir="\x2fprivate/tmp"))
+                directory = Path(tempfile.mkdtemp(dir=REAL_TEMP_ROOT))
                 self.addCleanup(shutil.rmtree, directory, True)
                 pid_path = directory / "provider.pid"
 

@@ -16,6 +16,7 @@ from floati.tide import TideEvaluator, TideReading
 from floati.tide_catalog import metric_for
 from floati.tide_policy import TidePolicyLedger
 from tests.schema_validation import validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 SOURCE_SHA = "f2b587634cfc6d6a52cc24bd02bfd978919c359b"
@@ -47,7 +48,7 @@ class _IdentityDelegate:
 
 class QuotaTideTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "quota-tide-fleet", create=True

@@ -17,6 +17,7 @@ from typing import Optional
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 def copy_exact_observer_source_package(destination: Path) -> tuple[Path, Path]:
@@ -35,7 +36,7 @@ class ReconciliationObserverTests(unittest.TestCase):
     """Read-only behavior at the descriptor-bound observer boundary."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"

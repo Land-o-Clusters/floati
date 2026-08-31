@@ -39,6 +39,7 @@ from floati.adapters.opencode import OpenCodeAdapter
 from floati.adapters.pi_observation import PiObservationAdapter
 from floati.adapters.zcode import ZcodeAdapter
 from floati.workers import WorkerAdapterFailure
+from tests.temp_roots import REAL_TEMP_ROOT
 
 ROSTER = [
     ("grok-build", GrokBuildAdapter),
@@ -61,7 +62,7 @@ class RosterParityBattery(unittest.TestCase):
     """CHECK-ONE, behavioral: one law, every roster member, really run."""
 
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.tmp = Path(self.temp.name)
         self.parent = self.tmp / "floati-work"

@@ -9,6 +9,7 @@ from pathlib import Path
 from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 OBSERVED_AT = "2026-08-29T12:00:00Z"
@@ -115,7 +116,7 @@ class QuotaTruthTests(unittest.TestCase):
 
     def test_quota_ledger_replay_is_idempotent_and_conflicts_on_changed_content(self) -> None:
         api = _quota_api()
-        temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(temporary.cleanup)
         root = FloatiRoot.open_direct_home(
             Path(temporary.name) / "fleet-alpha", create=True

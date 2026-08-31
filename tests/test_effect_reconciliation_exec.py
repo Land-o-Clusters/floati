@@ -22,6 +22,7 @@ from unittest import mock
 from tests.test_effect_reconciliation_observer import (
     copy_exact_observer_source_package,
 )
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class EffectReconciliationExecTests(unittest.TestCase):
@@ -33,7 +34,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
     )
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.protocol_path, self.observer_path = copy_exact_observer_source_package(

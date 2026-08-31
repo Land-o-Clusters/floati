@@ -17,6 +17,7 @@ from floati.wake_daemon_contract import (
     DaemonConsentLedger,
     DaemonCoordinate,
 )
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class _Launchctl:
@@ -32,7 +33,7 @@ class _Launchctl:
 
 class WakeDaemonLaunchAgentTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)

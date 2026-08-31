@@ -42,6 +42,7 @@ from floati.worker_bootstrap_protocol import (
 )
 from floati.worker_isolation import cleanup_worker_isolation, prepare_worker_isolation
 from tests.test_spawn_groups import _Task2Case
+from tests.temp_roots import REAL_TEMP_ROOT
 
 try:
     from floati.workers import WorkerAdapterFailure, WorkerReceipts, WorkerRefusals, WorkerRunner, _adapter_process
@@ -1289,7 +1290,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches dependency path replacement selecting unbound prelude bytes."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1354,7 +1355,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches a held source inode changing after its parent digest is frozen."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1410,7 +1411,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches path finders resolving any pre-isolation project dependency."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1483,7 +1484,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         )
         self.assertTrue(hasattr(worker_exec, "_PRELUDE_SOURCES"))
         self.assertEqual(expected, worker_exec._PRELUDE_SOURCES)
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             records = worker_exec._open_validated_prelude(bootstrap.resolve())
             try:
@@ -1527,7 +1528,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches any held prelude source surviving either parent disposition."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             captured: list[int] = []
 
@@ -1801,7 +1802,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches tenant, relative, symlink, or non-file bootstrap selection."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             regular = self._prelude_package(root / "regular")
             symbolic = root / "bootstrap-link.py"
@@ -1826,7 +1827,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches native loader configuration reaching pre-isolation startup."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             hostile = {
                 "DYLD_INSERT_LIBRARIES": "/hostile/dyld.dylib",
@@ -1862,7 +1863,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches bootstrap pathname replacement changing the executed program."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             marker = root / "marker"
             bootstrap = self._prelude_package(root / "trusted")
@@ -1906,7 +1907,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches execution when opened bootstrap bytes change after hashing."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             marker = root / "marker"
             bootstrap = self._prelude_package(root / "trusted")
@@ -2203,7 +2204,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
 
     def test_real_backend_executes_zero_parent_adapter_callbacks(self) -> None:
         """Catches fresh exec inspecting or running the parent adapter object."""
-        callback_evidence = Path(tempfile.mkdtemp(dir="\x2fprivate/tmp")) / "callback"
+        callback_evidence = Path(tempfile.mkdtemp(dir=REAL_TEMP_ROOT)) / "callback"
         self.addCleanup(shutil.rmtree, callback_evidence.parent, True)
 
         class CallbackAdapter(_EffectReportingAdapter):
@@ -2555,7 +2556,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         from floati.adapters.codex_live import CodexAppServerAdapter
         from floati.worker_isolation import prepare_worker_isolation as real_prepare
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             evidence = Path(temporary) / "prepared.jsonl"
             harness = (
                 Path(__file__).parent
@@ -2643,7 +2644,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches cleanup leaking ephemeral paths or deleting durable artifacts."""
         from floati.adapters.codex_live import CodexAppServerAdapter
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             evidence = Path(temporary) / "policy.json"
             harness = (
                 Path(__file__).parent
@@ -2710,7 +2711,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
                 "floati-effect-worker-", worker_isolation._SCRATCH_PREFIX,
             )
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             tenant = root / "tenant"
             effects = tenant / "effects"

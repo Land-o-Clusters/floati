@@ -33,6 +33,7 @@ from floati.wake import (
     replay_one_shot_wake,
 )
 from tests.schema_validation import SchemaValidationError, validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 NOW = "2099-01-02T03:04:05.000Z"
@@ -86,7 +87,7 @@ class _OneShotWakePathTestCase(unittest.TestCase):
     """Real callback files for descriptor-bound wake testimony contracts."""
 
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name) / "root", "alpha")
         self.callback = Path(self.temp.name) / "callback"

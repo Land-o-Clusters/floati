@@ -15,6 +15,7 @@ from unittest import mock
 from floati.errors import ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
+from tests.temp_roots import REAL_TEMP_ROOT
 
 try:
     import floati.adapters.codex_live as codex_live
@@ -31,7 +32,7 @@ WORK_ID = "work-018f0f23abcd71238000000000000000"
 
 class CodexAppServerSessionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.workspace = Path(self.temp.name) / "slipway-work" / WORK_ID
         self.workspace.mkdir(parents=True)
@@ -322,7 +323,7 @@ class CodexAppServerAdapterTests(unittest.TestCase):
         replacement_path.mkdir(mode=0o700)
         original = replacement_path.lstat()
         replacement_path.rmdir()
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             target = Path(temporary) / "replacement"
             target.mkdir(mode=0o700)
             replacement_path.symlink_to(target, target_is_directory=True)
@@ -649,7 +650,7 @@ class CodexAppServerAdapterTests(unittest.TestCase):
 
     def test_workspace_parent_rejects_symlink_and_wrong_owner(self) -> None:
         self.assertIsNotNone(codex_live)
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             base = Path(temporary)
             target = base / "target"
             target.mkdir()
@@ -678,7 +679,7 @@ class CodexAppServerAdapterTests(unittest.TestCase):
                 self.assertEqual("workspace_invalid", caught.exception.code)
 
     def test_git_finalization_uses_literal_paths_and_ignores_hooks_and_signing(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             template = Path(temporary) / "template"
             hooks = template / "hooks"
             hooks.mkdir(parents=True)

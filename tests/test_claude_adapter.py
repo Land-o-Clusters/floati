@@ -15,6 +15,7 @@ from unittest import mock
 
 from floati.errors import ProtocolRefusal
 from floati.workers import WorkerAdapterFailure
+from tests.temp_roots import REAL_TEMP_ROOT
 
 try:
     import floati.adapters.claude as claude
@@ -31,7 +32,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.assertIsNotNone(claude, "Claude headless adapter module must exist")
         self.assertIsNotNone(ClaudeHeadlessAdapter, "Claude headless adapter must exist")
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.parent = Path(self.temp.name) / "slipway-work"
         codex_patcher = mock.patch("floati.adapters.codex_live._WORKSPACE_PARENT", self.parent)

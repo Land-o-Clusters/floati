@@ -25,6 +25,7 @@ except ImportError:
     run_cli_artifact = None
 from floati.registry import REGISTRY_KINDS, Registry
 from floati.root import FloatiRoot
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 SHA = "a" * 40
@@ -69,7 +70,7 @@ def leaf_parser(
 
 class McpToolSurfaceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet",

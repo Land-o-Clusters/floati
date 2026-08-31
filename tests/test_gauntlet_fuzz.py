@@ -53,6 +53,7 @@ from tests.hm3i_gauntlet_fixtures import (
     canonical_observation_from_records,
 )
 from floati.runtruth import LEGACY_RUN_KINDS
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2546,7 +2547,7 @@ class WakeHoldFuzzTests(unittest.TestCase):
         from floati.wake import OneShotWakeRegistrar, OneShotWakeRequest
 
         for mutation in ("same_inode_bytes", "replacement", "disappearance"):
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as directory:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as directory:
                 root = FloatiRoot.open(Path(directory) / "root", "alpha")
                 callback = Path(directory) / "callback"
                 callback.write_bytes(b"#!/bin/sh\nexit 0\n")
