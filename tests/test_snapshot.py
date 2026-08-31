@@ -148,7 +148,7 @@ class SnapshotStoreTests(unittest.TestCase):
             ),
             (
                 "snapshot_identity_mismatch",
-                lambda envelope: envelope.__setitem__("root", "\x2fprivate\x2ftmp/other"),
+                lambda envelope: envelope.__setitem__("root", "\x2fprivate/tmp/other"),
                 True,
             ),
             (

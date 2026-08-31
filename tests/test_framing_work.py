@@ -191,7 +191,7 @@ class WorkLogTests(unittest.TestCase):
 
         self.assertNotIn("workspace", legacy)
         self.assertEqual(
-            f"\x2fprivate\x2ftmp/floati-work/{live['id']}",
+            f"\x2fprivate/tmp/floati-work/{live['id']}",
             live["workspace"],
         )
         projected = {item["id"]: item for item in work.show()}

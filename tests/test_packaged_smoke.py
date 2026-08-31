@@ -30,7 +30,7 @@ LAUNCHER = "scripts/floati"
 class PackagedSmokeBattery(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        cls.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         cls.tree = Path(cls.temp.name) / "tree"
         cls.tree.mkdir()
         manifest = json.loads(

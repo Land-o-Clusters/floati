@@ -345,7 +345,7 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         item = self.artifact(result)["evidence"]
         self.assertEqual(
-            f"\x2fprivate\x2ftmp/floati-work/{item['id']}",
+            f"\x2fprivate/tmp/floati-work/{item['id']}",
             item["workspace"],
         )
 

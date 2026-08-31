@@ -15,7 +15,7 @@ from floati.root import FloatiRoot
 
 class CodexHookInstallerTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.source = Path(__file__).resolve().parents[1]

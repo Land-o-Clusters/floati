@@ -182,7 +182,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             "requested_scope": "repo:slipway",
             "resume_mode": "checkpoint_restart",
             "provider_session_or_thread_id": None,
-            "workspace": f"\x2fprivate\x2ftmp/floati-work/{state['item_id']}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{state['item_id']}",
             "workspace_checkpoint": {
                 "repo": "owner/slipway",
                 "sha": "c" * 40,
@@ -370,7 +370,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             for record in records
             if isinstance(record.get("item_id"), str)
             and record.get("workspace")
-            == f"\x2fprivate\x2ftmp/floati-work/{record['item_id']}"
+            == f"\x2fprivate/tmp/floati-work/{record['item_id']}"
         ]
         self.assertTrue(
             positive_workspaces,
@@ -660,7 +660,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             ("exact_action_digest", "d" * 64),
             ("requested_scope", "repo:other"),
             ("resume_mode", "unsupported"),
-            ("workspace", f"\x2fprivate\x2ftmp/floati-work/work-{uuid7_hex()}"),
+            ("workspace", f"\x2fprivate/tmp/floati-work/work-{uuid7_hex()}"),
             ("workspace_checkpoint", {"repo": "owner/slipway", "sha": "d" * 40, "doc": "other.md"}),
             ("resume_authority_subject", "other-subject"),
             ("resume_authority_epoch", suspension["authority_epoch_at_request"]),
@@ -701,7 +701,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
                 self.assertEqual((True, True), accepted(record))
             retired = dict(
                 record,
-                workspace=f"\x2fprivate\x2ftmp/slipway-work/{state['item_id']}",
+                workspace=f"\x2fprivate/tmp/slipway-work/{state['item_id']}",
             )
             with self.subTest(retired_root=record["kind"]):
                 self.assertEqual((False, False), accepted(retired))
@@ -712,7 +712,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             dict(suspension, exact_action_digest="A" * 64),
             dict(suspension, requested_scope="repo:slipway\n"),
             dict(suspension, authority_epoch_at_request=True),
-            dict(suspension, workspace="\x2fprivate\x2ftmp/floati-work/not-a-work-id"),
+            dict(suspension, workspace="\x2fprivate/tmp/floati-work/not-a-work-id"),
             dict(suspension, workspace_checkpoint={"repo": "owner/slipway", "sha": "c" * 39, "doc": "x"}),
             dict(suspension, resume_mode="native", provider_session_or_thread_id=None),
             dict(suspension, extra=True),

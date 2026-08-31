@@ -87,7 +87,7 @@
     },
     {
       "path": "floati/adapters/codex_live.py",
-      "sha256": "3aedbfb1dda5a05a4c6e5a2cb5695372084be145206f02c24fa6d1a5c5b0d4c2"
+      "sha256": "c4d48f947f51b557cfebde97ec63326e42c8c0a018937e4d2a760fcc20acf370"
     },
     {
       "path": "floati/adapters/cursor.py",
@@ -183,7 +183,7 @@
     },
     {
       "path": "floati/c7_bundle.py",
-      "sha256": "2d6e8193d916d609460211c7c3a1af675cfaae89d67f84f938ca455f547fb557"
+      "sha256": "2260086937b51b6ea2faacfc92ac3a78173559633d0828348bea0460a07af1cc"
     },
     {
       "path": "floati/cancellation.py",
@@ -219,7 +219,7 @@
     },
     {
       "path": "floati/command_contract.py",
-      "sha256": "fb338a6078ff87c56eeda1cf7630ce76c2575a0350a93f8c18d1238737750aac"
+      "sha256": "28d5bedf16334518dff5fbc82f259a77ec9639f00d6ed22d0549e9f22dc2761e"
     },
     {
       "path": "floati/command_scope.py",
@@ -359,7 +359,7 @@
     },
     {
       "path": "floati/helptext.py",
-      "sha256": "e7e1adebfbf3f8246d57460b72d31788edc1c3bab2ecd8cd9950dc9be83b985a"
+      "sha256": "eeec9a9305f2569e686b589f7bae7ea3d5613c9a4f181cd88835196c49f12d6e"
     },
     {
       "path": "floati/host_facts.py",
@@ -367,7 +367,7 @@
     },
     {
       "path": "floati/identity_fence.py",
-      "sha256": "c08ca8dce0cff9895fdffbbf4d895ddf856466f618fb6e176b491b903fd57279"
+      "sha256": "a261741e0faae77647bf651770f44381e69fd75e880e5cf3c28ba45b6f43b49f"
     },
     {
       "path": "floati/ids.py",
@@ -459,7 +459,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "1212dd058887939262330b31f360b43b1df1b3d8878e467d7a34e068818612e8"
+      "sha256": "a4c0ba1c7881f4a0433b94d0bddbd149af5bcf1fe2ce34ec59ec2a1ce3b63a03"
     },
     {
       "path": "floati/registry.py",
@@ -499,7 +499,7 @@
     },
     {
       "path": "floati/runtruth.py",
-      "sha256": "08f6c7a7706fef9bbbd68de5e46a99e448d38151868f92d1a2a493bb8aca6d05"
+      "sha256": "4ec03de71dff2e118bc2a5f8b057b0479e1c947d19b92a741471525d7316b02e"
     },
     {
       "path": "floati/scheduler.py",
@@ -547,7 +547,7 @@
     },
     {
       "path": "floati/spawn_groups.py",
-      "sha256": "48db06fe95c53624fae93936130d08588ca030a07022d1a53120b32d58b5d688"
+      "sha256": "c56b44add7ca1abcea749576cf6daedf2384d31044dcf5250a7bd46518ae5413"
     },
     {
       "path": "floati/state_receipts.py",
@@ -563,11 +563,11 @@
     },
     {
       "path": "floati/support_bundle.py",
-      "sha256": "a77acb1a0c2c32cde8487ee2cc88fcbff7f74e892d58271fd1a23095c1b8b5f9"
+      "sha256": "675bb6946139d1d1da0385d99adf8cd01928fb42aea99694fbc5a239fb351bfb"
     },
     {
       "path": "floati/suspension.py",
-      "sha256": "5e0251fab8dbaa08047ac22858222ce7c06c388329ed32c4f9ea6b9e6ffd112f"
+      "sha256": "1f9c5f063c1c91a1782af76904eb8f0cd6a9c41e2b7617bd252b133b84f30db5"
     },
     {
       "path": "floati/thread_observations.py",
@@ -719,7 +719,7 @@
     },
     {
       "path": "floati/work.py",
-      "sha256": "ac606b135eab1bda12ffc1e5da528e6d254621390bc503dc8868df4595a93dd2"
+      "sha256": "db277d23287de6c391828e9cd6548257f7ea26a45958b727001894a885a6d58f"
     },
     {
       "path": "floati/worker_adapter_runtime.py",

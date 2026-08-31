@@ -204,7 +204,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create A.txt",
-          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
         },
         {
           "artifact_bindings": [],
@@ -218,7 +218,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create B.txt",
-          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
         },
         {
           "artifact_bindings": [],
@@ -232,7 +232,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create C.txt",
-          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
         },
         {
           "artifact_bindings": [],
@@ -250,7 +250,7 @@
           "readiness": "blocked",
           "state": "open",
           "title": "Create D.txt",
-          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
         }
       ],
       "item_count": 4,
@@ -412,7 +412,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create A.txt",
-        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
       },
       {
         "artifact_bindings": [],
@@ -426,7 +426,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create B.txt",
-        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
       },
       {
         "artifact_bindings": [],
@@ -440,7 +440,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create C.txt",
-        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
       },
       {
         "artifact_bindings": [],
@@ -458,7 +458,7 @@
         "readiness": "blocked",
         "state": "open",
         "title": "Create D.txt",
-        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
       }
     ]
   },

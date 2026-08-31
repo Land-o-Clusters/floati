@@ -39,7 +39,7 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 
 class ConfluenceSeamTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root_a = FloatiRoot.open_direct_home(
@@ -214,7 +214,7 @@ class ConfluenceCliRoundTrip(unittest.TestCase):
     def test_grant_bundle_revoke_round_trip(self) -> None:
         import subprocess
 
-        temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(temporary.cleanup)
         base = Path(temporary.name)
         root = base / "fleet"
@@ -285,7 +285,7 @@ class ConfluencePhase4Tests(unittest.TestCase):
     gate the status --json surface."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(

@@ -93,7 +93,7 @@ class GovernedLedgerRepairTests(unittest.TestCase):
             "timestamp": "2026-08-29T12:00:00.000Z",
             "kind": "delivery_claim",
             "sha": "a" * 40,
-            "repo_path": "\x2fprivate\x2ftmp/floati",
+            "repo_path": "\x2fprivate/tmp/floati",
             "bank": "discover",
             "declared": {"ran": 1, "result": "OK"},
             "artifacts": artifacts,

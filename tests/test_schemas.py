@@ -143,7 +143,7 @@ class SchemaContractTests(unittest.TestCase):
         from floati.registry import Registry
         from floati.root import FloatiRoot
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             base = Path(temporary)
             home = base / "demo-fleet"
             root = FloatiRoot.open_direct_home(home, create=True)
@@ -1622,7 +1622,7 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIsNotNone(
             re.fullmatch(
                 workspace["pattern"],
-                "\x2fprivate\x2ftmp/floati-work/work-018f0f23abcd71238000000000000000",
+                "\x2fprivate/tmp/floati-work/work-018f0f23abcd71238000000000000000",
             )
         )
         self.assertIsNone(re.fullmatch(workspace["pattern"], "\x2ftmp/inferred"))
@@ -1650,7 +1650,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate\x2ftmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
         }
 
         def runtime_accepts(candidate: dict[str, object]) -> bool:
@@ -1666,8 +1666,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate\x2ftmp/floati-work/{item_id}", True),
-            (f"\x2fprivate\x2ftmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, runtime_accepts(dict(record, workspace=workspace)))
@@ -1685,7 +1685,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate\x2ftmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
         }
         schema_path = SCHEMA_DIR / "work-item-record.schema.json"
 
@@ -1697,8 +1697,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate\x2ftmp/floati-work/{item_id}", True),
-            (f"\x2fprivate\x2ftmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, schema_accepts(dict(record, workspace=workspace)))

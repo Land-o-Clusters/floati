@@ -19,6 +19,7 @@ from .host_facts import collect_host_facts
 from .identity_fence import (
     GOVERNED_TEMP_FENCES,
     GOVERNED_TEMP_PREFIXES,
+    redact_governed_temp_prefixes,
     HOME_PATTERN,
     HOME_PREFIX,
     OWNER_USERNAME,
@@ -44,8 +45,7 @@ class _OpaqueMember(Exception):
 
 def _scrub_string(value: str) -> str:
     scrubbed = HOME_PATTERN.sub("~", value).replace(HOME_PREFIX, "~/")
-    for prefix in GOVERNED_TEMP_PREFIXES:
-        scrubbed = scrubbed.replace(prefix, "<temp>")
+    scrubbed = redact_governed_temp_prefixes(scrubbed)
     return scrubbed.replace(OWNER_USERNAME, "<operator>")
 
 

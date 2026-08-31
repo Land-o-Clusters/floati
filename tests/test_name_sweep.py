@@ -7,6 +7,7 @@ import re
 import subprocess
 import unittest
 from pathlib import Path
+from tests.private_artifacts import require_private_artifact
 
 
 PRIVATE_FLEET = bytes.fromhex("707564646c652d666c656574").decode("ascii")
@@ -176,6 +177,8 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
 
     def test_living_public_docs_teach_floati_not_the_retired_name(self) -> None:
         """Catches living product prose or public command examples left behind."""
+        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
+
         for relative in LIVING_PUBLIC_DOCS:
             with self.subTest(relative=relative):
                 text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
@@ -184,6 +187,8 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
 
     def test_living_public_docs_are_tenant_neutral(self) -> None:
         """Catches an owner path, host identity, or private fleet in public copy."""
+        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
+
         for relative in LIVING_PUBLIC_DOCS:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             if relative == "README.md":
@@ -201,6 +206,8 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
 
     def test_public_capture_artifacts_do_not_expose_an_operator_account(self) -> None:
         """Catches real macOS home paths without embedding an account literal."""
+        require_private_artifact(self, 'docs/demo/corpus.v0.jsonl')
+
         for relative in ACCOUNT_NEUTRAL_PUBLIC_FILES:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             for pattern in PRIVATE_ACCOUNT_PATTERNS:

@@ -1055,7 +1055,7 @@ class SpawnGroupController:
             <= set(parent_policy["child_capability_ceiling"])
         ):
             _refuse("spawn_child_binding_invalid", "child no longer matches durable admission ceilings")
-        workspace = f"\x2fprivate\x2ftmp/floati-work/{child_item_id}"
+        workspace = f"\x2fprivate/tmp/floati-work/{child_item_id}"
         record: Dict[str, object] = {
             "schema_version": 1,
             "id": "child-admitted-" + _semantic_uuid(

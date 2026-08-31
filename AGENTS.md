@@ -166,14 +166,14 @@ shape.
   add and claim work. The reverse uses the same coordinate and architect gate.
 
 ```text
-floati init --root /var<temp>/fleet
-floati node add --root /var<temp>/fleet --node architect-a --harness Codex --lifetime permanent
-floati node role --root /var<temp>/fleet --node architect-a --template architect --answer repo=floati --answer never_touch=foreign-project --answer owner_stops=owner-tier
-floati node add --root /var<temp>/fleet --node builder-a --harness Codex --lifetime permanent
-floati grant --root /var<temp>/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
-floati work add --root /var<temp>/fleet --title bounded-work --owner builder-a
-floati work claim --root /var<temp>/fleet --id work-00000000000070008000000000000000 --as builder-a --authority-subject work-claims --authority-epoch 1
-floati grant revoke --root /var<temp>/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
+floati init --root /var/tmp/fleet
+floati node add --root /var/tmp/fleet --node architect-a --harness Codex --lifetime permanent
+floati node role --root /var/tmp/fleet --node architect-a --template architect --answer repo=floati --answer never_touch=foreign-project --answer owner_stops=owner-tier
+floati node add --root /var/tmp/fleet --node builder-a --harness Codex --lifetime permanent
+floati grant --root /var/tmp/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
+floati work add --root /var/tmp/fleet --title bounded-work --owner builder-a
+floati work claim --root /var/tmp/fleet --id work-00000000000070008000000000000000 --as builder-a --authority-subject work-claims --authority-epoch 1
+floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
 ```
 
 - **Health check:** `doctor --root R` → chase every red with the receipt it

@@ -497,7 +497,7 @@ class SpawnGroupFixtures:
             capability_ceiling=["review"],
             budget_allocation=[{"budget_id": "build", "amount": 1}],
             workspace_policy="patch_only",
-            workspace=f"\x2fprivate\x2ftmp/floati-work/{self.child}",
+            workspace=f"\x2fprivate/tmp/floati-work/{self.child}",
             admitted_at_testimony=NOW,
         )
 
@@ -512,7 +512,7 @@ class SpawnGroupFixtures:
                 exc.code == "workspace_invalid"
                 and exc.detail == "child workspace must use the closed reservation path"
                 and record["workspace"]
-                == f"\x2fprivate\x2ftmp/floati-work/{record['child_item_id']}"
+                == f"\x2fprivate/tmp/floati-work/{record['child_item_id']}"
             ):
                 raise AssertionError(
                     "Floati child-admission workspace must be accepted before fixture construction"
@@ -1957,7 +1957,7 @@ class SpawnGroupAdmissionTests(unittest.TestCase):
         admitted = case.admit()
         self.assertEqual(admitted["capability_ceiling"], ["review"])
         self.assertEqual(admitted["budget_allocation"], [{"budget_id": "build", "amount": 1}])
-        self.assertEqual(admitted["workspace"], f"\x2fprivate\x2ftmp/floati-work/{case.child}")
+        self.assertEqual(admitted["workspace"], f"\x2fprivate/tmp/floati-work/{case.child}")
         self.assertIs(case.controller.admit_child(
             case.run_id, case.created["id"], case.child, now=case.now(9)
         ) is admitted, False)
@@ -2904,8 +2904,8 @@ class SpawnGroupRecordTests(unittest.TestCase):
             return runtime, schema
 
         for workspace, expected in (
-            (f"\x2fprivate\x2ftmp/floati-work/{fixture.child}", (True, True)),
-            (f"\x2fprivate\x2ftmp/slipway-work/{fixture.child}", (False, False)),
+            (f"\x2fprivate/tmp/floati-work/{fixture.child}", (True, True)),
+            (f"\x2fprivate/tmp/slipway-work/{fixture.child}", (False, False)),
         ):
             with self.subTest(workspace=workspace):
                 self.assertEqual(

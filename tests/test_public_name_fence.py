@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from tests.private_artifacts import require_private_artifact
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,8 @@ class PublicNameFenceTests(unittest.TestCase):
     def test_public_product_source_has_no_private_seat_vocabulary(self) -> None:
         """A private seat identifier reaching product code or tests is rejected."""
 
+        require_private_artifact(self, 'scripts/export_public.py')
+
         module = self.module()
         policy = json.loads(
             (REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json").read_text(
@@ -82,12 +85,18 @@ class PublicNameFenceTests(unittest.TestCase):
     def test_private_only_policy_retains_the_ruled_exact_path_count(self) -> None:
         """A wildcard-shaped simplification cannot erase the explicit inventory."""
 
+        require_private_artifact(self, '.github/public-export-policy.v0.json')
+
         from scripts.export_public import ExportPolicy
 
         policy = ExportPolicy.load(
             REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json"
         )
-        self.assertEqual(19, len(policy.private_only_paths))
+        # 19 -> 25: six test modules whose whole subject the export strips.
+        # AN EXCLUSION LIST THAT NAMES SUBJECTS BUT NOT THEIR TESTS SHIPS A
+        # SUITE THAT TESTS ABSENCE - the published artifact failed 29 of its
+        # own tests that way.
+        self.assertEqual(25, len(policy.private_only_paths))
 
     def test_home_prefix_is_detected_in_each_supported_encoding(self) -> None:
         """Dropping an encoding from the byte fence leaves that encoded path publishable."""

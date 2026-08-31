@@ -115,7 +115,7 @@ class QuotaTruthTests(unittest.TestCase):
 
     def test_quota_ledger_replay_is_idempotent_and_conflicts_on_changed_content(self) -> None:
         api = _quota_api()
-        temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(temporary.cleanup)
         root = FloatiRoot.open_direct_home(
             Path(temporary.name) / "fleet-alpha", create=True

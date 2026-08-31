@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.private_artifacts import require_private_artifact
 
 
 class HM3IContractTests(unittest.TestCase):
@@ -18,6 +19,8 @@ class HM3IContractTests(unittest.TestCase):
             self.assertIn("never the reasoning framework", text)
 
     def test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims(self) -> None:
+        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
+
         spec = Path("docs/SPEC-DRAFT.md").read_text()
         checklist = Path("docs/PUBLICATION-CHECKLIST.md").read_text()
         for literal in (

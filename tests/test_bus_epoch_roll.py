@@ -433,7 +433,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
     """G5 rotates one byte-exact event/delivery/ack epoch as a unit."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.home = self.base / "epoch-tenant"
@@ -1274,7 +1274,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         module = cls._epoch_module()
         guards = []
         probe_root = FloatiRoot.open_direct_home(
-            Path(tempfile.mkdtemp(dir="\x2fprivate\x2ftmp")) / "epoch-guard-probe", create=True
+            Path(tempfile.mkdtemp(dir="\x2fprivate/tmp")) / "epoch-guard-probe", create=True
         )
         for value in vars(module).values():
             if not callable(value):
