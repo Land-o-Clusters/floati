@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import fcntl
 import hashlib
 import json
@@ -264,7 +266,7 @@ def _send_under_contention(base: str, results: object) -> None:
     root = FloatiRoot.open(Path(base), "alpha")
     try:
         EventLog(root).send(
-            "alice",
+            public_ids.worker('alpha'),
             "bob",
             "slipway",
             "a" * 40,
@@ -282,7 +284,7 @@ def _claim_under_contention(base: str, results: object) -> None:
     root = FloatiRoot.open(Path(base), "alpha")
     try:
         AuthorityGrantStore(root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
     except ProtocolRefusal as exc:
         results.put(("refused", exc.code))
@@ -328,7 +330,7 @@ def _send_hammer(base: str, index: int, start: object, results: object) -> None:
             key = f"hammer-send-{index:02d}-{item:02d}"
             record = _retry_lock_timeouts(
                 lambda key=key: events.send(
-                    "alice",
+                    public_ids.worker('alpha'),
                     "bob",
                     "slipway",
                     "a" * 40,
@@ -368,7 +370,7 @@ def _claim_hammer(base: str, start: object, results: object) -> None:
             try:
                 item = _retry_lock_timeouts(
                     lambda: work.claim_owned_oldest(
-                        "alice", "work-claims", 1, now=NOW
+                        public_ids.worker('alpha'), "work-claims", 1, now=NOW
                     )
                 )
             except ProtocolRefusal as exc:
@@ -396,7 +398,7 @@ def _decision_proposal() -> dict:
         "author_authority": "worker",
         "source_artifact_ids": ["run:run-018f7e9b3c137abc8def0123456789ab"],
         "task_contract_id": None,
-        "decided_by": "fable",
+        "decided_by": public_ids.reviewer(),
         "supersedes": None,
     }
     record["decision_digest"] = decision_digest(record)
@@ -639,7 +641,7 @@ def _wake_ordered_action(
             results.put((action, "ok", "acknowledged"))
         else:
             EventLog(root).retract(
-                item_id, worker_session_id=session, reason="sent_in_error", author="alice",
+                item_id, worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'),
             )
             results.put((action, "ok", "retracted"))
     except BaseException as exc:
@@ -679,7 +681,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
-            registry.register("alice", "worker")
+            registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
 
             context = multiprocessing.get_context("fork")
@@ -765,7 +767,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
-            registry.register("alice", "worker")
+            registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
 
             registration_results = self.run_hammer(
@@ -828,11 +830,11 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
             work = WorkLog(root)
             expected_work_ids = {
-                work.add(f"hammer-work-{index:03d}", "alice", [], now=NOW)["id"]
+                work.add(f"hammer-work-{index:03d}", public_ids.worker('alpha'), [], now=NOW)["id"]
                 for index in range(expected_count)
             }
             AuthorityGrantStore(root).claim(
-                "work-claims", "alice", 60, 60, NOW
+                "work-claims", public_ids.worker('alpha'), 60, 60, NOW
             )
             claim_results = self.run_hammer(
                 _claim_hammer,
@@ -1550,10 +1552,10 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
     def _root_with_message(self, base: Path) -> FloatiRoot:
         root = FloatiRoot.open(base, "alpha")
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root, registry).send(
-            "alice", "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md",
+            public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md",
             "wake race", idempotency_key="wake-race-message",
         )
         return root
@@ -1602,11 +1604,11 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
-            registry.register("alice", "worker")
+            registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
             for index, session in enumerate(sessions):
                 EventLog(root, registry).send(
-                    "alice", "bob", "slipway", "a" * 40,
+                    public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
                     "docs/evidence/wake-race.md", "wake race",
                     idempotency_key=f"session-race-{index}",
                     worker_session_id=session,
@@ -1725,9 +1727,9 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
                 base = Path(directory)
                 root = FloatiRoot.open(base, "alpha")
                 registry = Registry(root)
-                registry.register("alice", "worker")
+                registry.register(public_ids.worker('alpha'), "worker")
                 registry.register("bob", "worker")
-                item = EventLog(root, registry).send("alice", "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md", "wake race", idempotency_key="wake-race-message", worker_session_id=session)
+                item = EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md", "wake race", idempotency_key="wake-race-message", worker_session_id=session)
                 WakeHoldController(root).evaluate("bob", idempotency_key="ordered-seed", worker_session_id=session)
                 other = "retract" if first_action == "evaluate" else "evaluate"
                 observed = self._ordered_race(base, first_action, other, str(item["id"]), session)

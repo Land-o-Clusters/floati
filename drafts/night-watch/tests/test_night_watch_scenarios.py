@@ -8,6 +8,10 @@ from night_watch.render import render_morning_report
 from night_watch.watch import NightWatch
 
 
+def _worker(label: str) -> str:
+    return f"worker-{label}"
+
+
 def table(max_wakes=10, max_idle=2, max_depth=4, citation="test-citation"):
     return BudgetTable(
         max_wakes_per_node=max_wakes,
@@ -42,9 +46,9 @@ class ScenarioTests(WatchBase):
 
     def test_1b_idle_soak_node_is_stated_not_alarm(self):
         watch = self.watch()
-        self.feed(watch, ("work_completed", "alice", "22:30"))
+        self.feed(watch, ("work_completed", _worker("alpha"), "22:30"))
         report = watch.morning_report()
-        alice = report.per_node["alice"]
+        alice = report.per_node[_worker("alpha")]
         self.assertEqual((alice.mails, alice.wakes), (0, 0))
         self.assertFalse(alice.paused)
 
@@ -52,11 +56,11 @@ class ScenarioTests(WatchBase):
         watch = self.watch()
         self.feed(
             watch,
-            ("mail_landed", "alice", "22:30"),
-            ("wake_requested", "alice", "22:31"),
-            ("work_completed", "alice", "22:40"),
+            ("mail_landed", _worker("alpha"), "22:30"),
+            ("wake_requested", _worker("alpha"), "22:31"),
+            ("work_completed", _worker("alpha"), "22:40"),
         )
-        node = watch.morning_report().per_node["alice"]
+        node = watch.morning_report().per_node[_worker("alpha")]
         self.assertEqual((node.wakes, node.mails, node.work_items), (1, 1, 1))
         self.assertFalse(node.paused)
 
@@ -178,8 +182,8 @@ class ScenarioTests(WatchBase):
 
     def test_12_replay_is_byte_identical_pure_fold(self):
         events = [
-            NightEvent("mail_landed", "alice", "22:30"),
-            NightEvent("wake_delivered", "alice", "22:31"),
+            NightEvent("mail_landed", _worker("alpha"), "22:30"),
+            NightEvent("wake_delivered", _worker("alpha"), "22:31"),
             NightEvent("loop_edge", "B", "22:32", to_node="C"),
         ]
         first = self.watch()
@@ -193,7 +197,7 @@ class ScenarioTests(WatchBase):
     def test_13_unknown_event_kind_refuses(self):
         watch = self.watch()
         with self.assertRaises(Exception) as caught:
-            watch.fold(NightEvent("seance", "alice", "22:00"))
+            watch.fold(NightEvent("seance", _worker("alpha"), "22:00"))
         self.assertIn("unknown_event_kind", str(caught.exception))
 
     def test_14_inverted_window_refuses(self):
@@ -220,14 +224,14 @@ class ScenarioTests(WatchBase):
         watch = self.watch()
         self.feed(
             watch,
-            ("mail_landed", "alice", "22:30"),
-            ("wake_delivered", "alice", "22:31"),
+            ("mail_landed", _worker("alpha"), "22:30"),
+            ("wake_delivered", _worker("alpha"), "22:31"),
         )
         rendered = render_morning_report(watch.morning_report())
         placeholders = re.findall(r"\[\[[a-z0-9._]+\]\]", rendered)
         self.assertGreater(len(placeholders), 0)
         stripped = re.sub(r"\[\[[a-z0-9._]+\]\]", "", rendered)
-        self.assertNotIn("alice", stripped)
+        self.assertNotIn(_worker("alpha"), stripped)
 
 
 if __name__ == "__main__":

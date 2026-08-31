@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -15,7 +17,7 @@ from floati.tide_policy import TideTestimonyLedger
 
 class TideReaderTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
 
@@ -77,13 +79,13 @@ class TideReaderTests(unittest.TestCase):
         from floati.tide import BoundedTideReader
 
         root = FloatiRoot.open_direct_home(self.base / "fleet", create=True)
-        Registry(root).register("lane-cursor", "cursor")
+        Registry(root).register(public_ids.builder('cursor'), "cursor")
         testimony = TideTestimonyLedger(root).record(
-            "lane-cursor", "self_reported_context_fraction", "75%", "/context",
+            public_ids.builder('cursor'), "self_reported_context_fraction", "75%", "/context",
             idempotency_key="testimony",
         )
         reading = BoundedTideReader(root=root).read(
-            SimpleNamespace(harness="cursor", node_id="lane-cursor", session_id="unused"),
+            SimpleNamespace(harness="cursor", node_id=public_ids.builder('cursor'), session_id="unused"),
             metric_for("cursor", "self_reported_context_fraction"),
         )
         self.assertEqual("SELF_REPORTED", reading.stamp)

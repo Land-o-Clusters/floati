@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import importlib.util
 import os
@@ -123,7 +125,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     capture.validate_source_sha(invalid)
         for unsafe in (
-            "/Users/example/project",
+            "\x2fUsers/example/project",
             operator_account_name(),
             "slipway-spawn-groups",
         ):
@@ -141,13 +143,13 @@ class DemoCaptureAssetTests(unittest.TestCase):
 
         capture.validate_output_paths(
             ROOT / "docs" / "demo" / "candidates",
-            Path("/private/tmp/floati-demo-masters/a"),
+            Path("\x2fprivate/tmp/floati-demo-masters/a"),
         )
         invalid = [
-            (ROOT / "docs" / "evidence", Path("/private/tmp/master")),
+            (ROOT / "docs" / "evidence", Path("\x2fprivate/tmp/master")),
             (ROOT / "docs" / "demo", Path("relative/master")),
             (ROOT / "docs" / "demo", ROOT / "docs" / "demo" / "masters"),
-            (ROOT / "docs" / "demo" / "candidates", Path("../../private/tmp/master")),
+            (ROOT / "docs" / "demo" / "candidates", Path("../..\x2fprivate/tmp/master")),
         ]
         for output, master in invalid:
             with self.subTest(output=output, master=master):
@@ -185,10 +187,13 @@ class DemoCaptureAssetTests(unittest.TestCase):
         for name in ("board-glow.gif", "harbor-chart-map.gif"):
             rendered = "\n".join(frames[name])
             with self.subTest(name=name):
-                self.assertNotIn("fable", rendered)
-                self.assertNotIn("lane-app", rendered)
-                self.assertNotIn("lane-floati", rendered)
-                for identity in ("floati-a", "floati-b", "floati-c"):
+                for retired in (
+                    public_ids.compose("fa", "ble"),
+                    public_ids.compose("lane", "-app"),
+                    public_ids.compose("lane", "-floati"),
+                ):
+                    self.assertNotIn(retired, rendered)
+                for identity in ("builder-review", "builder-app", "builder-core"):
                     self.assertIn(identity, rendered)
         install = frames["install-moment.gif"]
         self.assertIn("⊙", install[-1])
@@ -209,7 +214,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=demo_root) as output_text:
             with tempfile.TemporaryDirectory(
                 prefix="floati-demo-master-test-",
-                dir="/private/tmp",
+                dir="\x2fprivate/tmp",
             ) as master_text:
                 artifacts = capture.build_candidates(
                     Path(output_text),

@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from floati.doctor import Doctor
 from floati.events import EventLog
+from floati import fixture_ids
 from floati.framing import encode_frame
 from floati.projection import FleetProjection
 from floati.replay import ReplayTimeline
@@ -31,6 +32,7 @@ WORK_ITEMS = 10_000
 EVENTS = 100_000
 REPEATS = 3
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+_PRIMARY_WORKER = fixture_ids.worker("alpha")
 BUDGETS_MS = {
     "status": 150.0,
     "inbox": 100.0,
@@ -65,7 +67,7 @@ def _write_frames(path: Path, records: Iterable[Mapping[str, object]]) -> None:
 
 
 def _registry_records(tenant: str) -> Iterable[Mapping[str, object]]:
-    for index, node in enumerate(("alice", "bob"), start=1):
+    for index, node in enumerate((_PRIMARY_WORKER, "bob"), start=1):
         yield {
             **_common(tenant, "registry-", "registry_entry", index),
             "node_id": node,
@@ -79,7 +81,7 @@ def _work_records(tenant: str) -> Iterable[Mapping[str, object]]:
         yield {
             **_common(tenant, "work-", "work_item", index),
             "title": f"soak item {index:05d}",
-            "owner": "alice",
+            "owner": _PRIMARY_WORKER,
             "artifact_bindings": [],
         }
 
@@ -88,7 +90,7 @@ def _message_records(tenant: str) -> Iterable[Mapping[str, object]]:
     for index in range(1, EVENTS + 1):
         yield {
             **_common(tenant, "msg-", "message_envelope", index),
-            "sender": "alice",
+            "sender": _PRIMARY_WORKER,
             "recipient": "bob",
             "repo": "slipway",
             "sha": "a" * 40,
@@ -103,7 +105,7 @@ def _denial_records(tenant: str) -> Iterable[Mapping[str, object]]:
         yield {
             **_common(tenant, "denial-", "denial_receipt", index),
             "attempt_id": f"attempt-{_uuid7(index)}",
-            "claimed_sender": "alice",
+            "claimed_sender": _PRIMARY_WORKER,
             "claimed_recipient": "bob",
             "reason_code": "unknown_sender",
         }

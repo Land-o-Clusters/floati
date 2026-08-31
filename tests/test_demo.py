@@ -27,7 +27,7 @@ class DemoTests(unittest.TestCase):
         model = build_demo_model(root)
         nodes = {node["node_id"]: node for node in model.nodes}
 
-        self.assertEqual({"fable", "lane-app", "lane-floati"}, set(nodes))
+        self.assertEqual({"builder-review", "builder-app", "builder-core"}, set(nodes))
         self.assertEqual({"present", "silent", "expired"}, {node["liveness"] for node in nodes.values()})
         self.assertEqual({"active", "expired", "none"}, {node["authority"] for node in nodes.values()})
         self.assertEqual({"active", "expired", "none"}, {node["mutex"] for node in nodes.values()})
@@ -68,6 +68,20 @@ class DemoTests(unittest.TestCase):
         self.assertIn("MUTEX", first)
         self.assertIn("\x1b[38;5;208m", color)
 
+    def test_harbor_map_demo_uses_role_neutral_fictional_identifiers(self) -> None:
+        """Catches the public demo reusing a private fleet or architect coordinate."""
+        from floati.demo import harbor_map_demo_artifact
+
+        artifact = harbor_map_demo_artifact(include_envelope=True)
+        primary = artifact["buses"][0]
+
+        self.assertEqual("demo-fleet", primary["bus_id"])
+        self.assertEqual("demo-architect", primary["architect_node"])
+        self.assertEqual("demo-architect", primary["nodes"][0]["id"])
+        self.assertEqual("builder-core", primary["nodes"][1]["id"])
+        self.assertEqual("demo-fleet", artifact["relationships"][0]["source"])
+        self.assertEqual("demo-fleet", artifact["envelopes"][0]["source_bus"])
+
     def test_explicit_demo_capture_color_overrides_no_color_policy(self) -> None:
         """Catches NO_COLOR overriding an explicit color or monochrome capture flag."""
         from floati.demo import capture_demo
@@ -77,7 +91,7 @@ class DemoTests(unittest.TestCase):
             monochrome = capture_demo(color=False)
 
         self.assertEqual(
-            "cef93c3213392432e10732aff4967c531fe4ef39223fb02b57580077728ec25c",
+            "f082eaa33d4b892912b6408266f21819d268715b6ccd6f5ca82f1c9a212f0078",
             hashlib.sha256(color.encode("utf-8")).hexdigest(),
         )
         self.assertIn("\x1b[38;5;208m", color)

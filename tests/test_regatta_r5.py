@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.public_projection import projected_role_text
 from tests.test_regatta_r1 import _artifact
 from tests.test_regatta_spike import FULL_CAPABILITY_RESPONSE
 from tests.test_tui_render import RECEIPTS, SNAPSHOT, WORK
@@ -48,11 +49,11 @@ class R5AMachineTwinPins(unittest.TestCase):
         ).encode("utf-8")
 
         self.assertEqual(
-            "0fa896c0fb3d8a3ed97bdab22847214558c500e28ea2ea601366e16911da3504",
+            "31fdd93cdc00ff456f440ca3b022c0a16d9b0e88a6c2e0e4be83a86aeb8ce545",
             hashlib.sha256(plain).hexdigest(),
         )
         self.assertEqual(
-            "711c98bd6475631ef1d0bf3bb9a3b11b9eed9326eaf5b9c45297ebdfacd5b847",
+            "5c86d938487eacd6ca498aa31b0882c6640349d1458e0ff485a9d93f81543034",
             hashlib.sha256(artifact).hexdigest(),
         )
 
@@ -225,10 +226,10 @@ class R5DCaptureBankTests(unittest.TestCase):
 
         captures = Path("docs/evidence/captures")
         expected = (
-            ("regatta-r5-board-color.txt", capture_demo(color=True)),
-            ("regatta-r5-board-monochrome.txt", capture_demo(color=False)),
-            ("regatta-r5-live-map-color.txt", capture_harbor_map(color=True)),
-            ("regatta-r5-live-map-monochrome.txt", capture_harbor_map(color=False)),
+            ("regatta-r5-board-color.txt", projected_role_text(capture_demo(color=True))),
+            ("regatta-r5-board-monochrome.txt", projected_role_text(capture_demo(color=False))),
+            ("regatta-r5-live-map-color.txt", projected_role_text(capture_harbor_map(color=True))),
+            ("regatta-r5-live-map-monochrome.txt", projected_role_text(capture_harbor_map(color=False))),
         )
         for name, rendered in expected:
             with self.subTest(name=name):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -79,7 +81,7 @@ class GatewayContractTests(unittest.TestCase):
 
         ingress = gateway.ingress(
             "session-019fbb00000070008000000000000011",
-            "lane-a",
+            public_ids.builder('a'),
             workspace,
             now=NOW,
         )
@@ -120,7 +122,7 @@ class GatewayContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolRefusal, "gateway_workspace_outside_root"):
             gateway.ingress(
                 "session-019fbb00000070008000000000000013",
-                "lane-a",
+                public_ids.builder('a'),
                 outside,
                 now=NOW,
             )
@@ -134,7 +136,7 @@ class GatewayContractTests(unittest.TestCase):
 
         workspace = self.workspace_root / "session-chain"
         workspace.mkdir()
-        gateway.ingress(session_id, "lane-a", workspace, now=NOW)
+        gateway.ingress(session_id, public_ids.builder('a'), workspace, now=NOW)
         gateway.declare(session_id, ["approval.forward"], now=NOW)
         with self.assertRaisesRegex(ProtocolRefusal, "gateway_capability_missing"):
             gateway.forward_approval(
@@ -186,7 +188,7 @@ class GatewayContractTests(unittest.TestCase):
         workspace = self.workspace_root / "session-malformed"
         workspace.mkdir()
         session_id = "session-019fbb00000070008000000000000016"
-        gateway.ingress(session_id, "lane-a", workspace, now=NOW)
+        gateway.ingress(session_id, public_ids.builder('a'), workspace, now=NOW)
 
         with self.assertRaisesRegex(ProtocolRefusal, "gateway_capabilities_invalid"):
             gateway.declare(session_id, ["approval.forward", []], now=NOW)

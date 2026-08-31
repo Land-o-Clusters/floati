@@ -6,7 +6,7 @@
   "kind": "bridge_consent",
   "bridge_id": "bridge-018f0f23abce71238000000000000000",
   "peer_tenant_id": "beta",
-  "actor": "alice",
+  "actor": "worker-alpha",
   "direction": "bidirectional",
   "state": "granted",
   "scope": "advisory_not_consumption"

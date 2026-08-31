@@ -90,7 +90,7 @@
       "version"
     ],
     "parse_errors": 0,
-    "path": "~/.claude/projects/-Users-operator-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl",
+    "path": "\u002fUsers/penguinspecz/.claude/projects/-Users-penguinspecz-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl",
     "records": 11,
     "truncated_paths": false,
     "usageish_paths": [
@@ -173,7 +173,7 @@
       "type"
     ],
     "parse_errors": 0,
-    "path": "~/.codex/sessions/2026/08/09/rollout-2026-08-09T01-17-48-019fe4f4-aeca-7e33-b884-db3a7671b317.jsonl",
+    "path": "\u002fUsers/penguinspecz/.codex/sessions/2026/08/09/rollout-2026-08-09T01-17-48-019fe4f4-aeca-7e33-b884-db3a7671b317.jsonl",
     "records": 11,
     "truncated_paths": false,
     "usageish_paths": [
@@ -340,7 +340,7 @@
       "type"
     ],
     "parse_errors": 0,
-    "path": "~/.codex/sessions/2026/07/14/rollout-2026-07-14T22-06-41-019f6386-ba54-7c82-8091-d3d490cf24d4.jsonl",
+    "path": "\u002fUsers/penguinspecz/.codex/sessions/2026/07/14/rollout-2026-07-14T22-06-41-019f6386-ba54-7c82-8091-d3d490cf24d4.jsonl",
     "records": 64,
     "truncated_paths": false,
     "usageish_paths": [
@@ -414,7 +414,7 @@
       "type"
     ],
     "parse_errors": 0,
-    "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl",
+    "path": "\u002fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl",
     "records": 517,
     "truncated_paths": false,
     "usageish_paths": []
@@ -433,7 +433,7 @@
         "type"
       ],
       "parse_errors": 0,
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/chat_history.jsonl",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/chat_history.jsonl",
       "records": 2,
       "truncated_paths": false,
       "usageish_paths": []
@@ -453,7 +453,7 @@
         "type"
       ],
       "parse_errors": 0,
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/events.jsonl",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/events.jsonl",
       "records": 1,
       "truncated_paths": false,
       "usageish_paths": []
@@ -482,11 +482,11 @@
         "version",
         "working_directory"
       ],
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/prompt_context.json",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/prompt_context.json",
       "usageish_paths": []
     }
   },
-  "grok_session_dir": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3",
+  "grok_session_dir": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3",
   "grok_session_siblings": [
     "chat_history.jsonl",
     "events.jsonl",
@@ -523,7 +523,7 @@
       "session_summary",
       "updated_at"
     ],
-    "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/summary.json",
+    "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/summary.json",
     "usageish_paths": []
   },
   "grok_updates": {
@@ -548,7 +548,7 @@
       "timestamp"
     ],
     "parse_errors": 0,
-    "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/updates.jsonl",
+    "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/updates.jsonl",
     "records": 1,
     "truncated_paths": false,
     "usageish_paths": []

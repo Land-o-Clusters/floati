@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import os
 import select
@@ -105,7 +107,7 @@ class WatchTests(unittest.TestCase):
         self.assertEqual("initial", initial["evidence"]["delta"]["kind"])
 
         registered = self.run_cli(
-            "register", "--root", str(self.home), "lane-a", "--harness", "Codex"
+            "register", "--root", str(self.home), public_ids.builder('a'), "--harness", "Codex"
         )
         self.assertEqual(0, registered.returncode, registered.stderr)
         ready, _, _ = select.select([child.stdout], [], [], 1.0)

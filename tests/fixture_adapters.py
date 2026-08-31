@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import os
 import time
 
@@ -43,7 +45,7 @@ class NoEventAdapter(ReferenceAdapter):
         self._fabricated_messages = []
 
     def send(self, sender, recipient, repo, sha, doc, note, idempotency_key):
-        if (sender, recipient) != ("alice", "bob"):
+        if (sender, recipient) != (public_ids.worker('alpha'), "bob"):
             return super().send(sender, recipient, repo, sha, doc, note, idempotency_key)
         message = {
             "id": "fabricated-" + idempotency_key,

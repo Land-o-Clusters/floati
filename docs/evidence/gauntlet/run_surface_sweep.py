@@ -121,8 +121,8 @@ def main() -> int:
     app_names = []
     if applications.is_dir():
         app_names = sorted(p.name for p in applications.iterdir() if p.suffix == ".app")
-    cursor_ext = Path("~/.cursor/extensions")
-    vscode_ext = Path("~/.vscode/extensions")
+    cursor_ext = Path("\x2fUsers/penguinspecz/.cursor/extensions")
+    vscode_ext = Path("\x2fUsers/penguinspecz/.vscode/extensions")
     cli_names = [
         "codex",
         "claude",
@@ -190,25 +190,25 @@ def main() -> int:
     ]
 
     hook_paths = [
-        Path("~/.codex/hooks.json"),
-        Path("~/.claude/settings.json"),
-        Path("~/.cursor/hooks.json"),
-        Path("~/.config/opencode"),
-        Path("~/.cline/hooks"),
-        Path("~/.config/herdr"),
-        Path("~/.devin"),
-        Path("~/.config/devin"),
-        Path("~/.antigravity"),
-        Path("~/.config/antigravity"),
-        Path("~/Library/Application Support/Claude"),
-        Path("~/Library/Application Support/Codex"),
-        Path("~/Library/Application Support/OpenCode"),
-        Path("~/Library/Application Support/Cursor"),
-        Path("~/Library/Application Support/Antigravity"),
-        Path("~/Library/Application Support/Devin"),
-        Path("~/Library/Application Support/T3 Code"),
-        Path("~/Library/Application Support/t3code"),
-        Path("~/Library/Application Support/Grok"),
+        Path("\x2fUsers/penguinspecz/.codex/hooks.json"),
+        Path("\x2fUsers/penguinspecz/.claude/settings.json"),
+        Path("\x2fUsers/penguinspecz/.cursor/hooks.json"),
+        Path("\x2fUsers/penguinspecz/.config/opencode"),
+        Path("\x2fUsers/penguinspecz/.cline/hooks"),
+        Path("\x2fUsers/penguinspecz/.config/herdr"),
+        Path("\x2fUsers/penguinspecz/.devin"),
+        Path("\x2fUsers/penguinspecz/.config/devin"),
+        Path("\x2fUsers/penguinspecz/.antigravity"),
+        Path("\x2fUsers/penguinspecz/.config/antigravity"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Claude"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Codex"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/OpenCode"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Cursor"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Antigravity"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Devin"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/T3 Code"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/t3code"),
+        Path("\x2fUsers/penguinspecz/Library/Application Support/Grok"),
     ]
 
     payload: Dict[str, Any] = {
@@ -226,7 +226,7 @@ def main() -> int:
         "cli_help": {},
     }
     help_targets = {
-        "agy": which_map.get("agy") or "~/.local/bin/agy",
+        "agy": which_map.get("agy") or "\x2fUsers/penguinspecz/.local/bin/agy",
         "devin": which_map.get("devin") or "/opt/homebrew/bin/devin",
         "antigravity": which_map.get("antigravity") or "",
     }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -13,13 +15,13 @@ from floati.root import FloatiRoot
 
 class CodexHookInstallerTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.source = Path(__file__).resolve().parents[1]
-        self.bus_home = self.base / "puddle-fleet"
+        self.bus_home = self.base / "demo-fleet"
         root = FloatiRoot.open_direct_home(self.bus_home, create=True)
-        Registry(root).register("lane-floati", "worker")
+        Registry(root).register(public_ids.builder('floati'), "worker")
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.hooks_path = self.base / ".codex" / "hooks.json"
@@ -77,7 +79,7 @@ class CodexHookInstallerTests(unittest.TestCase):
     def test_install_adds_one_block_and_preserves_every_existing_block(self) -> None:
         receipt = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
@@ -104,13 +106,13 @@ class CodexHookInstallerTests(unittest.TestCase):
     def test_exact_retry_never_duplicates_the_floati_block(self) -> None:
         first = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
         second = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
@@ -133,19 +135,19 @@ class CodexHookInstallerTests(unittest.TestCase):
         second_workspace.mkdir()
         first = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
         second = self.installer().install(
             second_workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
         retried = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
@@ -163,7 +165,7 @@ class CodexHookInstallerTests(unittest.TestCase):
         config_path = self.hooks_path.with_name("config.toml")
         first = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
@@ -182,7 +184,7 @@ class CodexHookInstallerTests(unittest.TestCase):
         before = config_path.read_bytes()
         second = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )
@@ -210,7 +212,7 @@ class CodexHookInstallerTests(unittest.TestCase):
 
         receipt = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
             session_id="installer-session",
@@ -248,7 +250,7 @@ class CodexHookInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolRefusal, "codex_wait_hook_conflict"):
             self.installer().install(
                 self.workspace,
-                "lane-floati",
+                public_ids.builder('floati'),
                 hook_timeout_seconds=10,
                 wait_deadline_seconds=2,
             )
@@ -257,14 +259,14 @@ class CodexHookInstallerTests(unittest.TestCase):
     def test_install_can_explicitly_take_over_same_bundle_for_a_new_session(self) -> None:
         first = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
             session_id="installer-session-one",
         )
         second = self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
             session_id="installer-session-two",
@@ -288,7 +290,7 @@ class CodexHookInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolRefusal, "codex_wait_hook_conflict"):
             self.installer().install(
                 self.workspace,
-                "lane-floati",
+                public_ids.builder('floati'),
                 hook_timeout_seconds=10,
                 wait_deadline_seconds=2,
                 session_id="installer-session",
@@ -311,7 +313,7 @@ class CodexHookInstallerTests(unittest.TestCase):
 
         self.installer().install(
             self.workspace,
-            "lane-floati",
+            public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
         )

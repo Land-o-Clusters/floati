@@ -1,4 +1,4 @@
-"""Morning-report renderer: [[placeholder]] keys only — copy is Fable's."""
+"""Morning-report renderer: [[placeholder]] keys only — copy is the architect's."""
 
 from night_watch.report import MorningReport
 

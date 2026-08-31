@@ -95,7 +95,20 @@ _EFFECT_SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "compensation_proposed": ("compensation-proposed-", _COMMON | EFFECT_BINDING_FIELDS | {"effect_intent_id", "source_effect_evidence_id", "reason_code", "compensation_plan_digest", "compensation_request_digest", "compensation_operation_id", "compensation_risk_class", "approval_request_id", "approval_decision_id", "approval_consumption_id", "proposed_at_testimony"}),
     "compensation_executed": ("compensation-executed-", _COMMON | EFFECT_BINDING_FIELDS | {"compensation_proposal_id", "compensation_operation_id", "compensation_terminal_evidence_id", "executed_at_testimony"}),
 }
+
+
+def _kind_prefix(kind: str) -> str:
+    return kind.replace("_", "-") + "-"
+
+
 _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
+    "quota_receipt_record": (
+        "quota-receipt-",
+        _COMMON | {
+            "provider", "endpoint_id", "facts", "idempotency_key",
+            "receipt_digest",
+        },
+    ),
     "tide_policy_record": (
         "tide-policy-",
         _COMMON | {
@@ -136,6 +149,32 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "denial_receipt": ("denial-", _COMMON | {"attempt_id", "claimed_sender", "claimed_recipient", "reason_code"}),
     "liveness_presence": ("presence-", _COMMON | {"node_id", "observed_at", "expires_at", "state"}),
     "message_envelope": ("msg-", _COMMON | {"sender", "recipient", "repo", "sha", "doc", "note", "idempotency_key"}),
+    "delivery_claim": (
+        "delivery-claim-",
+        _COMMON
+        | {
+            "sha", "repo_path", "bank", "declared", "artifacts",
+            "note_ref", "deadline_seconds",
+        },
+    ),
+    "verification_receipt": (
+        "verification-receipt-",
+        _COMMON
+        | {
+            "claim_id", "verifier", "outcome", "reason_code", "remedy",
+            "runner_argv", "python_version", "repo_path", "wall_time_seconds",
+            "unchecked_scope", "output_sha256", "claim", "measurement",
+            "scratch",
+        },
+    ),
+    "journal_checkpoint_state": (
+        "journal-checkpoint-state-",
+        _COMMON
+        | {
+            "journal_id", "through_seq", "head_sha256", "byte_length",
+            "checkpoint_sha256",
+        },
+    ),
     "message_retracted": ("ret-", _COMMON | {"retracted_message_id", "worker_session_id", "reason", "author"}),
     "mutual_exclusion_hold": ("hold-", _COMMON | {"resource_id", "holder", "epoch", "acquired_at", "renewed_at", "expires_at", "released_at", "ttl_seconds", "deadline_seconds", "state"}),
     "registry_entry": ("registry-", _COMMON | {"node_id", "role", "state"}),
@@ -148,12 +187,40 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
             "previous_model", "harness", "model", "registry_entry_id",
         },
     ),
+    "fleet_update_started": (
+        "fleet-update-started-",
+        _COMMON | {"plan_digest", "actor", "consent_receipt_id", "operation", "step_kind", "pre_digest", "post_digest", "step_ordinal", "step_coordinate", "commit_disposition", "step_evidence", "state", "predecessor_receipt_id", "idempotency_key", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions", "recovery_witness"},
+    ),
+    "fleet_update_step": (
+        "fleet-update-step-",
+        _COMMON | {"plan_digest", "actor", "consent_receipt_id", "operation", "step_kind", "pre_digest", "post_digest", "step_ordinal", "step_coordinate", "commit_disposition", "step_evidence", "state", "predecessor_receipt_id", "idempotency_key", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions"},
+    ),
+    "fleet_update_completed": (
+        "fleet-update-completed-",
+        _COMMON | {"plan_digest", "actor", "consent_receipt_id", "operation", "step_kind", "pre_digest", "post_digest", "step_ordinal", "step_coordinate", "commit_disposition", "step_evidence", "state", "predecessor_receipt_id", "idempotency_key", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions", "step_receipt_ids", "moves", "unchanged", "previous_source_sha", "target_source_sha", "epoch_roll_state", "registry_before_sha256", "registry_after_sha256"},
+    ),
     "registry_role_record": (
         "registry-role-",
         _COMMON
         | {
             "node_id", "template_role", "template_version", "template_sha256",
             "answers", "state", "predecessor_role_record_id",
+        },
+    ),
+    "lane_spawn_receipt": (
+        _kind_prefix("lane_spawn_receipt"),
+        _COMMON
+        | {
+            "profile", "ordinal", "node_id", "actor", "state",
+            "failing_step", "artifacts", "compensated",
+        },
+    ),
+    "lane_teardown_receipt": (
+        _kind_prefix("lane_teardown_receipt"),
+        _COMMON
+        | {
+            "profile", "ordinal", "node_id", "actor", "state",
+            "removed", "retained",
         },
     ),
     "wake_cause": ("wake-", _COMMON | {"node_id", "cause", "context_bytes", "wake_count"}),
@@ -227,6 +294,8 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     **_EFFECT_SPECS,
 }
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
+    "tide_policy_record": _SPECS["tide_policy_record"][1],
+    "tide_receipt": _SPECS["tide_receipt"][1],
     "ack_receipt": _SPECS["ack_receipt"][1]
     | {
         "acting_session_id",
@@ -361,6 +430,25 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
 
     if not isinstance(record, dict):
         refuse("record_not_object", "each durable record must be an object")
+    chain_fields = frozenset({"seq", "prev"})
+    present_chain_fields = frozenset(record) & chain_fields
+    chain: Optional[Dict[str, object]] = None
+    if present_chain_fields:
+        if present_chain_fields != chain_fields:
+            refuse(
+                "journal_chain_fields_invalid",
+                "chained records must carry seq and prev together",
+            )
+        seq = record.get("seq")
+        prev = record.get("prev")
+        if not isinstance(seq, int) or isinstance(seq, bool) or not 1 <= seq <= 2**63 - 1:
+            refuse("journal_seq_invalid", "journal seq is outside its v-next bounds")
+        if not isinstance(prev, str) or re.fullmatch(r"[0-9a-f]{64}", prev) is None:
+            refuse("journal_prev_invalid", "journal prev must be a lowercase SHA-256 digest")
+        chain = {"seq": seq, "prev": prev}
+        record = {
+            key: value for key, value in record.items() if key not in chain_fields
+        }
     kind = record.get("kind")
     if not isinstance(kind, str) or kind not in allowed_kinds or kind not in _SPECS:
         refuse("record_kind_invalid", "record kind is not permitted by this ledger")
@@ -485,7 +573,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             epoch=normalized_epoch,
         )
     is_v1_record = (
-        kind in ({"ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "capability_grant", "capability_revoked", "capability_set_bound", "dispatch_decision", "result_accepted", "run_admission_bound", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        kind in ({"ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "capability_grant", "capability_revoked", "capability_set_bound", "dispatch_decision", "result_accepted", "run_admission_bound", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
         and isinstance(record["schema_version"], int)
         and not isinstance(record["schema_version"], bool)
         and record["schema_version"] == 1
@@ -514,6 +602,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         refuse("schema_version_invalid", "wake attempt receipts require schema version 1")
     if kind in {"codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt"} and normalized_version != 1:
         refuse("schema_version_invalid", "Codex wait receipts require schema version 1")
+    if kind in {"fleet_update_started", "fleet_update_step", "fleet_update_completed"} and normalized_version != 1:
+        refuse("schema_version_invalid", "fleet update receipts require schema version 1")
     if not is_v1_record and kind not in {"segment_opened", "segment_sealed"} and (
         record["schema_version"] != 0 or isinstance(record["schema_version"], bool)
     ):
@@ -637,6 +727,369 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 continue
             if not isinstance(value, str) or model_pattern.fullmatch(value) is None:
                 refuse("model_invalid", f"{field} is not a bounded model identifier")
+    elif kind in {"fleet_update_started", "fleet_update_step", "fleet_update_completed"}:
+        _sha256(record["plan_digest"], "plan_digest", refuse)
+        ident("actor")
+        _record_ref(record["consent_receipt_id"], "update-consent-", "consent_receipt_id", refuse)
+        _enum(record["operation"], {"start", "step", "complete"}, "operation", refuse)
+        expected = {"fleet_update_started": "start", "fleet_update_step": "step", "fleet_update_completed": "complete"}[kind]
+        if record["operation"] != expected:
+            refuse("fleet_update_operation_invalid", "fleet update receipt kind and operation disagree")
+        if kind == "fleet_update_started":
+            witness = record["recovery_witness"]
+            witness_fields = {
+                "schema_version", "kind", "inputs", "current_source_sha",
+                "target_source_sha", "current_manifest_sha256",
+                "target_manifest_sha256", "binding_inventory_sha256",
+                "transport_registry_sha256", "target_transport_registry_sha256",
+                "waiter_bindings", "target_waiter_digest", "current_encoder_sha256",
+                "target_encoder_sha256", "current_transport_pins",
+                "target_transport_pins", "current_managed_paths",
+                "shared_install_intents", "reader_consequences",
+                "seat_binding_consequences", "seat_exclusions",
+                "owner_review_batch_digest", "requires_epoch_roll", "stale_pins",
+                "moves", "unchanged",
+            }
+            if not isinstance(witness, dict) or set(witness) != witness_fields:
+                refuse("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+            try:
+                witness_digest = hashlib.sha256(json.dumps(
+                    witness, ensure_ascii=True, allow_nan=False, sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("ascii")).hexdigest()
+            except (TypeError, ValueError):
+                refuse("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+            if witness_digest != record["plan_digest"]:
+                refuse("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+            try:
+                # Import locally: receipt code imports this generic record validator,
+                # while start-row validation must also enforce plan derivation.
+                from .fleet_update_receipts import authenticate_plan
+
+                authenticate_plan(
+                    {**witness, "plan_digest": record["plan_digest"], "apply_argv": []},
+                    record["actor"],
+                )
+            except ProtocolRefusal:
+                refuse("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        if record["step_kind"] is not None and record["step_kind"] not in {"shared_install", "waiter_binding", "transport_pins", "epoch_roll"}:
+            refuse("fleet_update_step_invalid", "fleet update step kind is invalid")
+        if kind == "fleet_update_step" and record["step_kind"] is None:
+            refuse("fleet_update_step_invalid", "fleet update step requires its kind")
+        if kind != "fleet_update_step" and record["step_kind"] is not None:
+            refuse("fleet_update_step_invalid", "fleet update terminal rows cannot name a step")
+        phase_fields = ("step_ordinal", "step_coordinate", "commit_disposition", "step_evidence")
+        if kind != "fleet_update_step":
+            if any(record[field] is not None for field in phase_fields):
+                refuse("fleet_update_step_invalid", "terminal receipt has step evidence")
+        else:
+            if type(record["step_ordinal"]) is not int or record["step_ordinal"] < 1 or not isinstance(record["step_coordinate"], dict) or not isinstance(record["step_evidence"], dict) or record["commit_disposition"] not in {"applied", "recovered_post_state", "unchanged"}:
+                refuse("fleet_update_step_invalid", "step receipt phase evidence is invalid")
+            if (
+                record["step_kind"] == "shared_install"
+                and record["commit_disposition"] == "unchanged"
+            ):
+                refuse(
+                    "fleet_update_step_invalid",
+                    "shared install cannot have an unchanged disposition",
+                )
+            if record["step_coordinate"].get("kind") != record["step_kind"] or record["step_evidence"].get("kind") != record["step_kind"]:
+                refuse("fleet_update_step_invalid", "step receipt evidence discriminator is invalid")
+            coordinate = record["step_coordinate"]
+            if record["step_kind"] == "shared_install":
+                if (
+                    set(coordinate) != {"kind", "destination", "metadata_relative"}
+                    or not isinstance(coordinate.get("destination"), str)
+                    or not coordinate["destination"].startswith("/")
+                    or coordinate.get("metadata_relative")
+                    != ".floati-install/manifest.v0.json"
+                ):
+                    refuse("fleet_update_step_invalid", "shared install coordinate is invalid")
+            elif record["step_kind"] == "waiter_binding":
+                if (
+                    set(coordinate) != {"kind", "index", "configuration", "store", "trust_key"}
+                    or type(coordinate.get("index")) is not int
+                    or coordinate["index"] < 0
+                    or not isinstance(coordinate.get("configuration"), str)
+                    or not coordinate["configuration"].startswith("/")
+                    or not isinstance(coordinate.get("store"), str)
+                    or not coordinate["store"].startswith("/")
+                    or coordinate.get("trust_key") is not None and not isinstance(coordinate.get("trust_key"), str)
+                ):
+                    refuse("fleet_update_step_invalid", "waiter binding coordinate is invalid")
+            elif record["step_kind"] == "transport_pins":
+                if (
+                    set(coordinate) != {"kind", "registry", "transport"}
+                    or not isinstance(coordinate.get("registry"), str)
+                    or not coordinate["registry"].startswith("/")
+                    or not _identifier(coordinate.get("transport"))
+                ):
+                    refuse("fleet_update_step_invalid", "transport pin coordinate is invalid")
+            elif set(coordinate) != {"kind"}:
+                refuse("fleet_update_step_invalid", "non-G2 step coordinate is invalid")
+            if record["step_kind"] == "shared_install":
+                evidence = record["step_evidence"]
+                required_evidence = {
+                    "kind", "journal_path", "join_id", "predecessor_ordinal",
+                    "predecessor_entry_hash", "first_ordinal", "last_ordinal",
+                    "entry_hashes",
+                }
+                if set(evidence) != required_evidence:
+                    refuse("fleet_update_step_invalid", "shared install journal evidence has an invalid shape")
+                if (
+                    not isinstance(evidence["journal_path"], str)
+                    or not evidence["journal_path"].startswith("/")
+                    or not isinstance(evidence["join_id"], str)
+                    or re.fullmatch(r"[0-9a-f]{64}", evidence["join_id"]) is None
+                    or type(evidence["first_ordinal"]) is not int
+                    or evidence["first_ordinal"] < 1
+                    or type(evidence["last_ordinal"]) is not int
+                    or evidence["last_ordinal"] < evidence["first_ordinal"]
+                    or not isinstance(evidence["entry_hashes"], list)
+                    or len(evidence["entry_hashes"]) != evidence["last_ordinal"] - evidence["first_ordinal"] + 1
+                    or any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None for value in evidence["entry_hashes"])
+                ):
+                    refuse("fleet_update_step_invalid", "shared install journal evidence is invalid")
+                previous_ordinal = evidence["predecessor_ordinal"]
+                previous_hash = evidence["predecessor_entry_hash"]
+                if previous_ordinal is None:
+                    if previous_hash is not None or evidence["first_ordinal"] != 1:
+                        refuse("fleet_update_step_invalid", "shared install journal predecessor is invalid")
+                elif (
+                    type(previous_ordinal) is not int
+                    or previous_ordinal < 1
+                    or previous_ordinal + 1 != evidence["first_ordinal"]
+                    or not isinstance(previous_hash, str)
+                    or re.fullmatch(r"[0-9a-f]{64}", previous_hash) is None
+                ):
+                    refuse("fleet_update_step_invalid", "shared install journal predecessor is invalid")
+            if record["step_kind"] == "waiter_binding":
+                evidence = record["step_evidence"]
+                if set(evidence) != {"kind", "hook_post_observation"} or not isinstance(evidence.get("hook_post_observation"), dict):
+                    refuse("fleet_update_step_invalid", "waiter post-trust evidence has an invalid shape")
+                observation = evidence["hook_post_observation"]
+                if set(observation) != {"hook_trust_key", "current_hook_hash", "observed_trusted_hash", "observed_enabled"}:
+                    refuse("fleet_update_step_invalid", "waiter post-trust observation has an invalid shape")
+                if (
+                    not isinstance(observation["hook_trust_key"], str)
+                    or not isinstance(observation["current_hook_hash"], str)
+                    or re.fullmatch(r"[0-9a-f]{64}", observation["current_hook_hash"]) is None
+                    or observation["observed_trusted_hash"] is not None and (not isinstance(observation["observed_trusted_hash"], str) or re.fullmatch(r"[0-9a-f]{64}", observation["observed_trusted_hash"]) is None)
+                    or observation["observed_enabled"] is not None and type(observation["observed_enabled"]) is not bool
+                ):
+                    refuse("fleet_update_step_invalid", "waiter post-trust observation is invalid")
+            if record["step_kind"] == "transport_pins":
+                evidence = record["step_evidence"]
+                if set(evidence) != {
+                    "kind", "registry", "transport", "registry_before_sha256",
+                    "registry_after_sha256", "previous_source_sha",
+                    "target_source_sha", "epoch_roll_state",
+                }:
+                    refuse("fleet_update_step_invalid", "transport pin evidence has an invalid shape")
+                if (
+                    not isinstance(evidence["registry"], str)
+                    or evidence["registry"] != coordinate["registry"]
+                    or not isinstance(evidence["transport"], str)
+                    or evidence["transport"] != coordinate["transport"]
+                    or not isinstance(evidence["registry_before_sha256"], str)
+                    or not isinstance(evidence["registry_after_sha256"], str)
+                    or not isinstance(evidence["previous_source_sha"], str)
+                    or not isinstance(evidence["target_source_sha"], str)
+                    or not isinstance(evidence["epoch_roll_state"], str)
+                    or re.fullmatch(r"[0-9a-f]{64}", evidence["registry_before_sha256"]) is None
+                    or re.fullmatch(r"[0-9a-f]{64}", evidence["registry_after_sha256"]) is None
+                    or re.fullmatch(r"[0-9a-f]{40}", evidence["previous_source_sha"]) is None
+                    or re.fullmatch(r"[0-9a-f]{40}", evidence["target_source_sha"]) is None
+                    or evidence["epoch_roll_state"] not in {"not_required", "completed"}
+                ):
+                    refuse("fleet_update_step_invalid", "transport pin evidence is invalid")
+        for field in ("pre_digest", "post_digest"):
+            value = record[field]
+            if (kind == "fleet_update_step" and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None)) or (kind != "fleet_update_step" and value is not None):
+                refuse("fleet_update_digest_invalid", "fleet update pre/post digest fields are invalid")
+        _enum(record["state"], {"started", "completed"}, "state", refuse)
+        if (kind == "fleet_update_started") != (record["state"] == "started"):
+            refuse("fleet_update_state_invalid", "fleet update receipt state is invalid")
+        predecessor = record["predecessor_receipt_id"]
+        if predecessor is not None:
+            if not isinstance(predecessor, str) or re.fullmatch(r"fleet-update-(?:started|step|completed)-" + _UUID7, predecessor) is None:
+                refuse("predecessor_receipt_id_invalid", "fleet update predecessor receipt id is invalid")
+        if not isinstance(record["idempotency_key"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "fleet update idempotency key is invalid")
+        _sha256(record["owner_review_batch_digest"], "owner_review_batch_digest", refuse)
+        if not isinstance(record["reader_consequences"], list) or not isinstance(record["seat_binding_consequences"], list) or not isinstance(record["seat_exclusions"], list):
+            refuse("fleet_update_owner_review_invalid", "fleet update owner review arrays are invalid")
+        readers = record["reader_consequences"]
+        consequences = record["seat_binding_consequences"]
+        exclusions = record["seat_exclusions"]
+        try:
+            batch_payload = json.dumps({"reader_consequences": readers, "seat_binding_consequences": consequences, "seat_exclusions": exclusions}, ensure_ascii=True, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("ascii")
+        except (TypeError, ValueError):
+            refuse(
+                "fleet_update_owner_review_invalid",
+                "fleet update owner review evidence is not canonical JSON",
+            )
+        if record["owner_review_batch_digest"] != hashlib.sha256(batch_payload).hexdigest():
+            refuse("fleet_update_owner_review_invalid", "fleet update owner review digest is not canonical")
+        reader_fields = {"reader", "surface", "registry", "transport", "manifest_path", "current_schema_version", "target_schema_version", "added_fields", "removed_fields", "change", "compatibility_after_update", "remedy"}
+        if len(readers) > 1:
+            refuse("fleet_update_owner_review_invalid", "fleet update repeats a reader consequence")
+        for row in readers:
+            if not isinstance(row, dict) or set(row) != reader_fields:
+                refuse("fleet_update_owner_review_invalid", "fleet update reader consequence has an invalid shape")
+            if (
+                row["reader"] != "codex_fleet_bus_gateway"
+                or row["surface"] != "install_manifest"
+                or type(row["current_schema_version"]) is not int
+                or type(row["target_schema_version"]) is not int
+                or row["current_schema_version"] != 0
+                or row["target_schema_version"] != 1
+                or row["added_fields"] != ["ownership"]
+                or row["removed_fields"] != []
+                or row["change"] != "additive_widened"
+                or row["compatibility_after_update"] != "not_observed"
+                or row["remedy"] != "review the Codex fleet gateway reader before applying the widened manifest vocabulary"
+            ):
+                refuse("fleet_update_owner_review_invalid", "fleet update reader consequence formula is invalid")
+            for field in ("registry", "manifest_path"):
+                value = row[field]
+                if not isinstance(value, str) or not Path(value).is_absolute() or str(Path(value)) != value:
+                    refuse("fleet_update_owner_review_invalid", "fleet update reader consequence coordinate is invalid")
+            if not _identifier(row["transport"]):
+                refuse("fleet_update_owner_review_invalid", "fleet update reader consequence coordinate is invalid")
+        consequence_fields = {"node_id", "workspace", "harness", "configuration", "store", "association_basis", "hook_trust_key", "current_hook_hash", "target_hook_hash", "observed_trusted_hash", "observed_enabled", "current_waiter_digest", "target_waiter_digest", "trust_rotated_by_update", "review_required_after_update", "enable_required_after_update", "relaunch_required_after_update", "reachability_after_update", "remedy"}
+        exclusion_fields = {"node_id", "workspace", "authoritative_state", "harness", "reason"}
+        consequence_keys = []
+        for row in consequences:
+            if not isinstance(row, dict) or set(row) != consequence_fields:
+                refuse("fleet_update_owner_review_invalid", "fleet update consequence has an invalid shape")
+            if not _identifier(row["node_id"]) or not all(isinstance(row[field], str) and row[field].startswith("/") for field in ("workspace", "configuration", "store")):
+                refuse("fleet_update_owner_review_invalid", "fleet update consequence coordinate is invalid")
+            validate_role(row["harness"], integrity=integrity)
+            if row["association_basis"] != "conservative_root_scope" or not isinstance(row["hook_trust_key"], str) or not row["hook_trust_key"]:
+                refuse("fleet_update_owner_review_invalid", "fleet update consequence association is invalid")
+            for field in ("current_hook_hash", "target_hook_hash", "current_waiter_digest", "target_waiter_digest"):
+                _sha256(row[field], field, refuse)
+            if row["observed_trusted_hash"] is not None:
+                _sha256(row["observed_trusted_hash"], "observed_trusted_hash", refuse)
+            for field in ("observed_enabled", "trust_rotated_by_update", "review_required_after_update", "enable_required_after_update", "relaunch_required_after_update"):
+                if not isinstance(row[field], bool):
+                    refuse("fleet_update_owner_review_invalid", "fleet update consequence boolean is invalid")
+            rotated = row["current_hook_hash"] != row["target_hook_hash"]
+            review = row["target_hook_hash"] != row["observed_trusted_hash"]
+            enable = row["observed_enabled"] is not True
+            relaunch = rotated or review or enable
+            remedies = []
+            if enable:
+                remedies.append("enable the exact Stop hook in Codex settings")
+            if review:
+                remedies.append("review and trust the exact Stop hook in Codex settings")
+            if relaunch:
+                remedies.append("relaunch the affected session")
+            if (row["trust_rotated_by_update"], row["review_required_after_update"], row["enable_required_after_update"], row["relaunch_required_after_update"]) != (rotated, review, enable, relaunch):
+                refuse("fleet_update_owner_review_invalid", "fleet update consequence flags are not derived from hook observation")
+            if row["reachability_after_update"] != ("unknown_until_review_and_relaunch" if relaunch else "not_observed") or row["remedy"] != (";".join(remedies) if remedies else None):
+                refuse("fleet_update_owner_review_invalid", "fleet update consequence disposition is invalid")
+            consequence_keys.append((row["node_id"], row["workspace"], row["configuration"]))
+        if consequence_keys != sorted(consequence_keys) or len(set(consequence_keys)) != len(consequence_keys):
+            refuse("fleet_update_owner_review_invalid", "fleet update consequences are not sorted and unique")
+        exclusion_keys = []
+        for row in exclusions:
+            if not isinstance(row, dict) or set(row) != exclusion_fields:
+                refuse("fleet_update_owner_review_invalid", "fleet update exclusion has an invalid shape")
+            if not _identifier(row["node_id"]) or not isinstance(row["workspace"], str) or not row["workspace"].startswith("/"):
+                refuse("fleet_update_owner_review_invalid", "fleet update exclusion coordinate is invalid")
+            validate_role(row["harness"], integrity=integrity)
+            allowed_exclusions = {("retired", "node_retired"), ("lease_expired", "lease_expired"), ("active", "harness_not_codex")}
+            if (row["authoritative_state"], row["reason"]) not in allowed_exclusions:
+                refuse("fleet_update_owner_review_invalid", "fleet update exclusion disposition is invalid")
+            exclusion_keys.append((row["node_id"], row["workspace"], row["reason"]))
+        if exclusion_keys != sorted(exclusion_keys) or len(set(exclusion_keys)) != len(exclusion_keys):
+            refuse("fleet_update_owner_review_invalid", "fleet update exclusions are not sorted and unique")
+        if kind == "fleet_update_completed":
+            if (
+                not isinstance(record["previous_source_sha"], str)
+                or re.fullmatch(r"[0-9a-f]{40}", record["previous_source_sha"]) is None
+                or not isinstance(record["target_source_sha"], str)
+                or re.fullmatch(r"[0-9a-f]{40}", record["target_source_sha"]) is None
+                or not isinstance(record["epoch_roll_state"], str)
+                or record["epoch_roll_state"] not in {"not_required", "completed"}
+                or any(not isinstance(record[field], str) or re.fullmatch(r"[0-9a-f]{64}", record[field]) is None for field in ("registry_before_sha256", "registry_after_sha256"))
+            ):
+                refuse("fleet_update_completion_invalid", "fleet update terminal projection is invalid")
+            if not isinstance(record["step_receipt_ids"], list) or not isinstance(record["moves"], list) or not isinstance(record["unchanged"], list):
+                refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+            steps = record["step_receipt_ids"]
+            if len(steps) != len(set(steps)):
+                refuse("fleet_update_completion_invalid", "fleet update completion repeats a step receipt")
+            for value in steps:
+                _record_ref(value, "fleet-update-step-", "step_receipt_ids", refuse)
+            def absolute(value: object) -> bool:
+                return (
+                    isinstance(value, str)
+                    and Path(value).is_absolute()
+                    and str(Path(value)) == value
+                )
+
+            def pins(value: object) -> bool:
+                return (
+                    isinstance(value, dict)
+                    and set(value) == {"manifest_sha256", "source_sha"}
+                    and isinstance(value["manifest_sha256"], str)
+                    and re.fullmatch(r"[0-9a-f]{64}", value["manifest_sha256"]) is not None
+                    and isinstance(value["source_sha"], str)
+                    and re.fullmatch(r"[0-9a-f]{40}", value["source_sha"]) is not None
+                )
+
+            def action_row(row: object, *, allow_generation: bool) -> tuple[str, str]:
+                if not isinstance(row, dict) or not isinstance(row.get("kind"), str):
+                    refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                kind = row["kind"]
+                path = row.get("path")
+                if not absolute(path):
+                    refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                if kind == "shared_install":
+                    if set(row) != {"kind", "path", "from", "to"}:
+                        refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                    _sha256(row["from"], "moves.from", refuse)
+                    _sha256(row["to"], "moves.to", refuse)
+                elif kind == "transport_pins":
+                    if set(row) != {"kind", "path", "from", "to"} or not pins(row["from"]) or not pins(row["to"]):
+                        refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                elif kind == "waiter_binding":
+                    if set(row) != {
+                        "kind", "path", "store", "configuration_from_sha256",
+                        "configuration_to_sha256", "current_tree_digest",
+                        "target_tree_digest",
+                    } or not absolute(row.get("store")):
+                        refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                    for field in (
+                        "configuration_from_sha256", "configuration_to_sha256",
+                        "current_tree_digest", "target_tree_digest",
+                    ):
+                        _sha256(row[field], "moves." + field, refuse)
+                elif kind == "waiter_generation" and allow_generation:
+                    if set(row) != {
+                        "kind", "path", "named_tree_digest", "current_tree_digest",
+                        "retained",
+                    } or row["retained"] is not True:
+                        refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                    _sha256(row["named_tree_digest"], "unchanged.named_tree_digest", refuse)
+                    _sha256(row["current_tree_digest"], "unchanged.current_tree_digest", refuse)
+                else:
+                    refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+                return kind, str(path)
+
+            move_keys = [action_row(row, allow_generation=False) for row in record["moves"]]
+            unchanged_keys = [action_row(row, allow_generation=True) for row in record["unchanged"]]
+            if (
+                move_keys != sorted(move_keys)
+                or unchanged_keys != sorted(unchanged_keys)
+                or len(move_keys) != len(set(move_keys))
+                or len(unchanged_keys) != len(set(unchanged_keys))
+                or set(move_keys) & set(unchanged_keys)
+            ):
+                refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
     elif kind == "registry_role_record":
         ident("node_id")
         ident("template_role")
@@ -653,6 +1106,95 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _record_ref(
                 predecessor, "registry-role-", "predecessor_role_record_id", refuse
             )
+    elif kind == "lane_spawn_receipt":
+        ident("profile")
+        ident("node_id")
+        ident("actor")
+        integer("ordinal", 1, 1000000)
+        _enum(record["state"], {"complete", "spawn_incomplete"}, "state", refuse)
+        if record["failing_step"] is not None:
+            _enum(
+                record["failing_step"],
+                {"workspace", "registry"},
+                "failing_step",
+                refuse,
+            )
+        if record["state"] == "complete" and record["failing_step"] is not None:
+            refuse("lane_spawn_receipt_invalid", "complete spawn cannot name a failing step")
+        artifacts = record["artifacts"]
+        if not isinstance(artifacts, dict) or set(artifacts) != {
+            "workspace", "registry_entry_id", "role_record_id", "lease_id",
+            "committer_name", "committer_email",
+        }:
+            refuse("lane_spawn_artifacts_invalid", "spawn artifacts are malformed")
+        for field, value in artifacts.items():
+            if field == "lease_id" and value is None:
+                continue
+            _bounded_string(value, 1, 4096, "spawn artifact", refuse)
+        compensated = record["compensated"]
+        if (
+            not isinstance(compensated, list)
+            or len(compensated) > 8
+            or any(value not in {"workspace"} for value in compensated)
+        ):
+            refuse("lane_spawn_compensation_invalid", "spawn compensation is malformed")
+    elif kind == "lane_teardown_receipt":
+        ident("profile")
+        ident("node_id")
+        ident("actor")
+        integer("ordinal", 1, 1000000)
+        _enum(record["state"], {"complete"}, "state", refuse)
+        for field in ("removed", "retained"):
+            values = record[field]
+            if (
+                not isinstance(values, list)
+                or not 1 <= len(values) <= 32
+                or any(not isinstance(value, str) or not 1 <= len(value) <= 4096 for value in values)
+            ):
+                refuse("lane_teardown_receipt_invalid", f"{field} testimony is malformed")
+    elif kind == "quota_receipt_record":
+        ident("provider")
+        _bounded_string(record["endpoint_id"], 1, 256, "endpoint_id", refuse)
+        facts = record["facts"]
+        if not isinstance(facts, list) or not 1 <= len(facts) <= 16:
+            refuse("quota_facts_invalid", "quota facts must be a bounded nonempty list")
+        fact_keys = []
+        fact_identities = []
+        for fact in facts:
+            if not isinstance(fact, dict) or set(fact) != {
+                "provider", "surface", "state", "stamp", "source",
+                "evidence_digest", "observed_at", "resets_at",
+            }:
+                refuse("quota_fact_invalid", "quota fact fields are malformed")
+            if fact["provider"] != record["provider"]:
+                refuse("quota_fact_invalid", "quota fact provider does not match its receipt")
+            _bounded_string(fact["surface"], 1, 256, "quota surface", refuse)
+            state = fact["state"]
+            if not isinstance(state, dict) or set(state) != {"kind", "value"}:
+                refuse("quota_state_invalid", "quota state is malformed")
+            _enum(state["kind"], {"consumed_fraction", "session_tokens", "unknown"}, "quota state kind", refuse)
+            value = state["value"]
+            if state["kind"] == "unknown":
+                if value is not None:
+                    refuse("quota_state_invalid", "unknown quota state cannot carry a value")
+            elif state["kind"] == "consumed_fraction":
+                if not isinstance(value, str) or re.fullmatch(r"(?:0\.[0-9]{6}|1\.000000)", value) is None:
+                    refuse("quota_state_invalid", "quota fraction is not canonical")
+            elif not isinstance(value, str) or re.fullmatch(r"(?:0|[1-9][0-9]*)", value) is None:
+                refuse("quota_state_invalid", "quota token count is not canonical")
+            _enum(fact["stamp"], {"MEASURED", "DERIVED", "ESTIMATE"}, "quota stamp", refuse)
+            _bounded_string(fact["source"], 1, 4096, "quota source", refuse)
+            _sha256(fact["evidence_digest"], "evidence_digest", refuse)
+            observed = _timestamp_value(fact["observed_at"], "observed_at", refuse)
+            reset = fact["resets_at"]
+            if reset is not None and _timestamp_value(reset, "resets_at", refuse) < observed:
+                refuse("resets_at_invalid", "quota reset precedes its observation")
+            fact_keys.append((fact["surface"], fact["observed_at"], fact["evidence_digest"]))
+            fact_identities.append((fact["surface"], fact["observed_at"]))
+        if fact_keys != sorted(fact_keys) or len(set(fact_identities)) != len(fact_identities):
+            refuse("quota_facts_invalid", "quota facts must be ordered and unique")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        _sha256(record["receipt_digest"], "receipt_digest", refuse)
     elif kind == "tide_policy_record":
         ident("node_id")
         _bounded_string(record["harness"], 1, 64, "harness", refuse)
@@ -661,7 +1203,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             refuse("tide_threshold_invalid", "tide threshold is not canonical numeric text")
         _enum(record["action"], {"recommend", "direct"}, "action", refuse)
         _enum(record["access_class"], {"A", "B"}, "access_class", refuse)
-        _enum(record["stamp"], {"DERIVED", "SELF_REPORTED"}, "stamp", refuse)
+        _enum(
+            record["stamp"],
+            {"DERIVED", "SELF_REPORTED", "MEASURED_OR_DERIVED"}
+            if normalized_version == 1
+            else {"DERIVED", "SELF_REPORTED"},
+            "stamp",
+            refuse,
+        )
         _bounded_string(record["formula"], 1, 500, "formula", refuse)
         _repository_document(record["receipt_path"], refuse)
         _enum(record["state"], {"active", "cleared"}, "state", refuse)
@@ -679,7 +1228,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         for field in ("value", "threshold"):
             if not isinstance(record[field], str) or re.fullmatch(r"(?:0|0\.[0-9]+|[1-9][0-9]*(?:\.[0-9]+)?)", record[field]) is None:
                 refuse(f"tide_{field}_invalid", f"tide {field} is not canonical numeric text")
-        _enum(record["stamp"], {"DERIVED", "SELF_REPORTED"}, "stamp", refuse)
+        _enum(
+            record["stamp"],
+            {"MEASURED", "DERIVED", "SELF_REPORTED"}
+            if normalized_version == 1
+            else {"DERIVED", "SELF_REPORTED"},
+            "stamp",
+            refuse,
+        )
         _enum(record["access_class"], {"A", "B"}, "access_class", refuse)
         _bounded_string(record["formula"], 1, 500, "formula", refuse)
         sources = record["sources"]
@@ -729,6 +1285,155 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _attempt_binding(
                 record["attempt_binding"], record.get("worker_session_id"), refuse
             )
+    elif kind == "delivery_claim":
+        if not isinstance(record["sha"], str) or re.fullmatch(r"[0-9a-f]{40}", record["sha"]) is None:
+            refuse("claim_sha_invalid", "delivery claim sha must be exactly 40 lowercase hex characters")
+        repo_path = record["repo_path"]
+        if (
+            not isinstance(repo_path, str)
+            or not 1 <= len(repo_path) <= 4096
+            or _terminal_unsafe(repo_path)
+            or not Path(repo_path).is_absolute()
+            or any(part in {"", ".", ".."} for part in Path(repo_path).parts)
+        ):
+            refuse("claim_repo_path_invalid", "delivery claim repo_path must be one canonical absolute path")
+        bank = record["bank"]
+        if bank != "discover":
+            if not isinstance(bank, list) or not 1 <= len(bank) <= 128:
+                refuse("claim_bank_invalid", "delivery claim bank must be discover or a bounded module list")
+            module_pattern = re.compile(
+                r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\Z"
+            )
+            if any(
+                not isinstance(module, str)
+                or len(module) > 256
+                or module_pattern.fullmatch(module) is None
+                for module in bank
+            ) or bank != list(dict.fromkeys(bank)):
+                refuse("claim_bank_invalid", "delivery claim bank modules must be unique import names")
+        declared = record["declared"]
+        if not isinstance(declared, dict) or set(declared) != {"ran", "result"}:
+            refuse("claim_declared_invalid", "delivery claim declared result must name ran and result")
+        ran = _json_integer(declared.get("ran"))
+        if ran is None or not 0 <= ran <= 10_000_000:
+            refuse("claim_declared_invalid", "delivery claim ran count is outside its v0 bounds")
+        _enum(declared.get("result"), {"OK", "FAILED"}, "claim_declared_result", refuse)
+        artifacts = record["artifacts"]
+        if not isinstance(artifacts, list) or len(artifacts) > 256:
+            refuse("claim_artifacts_invalid", "delivery claim artifacts must be a bounded list")
+        artifact_paths: list[str] = []
+        for artifact in artifacts:
+            if not isinstance(artifact, dict) or set(artifact) != {"path", "sha256"}:
+                refuse("claim_artifacts_invalid", "each claimed artifact must name path and sha256")
+            path = artifact["path"]
+            if (
+                not isinstance(path, str)
+                or not 1 <= len(path) <= 1024
+                or _terminal_unsafe(path)
+                or path.startswith("/")
+                or any(part in {"", ".", ".."} for part in path.split("/"))
+            ):
+                refuse("claim_artifact_path_invalid", "claimed artifact path must stay repository-relative")
+            _sha256(artifact["sha256"], "claim_artifact_sha256", refuse)
+            artifact_paths.append(path)
+        if artifact_paths != list(dict.fromkeys(artifact_paths)):
+            refuse("claim_artifacts_invalid", "claimed artifact paths must be unique")
+        _record_ref(record["note_ref"], "msg-", "note_ref", refuse)
+        integer("deadline_seconds", 1, 3600)
+    elif kind == "verification_receipt":
+        _record_ref(record["claim_id"], "delivery-claim-", "claim_id", refuse)
+        ident("verifier")
+        _enum(
+            record["outcome"],
+            {"verified_match", "verified_mismatch", "verification_unrunnable"},
+            "verification_outcome",
+            refuse,
+        )
+        reason = record["reason_code"]
+        if reason is not None:
+            _enum(
+                reason,
+                {
+                    "sha_absent", "sha_unbanked", "repository_invalid",
+                    "scratch_reuse_refused", "checkout_failure",
+                    "bank_module_unresolved", "deadline_exceeded",
+                    "test_output_unparseable", "checkout_dirty",
+                    "cleanup_failed",
+                },
+                "verification_reason_code",
+                refuse,
+            )
+        _bounded_string(record["remedy"], 0, 2048, "verification_remedy", refuse)
+        runner_argv = record["runner_argv"]
+        if not isinstance(runner_argv, list) or len(runner_argv) > 260:
+            refuse("verification_runner_invalid", "verification runner argv is out of bounds")
+        for argument in runner_argv:
+            _bounded_string(argument, 1, 4096, "verification_runner_argument", refuse)
+        if not isinstance(record["python_version"], str) or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", record["python_version"]) is None:
+            refuse("verification_python_version_invalid", "verification python version is not canonical")
+        repo_path = record["repo_path"]
+        if not isinstance(repo_path, str) or not Path(repo_path).is_absolute() or _terminal_unsafe(repo_path):
+            refuse("verification_repo_path_invalid", "verification repo path must be absolute")
+        if not isinstance(record["wall_time_seconds"], str) or re.fullmatch(r"[0-9]+\.[0-9]{6}", record["wall_time_seconds"]) is None:
+            refuse("verification_wall_time_invalid", "verification wall time must be canonical seconds")
+        _enum(record["unchecked_scope"], {"none", "claimed_bank_only"}, "unchecked_scope", refuse)
+        output_sha256 = record["output_sha256"]
+        if output_sha256 is not None:
+            _sha256(output_sha256, "output_sha256", refuse)
+        claim = record["claim"]
+        normalized_claim = validate_record(
+            claim, expected_tenant, frozenset({"delivery_claim"}), integrity=integrity
+        )
+        if normalized_claim["id"] != record["claim_id"] or normalized_claim["repo_path"] != repo_path:
+            refuse("verification_claim_binding_invalid", "verification receipt does not bind its exact claim")
+        measurement = record["measurement"]
+        if measurement is not None:
+            if not isinstance(measurement, dict) or set(measurement) != {
+                "declared", "artifacts", "returncode", "output_sha256"
+            }:
+                refuse("verification_measurement_invalid", "verification measurement fields are malformed")
+            measured_declared = measurement["declared"]
+            if not isinstance(measured_declared, dict) or set(measured_declared) != {"ran", "result"}:
+                refuse("verification_measurement_invalid", "measured test result is malformed")
+            measured_ran = _json_integer(measured_declared.get("ran"))
+            if measured_ran is None or not 0 <= measured_ran <= 10_000_000:
+                refuse("verification_measurement_invalid", "measured test count is out of bounds")
+            _enum(measured_declared.get("result"), {"OK", "FAILED"}, "verification_measured_result", refuse)
+            returncode = _json_integer(measurement["returncode"])
+            if returncode is None or not -255 <= returncode <= 255:
+                refuse("verification_measurement_invalid", "runner return code is out of bounds")
+            _sha256(measurement["output_sha256"], "output_sha256", refuse)
+            measured_artifacts = measurement["artifacts"]
+            if not isinstance(measured_artifacts, list) or len(measured_artifacts) > 256:
+                refuse("verification_measurement_invalid", "measured artifacts are out of bounds")
+            for artifact in measured_artifacts:
+                if not isinstance(artifact, dict) or set(artifact) != {"path", "present", "sha256"}:
+                    refuse("verification_measurement_invalid", "measured artifact fields are malformed")
+                _bounded_string(artifact["path"], 1, 1024, "measured_artifact_path", refuse)
+                if type(artifact["present"]) is not bool:
+                    refuse("verification_measurement_invalid", "measured artifact presence must be boolean")
+                if artifact["present"]:
+                    _sha256(artifact["sha256"], "measured_artifact_sha256", refuse)
+                elif artifact["sha256"] is not None:
+                    refuse("verification_measurement_invalid", "absent measured artifact cannot have a digest")
+        scratch = record["scratch"]
+        if not isinstance(scratch, dict) or set(scratch) != {"path", "created", "destroyed"}:
+            refuse("verification_scratch_invalid", "verification scratch testimony is malformed")
+        if not isinstance(scratch["path"], str) or not Path(scratch["path"]).is_absolute():
+            refuse("verification_scratch_invalid", "verification scratch path must be absolute")
+        if type(scratch["created"]) is not bool or type(scratch["destroyed"]) is not bool:
+            refuse("verification_scratch_invalid", "verification scratch states must be boolean")
+        if record["outcome"] == "verification_unrunnable":
+            if reason is None:
+                refuse("verification_reason_code_invalid", "unrunnable verification requires a reason")
+        elif reason is not None or measurement is None:
+            refuse("verification_outcome_invalid", "completed verification cannot carry an unrunnable reason")
+    elif kind == "journal_checkpoint_state":
+        ident("journal_id")
+        integer("through_seq", 1, 2**63 - 1)
+        integer("byte_length", 1, 64 * 1024 * 1024)
+        _sha256(record["head_sha256"], "head_sha256", refuse)
+        _sha256(record["checkpoint_sha256"], "checkpoint_sha256", refuse)
     elif kind == "message_retracted":
         _record_ref(record["retracted_message_id"], "msg-", "retracted_message_id", refuse)
         _opaque_identifier(record["worker_session_id"], "worker_session_id", refuse)
@@ -917,7 +1622,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
     elif kind == "wake_daemon_consent_receipt":
         ident("node_id")
-        _enum(record["harness"], {"codex", "cursor"}, "harness", refuse)
+        _enum(
+            record["harness"],
+            {"codex", "cursor", "grok-build"}
+            if normalized_version == 1
+            else {"codex", "cursor"},
+            "harness",
+            refuse,
+        )
         _sha256(record["coordinate_digest"], "coordinate_digest", refuse)
         _bounded_string(record["adapter_version"], 1, 64, "adapter_version", refuse)
         _sha256(record["adapter_digest"], "adapter_digest", refuse)
@@ -941,7 +1653,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
     elif kind == "wake_daemon_lifecycle_receipt":
         ident("node_id")
-        _enum(record["harness"], {"codex", "cursor"}, "harness", refuse)
+        _enum(
+            record["harness"],
+            {"codex", "cursor", "grok-build"}
+            if normalized_version == 1
+            else {"codex", "cursor"},
+            "harness",
+            refuse,
+        )
         _sha256(record["coordinate_digest"], "coordinate_digest", refuse)
         _bounded_string(record["daemon_instance_id"], 1, 64, "daemon_instance_id", refuse)
         integer("activation_epoch", 1, 2**63 - 1)
@@ -1004,7 +1723,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             seen_needs.add(dependency)
         if "workspace" in record:
             workspace = record["workspace"]
-            expected = f"/private/tmp/floati-work/{record['id']}"
+            expected = f"\x2fprivate/tmp/floati-work/{record['id']}"
             if workspace is not None and workspace != expected:
                 refuse(
                     "workspace_invalid",
@@ -1323,7 +2042,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _capability_set(record["capability_ceiling"], "capability_ceiling", refuse)
         _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
         _enum(record["workspace_policy"], {"patch_only", "isolated_worktree"}, "workspace_policy", refuse)
-        if not isinstance(record["workspace"], str) or re.fullmatch(r"/private/tmp/floati-work/work-" + _UUID7, record["workspace"]) is None:
+        if not isinstance(record["workspace"], str) or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, record["workspace"]) is None:
             refuse("workspace_invalid", "child workspace must use the closed reservation path")
         _timestamp_value(record["admitted_at_testimony"], "admitted_at_testimony", refuse)
     elif kind == "child_rejected":
@@ -1793,6 +2512,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _record_ref(record["attempt_terminal_id"], "attempt-terminal-", "attempt_terminal_id", refuse)
             integer("max_attempts", 1, 32)
             _enum(record["reason_code"], {"max_attempts"}, "reason_code", refuse)
+    if chain is not None:
+        record = dict(record, **chain)
     return record
 
 
@@ -2638,7 +3359,7 @@ def _resume_binding(
 def _suspension_workspace(value: object, refuse: Any) -> None:
     if (
         not isinstance(value, str)
-        or re.fullmatch(r"/private/tmp/floati-work/work-" + _UUID7, value) is None
+        or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, value) is None
     ):
         refuse(
             "workspace_invalid",
@@ -2647,7 +3368,7 @@ def _suspension_workspace(value: object, refuse: Any) -> None:
 
 
 def _attempt_binding(value: object, worker_session_id: object, refuse: Any) -> None:
-    """Validate Fable's exact legacy literal or complete opaque binding object."""
+    """Validate the reviewer's exact legacy literal or complete opaque binding object."""
 
     if value == "absent_legacy":
         return

@@ -2,15 +2,15 @@
 [38;5;245m~ ≈ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
 [38;5;240mHARBOR MAP // SPEED 4x[0m
 [38;5;240m╭─ ● PIER beta ──────────[0m
-[38;5;196m│  x ▤ VESSEL lane-b ⚑  FAULT E_DENIED[0m
+[38;5;196m│  x ▤ VESSEL builder-b ⚑  FAULT E_DENIED[0m
 [38;5;240m╰──────────────────────────────────────────[0m
 [38;5;240m╭─ ● PIER alpha ──────────[0m
-[38;5;252m│    ▤ VESSEL lane-a ⚑[0m
+[38;5;252m│    ▤ VESSEL builder-a ⚑[0m
 [38;5;240m╰──────────────────────────────────────────[0m
-[38;5;45m● ROUTE // lane-b [beta] ─────▶ lane-a [alpha][0m
+[38;5;45m● ROUTE // builder-b [beta] ─────▶ builder-a [alpha][0m
 [38;5;240mTIMELINE ├[38;5;208m◆[0m[38;5;240m──[38;5;208m◆[0m[38;5;240m──[38;5;196mx[38;5;240m──○┤[0m
 [38;5;245m  3/4 // 1500ms[0m
 [38;5;240mEVENT STREAM ────────────────[0m
-[38;5;252m[38;5;208m◆[0m[38;5;252m +0000.000s  CLAIM    WORK    lane-a work-1 claim[0m
-[38;5;252m│ +0000.500s  TURN     WORKER  lane-b work-1 drive[0m
-[38;5;196m! +0001.000s  DENIED   DENIAL  lane-b work-1 E_DENIED[0m
+[38;5;252m[38;5;208m◆[0m[38;5;252m +0000.000s  CLAIM    WORK    builder-a work-1 claim[0m
+[38;5;252m│ +0000.500s  TURN     WORKER  builder-b work-1 drive[0m
+[38;5;196m! +0001.000s  DENIED   DENIAL  builder-b work-1 E_DENIED[0m

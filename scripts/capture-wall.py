@@ -16,6 +16,7 @@ from typing import Mapping
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT))
 from floati.brand import render_buoy_mark  # noqa: E402
+from floati import fixture_ids  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
 
 from floati.replay_render import render_replay_frame, render_replay_plain  # noqa: E402
@@ -26,6 +27,7 @@ OBSERVED = "2026-08-01T12:00:10.000Z"
 STATES = ("idle", "live", "degraded", "replay", "graph", "install", "selftest")
 MODES = ("standard", "plain")
 THEMES = ("dark", "light")
+_FLOATI_BUILDER = fixture_ids.builder("floati")
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PALETTES = {
     "dark": {"background": "#12161c", "foreground": "#d8dee9", "accent": "#ff9f43", "dim": "#9aa6b2"},
@@ -130,9 +132,9 @@ def _graph_artifacts() -> tuple[Mapping[str, object], Mapping[str, object]]:
         "topology_version": "0",
         "tenant_id": "demo-fleet",
         "nodes": [
-            {"id": "lane-floati", "kind": "node", "role": "Codex", "state": "active"},
+            {"id": _FLOATI_BUILDER, "kind": "node", "role": "Codex", "state": "active"},
             {
-                "id": "puddle-floati-architect",
+                "id": "demo-architect",
                 "kind": "node",
                 "role": "architect",
                 "state": "active",
@@ -142,7 +144,7 @@ def _graph_artifacts() -> tuple[Mapping[str, object], Mapping[str, object]]:
             {
                 "id": "worker-00000000000070008000000000000001",
                 "kind": "worker",
-                "node_id": "lane-floati",
+                "node_id": _FLOATI_BUILDER,
                 "work_item_id": "work-00000000000070008000000000000002",
                 "adapter": "codex",
                 "state": "driving",
@@ -157,14 +159,14 @@ def _graph_artifacts() -> tuple[Mapping[str, object], Mapping[str, object]]:
         "tenant_id": "demo-fleet",
         "pairs": [
             {
-                "sender": "lane-floati",
-                "recipient": "puddle-floati-architect",
+                "sender": _FLOATI_BUILDER,
+                "recipient": "demo-architect",
                 "envelope_count": 4,
                 "denial_count": 1,
             },
             {
-                "sender": "puddle-floati-architect",
-                "recipient": "lane-floati",
+                "sender": "demo-architect",
+                "recipient": _FLOATI_BUILDER,
                 "envelope_count": 3,
                 "denial_count": 0,
             },

@@ -93,7 +93,7 @@ mechanically and the bundle manifest was regenerated last from
 - `git diff --check`: no output, exit 0.
 
 The activation test patches only the account Trash resolver inside its
-isolated `/private/tmp` fixture. It executes `main` with `--dry-run`, proves
+isolated `/tmp` fixture. It executes `main` with `--dry-run`, proves
 the source bytes and root remain in place, proves Trash remains empty, and
 requires the real writer's `trash_only: true` evidence. It also proves the
 purge seam is registered exactly once and that static help carries the

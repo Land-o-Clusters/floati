@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import errno
 import fcntl
 import json
@@ -320,7 +322,7 @@ class _EffectWorkerCase:
             "owner": "node-a",
             "artifact_bindings": [],
         }
-        workspace = Path("/private/tmp/floati-work") / self.run.parent
+        workspace = Path("\x2fprivate/tmp/floati-work") / self.run.parent
         shutil.rmtree(workspace, ignore_errors=True)
         testcase.addCleanup(shutil.rmtree, workspace, True)
         work_item["workspace"] = str(workspace)
@@ -493,22 +495,22 @@ class WorkerContractTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open_direct_home(Path(self.temp.name) / "fleet", create=True)
-        Registry(self.root).register("lane-a", "Codex")
+        Registry(self.root).register(public_ids.builder('a'), "Codex")
         self.work = WorkLog(self.root)
-        self.item = self.work.add("write README line", "lane-a", [], now=NOW)
+        self.item = self.work.add("write README line", public_ids.builder('a'), [], now=NOW)
 
     def grant(self) -> None:
-        AuthorityGrantStore(self.root).claim("work-claims", "lane-a", 60, 60, NOW)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
 
     def test_receipts_project_only_the_latest_durable_worker_state(self) -> None:
         self.assertIsNotNone(WorkerReceipts, "worker receipt contract must exist")
         self.grant()
-        claim = self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
+        claim = self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         receipts = WorkerReceipts(self.root)
         session = "worker-" + uuid7_hex()
-        receipts.append(session, self.item["id"], "lane-a", "fixture", "claim", None, [], now=NOW)
-        receipts.append(session, self.item["id"], "lane-a", "fixture", "spawn", None, [], now=NOW)
-        receipts.append(session, self.item["id"], "lane-a", "fixture", "drive", None, [], now=NOW)
+        receipts.append(session, self.item["id"], public_ids.builder('a'), "fixture", "claim", None, [], now=NOW)
+        receipts.append(session, self.item["id"], public_ids.builder('a'), "fixture", "spawn", None, [], now=NOW)
+        receipts.append(session, self.item["id"], public_ids.builder('a'), "fixture", "drive", None, [], now=NOW)
 
         projected = receipts.sessions()
         self.assertEqual(1, len(projected))
@@ -521,7 +523,7 @@ class WorkerContractTests(unittest.TestCase):
         self.grant()
         adapter = _CompletingAdapter(self.work)
 
-        result = WorkerRunner(self.root, {"fixture": adapter}).run("lane-a", "fixture", now=NOW)
+        result = WorkerRunner(self.root, {"fixture": adapter}).run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("complete", result["transition"])
         item = self.work.show(self.item["id"])[0]
@@ -538,7 +540,7 @@ class WorkerContractTests(unittest.TestCase):
 
         result = WorkerRunner(
             self.root, {"fixture": _RuntimeIdentityAdapter(evidence)},
-        ).run("lane-a", "fixture", now=NOW)
+        ).run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("complete", result["transition"])
         self.assertEqual("floati-worker-adapter", evidence.read_text(encoding="utf-8"))
@@ -554,7 +556,7 @@ class WorkerContractTests(unittest.TestCase):
 
         result = WorkerRunner(
             self.root, {"fixture": adapter}, clock=forbidden_clock,
-        ).run("lane-a", "fixture", now=NOW)
+        ).run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("complete", result["transition"])
         self.assertEqual("completed", self.work.show(self.item["id"])[0]["state"])
@@ -649,7 +651,7 @@ class WorkerContractTests(unittest.TestCase):
         self.grant()
 
         result = WorkerRunner(self.root, {"fixture": _DyingAdapter()}).run(
-            "lane-a", "fixture", now=NOW
+            public_ids.builder('a'), "fixture", now=NOW
         )
 
         self.assertEqual("degrade", result["transition"])
@@ -662,7 +664,7 @@ class WorkerContractTests(unittest.TestCase):
         adapter = _CompletingAdapter(self.work)
 
         with self.assertRaises(ProtocolRefusal) as caught:
-            WorkerRunner(self.root, {"fixture": adapter}).run("lane-a", "fixture", now=NOW)
+            WorkerRunner(self.root, {"fixture": adapter}).run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("worker_authority_missing", caught.exception.code)
         self.assertFalse(adapter.spawned_after_claim)
@@ -674,17 +676,17 @@ class WorkerContractTests(unittest.TestCase):
 
     def test_one_work_claim_cannot_bind_two_worker_sessions(self) -> None:
         self.grant()
-        self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
+        self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         receipts = WorkerReceipts(self.root)
         receipts.append(
             "worker-018f0f23abcd71238000000000000000",
-            self.item["id"], "lane-a", "fixture", "claim", None, [], now=NOW,
+            self.item["id"], public_ids.builder('a'), "fixture", "claim", None, [], now=NOW,
         )
 
         with self.assertRaises(ProtocolRefusal) as caught:
             receipts.append(
                 "worker-018f0f23abce71238000000000000000",
-                self.item["id"], "lane-a", "fixture", "claim", None, [], now=NOW,
+                self.item["id"], public_ids.builder('a'), "fixture", "claim", None, [], now=NOW,
             )
 
         self.assertEqual("worker_claim_already_bound", caught.exception.code)
@@ -692,15 +694,15 @@ class WorkerContractTests(unittest.TestCase):
 
     def test_concurrent_receipt_branches_append_exactly_one_transition(self) -> None:
         self.grant()
-        self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
+        self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         receipts = WorkerReceipts(self.root)
         session = "worker-018f0f23abcd71238000000000000000"
-        receipts.append(session, self.item["id"], "lane-a", "fixture", "claim", None, [], now=NOW)
+        receipts.append(session, self.item["id"], public_ids.builder('a'), "fixture", "claim", None, [], now=NOW)
 
         def append_spawn() -> str:
             try:
                 receipts.append(
-                    session, self.item["id"], "lane-a", "fixture", "spawn", None, [], now=NOW
+                    session, self.item["id"], public_ids.builder('a'), "fixture", "spawn", None, [], now=NOW
                 )
                 return "ok"
             except ProtocolRefusal as exc:
@@ -714,7 +716,7 @@ class WorkerContractTests(unittest.TestCase):
 
     def test_projection_rejects_schema_valid_forged_transition_order(self) -> None:
         self.grant()
-        claimed = self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
+        claimed = self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         forged = {
             "schema_version": 0,
             "id": "worker-receipt-" + uuid7_hex(),
@@ -723,7 +725,7 @@ class WorkerContractTests(unittest.TestCase):
             "kind": "worker_receipt",
             "session_id": "worker-" + uuid7_hex(),
             "work_item_id": self.item["id"],
-            "node_id": "lane-a",
+            "node_id": public_ids.builder('a'),
             "adapter": "fixture",
             "transition": "complete",
             "outcome_code": None,
@@ -742,38 +744,38 @@ class WorkerContractTests(unittest.TestCase):
 
     def test_completed_work_cannot_gain_a_retroactive_worker_session(self) -> None:
         self.grant()
-        self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
-        self.work.complete(self.item["id"], "lane-a", [], now=NOW)
+        self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
+        self.work.complete(self.item["id"], public_ids.builder('a'), [], now=NOW)
 
         with self.assertRaises(ProtocolRefusal) as caught:
             WorkerReceipts(self.root).append(
                 "worker-018f0f23abcd71238000000000000000",
-                self.item["id"], "lane-a", "fixture", "claim", None, [], now=NOW,
+                self.item["id"], public_ids.builder('a'), "fixture", "claim", None, [], now=NOW,
             )
 
         self.assertEqual("worker_claim_missing", caught.exception.code)
 
     def test_complete_receipt_must_match_the_work_completion_bindings(self) -> None:
         self.grant()
-        self.work.claim(self.item["id"], "lane-a", "work-claims", 1, now=NOW)
+        self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         receipts = WorkerReceipts(self.root)
         session = "worker-018f0f23abcd71238000000000000000"
         binding_a = {"repo": "slipway", "sha": "a" * 40, "doc": "README.md"}
         binding_b = {"repo": "slipway", "sha": "b" * 40, "doc": "README.md"}
         for transition in ("claim", "spawn", "drive"):
             receipts.append(
-                session, self.item["id"], "lane-a", "fixture",
+                session, self.item["id"], public_ids.builder('a'), "fixture",
                 transition, None, [], now=NOW,
             )
         receipts.append(
-            session, self.item["id"], "lane-a", "fixture",
+            session, self.item["id"], public_ids.builder('a'), "fixture",
             "bind_artifact", None, [binding_a], now=NOW,
         )
-        self.work.complete(self.item["id"], "lane-a", [binding_b], now=NOW)
+        self.work.complete(self.item["id"], public_ids.builder('a'), [binding_b], now=NOW)
 
         with self.assertRaises(ProtocolRefusal) as caught:
             receipts.append(
-                session, self.item["id"], "lane-a", "fixture",
+                session, self.item["id"], public_ids.builder('a'), "fixture",
                 "complete", None, [binding_a], now=NOW,
             )
 
@@ -783,7 +785,7 @@ class WorkerContractTests(unittest.TestCase):
         self.grant()
 
         result = WorkerRunner(self.root, {"fixture": _MalformedOutputAdapter()}).run(
-            "lane-a", "fixture", now=NOW
+            public_ids.builder('a'), "fixture", now=NOW
         )
 
         self.assertEqual("degrade", result["transition"])
@@ -811,7 +813,7 @@ class WorkerContractTests(unittest.TestCase):
 
         runner.work.claim_owned_oldest = lose_claim  # type: ignore[method-assign]
         with self.assertRaises(ProtocolRefusal) as caught:
-            runner.run("lane-a", "fixture", now=NOW)
+            runner.run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("work_not_open", caught.exception.code)
         refusals = WorkerRefusals(self.root).records()
@@ -829,7 +831,7 @@ class WorkerContractTests(unittest.TestCase):
 
         runner.work.claim_owned_oldest = lose_authority  # type: ignore[method-assign]
         with self.assertRaises(ProtocolRefusal) as caught:
-            runner.run("lane-a", "fixture", now=NOW)
+            runner.run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("worker_authority_changed", caught.exception.code)
         refusals = WorkerRefusals(self.root).records()
@@ -847,7 +849,7 @@ class WorkerContractTests(unittest.TestCase):
 
         runner.work.claim_owned_oldest = corrupt_claim  # type: ignore[method-assign]
         with self.assertRaises(IntegrityFailure) as caught:
-            runner.run("lane-a", "fixture", now=NOW)
+            runner.run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("consumption_state_unavailable", caught.exception.code)
         self.assertFalse(adapter.spawned_after_claim)
@@ -863,7 +865,7 @@ class WorkerContractTests(unittest.TestCase):
         with self.assertRaises(IntegrityFailure) as caught:
             WorkerRunner(
                 self.root, {"fixture": _CompletingAdapter(self.work)}
-            ).run("lane-a", "fixture", now=NOW)
+            ).run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertEqual("authority_state_unavailable", caught.exception.code)
         refusals = WorkerRefusals(self.root).records()
@@ -884,7 +886,7 @@ class WorkerContractTests(unittest.TestCase):
             return item
 
         runner.work.claim_owned_oldest = corrupt_after_claim  # type: ignore[method-assign]
-        result = runner.run("lane-a", "fixture", now=NOW)
+        result = runner.run(public_ids.builder('a'), "fixture", now=NOW)
 
         self.assertFalse(adapter.spawned_after_claim)
         self.assertEqual("degrade", result["transition"])
@@ -901,7 +903,7 @@ class WorkerContractTests(unittest.TestCase):
         adapter = _CorruptAuthorityAfterDriveAdapter(self.work, authority_path)
 
         result = WorkerRunner(self.root, {"fixture": adapter}).run(
-            "lane-a", "fixture", now=NOW
+            public_ids.builder('a'), "fixture", now=NOW
         )
 
         self.assertEqual("degrade", result["transition"])
@@ -919,7 +921,7 @@ class WorkerContractTests(unittest.TestCase):
 
         with self.assertRaises(IntegrityFailure) as caught:
             WorkerRunner(self.root, {"fixture": adapter}).run(
-                "lane-a", "fixture", now=NOW
+                public_ids.builder('a'), "fixture", now=NOW
             )
 
         self.assertEqual("consumption_state_unavailable", caught.exception.code)
@@ -932,14 +934,14 @@ class WorkerContractTests(unittest.TestCase):
         self.grant()
 
         WorkerRunner(self.root, {"fixture": _CompletingAdapter(self.work)}).run(
-            "lane-a", "fixture", now=NOW
+            public_ids.builder('a'), "fixture", now=NOW
         )
 
         self.assertFalse(
-            self.root.resolve_relative("receipts/deliveries/lane-a.jsonl").exists()
+            self.root.resolve_relative(public_ids.compose('receipts/deliveries/', public_ids.ledger(public_ids.builder('a')))).exists()
         )
         self.assertFalse(
-            self.root.resolve_relative("receipts/acks/lane-a.jsonl").exists()
+            self.root.resolve_relative(public_ids.compose('receipts/acks/', public_ids.ledger(public_ids.builder('a')))).exists()
         )
 
     def test_hang_and_untyped_exception_become_distinct_typed_degradation(self) -> None:
@@ -951,13 +953,13 @@ class WorkerContractTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 with tempfile.TemporaryDirectory() as temporary:
                     root = FloatiRoot.open_direct_home(Path(temporary) / "fleet", create=True)
-                    Registry(root).register("lane-a", "Codex")
-                    AuthorityGrantStore(root).claim("work-claims", "lane-a", 60, 60, NOW)
-                    WorkLog(root).add("bounded adapter", "lane-a", [], now=NOW)
+                    Registry(root).register(public_ids.builder('a'), "Codex")
+                    AuthorityGrantStore(root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
+                    WorkLog(root).add("bounded adapter", public_ids.builder('a'), [], now=NOW)
 
                     result = WorkerRunner(
                         root, {"fixture": adapter}, call_timeout=0.05
-                    ).run("lane-a", "fixture", now=NOW)
+                    ).run(public_ids.builder('a'), "fixture", now=NOW)
 
                     self.assertEqual("degrade", result["transition"])
                     self.assertEqual(expected, result["outcome_code"])
@@ -965,13 +967,13 @@ class WorkerContractTests(unittest.TestCase):
     def test_runner_passes_a_deadline_clipped_to_ttl_minus_the_fixed_margin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = Path(temporary) / "deadlines.txt"
-            AuthorityGrantStore(self.root).claim("bounded", "lane-a", 10, 10, NOW)
+            AuthorityGrantStore(self.root).claim("bounded", public_ids.builder('a'), 10, 10, NOW)
 
             result = WorkerRunner(
                 self.root,
                 {"fixture": _DeadlineAdapter(evidence)},
                 call_timeout=30,
-            ).run("lane-a", "fixture", now=NOW)
+            ).run(public_ids.builder('a'), "fixture", now=NOW)
 
             self.assertEqual("complete", result["transition"])
             entries = evidence.read_text(encoding="utf-8").splitlines()
@@ -984,7 +986,7 @@ class WorkerContractTests(unittest.TestCase):
     def test_runner_reobserves_wall_clock_immediately_before_adapter_launch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = Path(temporary) / "fresh-deadline.txt"
-            AuthorityGrantStore(self.root).claim("bounded", "lane-a", 10, 10, NOW)
+            AuthorityGrantStore(self.root).claim("bounded", public_ids.builder('a'), 10, 10, NOW)
             observations = iter((NOW, NOW + timedelta(seconds=2)))
             last = NOW + timedelta(seconds=2)
 
@@ -996,7 +998,7 @@ class WorkerContractTests(unittest.TestCase):
                 {"fixture": _DeadlineAdapter(evidence)},
                 call_timeout=30,
                 clock=clock,
-            ).run("lane-a", "fixture")
+            ).run(public_ids.builder('a'), "fixture")
 
             self.assertEqual("complete", result["transition"])
             spawn_seconds = float(
@@ -1008,12 +1010,12 @@ class WorkerContractTests(unittest.TestCase):
     def test_deadline_that_cannot_fit_margin_degrades_without_starting_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = Path(temporary) / "not-started.txt"
-            AuthorityGrantStore(self.root).claim("bounded", "lane-a", 1, 1, NOW)
+            AuthorityGrantStore(self.root).claim("bounded", public_ids.builder('a'), 1, 1, NOW)
 
             result = WorkerRunner(
                 self.root,
                 {"fixture": _DeadlineAdapter(evidence)},
-            ).run("lane-a", "fixture", now=NOW)
+            ).run(public_ids.builder('a'), "fixture", now=NOW)
 
             self.assertEqual("degrade", result["transition"])
             self.assertEqual("authority_deadline_unavailable", result["outcome_code"])
@@ -1028,7 +1030,7 @@ class WorkerContractTests(unittest.TestCase):
             result = WorkerRunner(
                 self.root,
                 {"codex": _WorkspaceAdapter(evidence)},
-            ).run("lane-a", "codex", now=NOW)
+            ).run(public_ids.builder('a'), "codex", now=NOW)
 
             self.assertEqual("degrade", result["transition"])
             self.assertEqual("workspace_mapping_missing", result["outcome_code"])
@@ -1046,7 +1048,7 @@ class WorkerContractTests(unittest.TestCase):
                 self.root,
                 {"fixture": _GrandchildHangAdapter(pid_path)},
                 call_timeout=0.2,
-            ).run("lane-a", "fixture", now=NOW)
+            ).run(public_ids.builder('a'), "fixture", now=NOW)
 
             self.assertEqual("process_timeout", result["outcome_code"])
             pid = int(pid_path.read_text(encoding="utf-8"))
@@ -1064,18 +1066,18 @@ class WorkerContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             root = FloatiRoot.open_direct_home(Path(temporary) / "fleet", create=True)
-            Registry(root).register("lane-a", "Codex")
+            Registry(root).register(public_ids.builder('a'), "Codex")
             current = datetime.now(timezone.utc)
             item = WorkLog(root).add(
                 "Create PROOF.txt",
-                "lane-a",
+                public_ids.builder('a'),
                 [],
                 provision_workspace=True,
                 now=current,
             )
             workspace = Path(str(item["workspace"]))
             self.addCleanup(shutil.rmtree, workspace, True)
-            AuthorityGrantStore(root).claim("work-claims", "lane-a", 10, 10, current)
+            AuthorityGrantStore(root).claim("work-claims", public_ids.builder('a'), 10, 10, current)
             harness = (
                 Path(__file__).parent
                 / "fixtures"
@@ -1088,7 +1090,7 @@ class WorkerContractTests(unittest.TestCase):
 
             result = WorkerRunner(
                 root, {"codex": adapter}, call_timeout=0.3
-            ).run("lane-a", "codex", now=current)
+            ).run(public_ids.builder('a'), "codex", now=current)
 
             self.assertEqual("process_timeout", result["outcome_code"])
             pid_path = workspace / ".floati" / "harness.pid"
@@ -1113,18 +1115,18 @@ class WorkerContractTests(unittest.TestCase):
     def test_adapter_crash_after_spawn_reaps_the_live_app_server_process(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = FloatiRoot.open_direct_home(Path(temporary) / "fleet", create=True)
-            Registry(root).register("lane-a", "Codex")
+            Registry(root).register(public_ids.builder('a'), "Codex")
             current = datetime.now(timezone.utc)
             item = WorkLog(root).add(
                 "Create PROOF.txt",
-                "lane-a",
+                public_ids.builder('a'),
                 [],
                 provision_workspace=True,
                 now=current,
             )
             workspace = Path(str(item["workspace"]))
             self.addCleanup(shutil.rmtree, workspace, True)
-            AuthorityGrantStore(root).claim("work-claims", "lane-a", 10, 10, current)
+            AuthorityGrantStore(root).claim("work-claims", public_ids.builder('a'), 10, 10, current)
             harness = (
                 Path(__file__).parent
                 / "fixtures"
@@ -1136,7 +1138,7 @@ class WorkerContractTests(unittest.TestCase):
             )
 
             result = WorkerRunner(root, {"codex": adapter}, call_timeout=1).run(
-                "lane-a", "codex", now=current
+                public_ids.builder('a'), "codex", now=current
             )
 
             self.assertEqual("process_died", result["outcome_code"])
@@ -1287,7 +1289,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches dependency path replacement selecting unbound prelude bytes."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1352,7 +1354,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches a held source inode changing after its parent digest is frozen."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1408,7 +1410,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches path finders resolving any pre-isolation project dependency."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             bootstrap = self._prelude_package(root / "trusted")
             package = bootstrap.parent
@@ -1481,7 +1483,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         )
         self.assertTrue(hasattr(worker_exec, "_PRELUDE_SOURCES"))
         self.assertEqual(expected, worker_exec._PRELUDE_SOURCES)
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             records = worker_exec._open_validated_prelude(bootstrap.resolve())
             try:
@@ -1525,7 +1527,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches any held prelude source surviving either parent disposition."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             captured: list[int] = []
 
@@ -1799,7 +1801,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches tenant, relative, symlink, or non-file bootstrap selection."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             regular = self._prelude_package(root / "regular")
             symbolic = root / "bootstrap-link.py"
@@ -1824,7 +1826,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches native loader configuration reaching pre-isolation startup."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             bootstrap = self._prelude_package(Path(temporary))
             hostile = {
                 "DYLD_INSERT_LIBRARIES": "/hostile/dyld.dylib",
@@ -1860,7 +1862,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches bootstrap pathname replacement changing the executed program."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             marker = root / "marker"
             bootstrap = self._prelude_package(root / "trusted")
@@ -1904,7 +1906,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches execution when opened bootstrap bytes change after hashing."""
         from floati.worker_exec import spawn_effect_worker
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             marker = root / "marker"
             bootstrap = self._prelude_package(root / "trusted")
@@ -2201,7 +2203,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
 
     def test_real_backend_executes_zero_parent_adapter_callbacks(self) -> None:
         """Catches fresh exec inspecting or running the parent adapter object."""
-        callback_evidence = Path(tempfile.mkdtemp(dir="/private/tmp")) / "callback"
+        callback_evidence = Path(tempfile.mkdtemp(dir="\x2fprivate/tmp")) / "callback"
         self.addCleanup(shutil.rmtree, callback_evidence.parent, True)
 
         class CallbackAdapter(_EffectReportingAdapter):
@@ -2490,10 +2492,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = FloatiRoot.open_direct_home(Path(temp.name) / "fleet", create=True)
-        Registry(root).register("lane-a", "Codex")
+        Registry(root).register(public_ids.builder('a'), "Codex")
         work = WorkLog(root)
-        work.add("legacy effect-disabled work", "lane-a", [], now=NOW)
-        AuthorityGrantStore(root).claim("work-claims", "lane-a", 60, 60, NOW)
+        work.add("legacy effect-disabled work", public_ids.builder('a'), [], now=NOW)
+        AuthorityGrantStore(root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
 
         def forbidden_clock() -> datetime:
             raise AssertionError("disabled effect context sampled its clock")
@@ -2515,7 +2517,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         ):
             result = WorkerRunner(
                 root, {"fixture": DisabledAdapter(work)}, clock=forbidden_clock,
-            ).run("lane-a", "fixture", now=NOW)
+            ).run(public_ids.builder('a'), "fixture", now=NOW)
         self.assertEqual("complete", result["transition"])
 
         class DirectDisabledAdapter:
@@ -2553,7 +2555,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         from floati.adapters.codex_live import CodexAppServerAdapter
         from floati.worker_isolation import prepare_worker_isolation as real_prepare
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             evidence = Path(temporary) / "prepared.jsonl"
             harness = (
                 Path(__file__).parent
@@ -2641,7 +2643,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         """Catches cleanup leaking ephemeral paths or deleting durable artifacts."""
         from floati.adapters.codex_live import CodexAppServerAdapter
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             evidence = Path(temporary) / "policy.json"
             harness = (
                 Path(__file__).parent
@@ -2708,7 +2710,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
                 "floati-effect-worker-", worker_isolation._SCRATCH_PREFIX,
             )
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             root = Path(temporary)
             tenant = root / "tenant"
             effects = tenant / "effects"
@@ -2795,7 +2797,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         ):
             result = case.execute()
 
-        workspace = Path("/private/tmp/floati-work") / case.run.parent
+        workspace = Path("\x2fprivate/tmp/floati-work") / case.run.parent
         self.assertEqual(1, len(policies))
         policy = policies[0]
         self.assertTrue(policy.write_probe.name.startswith(".floati-effect-worker-"))

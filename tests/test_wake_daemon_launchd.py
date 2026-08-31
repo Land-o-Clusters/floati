@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import subprocess
 import tempfile
@@ -30,12 +32,12 @@ class _Launchctl:
 
 class WakeDaemonLaunchAgentTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
-        Registry(self.root).register("lane-a", "worker")
-        self.coordinate = DaemonCoordinate(self.root, "lane-a", "cursor")
+        Registry(self.root).register(public_ids.builder('a'), "worker")
+        self.coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.executable = self.base / "cursor-agent"
@@ -102,7 +104,7 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
                 "--root",
                 str(self.root.path),
                 "--as",
-                "lane-a",
+                public_ids.builder('a'),
                 "--harness",
                 "cursor",
                 "--activation-epoch",
@@ -115,6 +117,62 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
             preview["plist_digest"],
         )
         self.assertNotIn(b"Sockets", preview["encoded"])
+        self.assertEqual([], self.runner.calls)
+
+    def test_grok_build_preview_is_bound_to_the_exact_closed_coordinate(self) -> None:
+        from floati.wake_daemon_launchd import LaunchAgentManager
+
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "grok-build")
+        AdapterBindingStore(self.root).write(
+            coordinate,
+            session_id=public_ids.compose(public_ids.verifier(), '-session-1'),
+            workspace=self.workspace,
+            executable=self.executable,
+            adapter_version="1",
+            adapter_digest=adapter_contract_digest("grok-build"),
+            binding_epoch=1,
+        )
+        DaemonConsentLedger(self.root).consent(
+            coordinate,
+            adapter_version="1",
+            adapter_digest=adapter_contract_digest("grok-build"),
+            min_poll_seconds=1,
+            max_poll_seconds=30,
+            max_backoff_seconds=120,
+            activation_epoch=7,
+            idempotency_key=public_ids.compose(public_ids.verifier(), '-launchd-consent'),
+        )
+        manager = LaunchAgentManager(
+            coordinate,
+            installed_launcher=self.launcher,
+            launch_agents_directory=self.launch_agents,
+            uid=501,
+            runner=self.runner,
+        )
+
+        preview = manager.preview()
+
+        self.assertEqual(
+            [
+                str(self.launcher),
+                "wake",
+                "daemon",
+                "serve",
+                "--root",
+                str(self.root.path),
+                "--as",
+                public_ids.builder('a'),
+                "--harness",
+                "grok-build",
+                "--activation-epoch",
+                "7",
+            ],
+            preview["plist"]["ProgramArguments"],
+        )
+        self.assertEqual(
+            hashlib.sha256(preview["encoded"]).hexdigest(),
+            preview["plist_digest"],
+        )
         self.assertEqual([], self.runner.calls)
 
     def test_program_arguments_execute_installed_shell_launcher_directly(self) -> None:

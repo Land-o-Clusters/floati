@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -38,7 +40,7 @@ def _denial(index: int, timestamp: str) -> dict[str, object]:
         "timestamp": timestamp,
         "kind": "denial_receipt",
         "attempt_id": f"attempt-{UUIDS[index]}",
-        "claimed_sender": "alice",
+        "claimed_sender": public_ids.worker('alpha'),
         "claimed_recipient": "bob",
         "reason_code": "unknown_sender",
     }
@@ -51,7 +53,7 @@ def _message(index: int, timestamp: str) -> dict[str, object]:
         "tenant_id": "time-hostility",
         "timestamp": timestamp,
         "kind": "message_envelope",
-        "sender": "alice",
+        "sender": public_ids.worker('alpha'),
         "recipient": "bob",
         "repo": "slipway",
         "sha": "a" * 40,
@@ -84,7 +86,7 @@ def _decision(
         "author_authority": "worker" if status == "proposed" else "architect",
         "source_artifact_ids": ["run:run-018f7e9b3c137abc8def0123456789ab"],
         "task_contract_id": None,
-        "decided_by": "fable",
+        "decided_by": public_ids.reviewer(),
         "supersedes": supersedes,
     }
     record["decision_digest"] = decision_digest(record)
@@ -139,7 +141,7 @@ class TimeHostilityGauntletTests(unittest.TestCase):
 
     def test_status_last_activity_uses_latest_append_not_largest_timestamp(self) -> None:
         registry = Registry(self.root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         records = (
             _message(0, "2036-01-01T00:00:00.000Z"),
@@ -152,7 +154,7 @@ class TimeHostilityGauntletTests(unittest.TestCase):
         snapshot = Supervisor(self.root).snapshot(NOW)
 
         nodes = {node["node_id"]: node for node in snapshot["nodes"]}
-        self.assertEqual(records[-1]["timestamp"], nodes["alice"]["last_activity"])
+        self.assertEqual(records[-1]["timestamp"], nodes[public_ids.worker('alpha')]["last_activity"])
         self.assertEqual(records[-1]["timestamp"], nodes["bob"]["last_activity"])
 
     def test_board_receipt_ticker_uses_reverse_append_ordinal_not_timestamp(self) -> None:
@@ -232,7 +234,7 @@ class TimeHostilityGauntletTests(unittest.TestCase):
                 ]
             )
 
-        # Fable ruling A: the durable decision digest includes timestamp
+        # reviewer ruling A: the durable decision digest includes timestamp
         # testimony, so capsule bytes may differ.  The invariant is the
         # accepted state selected in physical ledger order.
         self.assertEqual(accepted_selections[0], accepted_selections[1])

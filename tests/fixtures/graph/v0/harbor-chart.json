@@ -3,13 +3,13 @@
   "topology_version": "0",
   "tenant_id": "alpha",
   "nodes": [
-    {"id": "lane-a", "kind": "node", "role": "Codex", "state": "active"}
+    {"id": "builder-a", "kind": "node", "role": "Codex", "state": "active"}
   ],
   "workers": [
     {
       "id": "worker-018f0f23abcd71238000000000000000",
       "kind": "worker",
-      "node_id": "lane-a",
+      "node_id": "builder-a",
       "work_item_id": "work-018f0f23abce71238000000000000000",
       "adapter": "codex",
       "state": "claim",

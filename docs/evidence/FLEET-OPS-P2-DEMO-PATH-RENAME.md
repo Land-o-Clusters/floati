@@ -143,7 +143,7 @@ Reported rather than silently reconciled:
   `floati/c7_2_bundle.py`, and `bundle/c7.*/schemas/` — an unrelated C7
   conflicting-binding term, not a demo path.
 - Not exercised: the local 4K master. It remains local-only and uncommitted;
-  its corpus row is an absolute `/private/tmp/...` path and was not edited,
+  its corpus row is an absolute `/tmp/...` path and was not edited,
   and no decode or re-hash of it was performed in this window.
 - Not claimed: the guided sitting, its execution, or any sitting verdict.
 - Out of scope by fence (R7) and untouched: the wake daemon, installer,

@@ -63,7 +63,7 @@ stderr: 0 bytes. exit: 0.
 
 ## Check 3 — live-root exercise (scratch root created by this seat)
 
-Root (created here, not the puddle-fleet root, not `/private/tmp`):
+Root (created here, not the puddle-fleet root, not `/tmp`):
 
 `~/Projects/floati-grok/.conformance-scratch/c2-live-root`
 

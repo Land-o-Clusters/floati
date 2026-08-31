@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 import json
@@ -38,7 +40,7 @@ def message(message_id: str, *, recipient: str = "bob", session: object = None, 
         "tenant_id": tenant_id,
         "timestamp": NOW,
         "kind": "message_envelope",
-        "sender": "alice",
+        "sender": public_ids.worker('alpha'),
         "recipient": recipient,
         "repo": "slipway",
         "sha": "a" * 40,
@@ -177,9 +179,9 @@ class WakeHoldRecordTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         root = FloatiRoot.open(Path(temp.name), "alpha")
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
-        EventLog(root, registry).send("alice", "bob", "slipway", "a" * 40, "docs/evidence/hold.md", "hold", idempotency_key="hold")
+        EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/hold.md", "hold", idempotency_key="hold")
         WakeHoldController(root).evaluate("bob", idempotency_key="hold-view")
         self.assertEqual([], FleetProjection(root).receipts("bob")["deliveries"])
 
@@ -286,10 +288,10 @@ class WakeHoldRecordTests(unittest.TestCase):
             self.addCleanup(temp.cleanup)
             root = FloatiRoot.open(Path(temp.name), "alpha")
             registry = Registry(root)
-            registry.register("alice", "worker")
+            registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
             item = EventLog(root, registry).send(
-                "alice", "bob", "slipway", "a" * 40, "docs/evidence/provenance.md",
+                public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/provenance.md",
                 "provenance", idempotency_key="provenance-message",
             )
             return root, str(item["id"])
@@ -330,10 +332,10 @@ class WakeHoldRecordTests(unittest.TestCase):
                 self.addCleanup(temp.cleanup)
                 root = FloatiRoot.open(Path(temp.name), "alpha")
                 registry = Registry(root)
-                registry.register("alice", "worker")
+                registry.register(public_ids.worker('alpha'), "worker")
                 registry.register("bob", "worker")
                 EventLog(root, registry).send(
-                    "alice", "bob", "slipway", "a" * 40,
+                    public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
                     "docs/evidence/copied-globals.md", "copied globals",
                     idempotency_key="copied-globals-message",
                 )
@@ -361,10 +363,10 @@ class WakeHoldRecordTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         root = FloatiRoot.open(Path(temp.name), "alpha")
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root, registry).send(
-            "alice", "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
             "docs/evidence/private-globals.md", "private globals",
             idempotency_key="private-globals-message",
         )
@@ -393,7 +395,7 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         registry = Registry(self.root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         self.events = EventLog(self.root, registry)
 
@@ -404,7 +406,7 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         from floati.wake_hold import WakeAttemptLedger, WakeHoldController
 
         message = self.events.send(
-            "alice", "bob", "floati", "a" * 40,
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/wake-attempt.md", "wake attempt",
             idempotency_key="wake-attempt-message",
         )
@@ -443,7 +445,7 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         owner = "session-018f7e9b3c137abc8def0123456789ab"
         intruder = "session-018f7e9b3c147abc8def0123456789ab"
         message = self.events.send(
-            "alice", "bob", "floati", "a" * 40,
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/wake-attempt.md", "wake attempt",
             idempotency_key="owned-wake-message", worker_session_id=owner,
         )
@@ -810,7 +812,7 @@ class WakeHoldProjectionTests(unittest.TestCase):
             "retracted_message_id": self.first,
             "worker_session_id": session,
             "reason": "sent_in_error",
-            "author": "alice",
+            "author": public_ids.worker('alpha'),
         }
         arguments = {
             "deliveries": [], "acknowledgments": [], "recipient": "bob",
@@ -854,13 +856,13 @@ class WakeHoldControllerTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         registry = Registry(self.root)
-        for node in ("alice", "bob", "charlie"):
+        for node in (public_ids.worker('alpha'), "bob", "charlie"):
             registry.register(node, "worker")
         self.events = EventLog(self.root, registry)
 
     def send(self, recipient: str = "bob", *, session: object = None, key: str = "message") -> dict:
         return self.events.send(
-            "alice", recipient, "slipway", "a" * 40,
+            public_ids.worker('alpha'), recipient, "slipway", "a" * 40,
             "docs/evidence/wake-controller.md", "controller evidence",
             idempotency_key=key, worker_session_id=session,
         )
@@ -910,7 +912,7 @@ class WakeHoldControllerTests(unittest.TestCase):
         self.assertFalse(after_ack["wake_required"])
         self.assertEqual([], after_ack["fresh_messages"])
         self.assertIsNone(after_ack["receipt"])
-        self.events.retract(second["id"], worker_session_id=session, reason="sent_in_error", author="alice")
+        self.events.retract(second["id"], worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'))
         after_retraction = self.evaluate("response-loss", worker_session_id=session)
         self.assertEqual("caught_up", after_retraction["state"])
         self.assertFalse(after_retraction["wake_required"])
@@ -926,7 +928,7 @@ class WakeHoldControllerTests(unittest.TestCase):
             "bob", [message["id"]], acting_session_id="wake-hold-session",
             worker_session_id=session,
         )
-        self.events.retract(message["id"], worker_session_id=session, reason="sent_in_error", author="alice")
+        self.events.retract(message["id"], worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'))
         for key in ("first-key", "new-key"):
             with self.subTest(key=key):
                 artifact = self.evaluate(key, worker_session_id=session)

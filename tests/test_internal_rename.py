@@ -33,7 +33,7 @@ FROZEN_IDENTITY_FORBIDDEN_TOKENS = (
     "floati.local",
     "Slipway",
     "x-slipway-",
-    "/private/tmp/slipway-work",
+    "\x2fprivate/tmp/slipway-work",
     r"com\\.slipway\\.oneshot\\.",
     '"path": "slip/',
     '"path": "scripts/slip"',

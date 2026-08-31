@@ -33,7 +33,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
     )
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.protocol_path, self.observer_path = copy_exact_observer_source_package(
@@ -855,9 +855,9 @@ class EffectReconciliationExecTests(unittest.TestCase):
             return real_spawn(executable, argv, environment, **kwargs)
 
         safe_remote_environment = {
-            "SSH_AUTH_SOCK": "/private/tmp/slipway-agent.sock",
-            "SSL_CERT_FILE": "/private/tmp/slipway-ca.pem",
-            "SSL_CERT_DIR": "/private/tmp/slipway-certs",
+            "SSH_AUTH_SOCK": "\x2fprivate/tmp/slipway-agent.sock",
+            "SSL_CERT_FILE": "\x2fprivate/tmp/slipway-ca.pem",
+            "SSL_CERT_DIR": "\x2fprivate/tmp/slipway-certs",
             "NO_PROXY": "localhost,127.0.0.1",
             "HTTPS_PROXY": "https://proxy.example.invalid",
             "HTTP_PROXY": "http://proxy.example.invalid",

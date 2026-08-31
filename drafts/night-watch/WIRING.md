@@ -25,7 +25,7 @@ a placeholder key emitted by `render_morning_report`:
 `[[morning.header]] [[morning.window]] [[morning.node.summary]]
 [[morning.node.violations]] [[morning.node.paused]] [[morning.loop.finding]]
 [[morning.healthy.silence]] [[morning.footer]]`. Copy keys are
-placeholders only; wording is Fable's.
+placeholders only; wording is the architect's.
 
 ## 3. ACTIVATION (NOT the test gate)
 
@@ -69,7 +69,7 @@ Release-binary rows: 3 (Slipway), 7 files — rides an owner slot;
 
 ESTIMATE: 4–8 hours total wiring (CLI verb + JSON surface + manifest regen
 + receipts), assuming no drift surprises. Copy authoring (placeholder
-filling) is separate and Fable-owned.
+filling) is separate and architect-owned.
 
 ## 7. Non-authority restatement
 

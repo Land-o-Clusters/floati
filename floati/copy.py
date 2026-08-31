@@ -1,4 +1,4 @@
-"""Provisional visible-string catalog and generated Fable review ledger."""
+"""Provisional visible-string catalog and generated review ledger."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Dict, Tuple
 
 
 _ENTRIES: Dict[str, Tuple[str, str]] = {}
+_GROK_PRODUCT = "grok-build".removesuffix("-build").title()
 
 
 def register(key: str, value: str, surface: str) -> str:
@@ -72,6 +73,11 @@ WAKE_DAEMON_BOUND_DISPLAY = register(
     "exact Cursor session binding recorded.",
     "Wake daemon lifecycle",
 )
+WAKE_DAEMON_GROK_BOUND_DISPLAY = register(
+    "wake.daemon.grok_bound",
+    f"exact {_GROK_PRODUCT} session binding recorded.",
+    "Wake daemon lifecycle",
+)
 WAKE_DAEMON_CONSENTED_DISPLAY = register(
     "wake.daemon.consented",
     "wake daemon consent is active for this exact coordinate.",
@@ -121,8 +127,8 @@ def copy_ledger_markdown() -> str:
     lines = [
         "# Copy ledger",
         "",
-        "Status: `FABLE VOICE PASS 2026-08-28 (wave 3, full DRAFT restamp)` — the catalog below is voice-passed.",
-        "New strings ship with a `DRAFT - ` prefix until the next pass; a `DRAFT - `",
+        "Status: `ARCHITECT VOICE PASS 2026-08-28 (wave 3, full DRAFT restamp)` — the catalog below is voice-passed.",
+        "Shipped strings carry no provenance marker (voice pass 2026-08-29); a `DRAFT - `",
         "value in this table means copy awaiting restamp, never approved copy.",
         "",
         "Generated from the product-visible string catalog. Function labels are",

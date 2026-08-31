@@ -6,6 +6,7 @@ import argparse
 import io
 import json
 import signal
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Tuple
@@ -110,12 +111,40 @@ def _node_add(args: argparse.Namespace) -> HandlerResult:
 
 
 def _node_retire(args: argparse.Namespace) -> HandlerResult:
+    if args.instance is not None:
+        from .lane_scaling import LaneScalingService, load_role_profiles
+
+        profiles = load_role_profiles(Path(__file__).parents[1] / "roles" / "profiles")
+        result = LaneScalingService(_root(args.root), profiles).retire(
+            actor=args.actor,
+            instance=args.instance,
+            drain=args.drain,
+        )
+        return "ok", result, OK
+    if args.drain:
+        from .errors import ProtocolRefusal
+
+        raise ProtocolRefusal(
+            "arguments_invalid", "--drain composes only with --instance"
+        )
     root = _root(args.root)
     preview = io.StringIO()
     result = NodeWizard(
         root, RegistryAdminBackend(root), id_factory=uuid7_hex
     ).retire_from_keys([args.node], preview)
     return "ok", _previewed(result, preview), OK
+
+
+def _node_spawn(args: argparse.Namespace) -> HandlerResult:
+    from .lane_scaling import LaneScalingService, load_role_profiles
+
+    profiles = load_role_profiles(Path(__file__).parents[1] / "roles" / "profiles")
+    result = LaneScalingService(_root(args.root), profiles).spawn(
+        actor=args.actor,
+        profile_name=args.lane_profile,
+        ordinal=args.ordinal,
+    )
+    return "ok", result, OK
 
 
 def _node_switch(args: argparse.Namespace) -> HandlerResult:
@@ -178,6 +207,78 @@ def _role_show(args: argparse.Namespace) -> HandlerResult:
 
         raise ProtocolRefusal("role_template_unknown", "selected role template is not shipped")
     return "ok", {"template": template.record, "sha256": template.digest}, OK
+
+
+def _quota_collect(args: argparse.Namespace) -> HandlerResult:
+    from .errors import ProtocolRefusal
+    from .quota import QuotaLedger
+    from .quota_adapters import (
+        MAX_PROVIDER_PAYLOAD_BYTES,
+        adapter_for,
+        collect_codex_app_server,
+    )
+
+    root = _root(args.root)
+    adapter = adapter_for(args.provider)
+    if args.provider == "openai_codex":
+        if args.executable is None:
+            raise ProtocolRefusal(
+                "quota_executable_required",
+                "Codex quota collection requires one explicit local executable",
+            )
+        receipt = collect_codex_app_server(
+            Path(args.executable),
+            observed_at=args.observed_at,
+            idempotency_key=args.idempotency_key,
+        )
+    else:
+        if args.executable is not None:
+            raise ProtocolRefusal(
+                "quota_executable_not_supported",
+                "only Codex quota collection accepts an executable",
+            )
+        if args.provider in {"anthropic_claude_code", "google_gemini"}:
+            payload = sys.stdin.buffer.read(MAX_PROVIDER_PAYLOAD_BYTES + 1)
+            if len(payload) > MAX_PROVIDER_PAYLOAD_BYTES:
+                raise ProtocolRefusal(
+                    "quota_payload_oversized", "provider testimony exceeds one MiB"
+                )
+        else:
+            payload = b""
+        receipt = adapter.observe(
+            payload,
+            observed_at=args.observed_at,
+            idempotency_key=args.idempotency_key,
+        )
+    row = QuotaLedger(root).append(receipt)
+    return "ok", {
+        "provider": receipt.provider,
+        "receipt": receipt.to_dict(),
+        "ledger_record_id": row["id"],
+    }, OK
+
+
+def _quota_show(args: argparse.Namespace) -> HandlerResult:
+    from .quota import QuotaLedger
+    from .quota_adapters import adapter_for
+
+    root = _root(args.root)
+    adapter_for(args.provider)
+    latest = QuotaLedger(root).latest_record(args.provider)
+    if latest is None:
+        return "no_result", {"provider": args.provider, "receipt": None}, 32
+    record_id, receipt = latest
+    return "ok", {
+        "provider": args.provider,
+        "receipt": receipt.to_dict(),
+        "ledger_record_id": record_id,
+    }, OK
+
+
+def _quota_provider_choices() -> Tuple[str, ...]:
+    from .quota_adapters import adapter_roster
+
+    return tuple(adapter.provider for adapter in adapter_roster())
 
 
 def _chart(args: argparse.Namespace) -> HandlerResult:
@@ -320,7 +421,8 @@ def _wake_pause(args: argparse.Namespace) -> HandlerResult:
     artifact = WakeController(_root(args.root)).pause(
         args.actor,
         args.session,
-        idempotency_key="wake-cli-pause-" + uuid7_hex(),
+        idempotency_key=args.idempotency_key
+        or "wake-cli-pause-" + uuid7_hex(),
     )
     return "ok", artifact, OK
 
@@ -331,7 +433,8 @@ def _wake_resume(args: argparse.Namespace) -> HandlerResult:
     artifact = WakeController(_root(args.root)).resume(
         args.actor,
         args.session,
-        idempotency_key="wake-cli-resume-" + uuid7_hex(),
+        idempotency_key=args.idempotency_key
+        or "wake-cli-resume-" + uuid7_hex(),
     )
     return "ok", artifact, OK
 
@@ -402,13 +505,13 @@ def _wake_daemon_display(artifact: Mapping[str, Any]) -> str:
 
 
 def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
-    from .copy import WAKE_DAEMON_BOUND_DISPLAY
+    from .copy import WAKE_DAEMON_BOUND_DISPLAY, WAKE_DAEMON_GROK_BOUND_DISPLAY
     from .errors import ProtocolRefusal
     from .wake_daemon_adapters import adapter_contract_digest
     from .wake_daemon_contract import AdapterBindingStore
 
     coordinate = _wake_daemon_coordinate(args)
-    if coordinate.harness != "cursor":
+    if coordinate.harness == "codex":
         raise ProtocolRefusal(
             "wake_daemon_codex_binding_source_invalid",
             "Codex daemon binding is accepted only from trusted waiter participation",
@@ -419,10 +522,14 @@ def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
         workspace=Path(args.workspace),
         executable=Path(args.executable),
         adapter_version="1",
-        adapter_digest=adapter_contract_digest("cursor"),
+        adapter_digest=adapter_contract_digest(coordinate.harness),
         binding_epoch=args.binding_epoch,
     )
-    artifact["display"] = WAKE_DAEMON_BOUND_DISPLAY
+    artifact["display"] = (
+        WAKE_DAEMON_GROK_BOUND_DISPLAY
+        if coordinate.harness == "grok-build"
+        else WAKE_DAEMON_BOUND_DISPLAY
+    )
     return "ok", artifact, OK
 
 
@@ -537,7 +644,9 @@ def _add_wake_identity(parser: argparse.ArgumentParser) -> None:
 def _add_wake_daemon_identity(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
     parser.add_argument("--as", dest="actor", required=True)
-    parser.add_argument("--harness", choices=("codex", "cursor"), required=True)
+    parser.add_argument(
+        "--harness", choices=("codex", "cursor", "grok-build"), required=True
+    )
 
 
 def _add_projection_arguments(parser: argparse.ArgumentParser) -> None:
@@ -567,9 +676,20 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     add.add_argument("--tide-idempotency-key")
     add.set_defaults(handler=_node_add)
 
+    spawn = node_commands.add_parser("spawn")
+    spawn.add_argument("--root", required=True)
+    spawn.add_argument("--as", dest="actor", required=True)
+    spawn.add_argument("--profile", dest="lane_profile", required=True)
+    spawn.add_argument("--ordinal", type=int)
+    spawn.set_defaults(handler=_node_spawn)
+
     retire = node_commands.add_parser("retire")
     retire.add_argument("--root", required=True)
-    retire.add_argument("--node", required=True)
+    retire_target = retire.add_mutually_exclusive_group(required=True)
+    retire_target.add_argument("--node")
+    retire_target.add_argument("--instance")
+    retire.add_argument("--as", dest="actor")
+    retire.add_argument("--drain", action="store_true")
     retire.set_defaults(handler=_node_retire)
 
     switch = node_commands.add_parser("switch")
@@ -614,6 +734,28 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     role_show.add_argument("role")
     role_show.set_defaults(handler=_role_show)
 
+    quota = commands.add_parser("quota")
+    quota_commands = quota.add_subparsers(dest="quota_command", required=True)
+    quota_collect = quota_commands.add_parser("collect")
+    quota_collect.add_argument("--root", required=True)
+    quota_collect.add_argument(
+        "--provider",
+        choices=_quota_provider_choices(),
+        required=True,
+    )
+    quota_collect.add_argument("--observed-at", required=True)
+    quota_collect.add_argument("--idempotency-key", required=True)
+    quota_collect.add_argument("--executable")
+    quota_collect.set_defaults(handler=_quota_collect)
+    quota_show = quota_commands.add_parser("show")
+    quota_show.add_argument("--root", required=True)
+    quota_show.add_argument(
+        "--provider",
+        choices=_quota_provider_choices(),
+        required=True,
+    )
+    quota_show.set_defaults(handler=_quota_show)
+
     chart = commands.add_parser("chart")
     chart.add_argument("--declared-roots", required=True)
     chart.add_argument("--json", action="store_true")
@@ -629,11 +771,21 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
 
     wake = commands.add_parser("wake")
     wake_commands = wake.add_subparsers(dest="wake_command", required=True)
-    wake_pause = wake_commands.add_parser("pause")
+    wake_pause = wake_commands.add_parser(
+        "pause",
+        floati_mcp_exposure="governed",
+        floati_mcp_required=("idempotency_key",),
+    )
     _add_wake_identity(wake_pause)
+    wake_pause.add_argument("--idempotency-key")
     wake_pause.set_defaults(handler=_wake_pause)
-    wake_resume = wake_commands.add_parser("resume")
+    wake_resume = wake_commands.add_parser(
+        "resume",
+        floati_mcp_exposure="governed",
+        floati_mcp_required=("idempotency_key",),
+    )
     _add_wake_identity(wake_resume)
+    wake_resume.add_argument("--idempotency-key")
     wake_resume.set_defaults(handler=_wake_resume)
     wake_status = wake_commands.add_parser("status")
     _add_wake_identity(wake_status)
@@ -676,7 +828,9 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         _add_wake_daemon_identity(daemon_operation)
         daemon_operation.set_defaults(handler=handler)
 
-    daemon_serve = daemon_commands.add_parser("serve", help=argparse.SUPPRESS)
+    daemon_serve = daemon_commands.add_parser(
+        "serve", help=argparse.SUPPRESS, floati_public=False
+    )
     _add_wake_daemon_identity(daemon_serve)
     daemon_serve.add_argument("--activation-epoch", type=int, required=True)
     daemon_serve.set_defaults(handler=_wake_daemon_serve)

@@ -35,6 +35,6 @@ Stdlib only; Python >= 3.9. 17 tests (refusal-path weight ≥ happy-path).
 - `night_watch/budget.py` — injected ceiling table + violation record.
 - `night_watch/watch.py` — the fold engine, loop finder, directives.
 - `night_watch/report.py` / `render.py` — morning report + [[placeholder]]
-  renderer (copy is Fable's; placeholders only).
+  renderer (copy is the architect's; placeholders only).
 - `docs/NIGHT_WATCH_SPEC.md` — the spec this implements.
 - `WIRING.md` — seam, surface, gate, blast radius, receipts, estimate.

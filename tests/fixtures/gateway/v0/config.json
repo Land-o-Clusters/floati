@@ -3,6 +3,6 @@
   "kind": "local_gateway_config",
   "transport": "stdio",
   "network": "disabled",
-  "workspace_root": "/private/tmp/slipway-gateway-work",
+  "workspace_root": "\u002fprivate/tmp/slipway-gateway-work",
   "approval_mode": "forward_fail_closed"
 }

@@ -26,7 +26,7 @@
       ],
       "name": "harbor-board",
       "real_ledger": true,
-      "root": "/private/tmp/floati-captures.LtNmwM/other5/harbor-board"
+      "root": "\u002fprivate/tmp/floati-captures.LtNmwM/other5/harbor-board"
     },
     {
       "animated": true,
@@ -56,7 +56,7 @@
       "frame_count": 14,
       "name": "flight-recorder-replay",
       "real_ledger": true,
-      "root": "/private/tmp/floati-captures.LtNmwM/other5/flight-recorder"
+      "root": "\u002fprivate/tmp/floati-captures.LtNmwM/other5/flight-recorder"
     },
     {
       "animated": true,
@@ -80,10 +80,10 @@
       "frame_count": 3,
       "name": "onboard-wizard",
       "real_ledger": true,
-      "root": "/private/tmp/floati-captures.LtNmwM/other5/onboard-wizard"
+      "root": "\u002fprivate/tmp/floati-captures.LtNmwM/other5/onboard-wizard"
     },
     {
-      "declared_roots": "/private/tmp/floati-captures.LtNmwM/other5/declared-roots.json",
+      "declared_roots": "\u002fprivate/tmp/floati-captures.LtNmwM/other5/declared-roots.json",
       "files": [
         {
           "bytes": 472,
@@ -104,8 +104,8 @@
       "name": "harbor-chart-multibus",
       "real_ledger": true,
       "roots": [
-        "/private/tmp/floati-captures.LtNmwM/other5/harbor-upstream",
-        "/private/tmp/floati-captures.LtNmwM/other5/harbor-downstream"
+        "\u002fprivate/tmp/floati-captures.LtNmwM/other5/harbor-upstream",
+        "\u002fprivate/tmp/floati-captures.LtNmwM/other5/harbor-downstream"
       ]
     },
     {
@@ -129,12 +129,12 @@
       "name": "doctor-delivery-health",
       "probe_budget_seconds": 1,
       "real_ledger": true,
-      "root": "/private/tmp/floati-captures.LtNmwM/doctor"
+      "root": "\u002fprivate/tmp/floati-captures.LtNmwM/doctor"
     }
   ],
   "generator": "scripts/capture-readme-real-ledgers.py",
   "schema_version": 0,
-  "scratch": "/private/tmp/floati-captures.LtNmwM/other5",
+  "scratch": "\u002fprivate/tmp/floati-captures.LtNmwM/other5",
   "source_sha": "cdd69c44ba9d192d9cd74526ba9d147b343be1d6",
   "synthetic": false
 }

@@ -14,10 +14,11 @@ from .errors import IntegrityFailure, ProtocolRefusal
 from .events import EventLog
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact
+from .quota import QuotaLedger, require_schedulable_fraction
 from .records import validate_record
 from .registry import Registry, utc_now
 from .root import FloatiRoot
-from .tide_catalog import TideMetric, metric_for
+from .tide_catalog import TideMetric, metric_for, provider_for_harness
 from .tide_policy import TidePolicyLedger
 
 
@@ -43,6 +44,68 @@ class UnavailableTideReader:
         raise ProtocolRefusal(
             "tide_reading_unavailable",
             f"{metric.name} has no readable exact-session artifact for this daemon binding",
+        )
+
+
+class QuotaAwareTideReader:
+    """Read V4 quota receipts and delegate every pre-V4 metric unchanged."""
+
+    def __init__(self, root: FloatiRoot, delegate: TideReader) -> None:
+        if not isinstance(root, FloatiRoot) or not hasattr(delegate, "read"):
+            raise ProtocolRefusal(
+                "tide_reader_invalid", "quota-aware Tide needs one root and delegate"
+            )
+        self.root = root
+        self.delegate = delegate
+
+    def read(self, binding: object, metric: TideMetric) -> TideReading:
+        if metric.name != "quota_fraction":
+            return self.delegate.read(binding, metric)
+        provider = provider_for_harness(getattr(binding, "harness", None))
+        latest = QuotaLedger(self.root).latest_record(provider)
+        if latest is None:
+            raise ProtocolRefusal(
+                "quota_fact_unknown", f"provider {provider} has no quota receipt"
+            )
+        record_id, receipt = latest
+        fractions = tuple(
+            fact for fact in receipt.facts
+            if fact.state.kind == "consumed_fraction"
+        )
+        if not fractions:
+            unknowns = tuple(
+                fact for fact in receipt.facts if fact.state.kind == "unknown"
+            )
+            if unknowns:
+                require_schedulable_fraction(max(
+                    unknowns, key=lambda fact: (fact.observed_at, fact.surface)
+                ))
+            raise ProtocolRefusal(
+                "quota_fact_unknown",
+                f"provider {provider} receipt has no consumed-fraction fact",
+            )
+        fact = max(
+            fractions,
+            key=lambda item: (
+                item.observed_at,
+                Decimal(item.state.value or "0"),
+                item.surface,
+            ),
+        )
+        value = require_schedulable_fraction(fact)
+        return TideReading(
+            metric=metric.name,
+            value=value,
+            stamp=fact.stamp,
+            access_class=metric.access_class,
+            formula=metric.formula,
+            sources=(
+                metric.receipt_path,
+                "quota-receipt:" + record_id,
+                "quota-source:" + fact.source,
+                "quota-evidence-sha256:" + fact.evidence_digest,
+                "quota-receipt-sha256:" + receipt.receipt_digest,
+            ),
         )
 
 
@@ -201,7 +264,10 @@ class TideEvaluator:
         source_sha: str,
     ) -> None:
         self.root = root
-        self.reader = BoundedTideReader(root=root) if reader is None else reader
+        self.reader = (
+            QuotaAwareTideReader(root, BoundedTideReader(root=root))
+            if reader is None else reader
+        )
         self.policies = TidePolicyLedger(root)
         self.events = EventLog(root)
         self.source_sha = source_sha
@@ -235,7 +301,21 @@ class TideEvaluator:
         if getattr(binding, "harness", None) != policy["harness"]:
             raise ProtocolRefusal("tide_binding_mismatch", "tide policy and daemon binding harness disagree")
         metric = metric_for(policy["harness"], policy["metric"])
-        reading = self.reader.read(binding, metric)
+        try:
+            reading = self.reader.read(binding, metric)
+        except ProtocolRefusal as exc:
+            if metric.name != "quota_fraction":
+                raise
+            state = (
+                "quota_unknown" if exc.code == "quota_fact_unknown"
+                else "quota_refused"
+            )
+            return {
+                "state": state,
+                "node_id": node_id,
+                "receipt": None,
+                "reason": {"code": exc.code, "detail": exc.detail},
+            }
         self._validate_reading(reading, metric)
         value = self._decimal(reading.value)
         threshold = self._decimal(policy["threshold"])
@@ -279,16 +359,31 @@ class TideEvaluator:
         return {"state": "crossed", "node_id": node_id, "receipt": receipt, "envelope": envelope}
 
     def _validate_reading(self, reading: TideReading, metric: TideMetric) -> None:
+        quota_stamp_valid = (
+            metric.name == "quota_fraction"
+            and metric.stamp == "MEASURED_OR_DERIVED"
+            and isinstance(reading, TideReading)
+            and reading.stamp in {"MEASURED", "DERIVED"}
+        )
+        quota_sources_valid = (
+            metric.name != "quota_fraction"
+            or (
+                any(source.startswith("quota-receipt:") for source in reading.sources)
+                and any(source.startswith("quota-source:") for source in reading.sources)
+                and any(source.startswith("quota-evidence-sha256:") for source in reading.sources)
+            )
+        ) if isinstance(reading, TideReading) else False
         if (
             not isinstance(reading, TideReading)
             or reading.metric != metric.name
-            or reading.stamp != metric.stamp
+            or (reading.stamp != metric.stamp and not quota_stamp_valid)
             or reading.access_class != metric.access_class
             or reading.formula != metric.formula
             or not reading.sources
             or metric.receipt_path not in reading.sources
+            or not quota_sources_valid
         ):
-            raise IntegrityFailure("tide_reading_invalid", "reading is not bound to the T1 recipe")
+            raise IntegrityFailure("tide_reading_invalid", "reading is not bound to the ruled Tide recipe")
 
     def _architect(self) -> str:
         registry = Registry(self.root)
@@ -324,6 +419,8 @@ class TideEvaluator:
                 f"e2={projected.get('kind')} role={provenance.get('role_record_id')} "
                 + " | ".join(commands)
             )
+        if policy["metric"] == "quota_fraction":
+            note = "DRAFT - " + note
         return self.events.send(
             sender, recipient, "floati", self.source_sha,
             "docs/design/tide-tables-spec-2026-08-28.md", note,
@@ -341,7 +438,7 @@ class TideEvaluator:
         envelope_id: Optional[str],
     ) -> Dict[str, object]:
         row: Dict[str, object] = {
-            "schema_version": 0,
+            "schema_version": 1 if policy["metric"] == "quota_fraction" else 0,
             "id": "tide-receipt-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
             "timestamp": utc_now(),

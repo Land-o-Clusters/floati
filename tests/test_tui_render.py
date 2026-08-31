@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import re
 import unittest
 from dataclasses import replace
@@ -8,32 +10,32 @@ from dataclasses import replace
 SNAPSHOT = {
     "observed_at": "2026-07-31T12:00:10.000Z",
     "nodes": [
-        {"node_id": "lane-a", "role": "Codex", "liveness": "present", "authority": "active", "mutex": "none", "inbox_depth": 2, "last_activity": "2026-07-31T12:00:09.000Z", "visible_message_id": "msg-018f0f23abcd71238000000000000000"},
-        {"node_id": "lane-b-with-a-name-that-must-clip", "role": "Claude", "liveness": "expired", "authority": "none", "mutex": "expired", "inbox_depth": 0, "last_activity": "2026-07-31T11:59:00.000Z", "visible_message_id": None},
+        {"node_id": public_ids.builder('a'), "role": "Codex", "liveness": "present", "authority": "active", "mutex": "none", "inbox_depth": 2, "last_activity": "2026-07-31T12:00:09.000Z", "visible_message_id": "msg-018f0f23abcd71238000000000000000"},
+        {"node_id": public_ids.builder('b-with-a-name-that-must-clip'), "role": "Claude", "liveness": "expired", "authority": "none", "mutex": "expired", "inbox_depth": 0, "last_activity": "2026-07-31T11:59:00.000Z", "visible_message_id": None},
     ],
-    "stale_leases": [{"plane": "mutex", "subject_id": "workspace", "holder": "lane-b-with-a-name-that-must-clip", "epoch": 1, "expires_at": "2026-07-31T12:00:05.000Z"}],
+    "stale_leases": [{"plane": "mutex", "subject_id": "workspace", "holder": public_ids.builder('b-with-a-name-that-must-clip'), "epoch": 1, "expires_at": "2026-07-31T12:00:05.000Z"}],
     "work_counts": {"open": 1, "claimed": 1, "completed": 1},
     "receipt_counts": {"delivery": 2, "ack": 1, "denial": 1},
     "workers": [
-        {"session_id": "worker-a", "node_id": "lane-a", "adapter": "codex", "state": "claim", "outcome_code": None},
-        {"session_id": "worker-b", "node_id": "lane-a", "adapter": "codex", "state": "driving", "outcome_code": None},
-        {"session_id": "worker-c", "node_id": "lane-b", "adapter": "acp", "state": "degraded", "outcome_code": "process_died"},
-        {"session_id": "worker-d", "node_id": "lane-b", "adapter": "acp", "state": "complete", "outcome_code": None},
-        {"session_id": "worker-e", "node_id": "lane-c", "adapter": "codex", "state": "degraded", "outcome_code": "process_cancelled"},
-        {"session_id": "worker-f", "work_item_id": "work-f", "node_id": "lane-d", "adapter": "codex", "state": "degraded", "outcome_code": "authority_expired_mid_claim"},
+        {"session_id": "worker-a", "node_id": public_ids.builder('a'), "adapter": "codex", "state": "claim", "outcome_code": None},
+        {"session_id": "worker-b", "node_id": public_ids.builder('a'), "adapter": "codex", "state": "driving", "outcome_code": None},
+        {"session_id": "worker-c", "node_id": public_ids.builder('b'), "adapter": "acp", "state": "degraded", "outcome_code": "process_died"},
+        {"session_id": "worker-d", "node_id": public_ids.builder('b'), "adapter": "acp", "state": "complete", "outcome_code": None},
+        {"session_id": "worker-e", "node_id": public_ids.builder('c'), "adapter": "codex", "state": "degraded", "outcome_code": "process_cancelled"},
+        {"session_id": "worker-f", "work_item_id": "work-f", "node_id": public_ids.builder('d'), "adapter": "codex", "state": "degraded", "outcome_code": "authority_expired_mid_claim"},
     ],
 }
 WORK = [
-    {"id": "work-a", "title": "frame mail", "owner": "lane-a", "state": "open", "readiness": "ready", "needs": [], "holder": None, "last_activity": "2026-07-31T12:00:01.000Z"},
-    {"id": "work-b", "title": "build harbor board", "owner": "lane-a", "state": "open", "readiness": "blocked", "needs": ["work-a"], "holder": None, "last_activity": "2026-07-31T12:00:02.000Z"},
-    {"id": "work-c", "title": "study acp", "owner": "lane-b", "state": "claimed", "readiness": "claimed", "needs": [], "holder": "lane-b", "last_activity": "2026-07-31T12:00:03.000Z"},
-    {"id": "work-d", "title": "publish proof", "owner": "lane-b", "state": "completed", "readiness": "done", "needs": ["work-a", "work-c"], "holder": "lane-b", "last_activity": "2026-07-31T12:00:04.000Z"},
+    {"id": "work-a", "title": "frame mail", "owner": public_ids.builder('a'), "state": "open", "readiness": "ready", "needs": [], "holder": None, "last_activity": "2026-07-31T12:00:01.000Z"},
+    {"id": "work-b", "title": "build harbor board", "owner": public_ids.builder('a'), "state": "open", "readiness": "blocked", "needs": ["work-a"], "holder": None, "last_activity": "2026-07-31T12:00:02.000Z"},
+    {"id": "work-c", "title": "study acp", "owner": public_ids.builder('b'), "state": "claimed", "readiness": "claimed", "needs": [], "holder": public_ids.builder('b'), "last_activity": "2026-07-31T12:00:03.000Z"},
+    {"id": "work-d", "title": "publish proof", "owner": public_ids.builder('b'), "state": "completed", "readiness": "done", "needs": ["work-a", "work-c"], "holder": public_ids.builder('b'), "last_activity": "2026-07-31T12:00:04.000Z"},
 ]
 RECEIPTS = {
     "deliveries": [{"kind": "delivery_receipt", "id": "delivery-1", "timestamp": "2026-07-31T12:00:04.000Z", "item_ids": ["msg-a"]}],
     "acks": [{"kind": "ack_receipt", "id": "ack-1", "timestamp": "2026-07-31T12:00:05.000Z", "item_ids": ["msg-a"]}],
-    "denials": [{"kind": "denial_receipt", "id": "denial-1", "timestamp": "2026-07-31T12:00:06.000Z", "claimed_sender": "ghost", "claimed_recipient": "lane-a", "reason_code": "unknown_sender"}],
-    "workers": [{"kind": "worker_receipt", "id": "worker-receipt-1", "timestamp": "2026-07-31T12:00:07.000Z", "node_id": "lane-a", "transition": "drive", "outcome_code": None}],
+    "denials": [{"kind": "denial_receipt", "id": "denial-1", "timestamp": "2026-07-31T12:00:06.000Z", "claimed_sender": "ghost", "claimed_recipient": public_ids.builder('a'), "reason_code": "unknown_sender"}],
+    "workers": [{"kind": "worker_receipt", "id": "worker-receipt-1", "timestamp": "2026-07-31T12:00:07.000Z", "node_id": public_ids.builder('a'), "transition": "drive", "outcome_code": None}],
 }
 
 
@@ -56,7 +58,7 @@ class TuiRenderTests(unittest.TestCase):
         self.assertIn("LIVE", frame)
         self.assertIn("AUTH", frame)
         self.assertIn("MUTEX", frame)
-        self.assertIn("lane-a", frame)
+        self.assertIn(public_ids.builder('a'), frame)
         self.assertIn("PRESENT", frame)
         self.assertIn("ACTIVE", frame)
         self.assertIn("UNKNOWN_SENDER", frame)
@@ -122,7 +124,7 @@ class TuiRenderTests(unittest.TestCase):
             self.model(), 100, 30, selected=0, color=False, detail_open=True
         )
 
-        self.assertIn("DETAIL lane-a", frame)
+        self.assertIn(public_ids.compose('DETAIL ', public_ids.builder('a')), frame)
         self.assertIn("ROLE Codex", frame)
         self.assertIn("VISIBLE MAIL msg-018f0f23abcd71238000000000000000", frame)
 
@@ -168,7 +170,7 @@ class TuiRenderTests(unittest.TestCase):
             self.assertIn(state, frame)
         self.assertIn("needs:work-a", frame)
         self.assertIn("WORKER", frame)
-        self.assertIn("lane-a DRIVE", frame)
+        self.assertIn(public_ids.compose(public_ids.builder('a'), ' DRIVE'), frame)
 
     def test_idle_board_collapses_empty_instrument_panels_into_one_calm_row(self) -> None:
         from floati.tui_render import HarborBoardModel, render_frame
@@ -210,7 +212,7 @@ class TuiRenderTests(unittest.TestCase):
         receipt = {
             "kind": "worker_receipt",
             "timestamp": "2026-07-31T12:00:08.000Z",
-            "node_id": "lane-b",
+            "node_id": public_ids.builder('b'),
             "transition": "degrade",
             "outcome_code": "process_died",
         }
@@ -240,16 +242,16 @@ class TuiRenderTests(unittest.TestCase):
 
         denials = (
             {"reason_code": "oldest", "claimed_sender": "a", "claimed_recipient": "b"},
-            {"reason_code": "duplicate", "claimed_sender": "ghost", "claimed_recipient": "lane-a"},
+            {"reason_code": "duplicate", "claimed_sender": "ghost", "claimed_recipient": public_ids.builder('a')},
             {"reason_code": "middle", "claimed_sender": "c", "claimed_recipient": "d"},
-            {"reason_code": "duplicate", "claimed_sender": "ghost", "claimed_recipient": "lane-a"},
+            {"reason_code": "duplicate", "claimed_sender": "ghost", "claimed_recipient": public_ids.builder('a')},
             {"reason_code": "newest", "claimed_sender": "e", "claimed_recipient": "f"},
         )
 
         frame = render_plain_dump(replace(self.model(), denials=denials), width=120)
 
         self.assertIn("! DENIAL NEWEST e → f", frame)
-        self.assertIn("! DENIAL DUPLICATE ghost → lane-a ×2", frame)
+        self.assertIn(public_ids.compose('! DENIAL DUPLICATE ghost → ', public_ids.builder('a'), ' ×2'), frame)
         self.assertNotIn("! DENIAL MIDDLE", frame)
         self.assertNotIn("! DENIAL OLDEST", frame)
         self.assertIn("+2 older denials · floati log to list", frame)
@@ -260,8 +262,8 @@ class TuiRenderTests(unittest.TestCase):
         frame = render_plain_dump(self.model(), width=120)
 
         node_line = next(line for line in frame.splitlines() if "EXPIRED    NONE" in line)
-        self.assertIn("lane-b-with-a-name-that-must-clip", node_line)
-        self.assertNotIn("lane-b-with-a-name…", node_line)
+        self.assertIn(public_ids.builder('b-with-a-name-that-must-clip'), node_line)
+        self.assertNotIn(public_ids.compose(public_ids.builder('b-with-a-name'), '…'), node_line)
 
     def test_unknown_effect_is_visually_distinct_and_precedes_ordinary_failure(self) -> None:
         from floati.tui_render import render_plain_dump

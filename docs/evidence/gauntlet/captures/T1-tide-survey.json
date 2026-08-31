@@ -5,7 +5,7 @@
     "local_version": {
       "absent": false,
       "argv": [
-        "~/.local/bin/agy",
+        "\u002fUsers/penguinspecz/.local/bin/agy",
         "--version"
       ],
       "auth_prompt_suspected": false,
@@ -19,7 +19,7 @@
       "stdout_sha256": "9b3b81e5314efb5d2f9c0897cfd1621c3aaa2b83e900ad599d07a28b314b5b80",
       "timed_out": false
     },
-    "path_agy": "~/.local/bin/agy"
+    "path_agy": "\u002fUsers/penguinspecz/.local/bin/agy"
   },
   "control": {
     "absent": false,
@@ -93,7 +93,7 @@
         "fleet-bus-profiles.json.bak-20260827-prefloati",
         "floati-wake"
       ],
-      "path": "~/.codex",
+      "path": "\u002fUsers/penguinspecz/.codex",
       "present": true,
       "truncated": true
     },
@@ -123,7 +123,7 @@
         "telemetry",
         "uploads"
       ],
-      "path": "~/.claude",
+      "path": "\u002fUsers/penguinspecz/.claude",
       "present": true,
       "truncated": false
     },
@@ -158,7 +158,7 @@
         "skills-cursor",
         "statsig-cache.json"
       ],
-      "path": "~/.cursor",
+      "path": "\u002fUsers/penguinspecz/.cursor",
       "present": true,
       "truncated": false
     },
@@ -172,7 +172,7 @@
         "package.json",
         "plugins"
       ],
-      "path": "~/.config/opencode",
+      "path": "\u002fUsers/penguinspecz/.config/opencode",
       "present": true,
       "truncated": false
     },
@@ -189,7 +189,7 @@
         "storage",
         "tool-output"
       ],
-      "path": "~/.local/share/opencode",
+      "path": "\u002fUsers/penguinspecz/.local/share/opencode",
       "present": true,
       "truncated": false
     },
@@ -198,7 +198,7 @@
       "names": [
         "data"
       ],
-      "path": "~/.cline",
+      "path": "\u002fUsers/penguinspecz/.cline",
       "present": true,
       "truncated": false
     },
@@ -221,7 +221,7 @@
         "sessions",
         "version.json"
       ],
-      "path": "~/.grok",
+      "path": "\u002fUsers/penguinspecz/.grok",
       "present": true,
       "truncated": false
     },
@@ -230,7 +230,7 @@
       "names": [
         "agent"
       ],
-      "path": "~/.pi",
+      "path": "\u002fUsers/penguinspecz/.pi",
       "present": true,
       "truncated": false
     },
@@ -244,7 +244,7 @@
         "herdr.sock",
         "session.json"
       ],
-      "path": "~/.config/herdr",
+      "path": "\u002fUsers/penguinspecz/.config/herdr",
       "present": true,
       "truncated": false
     },
@@ -256,7 +256,7 @@
         "config.json.backup",
         "config.json.backup.2026-07-29T01-57-01Z"
       ],
-      "path": "~/.config/devin",
+      "path": "\u002fUsers/penguinspecz/.config/devin",
       "present": true,
       "truncated": false
     },
@@ -312,7 +312,7 @@
         "vm_bundles",
         "window-state.json"
       ],
-      "path": "~/Library/Application Support/Claude",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Claude",
       "present": true,
       "truncated": false
     },
@@ -362,7 +362,7 @@
         "segmentation_platform",
         "sentry"
       ],
-      "path": "~/Library/Application Support/Codex",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Codex",
       "present": true,
       "truncated": false
     },
@@ -413,7 +413,7 @@
         "snapshots",
         "update-supervisor"
       ],
-      "path": "~/Library/Application Support/Cursor",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Cursor",
       "present": true,
       "truncated": false
     },
@@ -447,7 +447,7 @@
         "bin",
         "blob_storage"
       ],
-      "path": "~/Library/Application Support/Antigravity",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity",
       "present": true,
       "truncated": false
     },
@@ -478,7 +478,7 @@
         "WebStorage",
         "blob_storage"
       ],
-      "path": "~/Library/Application Support/t3code",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/t3code",
       "present": true,
       "truncated": false
     },
@@ -487,7 +487,7 @@
       "names": [
         "44b70300-ddc4-4869-a4ce-a0e15d2e12f5"
       ],
-      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "path": "\u002fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts",
       "present": true,
       "truncated": false
     }
@@ -498,7 +498,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.codex",
+      "path": "\u002fUsers/penguinspecz/.codex",
       "size": null
     },
     {
@@ -506,7 +506,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.claude",
+      "path": "\u002fUsers/penguinspecz/.claude",
       "size": null
     },
     {
@@ -514,7 +514,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.cursor",
+      "path": "\u002fUsers/penguinspecz/.cursor",
       "size": null
     },
     {
@@ -522,7 +522,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/opencode",
+      "path": "\u002fUsers/penguinspecz/.config/opencode",
       "size": null
     },
     {
@@ -530,7 +530,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.local/share/opencode",
+      "path": "\u002fUsers/penguinspecz/.local/share/opencode",
       "size": null
     },
     {
@@ -538,7 +538,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.cline",
+      "path": "\u002fUsers/penguinspecz/.cline",
       "size": null
     },
     {
@@ -546,7 +546,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.grok",
+      "path": "\u002fUsers/penguinspecz/.grok",
       "size": null
     },
     {
@@ -554,30 +554,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.pi",
-      "size": null
-    },
-    {
-      "exists": false,
-      "is_dir": false,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/.config/pi"
-    },
-    {
-      "exists": true,
-      "is_dir": true,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/.config/herdr",
-      "size": null
-    },
-    {
-      "exists": true,
-      "is_dir": true,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/.config/devin",
+      "path": "\u002fUsers/penguinspecz/.pi",
       "size": null
     },
     {
@@ -585,21 +562,14 @@
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/antigravity"
-    },
-    {
-      "exists": false,
-      "is_dir": false,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/.agy"
+      "path": "\u002fUsers/penguinspecz/.config/pi"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Claude",
+      "path": "\u002fUsers/penguinspecz/.config/herdr",
       "size": null
     },
     {
@@ -607,15 +577,7 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Codex",
-      "size": null
-    },
-    {
-      "exists": true,
-      "is_dir": true,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/Library/Application Support/Cursor",
+      "path": "\u002fUsers/penguinspecz/.config/devin",
       "size": null
     },
     {
@@ -623,14 +585,21 @@
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/OpenCode"
+      "path": "\u002fUsers/penguinspecz/.config/antigravity"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/.agy"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Antigravity",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Claude",
       "size": null
     },
     {
@@ -638,7 +607,15 @@
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/t3code",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Codex",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Cursor",
       "size": null
     },
     {
@@ -646,21 +623,44 @@
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/T3 Code"
-    },
-    {
-      "exists": false,
-      "is_dir": false,
-      "is_file": false,
-      "is_symlink": false,
-      "path": "~/Library/Application Support/Grok"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/OpenCode"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity",
+      "size": null
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/t3code",
+      "size": null
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/T3 Code"
+    },
+    {
+      "exists": false,
+      "is_dir": false,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Grok"
+    },
+    {
+      "exists": true,
+      "is_dir": true,
+      "is_file": false,
+      "is_symlink": false,
+      "path": "\u002fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts",
       "size": null
     }
   ],
@@ -703,7 +703,7 @@
         "CODEX_BUS_HOOK_CONTROL.md",
         "HOOK_DISABLED_sol.md"
       ],
-      "path": "~/.codex",
+      "path": "\u002fUsers/penguinspecz/.codex",
       "present": true,
       "truncated": true
     },
@@ -746,7 +746,7 @@
         "plugins/cache/",
         "projects/"
       ],
-      "path": "~/.claude",
+      "path": "\u002fUsers/penguinspecz/.claude",
       "present": true,
       "truncated": true
     },
@@ -788,7 +788,7 @@
         "agents/",
         "ai-tracking/"
       ],
-      "path": "~/.cursor",
+      "path": "\u002fUsers/penguinspecz/.cursor",
       "present": true,
       "truncated": true
     },
@@ -832,7 +832,7 @@
         "node_modules/fast-check/",
         "opencode.jsonc"
       ],
-      "path": "~/.config/opencode",
+      "path": "\u002fUsers/penguinspecz/.config/opencode",
       "present": true,
       "truncated": true
     },
@@ -874,7 +874,7 @@
         "tool-output/tool_024f3a964001jIpSMHZL4LULxs",
         "tool-output/tool_0252d3e17001fyqu0Qnql1w712"
       ],
-      "path": "~/.local/share/opencode",
+      "path": "\u002fUsers/penguinspecz/.local/share/opencode",
       "present": true,
       "truncated": true
     },
@@ -888,7 +888,7 @@
         "data/settings/",
         "data/settings/providers.json"
       ],
-      "path": "~/.cline",
+      "path": "\u002fUsers/penguinspecz/.cline",
       "present": true,
       "truncated": false
     },
@@ -931,7 +931,7 @@
         "docs/user-guide/23-dashboard.md",
         "logs/"
       ],
-      "path": "~/.grok",
+      "path": "\u002fUsers/penguinspecz/.grok",
       "present": true,
       "truncated": true
     },
@@ -942,12 +942,12 @@
         "agent/models-store.json",
         "agent/models.json"
       ],
-      "path": "~/.pi",
+      "path": "\u002fUsers/penguinspecz/.pi",
       "present": true,
       "truncated": false
     },
     {
-      "path": "~/.config/pi",
+      "path": "\u002fUsers/penguinspecz/.config/pi",
       "present": false
     },
     {
@@ -959,7 +959,7 @@
         "herdr.sock",
         "session.json"
       ],
-      "path": "~/.config/herdr",
+      "path": "\u002fUsers/penguinspecz/.config/herdr",
       "present": true,
       "truncated": false
     },
@@ -970,16 +970,16 @@
         "config.json.backup",
         "config.json.backup.2026-07-29T01-57-01Z"
       ],
-      "path": "~/.config/devin",
+      "path": "\u002fUsers/penguinspecz/.config/devin",
       "present": true,
       "truncated": false
     },
     {
-      "path": "~/.config/antigravity",
+      "path": "\u002fUsers/penguinspecz/.config/antigravity",
       "present": false
     },
     {
-      "path": "~/.agy",
+      "path": "\u002fUsers/penguinspecz/.agy",
       "present": false
     },
     {
@@ -1022,7 +1022,7 @@
         "Cache/No_Vary_Search/",
         "Code Cache/"
       ],
-      "path": "~/Library/Application Support/Claude",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Claude",
       "present": true,
       "truncated": true
     },
@@ -1065,7 +1065,7 @@
         "CertificateRevocation/10739/_metadata/",
         "ChromeFeatureState"
       ],
-      "path": "~/Library/Application Support/Codex",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Codex",
       "present": true,
       "truncated": true
     },
@@ -1108,12 +1108,12 @@
         "CachedConfigurations/folder/-124a415c/",
         "CachedData/"
       ],
-      "path": "~/Library/Application Support/Cursor",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Cursor",
       "present": true,
       "truncated": true
     },
     {
-      "path": "~/Library/Application Support/OpenCode",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/OpenCode",
       "present": false
     },
     {
@@ -1154,7 +1154,7 @@
         "Cookies",
         "Cookies-journal"
       ],
-      "path": "~/Library/Application Support/Antigravity",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity",
       "present": true,
       "truncated": true
     },
@@ -1198,16 +1198,16 @@
         "Cache/No_Vary_Search/",
         "Code Cache/"
       ],
-      "path": "~/Library/Application Support/t3code",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/t3code",
       "present": true,
       "truncated": true
     },
     {
-      "path": "~/Library/Application Support/T3 Code",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/T3 Code",
       "present": false
     },
     {
-      "path": "~/Library/Application Support/Grok",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Grok",
       "present": false
     },
     {
@@ -1215,16 +1215,16 @@
         "44b70300-ddc4-4869-a4ce-a0e15d2e12f5/",
         "44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl"
       ],
-      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts",
+      "path": "\u002fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts",
       "present": true,
       "truncated": false
     }
   ],
   "help_probes": {
-    "~/.local/bin/agy --help": {
+    "\u002fUsers/penguinspecz/.local/bin/agy --help": {
       "absent": false,
       "argv": [
-        "~/.local/bin/agy",
+        "\u002fUsers/penguinspecz/.local/bin/agy",
         "--help"
       ],
       "auth_prompt_suspected": false,
@@ -1240,10 +1240,10 @@
       "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "timed_out": false
     },
-    "~/.local/bin/agy plugin --help": {
+    "\u002fUsers/penguinspecz/.local/bin/agy plugin --help": {
       "absent": false,
       "argv": [
-        "~/.local/bin/agy",
+        "\u002fUsers/penguinspecz/.local/bin/agy",
         "plugin",
         "--help"
       ],
@@ -1552,7 +1552,7 @@
       "stderr_head": "",
       "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdout_bytes": 221,
-      "stdout_head": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout_head": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: \u002fUsers/penguinspecz/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
       "stdout_sha256": "2480e044fa8ab0d61a228dae986138a2932517bdf74d0ba9421d55eb89415f1a",
       "timed_out": false
     },
@@ -1732,17 +1732,17 @@
     {
       "bytes_read": 65536,
       "parse": "JSONDecodeError",
-      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-57-019f2b2d-ebd9-7870-9ebc-956de09084f2.jsonl"
+      "path": "\u002fUsers/penguinspecz/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-57-019f2b2d-ebd9-7870-9ebc-956de09084f2.jsonl"
     },
     {
       "bytes_read": 65536,
       "parse": "JSONDecodeError",
-      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T22-12-39-019f2ae6-3a3c-7840-bc54-f597208129ed.jsonl"
+      "path": "\u002fUsers/penguinspecz/.codex/sessions/2026/07/03/rollout-2026-07-03T22-12-39-019f2ae6-3a3c-7840-bc54-f597208129ed.jsonl"
     },
     {
       "bytes_read": 65536,
       "parse": "JSONDecodeError",
-      "path": "~/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-38-019f2b2d-a10b-7861-94d8-93dad0f927ff.jsonl"
+      "path": "\u002fUsers/penguinspecz/.codex/sessions/2026/07/03/rollout-2026-07-03T23-30-38-019f2b2d-a10b-7861-94d8-93dad0f927ff.jsonl"
     },
     {
       "bytes_read": 57117,
@@ -1788,7 +1788,7 @@
         "uuid",
         "version"
       ],
-      "path": "~/.claude/projects/-Users-operator-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl",
+      "path": "\u002fUsers/penguinspecz/.claude/projects/-Users-penguinspecz-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl",
       "records": 8
     },
     {
@@ -1833,14 +1833,14 @@
         "uuid",
         "version"
       ],
-      "path": "~/.claude/projects/-Users-operator-Projects-floati-grok/c28fc475-fea8-4036-9480-2cdf25b8caf8.jsonl",
+      "path": "\u002fUsers/penguinspecz/.claude/projects/-Users-penguinspecz-Projects-floati-grok/c28fc475-fea8-4036-9480-2cdf25b8caf8.jsonl",
       "records": 8
     },
     {
       "bytes_read": 2,
       "key_count": 0,
       "keys": [],
-      "path": "~/.local/share/opencode/storage/session_diff/ses_fdaf21501ffey7n6m18hor86sD.json",
+      "path": "\u002fUsers/penguinspecz/.local/share/opencode/storage/session_diff/ses_fdaf21501ffey7n6m18hor86sD.json",
       "records": 1
     },
     {
@@ -1858,7 +1858,7 @@
         "updatedAt",
         "version"
       ],
-      "path": "~/.cline/data/settings/providers.json",
+      "path": "\u002fUsers/penguinspecz/.cline/data/settings/providers.json",
       "records": 1
     },
     {
@@ -1873,7 +1873,7 @@
         "userId",
         "version"
       ],
-      "path": "~/.cline/data/cache/feature-flags.json",
+      "path": "\u002fUsers/penguinspecz/.cline/data/cache/feature-flags.json",
       "records": 1
     },
     {
@@ -1885,7 +1885,7 @@
         "session_id",
         "timestamp"
       ],
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/prompt_history.jsonl",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/prompt_history.jsonl",
       "records": 2
     },
     {
@@ -1912,7 +1912,7 @@
         "session_summary",
         "updated_at"
       ],
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/summary.json",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/summary.json",
       "records": 1
     },
     {
@@ -1934,7 +1934,7 @@
         "timestamp",
         "update"
       ],
-      "path": "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/updates.jsonl",
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3/updates.jsonl",
       "records": 1
     },
     {
@@ -1963,14 +1963,14 @@
         "providers",
         "reasoning"
       ],
-      "path": "~/.pi/agent/models.json",
+      "path": "\u002fUsers/penguinspecz/.pi/agent/models.json",
       "records": 1
     },
     {
       "bytes_read": 2,
       "key_count": 0,
       "keys": [],
-      "path": "~/.pi/agent/models-store.json",
+      "path": "\u002fUsers/penguinspecz/.pi/agent/models-store.json",
       "records": 1
     },
     {
@@ -2002,7 +2002,7 @@
         "workspaces",
         "zoomed"
       ],
-      "path": "~/.config/herdr/session.json",
+      "path": "\u002fUsers/penguinspecz/.config/herdr/session.json",
       "records": 1
     },
     {
@@ -2032,7 +2032,7 @@
         "type",
         "working_directory"
       ],
-      "path": "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl",
+      "path": "\u002fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl",
       "records": 8
     },
     {
@@ -2043,7 +2043,7 @@
         "ide-install-wizard-shown",
         "lastCreatedProjectId"
       ],
-      "path": "~/Library/Application Support/Antigravity/app_storage.json",
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity/app_storage.json",
       "records": 1
     },
     {
@@ -2053,7 +2053,7 @@
         "cwd",
         "schemaVersion"
       ],
-      "path": "~/.cursor/acp-sessions/17f910c6-3f28-47b6-867f-b0028ad2db00/meta.json",
+      "path": "\u002fUsers/penguinspecz/.cursor/acp-sessions/17f910c6-3f28-47b6-867f-b0028ad2db00/meta.json",
       "records": 1
     },
     {
@@ -2063,7 +2063,7 @@
         "cwd",
         "schemaVersion"
       ],
-      "path": "~/.cursor/acp-sessions/c4e2ec4a-bb8c-4f43-a02d-0bef967eed29/meta.json",
+      "path": "\u002fUsers/penguinspecz/.cursor/acp-sessions/c4e2ec4a-bb8c-4f43-a02d-0bef967eed29/meta.json",
       "records": 1
     },
     {
@@ -2073,7 +2073,7 @@
         "cwd",
         "schemaVersion"
       ],
-      "path": "~/.cursor/acp-sessions/723fce81-06fe-4751-b876-59d1e10f5aab/meta.json",
+      "path": "\u002fUsers/penguinspecz/.cursor/acp-sessions/723fce81-06fe-4751-b876-59d1e10f5aab/meta.json",
       "records": 1
     }
   ],
@@ -2193,7 +2193,7 @@
           "time_used"
         ]
       },
-      "path": "~/.local/share/opencode/opencode.db",
+      "path": "\u002fUsers/penguinspecz/.local/share/opencode/opencode.db",
       "sessionish_tables": [
         "message",
         "part",
@@ -2210,7 +2210,7 @@
     {
       "detail": "unable to open database file",
       "error": "OperationalError",
-      "path": "~/.grok/sessions/session_search.sqlite"
+      "path": "\u002fUsers/penguinspecz/.grok/sessions/session_search.sqlite"
     }
   ],
   "started_utc": "2026-08-28T03:17:31Z",
@@ -2218,7 +2218,7 @@
     "agy": {
       "absent": false,
       "argv": [
-        "~/.local/bin/agy",
+        "\u002fUsers/penguinspecz/.local/bin/agy",
         "--version"
       ],
       "auth_prompt_suspected": false,
@@ -2406,7 +2406,7 @@
     }
   },
   "which": {
-    "agy": "~/.local/bin/agy",
+    "agy": "\u002fUsers/penguinspecz/.local/bin/agy",
     "antigravity": "",
     "claude": "/opt/homebrew/bin/claude",
     "cline": "/opt/homebrew/bin/cline",

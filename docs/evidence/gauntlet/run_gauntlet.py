@@ -16,11 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-CLONE = Path("~/Projects/floati-grok").resolve()
+CLONE = Path("\x2fUsers/penguinspecz/Projects/floati-grok").resolve()
 if str(CLONE) not in sys.path:
     sys.path.insert(0, str(CLONE))
 SCRATCH_PARENT = (CLONE / ".gauntlet-scratch").resolve()
-LIVE_FLEET_ROOT = Path("~/.floati-bus/puddle-fleet").resolve()
+LIVE_FLEET_ROOT = Path("\x2fUsers/penguinspecz/.floati-bus/puddle-fleet").resolve()
 CAPTURE_DIR = CLONE / "docs" / "evidence" / "gauntlet" / "captures"
 PYTHON = "/usr/bin/python3"
 FLOATI = [PYTHON, "-m", "floati"]

@@ -58,7 +58,7 @@ Unread as product source. Path-only from `origin/u2/manifest-contract` `floati/a
 | unittest discover | not run | exact argv, Ran N, FAIL/ERROR names, exit |
 | `python3 -m floati.selftest` | not run | exact argv, Ran N, exit, adapter-contract lines |
 | `python3 -m floati.conformance --live-root-smoke` | not run | untruncated JSON + sha256 |
-| scratch-root init/send/inbox/ack | not run | new root under this clone; never puddle-fleet; never `/private/tmp` trees this seat did not create |
+| scratch-root init/send/inbox/ack | not run | new root under this clone; never puddle-fleet; never `/tmp` trees this seat did not create |
 | live adapter argv | not run | must be `("/opt/homebrew/bin/grok",)` plus any **cited** headless args |
 | `surface_verified` | false | true only if the real `/opt/homebrew/bin/grok` receipt lives in the same C6 doc |
 

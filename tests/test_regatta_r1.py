@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import io
 import json
@@ -9,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.public_projection import projected_role_text
 from tests.test_tui_render import RECEIPTS, SNAPSHOT, WORK
 
 
@@ -34,7 +37,7 @@ def _artifact(*, include_envelope: bool) -> dict[str, object]:
                         "receipt_count": 9,
                     },
                     {
-                        "id": "lane-a",
+                        "id": public_ids.builder('a'),
                         "role": "Codex",
                         "last_activity_age_seconds": 75,
                         "inbox_count": 0,
@@ -57,7 +60,7 @@ def _artifact(*, include_envelope: bool) -> dict[str, object]:
                         "receipt_count": 3,
                     },
                     {
-                        "id": "lane-b",
+                        "id": public_ids.builder('b'),
                         "role": "Claude",
                         "last_activity_age_seconds": 31,
                         "inbox_count": 2,
@@ -75,9 +78,9 @@ def _artifact(*, include_envelope: bool) -> dict[str, object]:
             {
                 "id": "envelope-002",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": public_ids.builder('a'),
                 "target_bus": "beta",
-                "recipient": "lane-b",
+                "recipient": public_ids.builder('b'),
             }
         ]
     return artifact
@@ -101,11 +104,11 @@ class RegattaR1MachineTwinTests(unittest.TestCase):
         ).encode("utf-8")
 
         self.assertEqual(
-            "0fa896c0fb3d8a3ed97bdab22847214558c500e28ea2ea601366e16911da3504",
+            "31fdd93cdc00ff456f440ca3b022c0a16d9b0e88a6c2e0e4be83a86aeb8ce545",
             hashlib.sha256(plain).hexdigest(),
         )
         self.assertEqual(
-            "711c98bd6475631ef1d0bf3bb9a3b11b9eed9326eaf5b9c45297ebdfacd5b847",
+            "5c86d938487eacd6ca498aa31b0882c6640349d1458e0ff485a9d93f81543034",
             hashlib.sha256(artifact).hexdigest(),
         )
 
@@ -198,9 +201,9 @@ class RegattaR1LiveMapTests(unittest.TestCase):
             {
                 "id": f"envelope-{index:05d}",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": public_ids.builder('a'),
                 "target_bus": "beta",
-                "recipient": "lane-b",
+                "recipient": public_ids.builder('b'),
             }
             for index in range(MAX_TRACKED_ENVELOPES + 20)
         ]
@@ -250,9 +253,9 @@ class RegattaR1LiveMapTests(unittest.TestCase):
         self.assertIn("\x1b[92m", color16.text)
         for signal in ("FLOATI // LIVE HARBOR MAP", "⚑", "▤", "●", "◐", "○"):
             self.assertIn(signal, mono.text)
-        self.assertIn("lane-a", mono.text)
-        self.assertIn("lane-b", mono.text)
-        self.assertRegex(mono.text, r"lane-a .*●.* lane-b")
+        self.assertIn(public_ids.builder('a'), mono.text)
+        self.assertIn(public_ids.builder('b'), mono.text)
+        self.assertRegex(mono.text, public_ids.compose(public_ids.builder('a'), ' .*●.* ', public_ids.builder('b')))
         self.assertTrue(all(len(line) <= 100 for line in mono.text.splitlines()))
         self.assertLessEqual(len(mono.text.splitlines()), 30)
 
@@ -454,7 +457,7 @@ class RegattaR1LiveMapTests(unittest.TestCase):
         bus = artifact["buses"][0]
         bus["nodes"] = [
             {
-                "id": f"lane-{index:02d}",
+                "id": public_ids.builder(f"{index:02d}"),
                 "role": "Codex",
                 "last_activity_age_seconds": index,
                 "inbox_count": 0,
@@ -479,7 +482,7 @@ class RegattaR1LiveMapTests(unittest.TestCase):
             controller.selected_target,
             {region.target for region in rendered.hit_regions},
         )
-        self.assertIn("lane-29", rendered.text)
+        self.assertIn(public_ids.builder('29'), rendered.text)
 
         for _ in range(4):
             controller.handle_key("KEY_DOWN")
@@ -587,7 +590,10 @@ class RegattaR1LiveMapTests(unittest.TestCase):
         for color, path in expected.items():
             with self.subTest(color=color):
                 self.assertTrue(path.is_file())
-                self.assertEqual(capture_harbor_map(color=color), path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    projected_role_text(capture_harbor_map(color=color)),
+                    path.read_text(encoding="utf-8"),
+                )
         self.assertNotIn("ENVELOPE", capture_harbor_map(color=False))
 
 

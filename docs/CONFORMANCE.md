@@ -59,5 +59,5 @@ unknown-party denial list, liveness silence, authority deadline enforcement,
 and separated exclusion evidence.
 
 The artifact emits one machine-readable JSON object. Product-visible copy is
-`COPY PENDING — FABLE`; these status identifiers are protocol vocabulary, not
+`COPY PENDING — ARCHITECT`; these status identifiers are protocol vocabulary, not
 interface copy.

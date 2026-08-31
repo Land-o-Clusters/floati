@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,9 +24,15 @@ from .installer_shadow import observe_installer_shadow, observation_exit_code
 from .manifest import verify_manifest
 from .registry import REGISTRY_KINDS
 from .root import FloatiRoot
+from .storage_identity import INSTALL_METADATA_DIRECTORY
+from .update_status import project_update_findings
 
 
 RULED_PROFILES = ("bus-only", "orchestration")
+CODEX_GATEWAY_SOURCE = Path("tools/codex/codex-fleet-bus.py")
+CODEX_GATEWAY_DIGEST = Path("tools/codex/codex-fleet-bus.sha256.json")
+CODEX_GATEWAY_HOST = Path.home() / ".codex/bin/codex-fleet-bus"
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _finding(
@@ -97,6 +106,207 @@ def _fold_shadow_exit(current: int, shadow: int) -> int:
     return shadow
 
 
+def project_fleet_update(root: FloatiRoot) -> Dict[str, object]:
+    """Read one root's complete fleet-update history without opening a lock.
+
+    Receipt files are product-owned evidence.  Every actor file must validate;
+    a corrupt sibling is an integrity failure, never an excuse to return a
+    healthy partial projection.
+    """
+
+    from .fleet_update_receipts import (
+        FleetUpdateReceiptLedger,
+        _authenticated_recovery_witness,
+        _physical_step_kinds,
+        _step_spec,
+    )
+
+    if not isinstance(root, FloatiRoot):
+        raise ProtocolRefusal("fleet_update_root_invalid", "fleet_update_root_invalid")
+    # Keep the lexical product-owned coordinate so a dangling symlink is
+    # classified as evidence corruption before containment resolution follows it.
+    directory = root.path / "receipts" / "fleet-update"
+    try:
+        if directory.is_symlink():
+            raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        if not directory.exists():
+            return {"state": "absent", "actors": []}
+        if not directory.is_dir():
+            raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        actor_paths = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError as exc:
+        raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid") from exc
+    histories: list[tuple[str, list[Dict[str, object]]]] = []
+    for path in actor_paths:
+        if path.name.endswith(".jsonl.lock") and path.is_file() and not path.is_symlink():
+            continue
+        if path.is_symlink() or not path.is_file() or path.suffix != ".jsonl":
+            raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        actor = path.stem
+        try:
+            rows = FleetUpdateReceiptLedger(root).rows(actor)
+        except (IntegrityFailure, ProtocolRefusal, OSError) as exc:
+            raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid") from exc
+        histories.append((actor, rows))
+    actors = [actor for actor, _rows in histories]
+    operations: list[tuple[str, Dict[str, object], list[Dict[str, object]]]] = []
+    for actor, rows in histories:
+        keys = sorted({str(row["idempotency_key"]) for row in rows})
+        for key in keys:
+            related = [row for row in rows if row["idempotency_key"] == key]
+            start = next(row for row in related if row["kind"] == "fleet_update_started")
+            operations.append((actor, start, related))
+    if not operations:
+        return {"state": "absent", "actors": actors}
+    def operation_projection(
+        actor: str, start: Dict[str, object], related: list[Dict[str, object]]
+    ) -> Dict[str, object]:
+        plan = _authenticated_recovery_witness(start, root)
+        completed_steps = [row for row in related if row["kind"] == "fleet_update_step"]
+        kinds = _physical_step_kinds(plan)
+        if len(completed_steps) > len(kinds):
+            raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        expected = [_step_spec(plan, plan["seat_binding_consequences"], ordinal) for ordinal in range(1, len(kinds) + 1)]
+        for row, spec in zip(completed_steps, expected):
+            if any(row.get(field) != value for field, value in spec.items()):
+                raise IntegrityFailure("fleet_update_receipt_invalid", "fleet_update_receipt_invalid")
+        completion = next((row for row in related if row["kind"] == "fleet_update_completed"), None)
+        return {
+            "state": "completed" if completion is not None else "in_progress",
+            "actor": actor,
+            "started_at": start["timestamp"],
+            "idempotency_key": start["idempotency_key"],
+            "plan_digest": start["plan_digest"],
+            "consent_receipt_id": start["consent_receipt_id"],
+            "last_completed_step_receipt_id": completed_steps[-1]["id"] if completed_steps else None,
+            "completion_receipt_id": completion["id"] if completion is not None else None,
+            "remaining_steps": [{"kind": spec["step_kind"], "ordinal": spec["step_ordinal"], "coordinate": spec["step_coordinate"]} for spec in expected[len(completed_steps):]],
+            "epoch_roll_state": completion["epoch_roll_state"] if completion is not None else ("required" if plan["requires_epoch_roll"] else "not_required"),
+            "current_transport_pins": plan["current_transport_pins"],
+            "target_transport_pins": plan["target_transport_pins"],
+            "owner_review_batch_digest": plan["owner_review_batch_digest"],
+            "reader_consequences": plan["reader_consequences"],
+            "seat_binding_consequences": plan["seat_binding_consequences"],
+            "seat_exclusions": plan["seat_exclusions"],
+        }
+    projected_operations = [operation_projection(*operation) for operation in operations]
+    in_progress = [
+        item for item in projected_operations if item["state"] == "in_progress"
+    ]
+    aggregate_state = "in_progress" if in_progress else "completed"
+    current = max(
+        in_progress if in_progress else projected_operations,
+        key=lambda item: (
+            str(item["started_at"]), str(item["plan_digest"]),
+            str(item["idempotency_key"]), str(item["actor"]),
+        ),
+    )
+    return {
+        **current,
+        "state": aggregate_state,
+        "actors": actors,
+        "operations": projected_operations,
+    }
+
+
+def _codex_gateway_finding(
+    source_root: Path,
+    host_path: Path,
+) -> Dict[str, object] | None:
+    vendored = source_root / CODEX_GATEWAY_SOURCE
+    digest_path = source_root / CODEX_GATEWAY_DIGEST
+    if not vendored.exists() and not digest_path.exists():
+        return None
+    remediation = (
+        "run scripts/install-codex-gateway.sh explicitly, then rerun doctor"
+    )
+    if (
+        vendored.is_symlink()
+        or digest_path.is_symlink()
+        or not vendored.is_file()
+        or not digest_path.is_file()
+    ):
+        return _finding(
+            "codex_gateway_vendored_source_invalid",
+            "error",
+            str(vendored),
+            "vendored gateway source and digest must both be regular non-symlink files",
+            "restore the governed vendored gateway source and digest, then rerun doctor",
+        )
+    try:
+        source_data = vendored.read_bytes()
+        record = json.loads(digest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return _finding(
+            "codex_gateway_vendored_source_invalid",
+            "error",
+            str(vendored),
+            "vendored gateway source or digest record is unreadable",
+            "restore the governed vendored gateway source and digest, then rerun doctor",
+        )
+    expected_fields = {"path", "schema_version", "sha256"}
+    expected_digest = record.get("sha256") if isinstance(record, dict) else None
+    if (
+        not isinstance(record, dict)
+        or set(record) != expected_fields
+        or record.get("schema_version") != 0
+        or record.get("path") != CODEX_GATEWAY_SOURCE.as_posix()
+        or not isinstance(expected_digest, str)
+        or _SHA256.fullmatch(expected_digest) is None
+    ):
+        return _finding(
+            "codex_gateway_vendored_source_invalid",
+            "error",
+            str(digest_path),
+            "vendored gateway digest record violates the version-zero contract",
+            "restore the governed vendored gateway source and digest, then rerun doctor",
+        )
+    source_digest = hashlib.sha256(source_data).hexdigest()
+    if source_digest != expected_digest:
+        return _finding(
+            "codex_gateway_vendored_source_digest_mismatch",
+            "error",
+            str(vendored),
+            f"vendored source digest {source_digest} != recorded {expected_digest}",
+            "ratify the source bytes and recorded digest together, then rerun doctor",
+        )
+    if host_path.is_symlink() or not host_path.is_file():
+        return _finding(
+            "codex_gateway_vendored_source_missing",
+            "warning",
+            str(host_path),
+            "the fixed host gateway is absent or not a regular non-symlink file",
+            remediation,
+        )
+    try:
+        host_digest = hashlib.sha256(host_path.read_bytes()).hexdigest()
+    except OSError:
+        return _finding(
+            "codex_gateway_vendored_source_unavailable",
+            "warning",
+            str(host_path),
+            "the fixed host gateway digest cannot be read",
+            remediation,
+        )
+    if host_digest != source_digest:
+        return _finding(
+            "codex_gateway_vendored_source_drift",
+            "warning",
+            str(host_path),
+            (
+                "gateway drifted from vendored source: "
+                f"host {host_digest}; source {source_digest}"
+            ),
+            remediation,
+        )
+    return _finding(
+        "codex_gateway_vendored_source_current",
+        "ok",
+        str(host_path),
+        f"host and vendored gateway digests match at {source_digest}",
+    )
+
+
 class Doctor:
     """Inspect without creating roots, locks, receipts, or repair writes."""
 
@@ -111,6 +321,7 @@ class Doctor:
         profile: str | None = None,
         codex_hooks: Path | str | None = None,
         codex_config: Path | str | None = None,
+        codex_gateway_host: Path | str | None = None,
     ) -> None:
         if profile is not None and profile not in RULED_PROFILES:
             raise ProtocolRefusal("doctor_profile_invalid", DOCTOR_PROFILE_INVALID_DETAIL)
@@ -124,6 +335,11 @@ class Doctor:
         self.destination_arg = destination
         self.codex_hooks_arg = None if codex_hooks is None else Path(codex_hooks).expanduser()
         self.codex_config_arg = None if codex_config is None else Path(codex_config).expanduser()
+        self.codex_gateway_host_arg = (
+            CODEX_GATEWAY_HOST
+            if codex_gateway_host is None
+            else Path(codex_gateway_host).expanduser()
+        )
 
     def _currency(self) -> tuple[Dict[str, object], bool]:
         source = self.source_arg
@@ -349,6 +565,16 @@ class Doctor:
             if rc == 0:
                 rc = 35
 
+        gateway_finding = _codex_gateway_finding(
+            self.source_arg, self.codex_gateway_host_arg
+        )
+        if gateway_finding is not None:
+            findings.append(gateway_finding)
+            if gateway_finding["severity"] == "warning" and rc == 0:
+                rc = 35
+            elif gateway_finding["severity"] == "error" and rc != 20:
+                rc = 33
+
         identity_paths = [
             self.source_arg,
             self.source_arg / "bundle-manifest.v0.json",
@@ -403,6 +629,54 @@ class Doctor:
         )
         findings.append(_installer_shadow_finding(installer_shadow, self.destination_arg))
         rc = _fold_shadow_exit(rc, observation_exit_code(installer_shadow))
+        if self.destination_arg is not None:
+            update_destination = Path(self.destination_arg).expanduser()
+            update_metadata = (
+                update_destination / INSTALL_METADATA_DIRECTORY / "manifest.v0.json"
+            )
+            if update_metadata.is_file() or update_metadata.is_symlink():
+                try:
+                    findings.extend(
+                        project_update_findings(
+                            update_destination,
+                            entrypoint=update_destination / "scripts" / "floati",
+                        )
+                    )
+                except IntegrityFailure as exc:
+                    findings.append(
+                        _finding(
+                            exc.code,
+                            "error",
+                            str(update_destination),
+                            exc.detail,
+                        )
+                    )
+                    if rc != 20:
+                        rc = 33
+                except ProtocolRefusal as exc:
+                    findings.append(
+                        _finding(
+                            exc.code,
+                            "error",
+                            str(update_destination),
+                            exc.detail,
+                        )
+                    )
+                    if rc == 0:
+                        rc = 20
+        from .adapters.herdr_host import protocol_pins as herdr_protocol_pins
+
+        observation_pin, host_pin = herdr_protocol_pins()
+        pin_finding = _finding(
+            "herdr_protocol_pins",
+            "ok",
+            "herdr",
+            (
+                f"observation pin {observation_pin['protocol']}; "
+                f"host pin {host_pin['protocol']} (measured)"
+            ),
+        )
+        findings.append(pin_finding)
         if self.codex_hooks_arg is not None:
             from .codex_hook_trust import observe_codex_waiter_hooks
 
@@ -447,6 +721,17 @@ class Doctor:
                     findings.append(finding)
                     if not trust["hook_armed"] and rc == 0:
                         rc = 35
+        if root is None:
+            fleet_update = {"state": "unavailable"}
+        else:
+            try:
+                fleet_update = project_fleet_update(root)
+            except IntegrityFailure as exc:
+                fleet_update = {
+                    "state": "integrity_failure",
+                    "code": exc.code,
+                }
+                rc = 33
         state = {
             0: "healthy",
             20: "refused",
@@ -465,6 +750,7 @@ class Doctor:
                 "ref": self.ref,
                 "findings": findings,
                 "unrecognized_kinds": unrecognized_kinds,
+                "fleet_update": fleet_update,
             },
             rc,
         )

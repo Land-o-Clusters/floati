@@ -1,6 +1,6 @@
 # Floati node workspace layout v0
 
-Status: **DRAFT - Fable copy and integration gate required**
+Status: **DRAFT - architect copy and integration gate required**
 
 ## Convention
 

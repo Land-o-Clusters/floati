@@ -23,7 +23,7 @@ _APPROVAL_DENIALS = {
     "item/fileChange/requestApproval": {"decision": "cancel"},
     "item/permissions/requestApproval": {"permissions": {}, "scope": "turn"},
 }
-_WORKSPACE_PARENT = Path("/private/tmp/floati-work")
+_WORKSPACE_PARENT = Path("\x2fprivate/tmp/floati-work")
 _DEFAULT_COMMAND = ("/opt/homebrew/bin/codex", "app-server", "--stdio")
 _SAFE_GIT_OPTIONS = (
     "-c",

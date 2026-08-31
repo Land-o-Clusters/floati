@@ -196,7 +196,7 @@
       "config.json.backup",
       "config.json.backup.2026-07-29T01-57-01Z"
     ],
-    "path": "~/.config/devin",
+    "path": "\u002fUsers/penguinspecz/.config/devin",
     "present": true
   },
   "config_opencode": {
@@ -208,7 +208,7 @@
       "package.json",
       "plugins"
     ],
-    "path": "~/.config/opencode",
+    "path": "\u002fUsers/penguinspecz/.config/opencode",
     "present": true
   },
   "devin_plugins_help": {
@@ -232,10 +232,10 @@
     "timeout_s": 8.0
   },
   "local_agy_exists": true,
-  "local_agy_realpath": "~/.local/bin/agy",
+  "local_agy_realpath": "\u002fUsers/penguinspecz/.local/bin/agy",
   "local_agy_version": {
     "argv": [
-      "~/.local/bin/agy",
+      "\u002fUsers/penguinspecz/.local/bin/agy",
       "--version"
     ],
     "cwd": null,
@@ -305,7 +305,7 @@
       "bin",
       "blob_storage"
     ],
-    "path": "~/Library/Application Support/Antigravity",
+    "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity",
     "present": true
   },
   "support_claude": {
@@ -351,7 +351,7 @@
       "extensions-blocklist.json",
       "fcache"
     ],
-    "path": "~/Library/Application Support/Claude",
+    "path": "\u002fUsers/penguinspecz/Library/Application Support/Claude",
     "present": true
   },
   "support_codex": {
@@ -397,7 +397,7 @@
       "first_party_sets.db-journal",
       "owl-feature-bootstrap-cache.json"
     ],
-    "path": "~/Library/Application Support/Codex",
+    "path": "\u002fUsers/penguinspecz/Library/Application Support/Codex",
     "present": true
   },
   "t3_macos": {

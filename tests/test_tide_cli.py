@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import unittest
 
 from floati.cli import _parser
@@ -10,15 +12,15 @@ class TideCliTests(unittest.TestCase):
         parser = _parser()
         set_args = parser.parse_args([
             "context", "policy", "set", "--root", "/tmp/fleet",
-            "--node", "lane-a", "--metric", "context_fraction",
+            "--node", public_ids.builder('a'), "--metric", "context_fraction",
             "--threshold", "70%", "--action", "direct",
             "--idempotency-key", "set-key", "--json",
         ])
         self.assertEqual("set", set_args.policy_command)
-        self.assertEqual("lane-a", set_args.node)
+        self.assertEqual(public_ids.builder('a'), set_args.node)
         self.assertTrue(callable(set_args.handler))
         for command in ("show", "clear"):
-            argv = ["context", "policy", command, "--root", "/tmp/fleet", "--node", "lane-a", "--json"]
+            argv = ["context", "policy", command, "--root", "/tmp/fleet", "--node", public_ids.builder('a'), "--json"]
             if command == "clear":
                 argv.extend(["--idempotency-key", "clear-key"])
             parsed = parser.parse_args(argv)
@@ -35,11 +37,11 @@ class TideCliTests(unittest.TestCase):
     def test_context_reading_record_carries_exact_node_testimony_command(self) -> None:
         parsed = _parser().parse_args([
             "context", "reading", "record", "--root", "/tmp/fleet",
-            "--as", "lane-a", "--metric", "self_reported_context_fraction",
+            "--as", public_ids.builder('a'), "--metric", "self_reported_context_fraction",
             "--value", "75%", "--command", "/context",
             "--idempotency-key", "reading-key", "--json",
         ])
-        self.assertEqual("lane-a", parsed.actor)
+        self.assertEqual(public_ids.builder('a'), parsed.actor)
         self.assertEqual("/context", parsed.testimony_command)
         self.assertTrue(callable(parsed.handler))
 

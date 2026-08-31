@@ -1,4 +1,4 @@
-DECLARED_ROOTS=/private/tmp/floati-captures.LtNmwM/other5/declared-roots.json
+DECLARED_ROOTS=/tmp/floati-captures.LtNmwM/other5/declared-roots.json
 $ floati chart --declared-roots $DECLARED_ROOTS
 
 FLOATI // MULTI-BUS HARBOR CHART

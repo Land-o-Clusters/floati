@@ -16,7 +16,7 @@ sys.path.insert(0, str(HERE))
 
 from run_gauntlet import CAPTURE_DIR, CLONE, capture, write_json  # noqa: E402
 
-HOME = Path("~")
+HOME = Path("\x2fUsers/penguinspecz")
 _FORBIDDEN = bytes.fromhex("5369676e616c4372616674")
 SKIP_BASENAMES = {
     "config.json",
@@ -293,13 +293,13 @@ def main() -> int:
         "codex": which("codex") or "/opt/homebrew/bin/codex",
         "claude": which("claude") or "/opt/homebrew/bin/claude",
         "opencode": which("opencode") or "/opt/homebrew/bin/opencode",
-        "cursor-agent": which("cursor-agent") or "~/.local/bin/cursor-agent",
+        "cursor-agent": which("cursor-agent") or "\x2fUsers/penguinspecz/.local/bin/cursor-agent",
         "cline": which("cline") or "/opt/homebrew/bin/cline",
         "grok": which("grok") or "/opt/homebrew/bin/grok",
         "pi": which("pi") or "/opt/homebrew/bin/pi",
         "herdr": which("herdr") or "/opt/homebrew/bin/herdr",
         "t3": which("t3") or "/opt/homebrew/bin/t3",
-        "agy": which("agy") or "~/.local/bin/agy",
+        "agy": which("agy") or "\x2fUsers/penguinspecz/.local/bin/agy",
         "devin": which("devin") or "/opt/homebrew/bin/devin",
     }
     which_map = {name: which(name) for name in list(cli) + ["cursor", "grok-build", "antigravity"]}
@@ -359,20 +359,20 @@ def main() -> int:
         HOME / "Library" / "Application Support" / "t3code",
         HOME / "Library" / "Application Support" / "T3 Code",
         HOME / "Library" / "Application Support" / "Grok",
-        Path("~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts"),
+        Path("\x2fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts"),
     ]
     trees = [dir_tree_names(p, depth=2, limit=35) for p in declared_dirs]
     listings = [list_names(p, limit=50) for p in declared_dirs if p.exists()]
 
     sample_roots = [
         HOME / ".codex" / "sessions",
-        HOME / ".claude" / "projects" / "-Users-operator-Projects-floati-grok",
+        HOME / ".claude" / "projects" / "-Users-penguinspecz-Projects-floati-grok",
         HOME / ".local" / "share" / "opencode",
         HOME / ".cline",
         HOME / ".grok" / "sessions",
         HOME / ".pi" / "agent",
         HOME / ".config" / "herdr",
-        Path("~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts"),
+        Path("\x2fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts"),
         HOME / "Library" / "Application Support" / "Antigravity",
         HOME / "Library" / "Application Support" / "t3code",
         HOME / ".cursor" / "acp-sessions",
@@ -387,7 +387,7 @@ def main() -> int:
         for sample in find_samples(root, suffixes=(".db", ".sqlite", ".sqlite3"), limit=2):
             sqlite_hits.append(sqlite_schema(sample))
 
-    local_agy = Path("~/.local/bin/agy")
+    local_agy = Path("\x2fUsers/penguinspecz/.local/bin/agy")
     brew_agy = Path("/opt/homebrew/bin/agy")
     payload: Dict[str, Any] = {
         "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

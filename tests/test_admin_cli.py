@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import os
 import subprocess
@@ -43,16 +45,16 @@ class AdminCliTests(unittest.TestCase):
     def test_register_and_retire_compose_the_nested_workspace_contract(self) -> None:
         """Catches CLI registration bypassing B2 workspace creation or retention."""
         registered = self.run_cli(
-            "register", "--root", str(self.root), "lane-a", "--harness", "Codex",
+            "register", "--root", str(self.root), public_ids.builder('a'), "--harness", "Codex",
             "--create-workspace",
         )
         self.assertEqual(0, registered.returncode, registered.stderr)
         registered_artifact = self.artifact(registered)
-        workspace = self.root / "nodes" / "lane-a"
+        workspace = self.root / "nodes" / public_ids.builder('a')
         self.assertTrue(workspace.is_dir())
         self.assertEqual("created", registered_artifact["evidence"]["workspace"]["state"])
 
-        retired = self.run_cli("retire", "--root", str(self.root), "lane-a")
+        retired = self.run_cli("retire", "--root", str(self.root), public_ids.builder('a'))
 
         self.assertEqual(0, retired.returncode, retired.stderr)
         self.assertEqual("retained", self.artifact(retired)["evidence"]["workspace"]["state"])
@@ -61,18 +63,18 @@ class AdminCliTests(unittest.TestCase):
     def test_node_add_and_switch_emit_exact_preview_rows_before_receipted_commits(self) -> None:
         """Catches the activated wizard writing guessed rows or losing model testimony."""
         added = self.run_cli(
-            "node", "add", "--root", str(self.root), "--node", "grok",
-            "--harness", "opencode-grok", "--lifetime", "temporary",
+            "node", "add", "--root", str(self.root), "--node", public_ids.verifier(),
+            "--harness", public_ids.compose('opencode-', public_ids.verifier()), "--lifetime", "temporary",
             "--lease-minutes", "60",
         )
         self.assertEqual(0, added.returncode, added.stderr)
         added_evidence = self.artifact(added)["evidence"]
         self.assertEqual(2, len(added_evidence["records"]))
         self.assertEqual(2, len(added_evidence["preview_rows"]))
-        self.assertTrue((self.root / "nodes" / "grok").is_dir())
+        self.assertTrue((self.root / "nodes" / public_ids.verifier()).is_dir())
 
         switched = self.run_cli(
-            "node", "switch", "--root", str(self.root), "--node", "grok",
+            "node", "switch", "--root", str(self.root), "--node", public_ids.verifier(),
             "--harness", "Cursor", "--model", "gpt-5.6",
         )
 
@@ -155,7 +157,7 @@ class AdminCliTests(unittest.TestCase):
         self.assertEqual((before.st_dev, before.st_ino, before.st_size), (after.st_dev, after.st_ino, after.st_size))
 
     def test_admin_help_is_static_and_restamped(self) -> None:
-        """Catches argparse-generated copy, or a DRAFT stamp surviving the Fable voice pass."""
+        'Catches argparse-generated copy, or a DRAFT stamp surviving the reviewer voice pass.'
         for arguments, phrase in (
             (("node", "--help"), "floati node"),
             (("role", "--help"), "floati role"),
@@ -170,7 +172,7 @@ class AdminCliTests(unittest.TestCase):
 
     def test_wake_arm_explicitly_transfers_one_workspace_to_one_session(self) -> None:
         registered = self.run_cli(
-            "register", "--root", str(self.root), "lane-floati", "--harness", "Codex",
+            "register", "--root", str(self.root), public_ids.builder('floati'), "--harness", "Codex",
         )
         self.assertEqual(0, registered.returncode, registered.stderr)
         workspace = self.base / "workspace"
@@ -182,7 +184,7 @@ class AdminCliTests(unittest.TestCase):
                 {
                     "schema_version": 0,
                     "tenant_id": self.root.name,
-                    "mappings": [{"workspace": str(workspace), "node_id": "lane-floati"}],
+                    "mappings": [{"workspace": str(workspace), "node_id": public_ids.builder('floati')}],
                 },
                 sort_keys=True,
                 separators=(",", ":"),
@@ -200,12 +202,12 @@ class AdminCliTests(unittest.TestCase):
         )
 
         first = self.run_cli(
-            "wake", "arm", "--root", str(self.root), "--as", "lane-floati",
+            "wake", "arm", "--root", str(self.root), "--as", public_ids.builder('floati'),
             "--session", "session-one", "--workspace", str(workspace),
             "--idempotency-key", "arm-one",
         )
         second = self.run_cli(
-            "wake", "arm", "--root", str(self.root), "--as", "lane-floati",
+            "wake", "arm", "--root", str(self.root), "--as", public_ids.builder('floati'),
             "--session", "session-two", "--workspace", str(workspace),
             "--idempotency-key", "arm-two",
         )
@@ -250,7 +252,7 @@ class AdminCliTests(unittest.TestCase):
             "--root", str(self.root), "--node", "architect-a",
             "--declared-roots", str(declarations),
             "--managed-executable", "/usr/local/bin/floati-fleet",
-            "--profile", "puddle-floati-lane-floati", "--json",
+            "--profile", public_ids.compose('puddle-floati-', public_ids.builder('floati')), "--json",
         )
 
         boot = self.run_cli("node", "boot", *common)

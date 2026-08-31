@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import threading
 import unittest
@@ -43,27 +45,27 @@ class LivenessTests(PlaneTestCase):
         self.store = LivenessPresenceStore(self.root)
 
     def test_present_silent_and_expired_are_distinct(self) -> None:
-        record = self.store.observe("alice", ttl_seconds=10, now=NOW)
+        record = self.store.observe(public_ids.worker('alpha'), ttl_seconds=10, now=NOW)
         self.assertEqual("liveness_presence", record["kind"])
-        self.assertEqual("present", self.store.status("alice", NOW + timedelta(seconds=4)))
-        self.assertEqual("silent", self.store.status("alice", NOW + timedelta(seconds=5)))
-        self.assertEqual("expired", self.store.status("alice", NOW + timedelta(seconds=10)))
+        self.assertEqual("present", self.store.status(public_ids.worker('alpha'), NOW + timedelta(seconds=4)))
+        self.assertEqual("silent", self.store.status(public_ids.worker('alpha'), NOW + timedelta(seconds=5)))
+        self.assertEqual("expired", self.store.status(public_ids.worker('alpha'), NOW + timedelta(seconds=10)))
 
     def test_observation_time_cannot_move_backward(self) -> None:
-        self.store.observe("alice", 10, NOW)
-        before = self.store.path_for("alice").read_bytes()
+        self.store.observe(public_ids.worker('alpha'), 10, NOW)
+        before = self.store.path_for(public_ids.worker('alpha')).read_bytes()
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.store.observe("alice", 10, NOW - timedelta(seconds=1))
+            self.store.observe(public_ids.worker('alpha'), 10, NOW - timedelta(seconds=1))
         self.assertEqual("time_regression", caught.exception.code)
-        self.assertEqual(before, self.store.path_for("alice").read_bytes())
+        self.assertEqual(before, self.store.path_for(public_ids.worker('alpha')).read_bytes())
 
     def test_liveness_has_its_own_path_and_rejects_invalid_ttl(self) -> None:
-        path = self.store.path_for("alice")
+        path = self.store.path_for(public_ids.worker('alpha'))
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.store.observe("alice", ttl_seconds=0, now=NOW)
+            self.store.observe(public_ids.worker('alpha'), ttl_seconds=0, now=NOW)
         self.assertEqual("ttl_invalid", caught.exception.code)
         self.assertFalse(path.exists())
-        self.store.observe("alice", ttl_seconds=10, now=NOW)
+        self.store.observe(public_ids.worker('alpha'), ttl_seconds=10, now=NOW)
         self.assertIn("liveness-presence", path.parts)
         self.assertNotIn("authority-grants", path.parts)
         self.assertNotIn("mutual-exclusion-holds", path.parts)
@@ -76,13 +78,13 @@ class AuthorityTests(PlaneTestCase):
         self.store = AuthorityGrantStore(self.root)
 
     def test_claim_renew_release_and_new_epoch(self) -> None:
-        claimed = self.store.claim("build", "alice", 10, 8, NOW)
+        claimed = self.store.claim("build", public_ids.worker('alpha'), 10, 8, NOW)
         self.assertEqual(1, claimed["epoch"])
         self.assertEqual("authority_grant", claimed["kind"])
-        renewed = self.store.renew("build", "alice", 1, 10, 10, NOW + timedelta(seconds=1))
+        renewed = self.store.renew("build", public_ids.worker('alpha'), 1, 10, 10, NOW + timedelta(seconds=1))
         self.assertEqual(1, renewed["epoch"])
         self.assertGreater(renewed["expires_at"], claimed["expires_at"])
-        released = self.store.release("build", "alice", 1, NOW + timedelta(seconds=2))
+        released = self.store.release("build", public_ids.worker('alpha'), 1, NOW + timedelta(seconds=2))
         self.assertEqual("released", released["state"])
         next_claim = self.store.claim("build", "bravo", 10, 5, NOW + timedelta(seconds=3))
         self.assertEqual(2, next_claim["epoch"])
@@ -90,7 +92,7 @@ class AuthorityTests(PlaneTestCase):
 
     def test_exact_tail_read_creates_no_lock_or_other_files(self) -> None:
         """Catches controller evaluation turning an authority read into mutation."""
-        claimed = self.store.claim("build", "alice", 10, 8, NOW)
+        claimed = self.store.claim("build", public_ids.worker('alpha'), 10, 8, NOW)
         path = self.store.path_for("build")
         read_lock = path.with_name(path.name + ".lock")
         if read_lock.exists():
@@ -118,10 +120,10 @@ class AuthorityTests(PlaneTestCase):
         self.assertFalse(self.store.path_for("missing").exists())
 
     def test_expire_records_an_expired_terminal_state_at_the_observation(self) -> None:
-        self.store.claim("build", "alice", 10, 8, NOW)
+        self.store.claim("build", public_ids.worker('alpha'), 10, 8, NOW)
 
         expired = self.store.expire(
-            "build", "alice", 1, NOW + timedelta(seconds=2)
+            "build", public_ids.worker('alpha'), 1, NOW + timedelta(seconds=2)
         )
 
         self.assertEqual("expired", expired["state"])
@@ -129,29 +131,29 @@ class AuthorityTests(PlaneTestCase):
         self.assertIsNone(expired["released_at"])
         with self.assertRaises(ProtocolRefusal) as caught:
             self.store.renew(
-                "build", "alice", 1, 10, 8, NOW + timedelta(seconds=3)
+                "build", public_ids.worker('alpha'), 1, 10, 8, NOW + timedelta(seconds=3)
             )
         self.assertEqual("authority_released", caught.exception.code)
 
     def test_deadline_invariant_accepts_both_valid_directions_and_refuses_inverse(self) -> None:
-        shorter = self.store.claim("shorter", "alice", 10, 9, NOW)
-        equal = self.store.claim("equal", "alice", 10, 10, NOW)
+        shorter = self.store.claim("shorter", public_ids.worker('alpha'), 10, 9, NOW)
+        equal = self.store.claim("equal", public_ids.worker('alpha'), 10, 10, NOW)
         self.assertEqual(9, shorter["deadline_seconds"])
         self.assertEqual(10, equal["deadline_seconds"])
         refused_path = self.store.path_for("inverse")
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.store.claim("inverse", "alice", 9, 10, NOW)
+            self.store.claim("inverse", public_ids.worker('alpha'), 9, 10, NOW)
         self.assertEqual("deadline_exceeds_ttl", caught.exception.code)
         self.assertFalse(refused_path.exists())
 
     def test_expired_or_stale_holder_cannot_renew_or_release(self) -> None:
-        self.store.claim("build", "alice", 10, 10, NOW)
+        self.store.claim("build", public_ids.worker('alpha'), 10, 10, NOW)
         path = self.store.path_for("build")
         before = path.read_bytes()
         cases = (
             (lambda: self.store.renew("build", "bravo", 1, 10, 10, NOW + timedelta(seconds=1)), "holder_mismatch"),
-            (lambda: self.store.release("build", "alice", 2, NOW + timedelta(seconds=1)), "epoch_mismatch"),
-            (lambda: self.store.renew("build", "alice", 1, 10, 10, NOW + timedelta(seconds=10)), "authority_expired"),
+            (lambda: self.store.release("build", public_ids.worker('alpha'), 2, NOW + timedelta(seconds=1)), "epoch_mismatch"),
+            (lambda: self.store.renew("build", public_ids.worker('alpha'), 1, 10, 10, NOW + timedelta(seconds=10)), "authority_expired"),
         )
         for operation, reason in cases:
             with self.subTest(reason=reason):
@@ -161,13 +163,13 @@ class AuthorityTests(PlaneTestCase):
                 self.assertEqual(before, path.read_bytes())
 
     def test_boolean_epoch_and_backward_time_refuse_without_mutation(self) -> None:
-        self.store.claim("build", "alice", 10, 10, NOW)
+        self.store.claim("build", public_ids.worker('alpha'), 10, 10, NOW)
         path = self.store.path_for("build")
         before = path.read_bytes()
         for operation, code in (
-            (lambda: self.store.renew("build", "alice", True, 10, 10, NOW + timedelta(seconds=1)), "epoch_invalid"),
-            (lambda: self.store.renew("build", "alice", 1, 10, 10, NOW - timedelta(seconds=1)), "time_regression"),
-            (lambda: self.store.release("build", "alice", 1, NOW - timedelta(seconds=1)), "time_regression"),
+            (lambda: self.store.renew("build", public_ids.worker('alpha'), True, 10, 10, NOW + timedelta(seconds=1)), "epoch_invalid"),
+            (lambda: self.store.renew("build", public_ids.worker('alpha'), 1, 10, 10, NOW - timedelta(seconds=1)), "time_regression"),
+            (lambda: self.store.release("build", public_ids.worker('alpha'), 1, NOW - timedelta(seconds=1)), "time_regression"),
         ):
             with self.subTest(code=code):
                 with self.assertRaises(ProtocolRefusal) as caught:
@@ -187,7 +189,7 @@ class AuthorityTests(PlaneTestCase):
             except ProtocolRefusal as exc:
                 refusals.append(exc.code)
 
-        threads = [threading.Thread(target=compete, args=(holder,)) for holder in ("alice", "bravo")]
+        threads = [threading.Thread(target=compete, args=(holder,)) for holder in (public_ids.worker('alpha'), "bravo")]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -205,16 +207,16 @@ class MutualExclusionTests(PlaneTestCase):
         self.store = MutualExclusionHoldStore(self.root)
 
     def test_acquire_renew_release_and_expiry_takeover(self) -> None:
-        acquired = self.store.acquire("workspace", "alice", 10, 10, NOW)
+        acquired = self.store.acquire("workspace", public_ids.worker('alpha'), 10, 10, NOW)
         self.assertEqual("mutual_exclusion_hold", acquired["kind"])
         self.assertEqual(1, acquired["epoch"])
-        renewed = self.store.renew("workspace", "alice", 1, 10, 8, NOW + timedelta(seconds=1))
+        renewed = self.store.renew("workspace", public_ids.worker('alpha'), 1, 10, 8, NOW + timedelta(seconds=1))
         self.assertEqual(1, renewed["epoch"])
-        released = self.store.release("workspace", "alice", 1, NOW + timedelta(seconds=2))
+        released = self.store.release("workspace", public_ids.worker('alpha'), 1, NOW + timedelta(seconds=2))
         self.assertEqual("released", released["state"])
         acquired_again = self.store.acquire("workspace", "bravo", 10, 10, NOW + timedelta(seconds=3))
         self.assertEqual(2, acquired_again["epoch"])
-        expired_takeover = self.store.acquire("other", "alice", 2, 2, NOW)
+        expired_takeover = self.store.acquire("other", public_ids.worker('alpha'), 2, 2, NOW)
         self.assertEqual(1, expired_takeover["epoch"])
         after_expiry = self.store.acquire("other", "bravo", 2, 2, NOW + timedelta(seconds=2))
         self.assertEqual(2, after_expiry["epoch"])
@@ -222,10 +224,10 @@ class MutualExclusionTests(PlaneTestCase):
     def test_exclusion_is_separate_and_enforces_deadline(self) -> None:
         path = self.store.path_for("workspace")
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.store.acquire("workspace", "alice", 5, 6, NOW)
+            self.store.acquire("workspace", public_ids.worker('alpha'), 5, 6, NOW)
         self.assertEqual("deadline_exceeds_ttl", caught.exception.code)
         self.assertFalse(path.exists())
-        self.store.acquire("workspace", "alice", 5, 5, NOW)
+        self.store.acquire("workspace", public_ids.worker('alpha'), 5, 5, NOW)
         self.assertIn("mutual-exclusion-holds", path.parts)
         self.assertNotIn("authority-grants", path.parts)
         self.assertNotIn("liveness-presence", path.parts)

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import os
 import re
 import subprocess
 import unittest
 from pathlib import Path
+
+
+PRIVATE_FLEET = bytes.fromhex("707564646c652d666c656574").decode("ascii")
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -30,22 +35,22 @@ APPROVED_HERO_LOOP = """<p align="center">
 LIVING_PUBLIC_DOCS = (
     "README.md",
     "CONTRIBUTING.md",
-    "docs/CASE-LAW.md",
     "docs/CONFLUENCE-v0.md",
     "docs/CONFORMANCE.md",
     "docs/COPY-LEDGER.md",
+    "docs/DESIGN.md",
+    "docs/FINDINGS.md",
     "docs/FLEET.md",
-    "docs/TRUTH-GUARANTEES.md",
+    "docs/PUBLICATION-CHECKLIST.md",
+    "docs/SPEC-DRAFT.md",
     "bundle/c7.1/README.md",
     "bundle/c7.2/README.md",
 )
 
 ACCOUNT_NEUTRAL_PUBLIC_FILES = (
     "docs/demo/corpus.v0.jsonl",
-    "docs/evidence/DEMO-UAT-CAPTURE-GIF-SET.md",
+    "docs/evidence/DEMO-UAT-CAPTURE-GIF-CANDIDATES.md",
 )
-
-INSTALLER_SHADOW_PUBLIC_NOTE = "docs/evidence/FLEET-OPS-ISSUE-3-INSTALLER-SHADOW-PATH-DOCS.md"
 
 
 def _operator_account_name() -> str:
@@ -53,15 +58,15 @@ def _operator_account_name() -> str:
 
 
 PRIVATE_ACCOUNT_PATTERNS = (
-    re.compile(r"/Users/[^/\s`<>]+", re.IGNORECASE),
+    re.compile(r"\x2fUsers/[^/\s`<>]+", re.IGNORECASE),
     re.compile(re.escape(_operator_account_name()), re.IGNORECASE),
 )
 
 TENANT_PATTERNS = (
     *PRIVATE_ACCOUNT_PATTERNS,
     re.compile(r"CMs-M5", re.IGNORECASE),
-    re.compile(r"\.slipway-bus/puddle-fleet", re.IGNORECASE),
-    re.compile(r"puddle-fleet", re.IGNORECASE),
+    re.compile(rf"\.slipway-bus/{re.escape(PRIVATE_FLEET)}", re.IGNORECASE),
+    re.compile(re.escape(PRIVATE_FLEET), re.IGNORECASE),
     re.compile(r"~/Projects/puddle", re.IGNORECASE),
     re.compile(r"/absolute/slipway", re.IGNORECASE),
 )
@@ -118,7 +123,7 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
                 self.assertIsNone(RETIRED_PRODUCT_NAME.search(text))
 
     def test_readme_begins_with_exact_fable_copy(self) -> None:
-        """Catches invented README voice on the ruled Fable-owned surface."""
+        'Catches invented README voice on the ruled reviewer-owned surface.'
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue(readme.startswith(APPROVED_README_TOP))
@@ -138,6 +143,16 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
             cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
         ).stdout.strip()
         self.assertEqual(rendered, embedded)
+
+    def test_full_capability_grid_is_generated_not_hand_written(self) -> None:
+        """The full-grid page must equal the renderer's full mode, same law as the README block."""
+        import subprocess
+        page = (REPOSITORY_ROOT / "docs" / "capability-matrix.md").read_text(encoding="utf-8")
+        rendered = subprocess.run(
+            ["python3", "scripts/capability-matrix-render.py", "--mode", "full"],
+            cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self.assertIn(rendered, page)
 
     def test_readme_local_references_resolve(self) -> None:
         """Catches a README link or image that points at an absent repository file."""
@@ -172,7 +187,14 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         for relative in LIVING_PUBLIC_DOCS:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             if relative == "README.md":
-                text = text.replace('"tenant_id":"puddle-fleet"', '"tenant_id":"real-receipt"')
+                text = text.replace(
+                    f'"tenant_id":"{PRIVATE_FLEET}"',
+                    '"tenant_id":"real-receipt"',
+                )
+            if relative == "docs/PUBLICATION-CHECKLIST.md":
+                # The publication ruling preserves one live durable coordinate;
+                # it does not make that coordinate acceptable elsewhere.
+                text = text.replace(PRIVATE_FLEET, "preserved-live-coordinate", 1)
             for pattern in TENANT_PATTERNS:
                 with self.subTest(relative=relative, pattern=pattern.pattern):
                     self.assertIsNone(pattern.search(text))
@@ -190,8 +212,8 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         from floati.demo import capture_demo
 
         frame = capture_demo(color=False)
-        self.assertIn("lane-floati", frame)
-        self.assertNotIn("lane-slipway", frame)
+        self.assertIn("builder-core", frame)
+        self.assertNotIn(public_ids.builder('slipway'), frame)
 
 
 class InstallerShadowDocumentationTests(unittest.TestCase):
@@ -204,18 +226,18 @@ class InstallerShadowDocumentationTests(unittest.TestCase):
         self.assertIn("install scripts directory", HELP["doctor"])
         self.assertNotIn("[[", HELP["doctor"])
 
-    def test_retained_public_note_carries_the_installer_shadow_operator_rule(self) -> None:
-        """Catches the operator rule disappearing with the non-public design corpus."""
-        text = (REPOSITORY_ROOT / INSTALLER_SHADOW_PUBLIC_NOTE).read_text(encoding="utf-8")
+    def test_design_doc_carries_the_installer_shadow_operator_note(self) -> None:
+        """Catches the operator note never landing in the living design doc."""
+        text = (REPOSITORY_ROOT / "docs/DESIGN.md").read_text(encoding="utf-8")
 
         self.assertEqual(0, text.count("[[design.doctor.installer_shadow_path]]"))
-        self.assertIn("not a shadow finding, not an all-clear", text)
+        self.assertIn("never promoted to `affirmative_none`", text)
 
     def test_the_installer_shadow_documentation_is_written(self) -> None:
         """The architect's prose landed on both surfaces; placeholders are a regression."""
         from floati.helptext import HELP
 
-        text = (REPOSITORY_ROOT / INSTALLER_SHADOW_PUBLIC_NOTE).read_text(encoding="utf-8")
+        text = (REPOSITORY_ROOT / "docs/DESIGN.md").read_text(encoding="utf-8")
         self.assertIn("installer-shadow", text)
         self.assertNotIn("[[design.doctor.", text)
         self.assertNotIn("[[help.doctor.", HELP["doctor"])

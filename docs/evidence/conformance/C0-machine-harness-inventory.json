@@ -109,12 +109,12 @@
     "timeout_s": 5
   },
   "extension_hits": {
-    "~/.cursor/extensions": {
+    "\u002fUsers/penguinspecz/.cursor/extensions": {
       "entry_count": 18,
       "exists": true,
       "hits": []
     },
-    "~/.vscode/extensions": {
+    "\u002fUsers/penguinspecz/.vscode/extensions": {
       "entry_count": 0,
       "exists": false,
       "hits": []
@@ -141,69 +141,69 @@
       "realpath_sha256": "de63d7265e20da15329ee70250c8596851e39d08cfdc814d5f73c00b8c7962a1",
       "realpath_size": 4798
     },
-    "~/.cargo/bin/herdr": {
+    "\u002fUsers/penguinspecz/.cargo/bin/herdr": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.cargo/bin/herdr"
+      "path": "\u002fUsers/penguinspecz/.cargo/bin/herdr"
     },
-    "~/.cargo/bin/pi": {
+    "\u002fUsers/penguinspecz/.cargo/bin/pi": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.cargo/bin/pi"
+      "path": "\u002fUsers/penguinspecz/.cargo/bin/pi"
     },
-    "~/.local/bin/claude": {
+    "\u002fUsers/penguinspecz/.local/bin/claude": {
       "exists": true,
       "is_symlink": true,
       "lstat_mode": "0o120755",
       "lstat_mtime": 1787262376,
       "lstat_size": 57,
-      "path": "~/.local/bin/claude",
-      "readlink": "~/.local/share/claude/versions/2.1.238",
-      "realpath": "~/.local/share/claude/versions/2.1.238",
+      "path": "\u002fUsers/penguinspecz/.local/bin/claude",
+      "readlink": "\u002fUsers/penguinspecz/.local/share/claude/versions/2.1.238",
+      "realpath": "\u002fUsers/penguinspecz/.local/share/claude/versions/2.1.238",
       "realpath_sha256": "1c196c456373b57818ae87df84aecee96cb659448c0d6a6bbb401ac5758431b2",
       "realpath_size": 321263536
     },
-    "~/.local/bin/cline": {
+    "\u002fUsers/penguinspecz/.local/bin/cline": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/cline"
+      "path": "\u002fUsers/penguinspecz/.local/bin/cline"
     },
-    "~/.local/bin/codex": {
+    "\u002fUsers/penguinspecz/.local/bin/codex": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/codex"
+      "path": "\u002fUsers/penguinspecz/.local/bin/codex"
     },
-    "~/.local/bin/cursor-agent": {
+    "\u002fUsers/penguinspecz/.local/bin/cursor-agent": {
       "exists": true,
       "is_symlink": true,
       "lstat_mode": "0o120755",
       "lstat_mtime": 1784173718,
       "lstat_size": 87,
-      "path": "~/.local/bin/cursor-agent",
-      "readlink": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
-      "realpath": "~/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "path": "\u002fUsers/penguinspecz/.local/bin/cursor-agent",
+      "readlink": "\u002fUsers/penguinspecz/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
+      "realpath": "\u002fUsers/penguinspecz/.local/share/cursor-agent/versions/2026.07.09-a3815c0/cursor-agent",
       "realpath_sha256": "eed61c5224668c9236334c4c68936a16aecc37374b592f59e31eb50433817831",
       "realpath_size": 1074
     },
-    "~/.local/bin/grok-build": {
+    "\u002fUsers/penguinspecz/.local/bin/grok-build": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/grok-build"
+      "path": "\u002fUsers/penguinspecz/.local/bin/grok-build"
     },
-    "~/.local/bin/herdr": {
+    "\u002fUsers/penguinspecz/.local/bin/herdr": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/herdr"
+      "path": "\u002fUsers/penguinspecz/.local/bin/herdr"
     },
-    "~/.local/bin/opencode": {
+    "\u002fUsers/penguinspecz/.local/bin/opencode": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/opencode"
+      "path": "\u002fUsers/penguinspecz/.local/bin/opencode"
     },
-    "~/.local/bin/pi": {
+    "\u002fUsers/penguinspecz/.local/bin/pi": {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/pi"
+      "path": "\u002fUsers/penguinspecz/.local/bin/pi"
     },
     "/opt/homebrew/bin/cursor": {
       "exists": false,
@@ -212,13 +212,13 @@
     }
   },
   "herdr_paths": {
-    "~/.config/herdr": {
+    "\u002fUsers/penguinspecz/.config/herdr": {
       "exists": false,
-      "path": "~/.config/herdr"
+      "path": "\u002fUsers/penguinspecz/.config/herdr"
     },
-    "~/.config/herdr/herdr.sock": {
+    "\u002fUsers/penguinspecz/.config/herdr/herdr.sock": {
       "exists": false,
-      "path": "~/.config/herdr/herdr.sock"
+      "path": "\u002fUsers/penguinspecz/.config/herdr/herdr.sock"
     }
   },
   "npm_root": "/opt/homebrew/lib/node_modules",
@@ -246,7 +246,7 @@
     },
     "claude-local": {
       "argv": [
-        "~/.local/bin/claude",
+        "\u002fUsers/penguinspecz/.local/bin/claude",
         "--version"
       ],
       "elapsed_s": 0.482,
@@ -306,7 +306,7 @@
     },
     "cursor-agent-local": {
       "argv": [
-        "~/.local/bin/cursor-agent",
+        "\u002fUsers/penguinspecz/.local/bin/cursor-agent",
         "--version"
       ],
       "elapsed_s": 0.448,

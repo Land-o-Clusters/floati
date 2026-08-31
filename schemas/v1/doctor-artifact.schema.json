@@ -4,7 +4,7 @@
   "title": "Floati Doctor Artifact v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "diagnostic_version", "state", "root", "source", "ref", "findings", "unrecognized_kinds"],
+  "required": ["schema_version", "diagnostic_version", "state", "root", "source", "ref", "findings", "unrecognized_kinds", "fleet_update"],
   "properties": {
     "schema_version": {"const": 1},
     "diagnostic_version": {"const": "0"},
@@ -13,6 +13,7 @@
     "source": {"type": "string", "minLength": 1, "maxLength": 4096},
     "ref": {"type": "string", "minLength": 1, "maxLength": 1024},
     "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unrecognized_kind"}},
+    "fleet_update": {"$ref": "#/$defs/fleet_update"},
     "findings": {
       "type": "array",
       "minItems": 1,
@@ -21,6 +22,62 @@
     }
   },
   "$defs": {
+    "fleet_update": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["state", "actors"], "properties": {"state": {"const": "absent"}, "actors": {"$ref": "#/$defs/actors"}}},
+        {"type": "object", "additionalProperties": false, "required": ["state"], "properties": {"state": {"const": "unavailable"}}},
+        {"type": "object", "additionalProperties": false, "required": ["state", "code"], "properties": {"state": {"const": "integrity_failure"}, "code": {"type": "string", "pattern": "^[a-z0-9_]+$"}}},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "actors", "operations", "actor", "started_at", "idempotency_key", "plan_digest", "consent_receipt_id", "last_completed_step_receipt_id", "completion_receipt_id", "remaining_steps", "epoch_roll_state", "current_transport_pins", "target_transport_pins", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions"],
+          "properties": {
+            "state": {"enum": ["in_progress", "completed"]}, "actors": {"$ref": "#/$defs/actors"},
+            "operations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/fleet_update_operation"}},
+            "actor": {"$ref": "#/$defs/identifier"}, "started_at": {"type": "string"}, "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+            "plan_digest": {"$ref": "#/$defs/sha256"}, "consent_receipt_id": {"type": "string", "pattern": "^update-consent-"},
+            "last_completed_step_receipt_id": {"$ref": "#/$defs/receipt_or_null"}, "completion_receipt_id": {"$ref": "#/$defs/receipt_or_null"},
+            "remaining_steps": {"type": "array", "items": {"$ref": "#/$defs/remaining_step"}}, "epoch_roll_state": {"enum": ["not_required", "required", "completed"]},
+            "current_transport_pins": {"$ref": "#/$defs/transport_pins"}, "target_transport_pins": {"$ref": "#/$defs/transport_pins"},
+            "owner_review_batch_digest": {"$ref": "#/$defs/sha256"},
+            "reader_consequences": {"$ref": "fleet-update-receipt.schema.json#/properties/reader_consequences"},
+            "seat_binding_consequences": {"$ref": "fleet-update-receipt.schema.json#/properties/seat_binding_consequences"},
+            "seat_exclusions": {"$ref": "fleet-update-receipt.schema.json#/properties/seat_exclusions"}
+          }
+        }
+      ]
+    },
+    "fleet_update_operation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "actor", "started_at", "idempotency_key", "plan_digest", "consent_receipt_id", "last_completed_step_receipt_id", "completion_receipt_id", "remaining_steps", "epoch_roll_state", "current_transport_pins", "target_transport_pins", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions"],
+      "properties": {
+        "state": {"enum": ["in_progress", "completed"]}, "actor": {"$ref": "#/$defs/identifier"}, "started_at": {"type": "string"}, "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+        "plan_digest": {"$ref": "#/$defs/sha256"}, "consent_receipt_id": {"type": "string", "pattern": "^update-consent-"},
+        "last_completed_step_receipt_id": {"$ref": "#/$defs/receipt_or_null"}, "completion_receipt_id": {"$ref": "#/$defs/receipt_or_null"},
+        "remaining_steps": {"type": "array", "items": {"$ref": "#/$defs/remaining_step"}}, "epoch_roll_state": {"enum": ["not_required", "required", "completed"]},
+        "current_transport_pins": {"$ref": "#/$defs/transport_pins"}, "target_transport_pins": {"$ref": "#/$defs/transport_pins"}, "owner_review_batch_digest": {"$ref": "#/$defs/sha256"},
+        "reader_consequences": {"$ref": "fleet-update-receipt.schema.json#/properties/reader_consequences"},
+        "seat_binding_consequences": {"$ref": "fleet-update-receipt.schema.json#/properties/seat_binding_consequences"},
+        "seat_exclusions": {"$ref": "fleet-update-receipt.schema.json#/properties/seat_exclusions"}
+      }
+    },
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receipt_or_null": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^fleet-update-"}]},
+    "actors": {"type": "array", "items": {"$ref": "#/$defs/identifier"}},
+    "transport_pins": {"type": "object", "additionalProperties": false, "required": ["manifest_sha256", "source_sha"], "properties": {"manifest_sha256": {"$ref": "#/$defs/sha256"}, "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
+    "remaining_step": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "ordinal", "coordinate"],
+      "properties": {"kind": {"enum": ["shared_install", "waiter_binding", "epoch_roll", "transport_pins"]}, "ordinal": {"type": "integer", "minimum": 1}, "coordinate": {"$ref": "#/$defs/step_coordinate"}}
+    },
+    "step_coordinate": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["kind", "destination", "metadata_relative"], "properties": {"kind": {"const": "shared_install"}, "destination": {"type": "string", "pattern": "^/"}, "metadata_relative": {"const": ".floati-install/manifest.v0.json"}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "index", "configuration", "store", "trust_key"], "properties": {"kind": {"const": "waiter_binding"}, "index": {"type": "integer", "minimum": 0}, "configuration": {"type": "string", "pattern": "^/"}, "store": {"type": "string", "pattern": "^/"}, "trust_key": {"oneOf": [{"type": "null"}, {"type": "string"}]}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind"], "properties": {"kind": {"const": "epoch_roll"}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "registry", "transport"], "properties": {"kind": {"const": "transport_pins"}, "registry": {"type": "string", "pattern": "^/"}, "transport": {"$ref": "#/$defs/identifier"}}}
+      ]
+    },
     "unrecognized_kind": {
       "type": "object",
       "additionalProperties": false,

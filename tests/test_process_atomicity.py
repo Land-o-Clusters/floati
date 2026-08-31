@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import multiprocessing
 import tempfile
 import unittest
@@ -42,7 +44,7 @@ def _send_worker(base: str, start: object, results: object) -> None:
     start.wait()
     try:
         results.put(("ok", events.send(
-            "alice", "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             idempotency_key="same-key",
         )["id"]))
@@ -69,7 +71,7 @@ def _claim_work_worker(
     start.wait()
     try:
         item = WorkLog(root).claim_owned_oldest(
-            "alice",
+            public_ids.worker('alpha'),
             subject,
             epoch,
             now=datetime(2026, 7, 31, 22, 0, tzinfo=timezone.utc),
@@ -108,7 +110,7 @@ class ProcessAtomicityTests(unittest.TestCase):
 
     def test_send_idempotency_is_process_atomic(self) -> None:
         registry = Registry(self.root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         outcomes = self.race(_send_worker, ())
         self.assertEqual({"ok"}, {status for status, _ in outcomes})
@@ -118,11 +120,11 @@ class ProcessAtomicityTests(unittest.TestCase):
 
     def test_sparse_ack_idempotency_is_process_atomic(self) -> None:
         registry = Registry(self.root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         events = EventLog(self.root, registry)
         message = events.send(
-            "alice", "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
         )
         events.present("bob")
@@ -133,13 +135,13 @@ class ProcessAtomicityTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
 
     def test_ready_work_claims_have_zero_double_consumption_under_process_contention(self) -> None:
-        Registry(self.root).register("alice", "worker")
+        Registry(self.root).register(public_ids.worker('alpha'), "worker")
         work = WorkLog(self.root)
-        first = work.add("first", "alice", [])
-        second = work.add("second", "alice", [])
+        first = work.add("first", public_ids.worker('alpha'), [])
+        second = work.add("second", public_ids.worker('alpha'), [])
         grant = AuthorityGrantStore(self.root).claim(
             "work-claims",
-            "alice",
+            public_ids.worker('alpha'),
             60,
             60,
             datetime(2026, 7, 31, 22, 0, tzinfo=timezone.utc),

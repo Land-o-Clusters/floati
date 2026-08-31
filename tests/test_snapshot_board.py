@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -24,8 +26,8 @@ class BoardSnapshotTests(unittest.TestCase):
         self.root = FloatiRoot.open_direct_home(
             Path(self.temp.name) / "board-snapshot", create=True
         )
-        Registry(self.root).register("alice", "worker")
-        WorkLog(self.root).add("first item", "alice", [], now=NOW)
+        Registry(self.root).register(public_ids.worker('alpha'), "worker")
+        WorkLog(self.root).add("first item", public_ids.worker('alpha'), [], now=NOW)
 
     def test_stable_board_and_work_tail_do_not_full_scan(self) -> None:
         expected = render_plain_dump(model_from_root(self.root, NOW))
@@ -37,7 +39,7 @@ class BoardSnapshotTests(unittest.TestCase):
         self.assertEqual(expected, stable)
 
         WorkLog(self.root).add(
-            "second item", "alice", [], now=NOW + timedelta(seconds=1)
+            "second item", public_ids.worker('alpha'), [], now=NOW + timedelta(seconds=1)
         )
         with patch(
             "floati.tui._model_from_root_full",

@@ -2,7 +2,7 @@
 
 Per registered node: undelivered-envelope count, oldest pending age, and
 time since the last drain receipt. Aged pending mail is RED with the
-intake's plain sentence ("alice: 9 undelivered, oldest 42m, no drain since
+intake's plain sentence ("builder-a: 9 undelivered, oldest 42m, no drain since
 03:28"). Silence is not health: counters are stated even when green.
 
 Pure analysis over injected records — no I/O here. The doctor supplies:
@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 DELIVERY_STALL_RED_MINUTES = 15
-# Threshold STAMPED RULED by Fable (2026-08-22, msg-01a0281107…): 15 is a
+# Threshold STAMPED RULED by the reviewer (2026-08-22, msg-01a0281107…): 15 is a
 # judgment with margin — NOT measured, NOT derived from the incident (the
 # incident's silence ran 40+ minutes). Do not re-derive it from sightings;
 # amendments enter by ruling.

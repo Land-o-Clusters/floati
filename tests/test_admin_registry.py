@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import io
 import tempfile
 import unittest
@@ -54,14 +56,14 @@ class RegistryAdminBackendTests(unittest.TestCase):
 
     def test_add_commits_the_exact_previewed_registry_and_lease_rows(self) -> None:
         """Catches an adapter regenerating ids/timestamps or omitting the previewed lease."""
-        registry = self.registry_record("lane-a", "Codex")
-        lease = self.lease_record("lane-a")
+        registry = self.registry_record(public_ids.builder('a'), "Codex")
+        lease = self.lease_record(public_ids.builder('a'))
         plan = NodeAddPlan(
-            node_id="lane-a",
+            node_id=public_ids.builder('a'),
             harness="Codex",
             lifetime="temporary",
             lease_minutes=60,
-            workspace=str(self.root.path / "nodes" / "lane-a"),
+            workspace=str(self.root.path / "nodes" / public_ids.builder('a')),
             records=(registry, lease),
             boot_command="floati node boot",
             teardown_command="floati node teardown",
@@ -70,20 +72,20 @@ class RegistryAdminBackendTests(unittest.TestCase):
         result = self.backend.commit_add(plan)
 
         self.assertEqual((registry, lease), tuple(result["records"]))
-        self.assertEqual(registry, self.backend.active_node("lane-a"))
-        self.assertEqual(lease, self.backend.active_lease("lane-a"))
+        self.assertEqual(registry, self.backend.active_node(public_ids.builder('a')))
+        self.assertEqual(lease, self.backend.active_lease(public_ids.builder('a')))
 
     def test_invalid_second_preview_row_appends_nothing(self) -> None:
         """Catches a partial registry mutation when a later preview row is malformed."""
-        registry = self.registry_record("lane-a", "Codex")
-        invalid_lease = dict(self.lease_record("lane-a"))
+        registry = self.registry_record(public_ids.builder('a'), "Codex")
+        invalid_lease = dict(self.lease_record(public_ids.builder('a')))
         invalid_lease.pop("expires_at")
         plan = NodeAddPlan(
-            node_id="lane-a",
+            node_id=public_ids.builder('a'),
             harness="Codex",
             lifetime="temporary",
             lease_minutes=60,
-            workspace=str(self.root.path / "nodes" / "lane-a"),
+            workspace=str(self.root.path / "nodes" / public_ids.builder('a')),
             records=(registry, invalid_lease),
             boot_command="floati node boot",
             teardown_command="floati node teardown",
@@ -97,44 +99,44 @@ class RegistryAdminBackendTests(unittest.TestCase):
 
     def test_retire_closes_the_exact_active_lease_and_retains_workspace(self) -> None:
         """Catches retirement deleting a workspace or closing another lease."""
-        workspace = self.root.path / "nodes" / "lane-a"
+        workspace = self.root.path / "nodes" / public_ids.builder('a')
         workspace.mkdir(parents=True)
-        registry = self.registry_record("lane-a", "Codex")
-        lease = self.lease_record("lane-a")
+        registry = self.registry_record(public_ids.builder('a'), "Codex")
+        lease = self.lease_record(public_ids.builder('a'))
         self.backend.commit_add(
             NodeAddPlan(
-                "lane-a", "Codex", "temporary", 60, str(workspace),
+                public_ids.builder('a'), "Codex", "temporary", 60, str(workspace),
                 (registry, lease), "floati node boot", "floati node teardown",
             )
         )
-        retired_registry = self.registry_record("lane-a", "Codex", "retired")
+        retired_registry = self.registry_record(public_ids.builder('a'), "Codex", "retired")
         retired_lease = {
             "schema_version": 0,
             "id": "lease-" + uuid7_hex(),
             "tenant_id": "alpha",
             "timestamp": NOW,
             "kind": "node_lease",
-            "node_id": "lane-a",
+            "node_id": public_ids.builder('a'),
             "predecessor_lease_id": lease["id"],
             "workspace": str(workspace),
             "state": "retired",
         }
 
         result = self.backend.commit_retire(
-            NodeRetirePlan("lane-a", str(workspace), (retired_registry, retired_lease))
+            NodeRetirePlan(public_ids.builder('a'), str(workspace), (retired_registry, retired_lease))
         )
 
         self.assertEqual((retired_registry, retired_lease), tuple(result["records"]))
-        self.assertIsNone(self.backend.active_lease("lane-a"))
+        self.assertIsNone(self.backend.active_lease(public_ids.builder('a')))
         self.assertTrue(workspace.is_dir())
 
     def test_provider_switch_folds_the_receipted_model_into_active_assignment(self) -> None:
         """Catches a switch receipt landing without changing the projected model."""
-        first = self.registry_record("grok", "opencode-grok")
+        first = self.registry_record(public_ids.verifier(), public_ids.compose('opencode-', public_ids.verifier()))
         self.backend.commit_add(
             NodeAddPlan(
-                "grok", "opencode-grok", "permanent", None,
-                str(self.root.path / "nodes" / "grok"), (first,), None, None,
+                public_ids.verifier(), public_ids.compose('opencode-', public_ids.verifier()), "permanent", None,
+                str(self.root.path / "nodes" / public_ids.verifier()), (first,), None, None,
             )
         )
         preview = io.StringIO()
@@ -145,9 +147,9 @@ class RegistryAdminBackendTests(unittest.TestCase):
             now=lambda: datetime(2026, 8, 28, 1, 0, tzinfo=timezone.utc),
         )
 
-        result = wizard.switch_from_keys(["grok", "Cursor", "gpt-5.6"], preview)
+        result = wizard.switch_from_keys([public_ids.verifier(), "Cursor", "gpt-5.6"], preview)
 
-        active = self.backend.active_assignment("grok")
+        active = self.backend.active_assignment(public_ids.verifier())
         self.assertEqual("Cursor", active["role"])
         self.assertEqual("gpt-5.6", active["model"])
         self.assertEqual(result["records"][0]["id"], active["id"])

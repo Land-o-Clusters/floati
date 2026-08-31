@@ -70,7 +70,7 @@ AssertionError: one envelope woke more than one session for one seat
 - Vendored watcher verifier: identity, delivery, exhaustion, and
   single-consumer all passed. Single-consumer measured one prompt, one
   `wake_attempt_receipt`, and canonical coordinator `alice-city`.
-- Python compilation succeeded with cache routed to `/private/tmp`.
+- Python compilation succeeded with cache routed to `/tmp`.
 - `git diff --check` passed.
 - Manifest focused checks passed after adding the new schema and updating exact
   deployable digests.
@@ -81,7 +81,7 @@ AssertionError: one envelope woke more than one session for one seat
 - Repository self-test: 1,526 tests executed, zero failures, `OK`, followed by
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - The four exact legacy coordinator directories were moved without globbing or
-  deletion to `/private/tmp/floati-wake-alias-quarantine-01a03b49`. Each
+  deletion to `/tmp/floati-wake-alias-quarantine-01a03b49`. Each
   quarantined directory contains its original zero-byte `default.lock`.
 - A source-tree doctor re-read of the live bus root reported
   `wake_namespace_registry_subset` with 16 wake identities across 17 registry

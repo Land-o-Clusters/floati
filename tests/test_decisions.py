@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import re
 import tempfile
@@ -181,7 +183,7 @@ class DecisionRegisterTests(unittest.TestCase):
         source_artifact_ids: object = None,
         task_contract_id: object = None,
         author_authority: object = "worker",
-        decided_by: object = "fable",
+        decided_by: object = public_ids.reviewer(),
         supersedes: object = None,
         timestamp: object = "2026-08-08T12:00:00.000Z",
     ) -> dict[str, object]:
@@ -682,7 +684,7 @@ class DecisionRegisterTests(unittest.TestCase):
                             "author_authority": "operator",
                             "source_artifact_ids": ["run:" + self.source_run_id],
                             "task_contract_id": None,
-                            "decided_by": "fable",
+                            "decided_by": public_ids.reviewer(),
                             "supersedes": "decision-" + UUIDS[1],
                             "status": "accepted",
                         },
@@ -723,7 +725,7 @@ class DecisionRegisterTests(unittest.TestCase):
             timestamp="2026-08-08T12:00:00.000Z",
             scope={"kind": "repository"},
             statement="Proposals remain explicit.",
-            decided_by="fable",
+            decided_by=public_ids.reviewer(),
             author_authority="worker",
             source_artifact_ids=["run:" + self.source_run_id],
         )
@@ -756,7 +758,7 @@ class DecisionRegisterTests(unittest.TestCase):
                         timestamp="2026-08-08T12:00:00.000Z",
                         scope={"kind": "repository"},
                         statement="Hostile public input must not append.",
-                        decided_by="fable",
+                        decided_by=public_ids.reviewer(),
                         **inputs,
                     )
                 except ProtocolRefusal:
@@ -892,7 +894,7 @@ class DecisionRegisterTests(unittest.TestCase):
             timestamp="2026-08-08T12:00:00.000Z",
             scope={"kind": "repository"},
             statement="A display tenant cannot redirect proposal validation.",
-            decided_by="fable",
+            decided_by=public_ids.reviewer(),
             author_authority="worker",
             source_artifact_ids=["run:" + self.source_run_id],
         )
@@ -1045,7 +1047,7 @@ class DecisionBindingIntegrationTests(unittest.TestCase):
             "decision_id": "decision-" + decision_uuid, "scope": scope,
             "statement": "Use one explicit decision ledger.", "status": status,
             "author_authority": authority, "source_artifact_ids": sources,
-            "task_contract_id": task_contract_id, "decided_by": "fable", "supersedes": None,
+            "task_contract_id": task_contract_id, "decided_by": public_ids.reviewer(), "supersedes": None,
         }
         assert decision_digest is not None
         record["decision_digest"] = decision_digest(record)

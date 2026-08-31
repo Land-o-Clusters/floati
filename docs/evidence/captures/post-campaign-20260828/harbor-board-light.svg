@@ -3,7 +3,7 @@
   <desc>Real Floati scratch-ledger terminal capture.</desc>
   <rect width="1920" height="508" fill="#f7f3eb"/>
   <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
-    <tspan x="28" dy="0" fill="#20252c">ROOT=/private/tmp/floati-captures.LtNmwM/other5/harbor-board</tspan>
+    <tspan x="28" dy="0" fill="#20252c">ROOT=/tmp/floati-captures.LtNmwM/other5/harbor-board</tspan>
     <tspan x="28" dy="19" fill="#20252c">$ floati board --root $ROOT --session capture-session --no-animation</tspan>
     <tspan x="28" dy="19" fill="#20252c"></tspan>
     <tspan x="28" dy="19" fill="#20252c">⊙ FLOATI // HARBOR BOARD</tspan>

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,7 +35,7 @@ class ReplaySnapshotTests(unittest.TestCase):
             "timestamp": timestamp,
             "kind": "denial_receipt",
             "attempt_id": f"attempt-{UUIDS[index]}",
-            "claimed_sender": "alice",
+            "claimed_sender": public_ids.worker('alpha'),
             "claimed_recipient": "bob",
             "reason_code": "unknown_sender",
         }

@@ -1,0 +1,41 @@
+{
+  "area:board": [
+    {"any-glob-to-any-file": ["floati/board.py", "floati/tui.py", "tests/test_*board*.py", "tests/test_tui_*.py"]}
+  ],
+  "area:bus": [
+    {"any-glob-to-any-file": ["floati/core.py", "floati/cli.py", "floati/registry.py", "floati/root.py", "tests/test_cli*.py", "tests/test_registry*.py", "tests/test_root*.py"]}
+  ],
+  "area:docs": [
+    {"any-glob-to-any-file": ["**/*.md", "docs/**", "README.md", "CONTRIBUTING.md", "SECURITY.md"]}
+  ],
+  "area:doctor": [
+    {"any-glob-to-any-file": ["floati/doctor.py", "floati/doctor_probe.py", "tests/test_doctor*.py"]}
+  ],
+  "area:ledger": [
+    {"any-glob-to-any-file": ["floati/jsonl.py", "floati/records.py", "floati/receipts.py", "floati/events.py", "tests/test_*ledger*.py", "tests/test_*receipt*.py", "tests/test_records*.py"]}
+  ],
+  "area:orchestrate": [
+    {"any-glob-to-any-file": ["floati/orchestrate.py", "floati/sequencer*.py", "floati/supervisor.py", "floati/workers.py", "tests/test_orchestrate.py", "tests/test_sequencer*.py", "tests/test_supervisor.py", "tests/test_workers.py"]}
+  ],
+  "area:replay": [
+    {"any-glob-to-any-file": ["floati/replay.py", "tests/test_replay.py", "tests/test_snapshot_replay.py"]}
+  ],
+  "area:roles": [
+    {"any-glob-to-any-file": ["roles/**", "floati/role*.py", "tests/test_role*.py"]}
+  ],
+  "area:schemas": [
+    {"any-glob-to-any-file": ["schemas/**", "bundle/**", "tests/test_c7*.py", "tests/test_schema*.py"]}
+  ],
+  "area:wake": [
+    {"any-glob-to-any-file": ["floati/*wake*.py", "scripts/floati-codex-wait", "tests/test_*wake*.py", "tests/test_codex_wait.py"]}
+  ],
+  "receipts": [
+    {"any-glob-to-any-file": ["floati/receipts.py", "floati/records.py", "schemas/**/*receipt*.json", "tests/test_*receipt*.py"]}
+  ],
+  "ruled": [
+    {"any-glob-to-any-file": ["docs/rulings/**"]}
+  ],
+  "security": [
+    {"any-glob-to-any-file": ["SECURITY.md", "floati/approvals.py", "floati/locks/**", "floati/purge.py", "floati/scrub.py", "tests/test_approval*.py", "tests/test_locks*.py", "tests/test_no_listener_fence.py", "tests/test_purge*.py", "tests/test_source_scrub.py"]}
+  ]
+}

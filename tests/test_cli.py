@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import io
 import json
 import os
@@ -32,7 +34,7 @@ class SlipCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / "puddle-fleet"
+        self.home = Path(self.temp.name) / "demo-fleet"
 
     def run_cli(
         self,
@@ -97,7 +99,7 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("init", artifact["command"])
         self.assertEqual("ok", artifact["status"])
         self.assertEqual(str(self.home.resolve()), artifact["evidence"]["root"])
-        self.assertEqual("puddle-fleet", artifact["evidence"]["tenant_id"])
+        self.assertEqual("demo-fleet", artifact["evidence"]["tenant_id"])
         self.assertTrue(self.home.is_dir())
 
     def test_init_refuses_a_legacy_positional_root_even_when_environment_is_set(self) -> None:
@@ -330,8 +332,8 @@ class SlipCliTests(unittest.TestCase):
             ("inbox", "--as", "recipient"),
             ("ack", "--as", "recipient", "--session", "cli-session", "--id", "msg-" + "0" * 32),
             ("log",),
-            ("grant", "--as", "architect-a", "--holder", "lane-a", "--subject", "work-claims", "--epoch", "1"),
-            ("grant", "revoke", "--as", "architect-a", "--holder", "lane-a", "--subject", "work-claims", "--epoch", "1"),
+            ("grant", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
+            ("grant", "revoke", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
         )
         for args in cases:
             with self.subTest(command=args[0]):
@@ -442,12 +444,17 @@ class SlipCliTests(unittest.TestCase):
 
     def test_every_command_has_static_man_page_quality_help(self) -> None:
         commands = (
-            (), ("init",), ("register",), ("retire",), ("send",), ("inbox",), ("ack",),
+            (), ("init",), ("register",), ("retire",), ("send",), ("verify",),
+            ("journal",), ("journal", "checkpoint"), ("journal", "verify"),
+            ("signature",), ("signature", "sign"), ("signature", "verify"),
+            ("inbox",), ("ack",),
             ("log",), ("status",), ("watch",), ("receipts",), ("supervise",),
             ("board",), ("orchestrate",), ("plan",),
             ("effects",), ("effect",), ("effect", "show"),
             ("effect", "reconcile"), ("effect", "compensate"),
             ("grant",), ("grant", "revoke"),
+            ("node",), ("node", "spawn"), ("node", "retire"),
+            ("mcp",), ("mcp", "serve"),
             ("work",), ("work", "add"), ("work", "claim"),
             ("work", "complete"), ("work", "show"),
             ("install",), ("update",),
@@ -470,6 +477,8 @@ class SlipCliTests(unittest.TestCase):
         commands = (
             ("effect", "show"), ("effect", "reconcile"), ("effect", "compensate"),
             ("grant", "revoke"),
+            ("journal", "checkpoint"), ("journal", "verify"),
+            ("signature", "sign"), ("signature", "verify"),
             ("work", "add"), ("work", "claim"),
             ("work", "complete"), ("work", "show"),
         )
@@ -543,7 +552,7 @@ class SequencerCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / "puddle-fleet"
+        self.home = Path(self.temp.name) / "demo-fleet"
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -625,7 +634,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / "puddle-fleet"
+        self.home = Path(self.temp.name) / "demo-fleet"
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -670,11 +679,11 @@ class WakeEvaluateCliTests(unittest.TestCase):
 
     def _seed(self, count: int = 1) -> None:
         self.initialize()
-        self.register("alice")
+        self.register(public_ids.worker('alpha'))
         self.register("bob")
         for index in range(count):
             result = self.run_cli(
-                "send", "--root", str(self.home), "--from", "alice", "--to", "bob",
+                "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
                 "--repo", "slipway", "--sha", SHA,
                 "--doc", f"docs/evidence/wake-{index}.md", "--note", f"wake {index}",
                 "--idempotency-key", f"message-{index}",
@@ -750,7 +759,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         first = self._wake()
         self.assertEqual(0, first.returncode, first.stderr)
         sent = self.run_cli(
-            "send", "--root", str(self.home), "--from", "alice", "--to", "bob",
+            "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
             "--repo", "slipway", "--sha", SHA, "--doc", "docs/evidence/mixed.md",
             "--note", "mixed", "--idempotency-key", "mixed-message",
         )
@@ -866,7 +875,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         evidence = self._outer(result)["evidence"]
         schema = REPOSITORY_ROOT / "schemas/v1/wake-decision-artifact.schema.json"
-        self.assertEqual(evidence, validate_wake_decision_artifact(evidence, tenant_id="puddle-fleet"))
+        self.assertEqual(evidence, validate_wake_decision_artifact(evidence, tenant_id="demo-fleet"))
         validate_json_schema(evidence, schema)
 
         receipt = dict(evidence["receipt"])
@@ -883,7 +892,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         for candidate in hostile:
             with self.subTest(candidate=candidate):
                 with self.assertRaises(ProtocolRefusal):
-                    validate_wake_decision_artifact(candidate, tenant_id="puddle-fleet")
+                    validate_wake_decision_artifact(candidate, tenant_id="demo-fleet")
                 with self.assertRaises(SchemaValidationError):
                     validate_json_schema(candidate, schema)
 

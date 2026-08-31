@@ -4,7 +4,7 @@
     "app-server",
     "--stdio"
   ],
-  "cwd": "~/Projects/floati-grok/.conformance-scratch/c1-codex-workspace",
+  "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok/.conformance-scratch/c1-codex-workspace",
   "exit": 0,
   "handshake_ok": true,
   "initialize_request": {
@@ -21,7 +21,7 @@
   "parsed_first_line": {
     "id": 1,
     "result": {
-      "codexHome": "~/.codex",
+      "codexHome": "\u002fUsers/penguinspecz/.codex",
       "platformFamily": "unix",
       "platformOs": "macos",
       "userAgent": "floati-grok-c1/0.150.0 (Mac OS 26.6.2; arm64) dumb (floati-grok-c1; 0)"
@@ -30,7 +30,7 @@
   "stderr_bytes": 0,
   "stderr_preview_400": "",
   "stdout_bytes": 192,
-  "stdout_preview_400": "{\"id\":1,\"result\":{\"userAgent\":\"floati-grok-c1/0.150.0 (Mac OS 26.6.2; arm64) dumb (floati-grok-c1; 0)\",\"codexHome\":\"~/.codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}\n",
+  "stdout_preview_400": "{\"id\":1,\"result\":{\"userAgent\":\"floati-grok-c1/0.150.0 (Mac OS 26.6.2; arm64) dumb (floati-grok-c1; 0)\",\"codexHome\":\"\u002fUsers/penguinspecz/.codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}\n",
   "timed_out": false,
   "timeout_s": 12.0
 }

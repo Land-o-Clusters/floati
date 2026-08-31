@@ -126,10 +126,11 @@ def run_stop_waiter(
         return 0
     started = monotonic()
     deadline = started + deadline_seconds
+    controller = WakeHoldController(participant.root)
     while True:
         invocation_key = "codex-stop-" + uuid7_hex()
         try:
-            artifact = WakeHoldController(participant.root).evaluate(
+            artifact = controller.evaluate(
                 participant.binding.node_id,
                 idempotency_key=invocation_key,
             )

@@ -1,4 +1,4 @@
-"""Grok Build worker adapter — roster 1 of the full-parity roster.
+"""`grok-build` worker adapter — roster 1 of the full-parity roster.
 
 RE-DERIVED from floati/adapters/headless_template.py (the repaired
 template) per the architect's ruling: this module declares ONLY its
@@ -18,8 +18,8 @@ _DEFAULT_COMMAND = ('/opt/homebrew/bin/grok-build',)
 _PROFILE = HarnessProfile(
     name="grok-build",
     command=_DEFAULT_COMMAND,
-    # Citation: https://docs.x.ai/build/cli/headless-scripting — `grok -p`.
-    # C0-DELTA keeps the absent grok-build default; C6 uses an explicit grok override.
+    # Citation: https://docs.x.ai/build/cli/headless-scripting — vendor `-p` flag.
+    # C0-DELTA keeps the absent grok-build default; C6 uses an explicit command override.
     headless_arguments=("-p",),
     stderr_name="grok-build.stderr",
     cited_source="https://docs.x.ai/build/cli/headless-scripting",
@@ -27,7 +27,7 @@ _PROFILE = HarnessProfile(
 
 
 class GrokBuildAdapter(HeadlessProfileAdapter):
-    """Grok Build worker with explicit workspace and fail-closed tools."""
+    """`grok-build` worker with explicit workspace and fail-closed tools."""
 
     name = "grok-build"
 

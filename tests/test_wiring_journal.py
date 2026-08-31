@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from floati import wiring_journal
 
@@ -34,6 +37,27 @@ class WiringJournalTests(unittest.TestCase):
         # Chain: second's prevHash is first's entryHash.
         self.assertEqual(entries[1].payload["prevHash"],
                          entries[0].payload["entryHash"])
+
+    def test_first_append_fsyncs_the_new_journal_parent_directory(self):
+        """The first durable intent row must also durably link its new file."""
+
+        observed: list[str] = []
+        real_fsync = wiring_journal.os.fsync
+
+        def observe(descriptor: int) -> None:
+            mode = os.fstat(descriptor).st_mode
+            observed.append("directory" if stat.S_ISDIR(mode) else "file")
+            real_fsync(descriptor)
+
+        with mock.patch.object(wiring_journal.os, "fsync", side_effect=observe):
+            wiring_journal.append_entry(self.destination, {
+                "v": 1, "ts": "t", "actor": {}, "action": "install",
+                "kind": "file", "path": "/tmp/a", "op": "create",
+                "sha256": "a" * 64,
+            })
+
+        self.assertEqual("file", observed[0])
+        self.assertIn("directory", observed[1:])
 
     def test_read_stops_at_first_corrupt_line_fail_closed(self):
         good = wiring_journal.append_entry(self.destination, {

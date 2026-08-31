@@ -28,24 +28,52 @@ class UninstallWriterTests(unittest.TestCase):
         path.write_bytes(payload)
         return {"path": relative, "sha256": self.digest(payload)}
 
-    def write_manifest(self, entries: list[dict[str, str]]) -> Path:
+    def write_manifest(
+        self,
+        entries: list[dict[str, str]],
+        *,
+        schema_version: int = 0,
+        ownership: dict[str, object] | None = None,
+    ) -> Path:
         metadata = self.destination / ".floati-install" / "manifest.v0.json"
         metadata.parent.mkdir()
+        payload: dict[str, object] = {
+            "schema_version": schema_version,
+            "source_ref": "refs/heads/main",
+            "source_sha": "a" * 40,
+            "files": entries,
+        }
+        if ownership is not None:
+            payload["ownership"] = ownership
         metadata.write_text(
-            json.dumps(
-                {
-                    "schema_version": 0,
-                    "source_ref": "refs/heads/main",
-                    "source_sha": "a" * 40,
-                    "files": entries,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         return metadata
+
+    def test_uninstall_accepts_strict_schema_v1_ownership_metadata(self) -> None:
+        """Catches v1 installs becoming impossible to remove safely."""
+
+        owned = self.install_file("scripts/floati", b"#!/bin/sh\n")
+        ownership = {
+            "kind": "floati_standalone",
+            "destination": str(self.destination.resolve()),
+            "entrypoint": "scripts/floati",
+            "entrypoint_sha256": owned["sha256"],
+            "manager": None,
+            "remedy": None,
+        }
+        self.write_manifest(
+            [owned], schema_version=1, ownership=ownership
+        )
+
+        try:
+            result = UninstallWriter(self.destination).run()
+        except ProtocolRefusal as exc:
+            self.fail(f"strict schema-v1 metadata must remain uninstallable: {exc}")
+
+        self.assertEqual(2, result["removed_count"])
+        self.assertFalse((self.destination / "scripts/floati").exists())
 
     def test_uninstall_preserves_every_file_absent_from_the_ownership_manifest(self) -> None:
         """Catches recursive destination pruning that deletes a foreign file."""
@@ -63,7 +91,7 @@ class UninstallWriterTests(unittest.TestCase):
     def test_uninstall_never_opens_or_removes_a_bus_ledger_inside_the_destination(self) -> None:
         """Catches uninstall treating durable bus data as disposable tool bytes."""
         owned = self.install_file("scripts/floati", b"#!/bin/sh\n")
-        ledger = self.destination / "puddle-fleet" / "registry" / "entries.jsonl"
+        ledger = self.destination / "demo-fleet" / "registry" / "entries.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_bytes(b"durable ledger bytes\n")
         before = ledger.stat()

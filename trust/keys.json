@@ -1,0 +1,13 @@
+{
+  "format": "floati-trust-keys.v1",
+  "keys": [
+    {
+      "key_id": "A9FBAB3833B4D4EF",
+      "public_key_file": "floati-release.pub",
+      "valid_from": "2026-08-29",
+      "valid_to": null,
+      "status": "active",
+      "transition": null
+    }
+  ]
+}

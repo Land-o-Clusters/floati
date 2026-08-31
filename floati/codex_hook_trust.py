@@ -11,6 +11,9 @@ from typing import Dict, Optional
 from .errors import ProtocolRefusal
 
 
+_TRUSTED_HASH = re.compile(r"[0-9a-f]{64}\Z")
+
+
 HOOK_TRUST_REMEDIATION = (
     "Review and trust this exact Stop hook in Codex settings, then "
     "relaunch the session; hook bytes are not an armed hook."
@@ -50,7 +53,11 @@ def codex_hook_current_hash(block: object) -> str:
     encoded = json.dumps(
         identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+    # Fleet-update testimony and the receipt schema use one bare SHA-256
+    # representation.  Codex's settings state is compared against this same
+    # normalized value; an absent setting remains ``None`` rather than a
+    # fabricated digest.
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _read_state(config_path: Path, key: str) -> tuple[Optional[bool], Optional[str]]:
@@ -82,8 +89,13 @@ def _read_state(config_path: Path, key: str) -> tuple[Optional[bool], Optional[s
         if enabled_match is not None:
             enabled = enabled_match.group(1) == "true"
             continue
-        hash_match = re.fullmatch(r"trusted_hash\s*=\s*(\"(?:[^\"\\]|\\.)*\")", stripped)
-        if hash_match is not None:
+        if stripped.startswith("trusted_hash"):
+            hash_match = re.fullmatch(r"trusted_hash\s*=\s*(\"(?:[^\"\\]|\\.)*\")", stripped)
+            if hash_match is None:
+                raise ProtocolRefusal(
+                    "codex_wait_hook_trust_unavailable",
+                    "Codex trusted hash is malformed",
+                )
             try:
                 value = json.loads(hash_match.group(1))
             except json.JSONDecodeError as exc:
@@ -91,8 +103,20 @@ def _read_state(config_path: Path, key: str) -> tuple[Optional[bool], Optional[s
                     "codex_wait_hook_trust_unavailable",
                     "Codex trusted hash is malformed",
                 ) from exc
-            if isinstance(value, str):
+            if not isinstance(value, str):
+                raise ProtocolRefusal(
+                    "codex_wait_hook_trust_unavailable",
+                    "Codex trusted hash is malformed",
+                )
+            if _TRUSTED_HASH.fullmatch(value) is not None:
                 trusted_hash = value
+            elif value.startswith("sha256:") and _TRUSTED_HASH.fullmatch(value[7:]) is not None:
+                trusted_hash = value[7:]
+            else:
+                raise ProtocolRefusal(
+                    "codex_wait_hook_trust_unavailable",
+                    "Codex trusted hash is malformed",
+                )
     return enabled, trusted_hash
 
 
@@ -155,3 +179,23 @@ def observe_codex_waiter_hooks(
             }
         )
     return observations
+
+
+def observe_rebound_waiter(
+    hooks_path: Path, *, expected_key: str, expected_hash: str
+) -> Dict[str, object]:
+    """Re-observe one planned hook coordinate after a surgical rebind.
+
+    This is deliberately a measurement only: it does not alter Codex's trust
+    state and never promotes the observed hook state to a running-session fact.
+    """
+
+    if not isinstance(expected_key, str) or not isinstance(expected_hash, str):
+        raise ProtocolRefusal("fleet_update_waiter_binding_drift", "planned trust coordinate is invalid")
+    rows = observe_codex_waiter_hooks(hooks_path)
+    if len(rows) != 1:
+        raise ProtocolRefusal("fleet_update_waiter_binding_drift", "waiter trust coordinate is ambiguous after rebind")
+    row = rows[0]
+    if row.get("hook_trust_key") != expected_key or row.get("hook_trust_current_hash") != expected_hash:
+        raise ProtocolRefusal("fleet_update_waiter_binding_drift", "waiter trust coordinate changed after rebind")
+    return row

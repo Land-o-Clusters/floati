@@ -1,29 +1,30 @@
-[38;5;208m[48;5;236mFLOATI // HARBOR BOARD[0m
+⊙ FLOATI // HARBOR BOARD
 OBSERVED 2026-07-31T12:00:10.000Z
-[38;5;208m! DENIAL UNKNOWN_SENDER ghost → lane-slipway[0m
-[38;5;208m! STALE AUTHORITY app-build holder:lane-app[0m
-[38;5;208m! STALE MUTEX fable-workspace holder:fable[0m
+[38;5;208m! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core[0m
+[38;5;208m! STALE AUTHORITY app-build holder:builder-app[0m
+[38;5;208m! STALE MUTEX builder-review-workspace holder:builder-review[0m
 
 NODE               LIVE       AUTH       MUTEX      INBOX  LAST
-> fable              EXPIRED    NONE       EXPIRED        0  12:00:06.000
-  lane-app           SILENT     EXPIRED    ACTIVE         0  11:59:40.000
-  lane-slipway       PRESENT    ACTIVE     NONE           1  12:00:09.000
+[38;5;208m>[0m builder-review     [38;5;208mEXPIRED[0m    NONE       [38;5;208mEXPIRED[0m        0  12:00:06.000
+  builder-app        [38;5;208mSILENT[0m     [38;5;208mEXPIRED[0m    ACTIVE         0  11:59:40.000
+  builder-core       PRESENT    ACTIVE     NONE           1  12:00:09.000
 
-WORK LOG  [▓▓░░░░░░░░]  20%
-  OPEN      review provisional copy  holder:-
-  CLAIMED   polish harbor board  holder:lane-slipway
-  COMPLETED verify protocol gate  holder:lane-slipway
-  CLAIMED   claim worker item  holder:lane-slipway
-  CLAIMED   drive worker item  holder:lane-slipway
+WORK DAG  [[38;5;208m▓[0m[38;5;208m▓[0m░░░░░░░░]  20%
+  READY     review provisional copy  holder:-
+  CLAIMED   polish harbor board  holder:builder-core
+  DONE      verify protocol gate  holder:builder-core
+  CLAIMED   claim worker item  holder:builder-core
+  CLAIMED   drive worker item  holder:builder-core
+
+CONSUMPTION  WORK AVAILABLE
+  coordinate: work/items.jsonl
 
 WORKERS
-  DEGRADED  lane-slipway codex PROCESS DIED
-  COMPLETE  lane-slipway acp
-  CLAIM     lane-slipway codex
-  DRIVING   lane-slipway codex
+[38;5;208m  DEGRADED  builder-core codex demo-work-2 PROCESS DIED[0m
+  COMPLETE  builder-core acp demo-work-3
+  CLAIM     builder-core codex demo-work-4
+[38;5;208m  DRIVING   builder-core codex demo-work-5[0m
 
 RECEIPTS
-  DELIVERY 1 ITEM
-  ACK      1 ITEM
   DELIVERY 1 ITEM
 ↑/k ↓/j select  enter detail  a ack  q quit

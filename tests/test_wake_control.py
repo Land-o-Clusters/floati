@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import io
 import json
@@ -22,12 +24,12 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 
 class WakeControlTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
-        self.root = FloatiRoot.open_direct_home(self.base / "puddle-fleet", create=True)
-        Registry(self.root).register("lane-a", "Codex")
-        Registry(self.root).register("lane-b", "Cursor")
+        self.root = FloatiRoot.open_direct_home(self.base / "demo-fleet", create=True)
+        Registry(self.root).register(public_ids.builder('a'), "Codex")
+        Registry(self.root).register(public_ids.builder('b'), "Cursor")
 
     def rows(self, node: str) -> list[dict]:
         return read_records_snapshot(
@@ -44,38 +46,38 @@ class WakeControlTests(unittest.TestCase):
         before_hook = hook.read_bytes()
         controller = WakeController(self.root)
         paused = controller.pause(
-            "lane-a", "session-one", idempotency_key="pause-session-one"
+            public_ids.builder('a'), "session-one", idempotency_key="pause-session-one"
         )
-        status = controller.status("lane-a", "session-one")
+        status = controller.status(public_ids.builder('a'), "session-one")
 
         self.assertEqual("paused", paused["state"])
         self.assertEqual("paused", status["state"])
-        self.assertEqual("lane-a", status["paused_by"])
+        self.assertEqual(public_ids.builder('a'), status["paused_by"])
         self.assertIn("paused by you at", status["display"])
         self.assertEqual("unknown", status["cached_session_state"])
         self.assertEqual("unknown", status["harness_trust_gate"])
         self.assertTrue(Path(paused["marker"]).is_file())
         self.assertEqual(before_hook, hook.read_bytes())
-        self.assertEqual(["pause"], [row["operation"] for row in self.rows("lane-a")])
+        self.assertEqual(["pause"], [row["operation"] for row in self.rows(public_ids.builder('a'))])
 
     def test_pause_and_resume_affect_exactly_one_node_session(self) -> None:
         """Catches a global marker or digest collision controlling another session."""
         from floati.wake_control import WakeController
 
         controller = WakeController(self.root)
-        controller.pause("lane-a", "session-one", idempotency_key="pause-a-one")
-        controller.pause("lane-a", "session-two", idempotency_key="pause-a-two")
-        controller.pause("lane-b", "session-one", idempotency_key="pause-b-one")
+        controller.pause(public_ids.builder('a'), "session-one", idempotency_key="pause-a-one")
+        controller.pause(public_ids.builder('a'), "session-two", idempotency_key="pause-a-two")
+        controller.pause(public_ids.builder('b'), "session-one", idempotency_key="pause-b-one")
 
         resumed = controller.resume(
-            "lane-a", "session-one", idempotency_key="resume-a-one"
+            public_ids.builder('a'), "session-one", idempotency_key="resume-a-one"
         )
 
         self.assertEqual("active", resumed["state"])
-        self.assertEqual("active", controller.status("lane-a", "session-one")["state"])
-        self.assertEqual("paused", controller.status("lane-a", "session-two")["state"])
-        self.assertEqual("paused", controller.status("lane-b", "session-one")["state"])
-        self.assertEqual(["pause", "pause", "resume"], [row["operation"] for row in self.rows("lane-a")])
+        self.assertEqual("active", controller.status(public_ids.builder('a'), "session-one")["state"])
+        self.assertEqual("paused", controller.status(public_ids.builder('a'), "session-two")["state"])
+        self.assertEqual("paused", controller.status(public_ids.builder('b'), "session-one")["state"])
+        self.assertEqual(["pause", "pause", "resume"], [row["operation"] for row in self.rows(public_ids.builder('a'))])
 
     def test_wildcards_global_and_unknown_sessions_refuse_without_state(self) -> None:
         """Catches a convenience selector widening one invocation beyond one session."""
@@ -85,9 +87,9 @@ class WakeControlTests(unittest.TestCase):
         for session in ("*", "all", "global", "session/../other", ""):
             with self.subTest(session=session):
                 with self.assertRaises(ProtocolRefusal):
-                    controller.pause("lane-a", session, idempotency_key="unsafe")
+                    controller.pause(public_ids.builder('a'), session, idempotency_key="unsafe")
         with self.assertRaises(ProtocolRefusal):
-            controller.resume("lane-a", "never-paused", idempotency_key="absent")
+            controller.resume(public_ids.builder('a'), "never-paused", idempotency_key="absent")
         self.assertFalse((self.root.path / "receipts" / "wake-control").exists())
 
     def test_waiter_treats_receipted_pause_as_intentional_silence(self) -> None:
@@ -104,7 +106,7 @@ class WakeControlTests(unittest.TestCase):
             json.dumps({
                 "schema_version": 0,
                 "tenant_id": self.root.tenant_id,
-                "mappings": [{"workspace": str(workspace), "node_id": "lane-a"}],
+                "mappings": [{"workspace": str(workspace), "node_id": public_ids.builder('a')}],
             }, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
@@ -117,11 +119,11 @@ class WakeControlTests(unittest.TestCase):
             idempotency_key="pause-test-consent",
         )
         EventLog(self.root).send(
-            "lane-b", "lane-a", "floati", "a" * 40,
+            public_ids.builder('b'), public_ids.builder('a'), "floati", "a" * 40,
             "docs/evidence/ping.md", "ping", idempotency_key="pause-ping",
         )
         WakeController(self.root).pause(
-            "lane-a", "session-paused", idempotency_key="pause-waiter"
+            public_ids.builder('a'), "session-paused", idempotency_key="pause-waiter"
         )
         stdout = io.StringIO()
 
@@ -134,7 +136,7 @@ class WakeControlTests(unittest.TestCase):
 
         self.assertEqual(0, result)
         self.assertEqual("", stdout.getvalue())
-        self.assertFalse((self.root.path / "receipts" / "wakes" / "lane-a.jsonl").exists())
+        self.assertFalse((self.root.path / "receipts" / "wakes" / public_ids.ledger(public_ids.builder('a'))).exists())
 
     def test_cli_requires_one_exact_session_and_emits_status_artifacts(self) -> None:
         """Catches parser aliases or omitted identity reaching the controller."""
@@ -150,15 +152,15 @@ class WakeControlTests(unittest.TestCase):
 
         paused = run(
             "wake", "pause", "--root", str(self.root.path),
-            "--as", "lane-a", "--session", "cli-session",
+            "--as", public_ids.builder('a'), "--session", "cli-session",
         )
         status = run(
             "wake", "status", "--root", str(self.root.path),
-            "--as", "lane-a", "--session", "cli-session",
+            "--as", public_ids.builder('a'), "--session", "cli-session",
         )
         refused = run(
             "wake", "pause", "--root", str(self.root.path),
-            "--as", "lane-a", "--session", "*",
+            "--as", public_ids.builder('a'), "--session", "*",
         )
 
         self.assertEqual(0, paused.returncode, paused.stderr)
@@ -172,9 +174,9 @@ class WakeControlTests(unittest.TestCase):
         from floati.wake_control import WakeController
 
         WakeController(self.root).pause(
-            "lane-a", "schema-session", idempotency_key="schema-pause"
+            public_ids.builder('a'), "schema-session", idempotency_key="schema-pause"
         )
-        row = self.rows("lane-a")[0]
+        row = self.rows(public_ids.builder('a'))[0]
         schema = REPOSITORY_ROOT / "schemas" / "v0" / "wake-control-receipt.schema.json"
         validate_json_schema(row, schema)
         with self.assertRaises(SchemaValidationError):

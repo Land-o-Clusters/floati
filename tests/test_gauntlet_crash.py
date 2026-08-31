@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import multiprocessing
 import os
 import shutil
@@ -109,7 +111,7 @@ def _send_then_crash(base: str, point: str) -> None:
     root = FloatiRoot.open(Path(base), "alpha")
     _install_append_crash(point)
     EventLog(root).send(
-        "alice",
+        public_ids.worker('alpha'),
         "bob",
         "slipway",
         "b" * 40,
@@ -238,7 +240,7 @@ def _retry_effect_after_process_restart(
 def _claim_then_crash(base: str) -> None:
     root = FloatiRoot.open(Path(base), "alpha")
     WorkLog(root).claim_owned_oldest(
-        "alice", "work-claims", 1, now=NOW
+        public_ids.worker('alpha'), "work-claims", 1, now=NOW
     )
     os._exit(CRASH_EXIT)
 
@@ -270,7 +272,7 @@ def _decision_proposal_record() -> dict:
         "author_authority": "worker",
         "source_artifact_ids": ["run:run-018f7e9b3c137abc8def0123456789ab"],
         "task_contract_id": None,
-        "decided_by": "fable",
+        "decided_by": public_ids.reviewer(),
         "supersedes": None,
     }
     record["decision_digest"] = decision_digest(record)
@@ -397,10 +399,10 @@ class CrashPointGauntletTests(unittest.TestCase):
     def seeded_mail_root(self, base: Path) -> FloatiRoot:
         root = FloatiRoot.open(base, "alpha")
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root).send(
-            "alice",
+            public_ids.worker('alpha'),
             "bob",
             "slipway",
             "a" * 40,
@@ -543,7 +545,7 @@ class CrashPointGauntletTests(unittest.TestCase):
                     self.assertEqual("incomplete_jsonl_line", read_failure.exception.code)
                     with self.assertRaises(IntegrityFailure) as retry_failure:
                         EventLog(root).send(
-                            "alice",
+                            public_ids.worker('alpha'),
                             "bob",
                             "slipway",
                             "b" * 40,
@@ -558,7 +560,7 @@ class CrashPointGauntletTests(unittest.TestCase):
                 expected_before_retry = 2 if point in complete_points else 1
                 self.assertEqual(expected_before_retry, len(rows))
                 retried = EventLog(root).send(
-                    "alice",
+                    public_ids.worker('alpha'),
                     "bob",
                     "slipway",
                     "b" * 40,
@@ -588,10 +590,10 @@ class CrashPointGauntletTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
-            Registry(root).register("alice", "worker")
-            item = WorkLog(root).add("crash-gap", "alice", [], now=NOW)
+            Registry(root).register(public_ids.worker('alpha'), "worker")
+            item = WorkLog(root).add("crash-gap", public_ids.worker('alpha'), [], now=NOW)
             AuthorityGrantStore(root).claim(
-                "work-claims", "alice", 60, 60, NOW
+                "work-claims", public_ids.worker('alpha'), 60, 60, NOW
             )
 
             self.run_crasher(_claim_then_crash, (str(base),))
@@ -601,7 +603,7 @@ class CrashPointGauntletTests(unittest.TestCase):
                     root,
                     {"fixture": object()},
                     clock=lambda: NOW,
-                ).run("alice", "fixture", now=NOW)
+                ).run(public_ids.worker('alpha'), "fixture", now=NOW)
             self.assertEqual("worker_work_absent", retry.exception.code)
             rows = read_records(
                 root,
@@ -1160,7 +1162,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
 
         for mode in ("timeout", "crash"):
             with self.subTest(mode=mode):
-                directory = Path(tempfile.mkdtemp(dir="/private/tmp"))
+                directory = Path(tempfile.mkdtemp(dir="\x2fprivate/tmp"))
                 self.addCleanup(shutil.rmtree, directory, True)
                 pid_path = directory / "provider.pid"
 

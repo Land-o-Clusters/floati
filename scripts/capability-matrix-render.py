@@ -59,6 +59,14 @@ def render(dataset: dict) -> str:
     if universal:
         lines.append(universal)
         lines.append("")
+    orchestrator = dataset.get("orchestrator_note", "").strip()
+    if orchestrator:
+        lines.append(orchestrator)
+        lines.append("")
+    surface_scope = dataset.get("surface_scope_note", "").strip()
+    if surface_scope:
+        lines.append(surface_scope)
+        lines.append("")
 
     titles = []
     for column in columns:
@@ -105,6 +113,116 @@ def render(dataset: dict) -> str:
     return "\n".join(lines)
 
 
+
+
+_GRADE_MARKS = {"measured": "●", "classified": "○"}
+
+
+def _compact_cell(record: dict) -> str:
+    cell = _cell(record)
+    grade = record.get("grade")
+    if grade:
+        mark = _GRADE_MARKS.get(grade)
+        if mark is None:
+            raise SystemExit("unknown grade: {0!r}".format(grade))
+        cell += " " + mark
+    return cell
+
+
+def render_compact(dataset: dict) -> str:
+    """README projection: feature-parity tables, CLI split from desktop/GUI.
+
+    Every cell stays receipt-linked; wake cells carry their measurement grade;
+    harness-specific deep integrations move to a notes paragraph so one
+    harness's head start does not render as everyone else's gap. The full grid
+    lives in docs/capability-matrix.md (mode=full).
+    """
+
+    index = {}
+    for record in dataset["records"]:
+        index[(record["harness"], record["surface"], record["capability"])] = record
+    rows = dataset.get("row_order")
+    if not rows:
+        seen = OrderedDict()
+        for record in dataset["records"]:
+            seen[(record["harness"], record["surface"])] = True
+        rows = list(seen)
+    row_notes = dataset.get("row_notes", {})
+
+    lines = []
+    universal = dataset.get("universal", "").strip()
+    if universal:
+        lines.append(universal)
+        lines.append("")
+    orchestrator = dataset.get("orchestrator_note", "").strip()
+    if orchestrator:
+        lines.append(orchestrator)
+        lines.append("")
+    surface_scope = dataset.get("surface_scope_note", "").strip()
+    if surface_scope:
+        lines.append(surface_scope)
+        lines.append("")
+
+    lines.append("**CLI surfaces**")
+    lines.append("")
+    lines.append("| harness | bus | work | wake | notes |")
+    lines.append("|---|---|---|---|---|")
+    for harness, surface in rows:
+        if surface != "cli":
+            continue
+        cells = [harness]
+        for cap in ("bus", "work", "wake"):
+            record = index.get((harness, surface, cap))
+            if record is None:
+                raise SystemExit("missing record: {0}/{1}/{2}".format(harness, surface, cap))
+            cells.append(_compact_cell(record))
+        cells.append(row_notes.get("{0}/{1}".format(harness, surface), ""))
+        lines.append("| " + " | ".join(cells) + " |")
+
+    lines.append("")
+    lines.append("**Desktop / GUI surfaces**")
+    lines.append("")
+    lines.append("| harness / surface | wake | notes |")
+    lines.append("|---|---|---|")
+    for harness, surface in rows:
+        if surface == "cli":
+            continue
+        record = index.get((harness, surface, "wake"))
+        if record is None or record["value"] == "—":
+            continue
+        cells = [
+            "{0} / {1}".format(harness, surface),
+            _compact_cell(record),
+            row_notes.get("{0}/{1}".format(harness, surface), ""),
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+
+    lines.append("")
+    lines.append(
+        "● measured live · ○ classified from surfaces (the unexercised probe is named "
+        "in the receipt) · — no receipt yet: we do not claim what we have not measured."
+    )
+
+    deep = []
+    for cap, label in (("boot", "session boot"), ("managed_send", "managed send")):
+        record = index.get(("codex", "cli", cap))
+        if record is not None and record["value"] not in ("—", "n/a"):
+            deep.append("[{0}]({1})".format(label, record["receipt_path"]))
+    if deep:
+        lines.append("")
+        lines.append(
+            "**Deep integrations (codex):** "
+            + " · ".join(deep)
+            + " — receipt-linked notes rather than grid columns, so one harness's "
+            + "head start does not read as everyone else's gap. The full "
+            + "19-surface grid, every cell receipt-linked, lives in "
+            + "[docs/capability-matrix.md](docs/capability-matrix.md)."
+        )
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Render the capability matrix markdown grid.")
     parser.add_argument(
@@ -117,9 +235,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         default="-",
         help="Write markdown here, or - for stdout",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("compact", "full"),
+        default="compact",
+        help="compact = README projection (default); full = the complete grid",
+    )
     args = parser.parse_args(argv)
     dataset_path = Path(args.dataset)
-    markdown = render(_load(dataset_path))
+    dataset = _load(dataset_path)
+    markdown = render_compact(dataset) if args.mode == "compact" else render(dataset)
     if args.output == "-":
         sys.stdout.write(markdown)
     else:

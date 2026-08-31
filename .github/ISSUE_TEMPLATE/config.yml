@@ -1,0 +1,15 @@
+{
+  "blank_issues_enabled": true,
+  "contact_links": [
+    {
+      "name": "Report a vulnerability privately",
+      "url": "https://github.com/Land-o-Clusters/floati/security/policy",
+      "about": "Never put a security report in a public issue."
+    },
+    {
+      "name": "Sending code? Read this first",
+      "url": "https://github.com/Land-o-Clusters/floati/blob/main/CONTRIBUTING.md",
+      "about": "Pull requests are by invitation; an issue is the front door."
+    }
+  ]
+}

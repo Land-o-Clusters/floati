@@ -196,13 +196,13 @@ No push or Fable Item 4 gate is claimed by this local evidence append.
   `OK`, but a child lock/termination traceback made that output non-pristine;
   it is not used as the clean proof.
 - Controller isolated rerun:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item4-controller-rerun python3 -m unittest tests.test_cancellation tests.test_attempts tests.test_workers tests.test_orchestrate tests.test_runtruth tests.test_schemas tests.test_approvals`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item4-controller-rerun python3 -m unittest tests.test_cancellation tests.test_attempts tests.test_workers tests.test_orchestrate tests.test_runtruth tests.test_schemas tests.test_approvals`
   exited 0 with 89 tests and clean `OK` output.
 - Controller compile, manifest, and diff check exited 0; manifest output was
   `[]`. At that time the worktree was clean and `lane/hm0` was ahead of origin
   by two commits.
 - Controller full selftest:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item4-controller-selftest python3 -m slip.selftest`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item4-controller-selftest python3 -m slip.selftest`
   exited 10 after 392 tests, with exactly one failure:
   `test_generated_repository_artifacts_are_scrubbed`, because `HM3I_BRIEF.md`
   was flagged. The same pre-existing condition existed at the pulled baseline
@@ -414,12 +414,12 @@ counted as verification. No commit, push, checkpoint, or gate is claimed.
   `4f1443cb2ee6c60aab050dac79a8920622e9dd9a`; no generated worktree exists in
   that candidate.
 - Final covering command:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item6-fix4-controller
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item6-fix4-controller
   python3 -m unittest -v tests.test_attempts tests.test_manifest`; exit 0,
   18 tests passed. The implementer covering bank independently passed 126
   tests, and `git diff --check` was clean.
 - Final clean-candidate command:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item6-final-selftest python3
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item6-final-selftest python3
   -m slip.selftest`; exit 0, 413 tests passed, followed by
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - Independent scoped re-review closed the post-attempt amendment,
@@ -526,16 +526,16 @@ review record, or human review claim was added.
   `tests/test_policy.py`, `tests/test_manifest.py`,
   `bundle-manifest.v0.json`, and this evidence document onto exact base
   `a607a406b2347fb0732df4afd1352a4840598044` in the clean candidate clone.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item7-controller-focused
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item7-controller-focused
   python3 -m unittest -v tests.test_policy tests.test_manifest
   tests.test_source_scrub` exited 0; **25/25 passed**.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item7-controller-selftest
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item7-controller-selftest
   python3 -m slip.selftest` exited 0; **425/425 passed** in 23.784 seconds and
   emitted `bundle_verified`.
 - The canonical policy digest remained
   `23e5ec9d826d91c8b51d42be1a521d1c572287f04003baeb454b2b1b1c765924`;
   direct manifest verification returned `[]`; Python compilation with an
-  explicit `/private/tmp` bytecode prefix and `git diff --check` exited 0.
+  explicit `/tmp` bytecode prefix and `git diff --check` exited 0.
   A first compile attempt without that prefix was sandbox-denied while trying
   to create a macOS Python cache outside the writable roots; it was not a code
   or test failure and is not counted as a pass.
@@ -621,7 +621,7 @@ checkpoint, and gate remain controller steps and are not claimed here.
   from the validated canonical routing map. Semantic/cache divergence now
   refuses before a result or append.
 - The exact two-test GREEN rerun exited 0; **2/2 passed**. The covering bank
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item8-fix1-cover-root
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item8-fix1-cover-root
   python3 -m unittest -v tests.test_admission tests.test_contracts
   tests.test_policy tests.test_runtruth tests.test_orchestrate tests.test_cli
   tests.test_cli_workflows tests.test_copy_ledger tests.test_manifest` exited
@@ -634,7 +634,7 @@ checkpoint, and gate remain controller steps and are not claimed here.
   fenced with the unanswered Fable request above.
 - The clean controller candidate repeated the covering bank at **106/106**
   and ran
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item8-controller-fix1-selftest
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item8-controller-fix1-selftest
   python3 -m slip.selftest`: exit 0; **438/438 passed** in 25.503 seconds and
   emitted `bundle_verified`. Controller compilation, direct manifest
   verification (`[]`), and `git diff --check` also exited 0.
@@ -832,7 +832,7 @@ publication, deployment, or activation is claimed.
 
 - The clean controller clone repeated the complete scoped bank at
   **106/106** and ran
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item9-controller-fix2-selftest
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item9-controller-fix2-selftest
   python3 -m slip.selftest`: exit 0; **468/468 passed** in 26.799 seconds and
   emitted `bundle_verified`. Fresh Python compilation, direct manifest
   verification (`[]`), and `git diff --check` each exited 0.
@@ -893,12 +893,12 @@ and full selftest before anyone may make an exact-tip claim.
 ### RED-first record
 
 - TD1 hostile lexical node spellings first ran
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-td1-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_hostile_cli_node_spellings_refuse_before_every_durable_entrypoint_writes`;
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-td1-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_hostile_cli_node_spellings_refuse_before_every_durable_entrypoint_writes`;
   it exited 1 after one test with four expected failures in 1.157 seconds.
   Sender/recipient lexical validation now occurs before registry or denial
   persistence.
 - TD3/TD4 first ran
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-td3-td4-red-exact python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_session_scoped_ack_and_append_only_retraction_do_not_cross_parties tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_legacy_attempt_binding_is_literal_and_dead_holder_projects_stale_send`;
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-td3-td4-red-exact python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_session_scoped_ack_and_append_only_retraction_do_not_cross_parties tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_legacy_attempt_binding_is_literal_and_dead_holder_projects_stale_send`;
   it exited 1 with two expected errors in 0.004 seconds because `send` had no
   `worker_session_id` boundary. The corresponding validator/gauntlet GREEN
   passed 4/4 in 0.014 seconds, and the later compatibility bank passed 56/56
@@ -986,7 +986,7 @@ artifact.
 ### Current local verification
 
 - Complete gauntlet:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-fix3-final-gauntlets python3 -m unittest -v tests.test_gauntlet_crash tests.test_gauntlet_fuzz tests.test_gauntlet_time tests.test_gauntlet_recovery tests.test_gauntlet_concurrency tests.test_gauntlet_snapshot`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-fix3-final-gauntlets python3 -m unittest -v tests.test_gauntlet_crash tests.test_gauntlet_fuzz tests.test_gauntlet_time tests.test_gauntlet_recovery tests.test_gauntlet_concurrency tests.test_gauntlet_snapshot`
   exited 0: **41/41** in **12.253 seconds**.
 - Architecture-contract bank (run truth, attempts, cancellation, outcomes,
   contracts, policy, admission, decisions, deploy, validators/schemas,
@@ -995,7 +995,7 @@ artifact.
   **296** tests in **17.614 seconds**: **295 passed**, and the one failure is
   the generated-tree scrub named below.
 - Full direct selftest:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-fix3-final-selftest python3 -m slip.selftest`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-fix3-final-selftest python3 -m slip.selftest`
   exited **10** after **522** tests in **42.023 seconds**: **521 passed**, one
   generated-tree scrub failure. It therefore did not emit or justify a
   `bundle_verified` completion claim.
@@ -1019,15 +1019,15 @@ fenced.
 
 This appends the controller-clean-candidate result without rewriting the
 historical shared-checkout nonpass above. The controller isolated that checkout
-artifact in `/private/tmp/slipway-hm3i-resume.LhUPUF`, built from base
+artifact in `/tmp/slipway-hm3i-resume.LhUPUF`, built from base
 `8d80ca086e9f90452bb1cf20e60445134d554a94` with the current Item 9/10
 changes. The prior `.worktrees/hm3i/HM3I_BRIEF.md` source-scrub finding is not
 present in that candidate.
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-controller-item10-selftest python3 -m slip.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-controller-item10-selftest python3 -m slip.selftest`
   exited 0: **522/522** in **37.718 seconds**, emitting
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-controller-item10-selftest python3 -m unittest -v tests.test_manifest tests.test_source_scrub tests.test_hm3i_contract`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-controller-item10-selftest python3 -m unittest -v tests.test_manifest tests.test_source_scrub tests.test_hm3i_contract`
   exited 0: **17/17** in **0.255 seconds**.
 - `python3 -m compileall slip tests` exited 0; direct
   `verify_manifest(Path.cwd())` returned `[]`; and `git diff --check` exited
@@ -1048,13 +1048,13 @@ C7.2 segment-identity debt remains in the publication checklist.
 ### RED-first and review seams
 
 - The initial reader-integrity RED was:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-review-red-a python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_projection_with_a_null_family tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_empty_present_run_map tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_an_index_with_an_extra_or_malformed_family_shape tests.test_c7_bundle.C7ReadBundleTests.test_malformed_unreferenced_worker_source_is_isolated_from_run_state tests.test_c7_bundle.C7ReadBundleTests.test_malformed_referenced_worker_source_errors_only_dependent_families tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_preflights_every_existing_output_symlink_before_any_write tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner tests.test_c7_bundle.C7ReadBundleTests.test_segment_typed_absence_fallbacks_are_bundle_relative_raw_paths tests.test_c7_bundle.C7ReadBundleTests.test_malformed_run_projection_keeps_the_closed_q5_vocabulary_schema_valid tests.test_c7_bundle.C7ReadBundleTests.test_public_projector_refuses_non_bytes_raw_run_override`.
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-review-red-a python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_projection_with_a_null_family tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_empty_present_run_map tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_an_index_with_an_extra_or_malformed_family_shape tests.test_c7_bundle.C7ReadBundleTests.test_malformed_unreferenced_worker_source_is_isolated_from_run_state tests.test_c7_bundle.C7ReadBundleTests.test_malformed_referenced_worker_source_errors_only_dependent_families tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_preflights_every_existing_output_symlink_before_any_write tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner tests.test_c7_bundle.C7ReadBundleTests.test_segment_typed_absence_fallbacks_are_bundle_relative_raw_paths tests.test_c7_bundle.C7ReadBundleTests.test_malformed_run_projection_keeps_the_closed_q5_vocabulary_schema_valid tests.test_c7_bundle.C7ReadBundleTests.test_public_projector_refuses_non_bytes_raw_run_override`.
   It exited 1 with 10 tests, 11 expected failures, and 3 expected errors.
 - The self-contained-source/installed-layout RED was:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-review-red-b python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_materialized_snapshot_contains_hashed_catalog_schemas_and_advertised_raw_ledgers tests.test_c7_bundle.C7ReadBundleTests.test_reader_verifies_copied_catalog_schemas_and_auxiliary_raw_digests tests.test_c7_bundle.C7ReadBundleTests.test_manifest_installed_layout_materializes_with_its_c7_static_package tests.test_c7_bundle.C7ReadBundleTests.test_auxiliary_timestamp_testimony_does_not_change_semantic_digest`.
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-review-red-b python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_materialized_snapshot_contains_hashed_catalog_schemas_and_advertised_raw_ledgers tests.test_c7_bundle.C7ReadBundleTests.test_reader_verifies_copied_catalog_schemas_and_auxiliary_raw_digests tests.test_c7_bundle.C7ReadBundleTests.test_manifest_installed_layout_materializes_with_its_c7_static_package tests.test_c7_bundle.C7ReadBundleTests.test_auxiliary_timestamp_testimony_does_not_change_semantic_digest`.
   It exited 1 with 4 tests, 36 expected failures, and 6 expected errors.
 - The single-record duplicate-session Q5 RED ran
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-red-duplicate-session python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner`;
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-red-duplicate-session python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner`;
   it exited 1 after 1 test with a selected-binding shape error. These REDs are
   local regression records, not Fable execution or acceptance.
 
@@ -1096,7 +1096,7 @@ C7.2 segment-identity debt remains in the publication checklist.
 
 ### Pre-evidence local verification
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-full-pre-evidence python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-full-pre-evidence python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`
   exited 0: **60/60** in **4.873 seconds**.
 - That command is a local reader/static/manifest/deploy/document bank only. It
   does not execute an external Fable bank, a publication gate, an activation
@@ -1104,20 +1104,20 @@ C7.2 segment-identity debt remains in the publication checklist.
 
 ### Post-evidence verification
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-post-doc-compile python3 -m py_compile slip/c7_bundle.py tests/test_c7_bundle.py tests/test_c7_static.py tests/test_manifest.py tests/test_hm3i_contract.py`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-post-doc-compile python3 -m py_compile slip/c7_bundle.py tests/test_c7_bundle.py tests/test_c7_static.py tests/test_manifest.py tests/test_hm3i_contract.py`
   exited 0.
 - Direct `verify_manifest(Path.cwd())` returned `[]`. The post-evidence exact
   local bank
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-full-post-evidence python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-full-post-evidence python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`
   exited 0: **60/60** in **4.951 seconds**. `git diff --check` exited 0.
 - The I11 FOC reader-route RED was
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-i11-red python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_foc_bank_has_thirty_nine_executable_reader_vectors`.
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-i11-red python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_foc_bank_has_thirty_nine_executable_reader_vectors`.
   It exited 1 in **1.391 seconds**: the new per-vector real-reader assertion
   expected 39 routes and observed 0 because the old bank made only two direct
   reader calls outside that route. The GREEN after routing every vector through
   its relevant materialized or mutated snapshot (or its expected reader
   refusal) was **1/1** in **2.130 seconds**. The final post-I11 bank was
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-full-i11 python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`;
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-full-i11 python3 -m unittest -v tests.test_c7_bundle tests.test_c7_static tests.test_manifest tests.test_deploy tests.test_hm3i_contract`;
   it exited 0: **60/60** in **4.290 seconds**. The matching compile command,
   direct `verify_manifest(Path.cwd())`, and `git diff --check` each exited 0;
   manifest verification returned `[]`.
@@ -1163,7 +1163,7 @@ self-contained/installed-layout aggregate (**36 expected failures**, **6
 expected errors**), and the separate I4 duplicate-session RED (**1 test**).
 The I11 route-accounting RED was **1 test**, failing `39 != 0` in **1.391
 seconds**. The post-fix focused local review command was
-`PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item11-i1-i11-focused python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_projection_with_a_null_family tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_empty_present_run_map tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_an_index_with_an_extra_or_malformed_family_shape tests.test_c7_bundle.C7ReadBundleTests.test_malformed_unreferenced_worker_source_is_isolated_from_run_state tests.test_c7_bundle.C7ReadBundleTests.test_malformed_referenced_worker_source_errors_only_dependent_families tests.test_c7_bundle.C7ReadBundleTests.test_auxiliary_timestamp_testimony_does_not_change_semantic_digest tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_preflights_every_existing_output_symlink_before_any_write tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_refuses_a_destination_with_a_caller_controlled_symlink_ancestor tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner tests.test_c7_bundle.C7ReadBundleTests.test_segment_typed_absence_fallbacks_are_bundle_relative_raw_paths tests.test_c7_bundle.C7ReadBundleTests.test_malformed_run_projection_keeps_the_closed_q5_vocabulary_schema_valid tests.test_c7_bundle.C7ReadBundleTests.test_manifest_installed_layout_materializes_with_its_c7_static_package tests.test_c7_bundle.C7ReadBundleTests.test_materialized_snapshot_contains_hashed_catalog_schemas_and_advertised_raw_ledgers tests.test_c7_bundle.C7ReadBundleTests.test_reader_verifies_copied_catalog_schemas_and_auxiliary_raw_digests tests.test_c7_bundle.C7ReadBundleTests.test_reader_binds_claim_frames_and_decision_path_to_captured_identities tests.test_c7_bundle.C7ReadBundleTests.test_reader_reprojects_captured_bytes_before_accepting_state_or_outcome_claims tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_foc_bank_has_thirty_nine_executable_reader_vectors`;
+`PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item11-i1-i11-focused python3 -m unittest -v tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_projection_with_a_null_family tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_a_digest_consistent_empty_present_run_map tests.test_c7_bundle.C7ReadBundleTests.test_reader_refuses_an_index_with_an_extra_or_malformed_family_shape tests.test_c7_bundle.C7ReadBundleTests.test_malformed_unreferenced_worker_source_is_isolated_from_run_state tests.test_c7_bundle.C7ReadBundleTests.test_malformed_referenced_worker_source_errors_only_dependent_families tests.test_c7_bundle.C7ReadBundleTests.test_auxiliary_timestamp_testimony_does_not_change_semantic_digest tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_preflights_every_existing_output_symlink_before_any_write tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_refuses_a_destination_with_a_caller_controlled_symlink_ancestor tests.test_c7_bundle.C7ReadBundleTests.test_duplicate_harness_session_inside_one_binding_is_conflicting_without_winner tests.test_c7_bundle.C7ReadBundleTests.test_segment_typed_absence_fallbacks_are_bundle_relative_raw_paths tests.test_c7_bundle.C7ReadBundleTests.test_malformed_run_projection_keeps_the_closed_q5_vocabulary_schema_valid tests.test_c7_bundle.C7ReadBundleTests.test_manifest_installed_layout_materializes_with_its_c7_static_package tests.test_c7_bundle.C7ReadBundleTests.test_materialized_snapshot_contains_hashed_catalog_schemas_and_advertised_raw_ledgers tests.test_c7_bundle.C7ReadBundleTests.test_reader_verifies_copied_catalog_schemas_and_auxiliary_raw_digests tests.test_c7_bundle.C7ReadBundleTests.test_reader_binds_claim_frames_and_decision_path_to_captured_identities tests.test_c7_bundle.C7ReadBundleTests.test_reader_reprojects_captured_bytes_before_accepting_state_or_outcome_claims tests.test_c7_bundle.C7ReadBundleTests.test_c7_1_foc_bank_has_thirty_nine_executable_reader_vectors`;
 it exited 0: **17/17** in **7.989 seconds**. Its final member executes the 39
 local C7.1 reader sub-vectors; it is not an external Fable execution.
 
@@ -1187,7 +1187,7 @@ push, publication, deployment, activation, or Fable final gate.
 ### RED-to-GREEN repairs
 
 - **I1 dead-holder full-run projection.**
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-events-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_dead_holder_send_projects_over_a_complete_foc_run_prefix`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-events-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_dead_holder_send_projects_over_a_complete_foc_run_prefix`
   failed as expected: **1/1** in **0.017 seconds**, because an otherwise
   lawful FOC prefix beginning with `run_created` was rejected as
   `record_kind_invalid`. `EventLog._dead_holder_state` now validates the
@@ -1195,7 +1195,7 @@ push, publication, deployment, activation, or Fable final gate.
   `supervisor_orphaned` evidence; it does not relax malformed-frame integrity.
   The matching focused GREEN was **2/2** in **0.020 seconds**.
 - **I2 command-root precedence.**
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-cli-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_refuses_a_legacy_positional_root_even_when_environment_is_set`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-cli-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_refuses_a_legacy_positional_root_even_when_environment_is_set`
   failed as expected: **1/1** in **0.131 seconds**; positional `init` chose a
   legacy root ahead of `SLIP_BUS_ROOT`. `init` now has only `--root`, so every
   entry point observes ruled `--root` then `SLIP_BUS_ROOT` precedence with no
@@ -1204,9 +1204,9 @@ push, publication, deployment, activation, or Fable final gate.
   was **48/48** in **8.087 seconds**.
 - **I3 semantic retraction replay.**
   The cursor RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-cursor-red python3 -m unittest -v tests.test_cursor.SparseCursorTests.test_forged_nonparty_retraction_fails_closed_before_ack_mutation`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-cursor-red python3 -m unittest -v tests.test_cursor.SparseCursorTests.test_forged_nonparty_retraction_fails_closed_before_ack_mutation`
   failed as expected: **1/1** in **0.008 seconds**. The writer RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-retract-red python3 -m unittest -v tests.test_registry_events.RegistryEventTests.test_retract_fails_closed_on_a_prior_nonparty_retraction_before_append`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-retract-red python3 -m unittest -v tests.test_registry_events.RegistryEventTests.test_retract_fails_closed_on_a_prior_nonparty_retraction_before_append`
   failed as expected: **1/1** in **0.004 seconds**. `SparseCursor` now consumes
   `EventLog`'s canonical semantic event records, and `EventLog.retract` replays
   those records within its existing transaction decision closure before it can
@@ -1216,9 +1216,9 @@ push, publication, deployment, activation, or Fable final gate.
   event/cursor/fuzz/process/concurrency compatibility bank was **45/45** in
   **9.745 seconds**.
 - **I4 executable literal-kind coverage.** Recovery RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-recovery-coverage-red python3 -m unittest -v tests.test_gauntlet_recovery.RecoveryGauntletTests.test_hm3i_retry_and_foc_reopen_with_stable_physical_ids_and_observation`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-recovery-coverage-red python3 -m unittest -v tests.test_gauntlet_recovery.RecoveryGauntletTests.test_hm3i_retry_and_foc_reopen_with_stable_physical_ids_and_observation`
   failed as expected: **1/1** in **0.062 seconds**; time RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-time-coverage-red python3 -m unittest -v tests.test_gauntlet_time.TimeHostilityGauntletTests.test_hm3i_run_projection_is_timestamp_invariant_for_contract_retry_and_foc_traces`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-time-coverage-red python3 -m unittest -v tests.test_gauntlet_time.TimeHostilityGauntletTests.test_hm3i_run_projection_is_timestamp_invariant_for_contract_retry_and_foc_traces`
   failed as expected: **1/1** in **0.085 seconds**. Test-only fixtures now
   derive each axis from real owner-built success, retry/stale, all three
   cancellation adapter, and FOC traces. Crash, fuzz, time, recovery, and
@@ -1230,9 +1230,9 @@ push, publication, deployment, activation, or Fable final gate.
   in **0.845 seconds**. The complete six-suite gauntlet is **44/44** in
   **12.214 seconds**.
 - **I5 TD1 zero-state `init`.** The CLI RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-init-zero-cli-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_rejects_invalid_solo_inputs_before_creating_a_root`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-init-zero-cli-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_rejects_invalid_solo_inputs_before_creating_a_root`
   and fuzz RED
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-init-zero-fuzz-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_hostile_init_solo_inputs_leave_a_nonexistent_root_at_zero_state`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-init-zero-fuzz-red python3 -m unittest -v tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_hostile_init_solo_inputs_leave_a_nonexistent_root_at_zero_state`
   each had **1 test with 2 expected subfailures**, in **0.224 seconds** and
   **0.150 seconds** respectively: hostile `--solo` or invalid `--harness`
   left a newly created root. Shared lexical solo bootstrap validation now runs
@@ -1267,11 +1267,11 @@ push, publication, deployment, activation, or Fable final gate.
 - The same architecture-contract bank, after the M1 document assertion and
   this append, ran **328** tests in **16.116 seconds**: **327 passed** and the
   sole failure remained the exact generated-tree path above.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-final-selftest-final python3 -m slip.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-final-selftest-final python3 -m slip.selftest`
   ran **530** tests in **31.900 seconds** and exited **10**: **529 passed** and
   the sole failure was the same generated-tree scrub. It did not emit and does
   not justify a `bundle_verified` completion claim.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-r1-final-doc-scrub python3 -m unittest -v tests.test_manifest tests.test_source_scrub tests.test_hm3i_contract`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-r1-final-doc-scrub python3 -m unittest -v tests.test_manifest tests.test_source_scrub tests.test_hm3i_contract`
   ran **18** tests in **0.512 seconds**: **17 passed** and that same scrub
   assertion failed. `python3 -m compileall -q slip tests` exited 0; direct
   `verify_manifest(Path.cwd())` returned `[]`; generated-tree scan returned
@@ -1294,7 +1294,7 @@ The root cause was a length-only solo/registry preflight while the durable
 characters.
 
 - RED:
-  `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-harness-zero-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_rejects_terminal_unsafe_harness_before_creating_a_root tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_terminal_unsafe_solo_harnesses_leave_a_nonexistent_root_at_zero_state tests.test_registry_events.RegistryEventTests.test_terminal_unsafe_role_refuses_before_the_registry_ledger_exists`
+  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-harness-zero-red python3 -m unittest -v tests.test_cli.SlipCliTests.test_init_rejects_terminal_unsafe_harness_before_creating_a_root tests.test_gauntlet_fuzz.ReaderFuzzGauntletTests.test_terminal_unsafe_solo_harnesses_leave_a_nonexistent_root_at_zero_state tests.test_registry_events.RegistryEventTests.test_terminal_unsafe_role_refuses_before_the_registry_ledger_exists`
   ran **3** tests with **6 expected failures** in **0.217 seconds**: control
   and Bidi harnesses created the direct home, and direct registry registration
   created its ledger directory before refusing.
@@ -1320,7 +1320,7 @@ is claimed.
 - The architecture-contract bank ran **331** tests in **17.179 seconds**:
   **330 passed** and the only assertion failure was the known shared
   generated-tree path `['.worktrees/hm3i/HM3I_BRIEF.md']`.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-item10-harness-final-selftest python3 -m slip.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-item10-harness-final-selftest python3 -m slip.selftest`
   ran **534** tests in **34.634 seconds** and exited **10**: **533 passed** and
   the sole failure was the same generated-tree scrub. It did not emit or
   justify `bundle_verified`.
@@ -1337,11 +1337,11 @@ final disposition is claimed by this append.
 
 This appends the controller's clean-candidate result after the adjacent harness
 zero-state evidence. The controller prepared
-`/private/tmp/slipway-hm3i-resume.LhUPUF` from the supplied base and the final
+`/tmp/slipway-hm3i-resume.LhUPUF` from the supplied base and the final
 uncommitted candidate changes; this lane did not create a commit or candidate
 identity.
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-hm3i-controller-item10-final-selftest python3 -m slip.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3i-controller-item10-final-selftest python3 -m slip.selftest`
   passed **534/534** in **37.828 seconds** and emitted
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - The controller's clean focused CLI/fuzz/registry/record/manifest/source bank
@@ -1390,7 +1390,7 @@ activation, external-consumer acceptance, or a Fable final publication gate.
 - Independent terminal re-review passed its focused C7.1/C7.2,
   record/schema, and manifest bank **107/107** in **4.084 seconds** and returned
   `APPROVED_SCOPED` with no remaining Critical, Important, or Medium findings.
-- `PYTHONPYCACHEPREFIX=/private/tmp/slipway-c72-final-selftest python3 -m slip.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/slipway-c72-final-selftest python3 -m slip.selftest`
   passed **594/594** in **40.691 seconds** and emitted
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - Direct manifest verification returned `[]`; generated-tree and history-note

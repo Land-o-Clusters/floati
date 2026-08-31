@@ -1,4 +1,4 @@
-"""Exact, digest-bound Codex and Cursor wake daemon adapters."""
+"""Exact, digest-bound Codex, Cursor, and `grok-build` wake daemon adapters."""
 
 from __future__ import annotations
 
@@ -21,10 +21,11 @@ from .wake_daemon_contract import (
 
 
 CODEX_EXECUTABLE = Path("/opt/homebrew/bin/codex")
-_ADAPTER_VERSIONS = {"codex": "1", "cursor": "1"}
+_ADAPTER_VERSIONS = {"codex": "1", "cursor": "1", "grok-build": "1"}
 _ADAPTER_CONTRACTS = {
     "codex": "floati:wake-daemon:codex:v1:queue --thread SESSION --message REASON",
     "cursor": "floati:wake-daemon:cursor:v1:--print --output-format json --single-turn --resume SESSION REASON",
+    "grok-build": "floati:wake-daemon:grok-build:v1:-p REASON --output-format json --resume SESSION",
 }
 
 
@@ -87,7 +88,7 @@ def adapter_contract_digest(harness: str) -> str:
     except (KeyError, TypeError) as exc:
         raise ProtocolRefusal(
             "wake_daemon_harness_unsupported",
-            "wake daemon v1 supports only codex or cursor",
+            "wake daemon v1 supports only codex, cursor, or grok-build",
         ) from exc
     return hashlib.sha256(contract.encode("utf-8")).hexdigest()
 
@@ -330,6 +331,54 @@ class CursorResumeWakeAdapter(_BoundWakeAdapter):
         return WakeAdapterResult("woke", None, exit_code, digest)
 
 
+class GrokBuildResumeWakeAdapter(_BoundWakeAdapter):
+    harness = "grok-build"
+
+    def request_wake(
+        self, binding: object, reason: str, deadline_seconds: int
+    ) -> WakeAdapterResult:
+        current = self._require_current(binding)
+        wake_reason = _reason(reason)
+        deadline = _deadline(deadline_seconds)
+        argv = (
+            str(current.executable),
+            "-p",
+            wake_reason,
+            "--output-format",
+            "json",
+            "--resume",
+            current.session_id,
+        )
+        return self._run(argv, current, deadline)
+
+    def _successful_result(
+        self,
+        exit_code: int,
+        output: str,
+        digest: str,
+        binding: AdapterBinding,
+    ) -> WakeAdapterResult:
+        if not output.strip():
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_grok_output_empty", exit_code, digest
+            )
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError:
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_grok_output_invalid", exit_code, digest
+            )
+        if (
+            not isinstance(parsed, dict)
+            or parsed.get("sessionId") != binding.session_id
+            or parsed.get("stopReason") != "end_turn"
+        ):
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_grok_result_invalid", exit_code, digest
+            )
+        return WakeAdapterResult("woke", None, exit_code, digest)
+
+
 def wake_adapter_for(
     root: FloatiRoot,
     node_id: str,
@@ -342,7 +391,9 @@ def wake_adapter_for(
         return CodexQueueWakeAdapter(coordinate, runner=runner)
     if harness == "cursor":
         return CursorResumeWakeAdapter(coordinate, runner=runner)
+    if harness == "grok-build":
+        return GrokBuildResumeWakeAdapter(coordinate, runner=runner)
     raise ProtocolRefusal(
         "wake_daemon_harness_unsupported",
-        "wake daemon v1 supports only codex or cursor",
+        "wake daemon v1 supports only codex, cursor, or grok-build",
     )

@@ -25,6 +25,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT))
 from floati.admin_registry import RegistryAdminBackend  # noqa: E402
 from floati.doctor import Doctor  # noqa: E402
 from floati.events import EventLog  # noqa: E402
+from floati import fixture_ids  # noqa: E402
 from floati.ids import uuid7_hex  # noqa: E402
 from floati.multi_bus_chart import MultiBusHarborChart, render_multi_bus_chart  # noqa: E402
 from floati.node_wizard import NodeWizard  # noqa: E402
@@ -43,6 +44,8 @@ from floati.work import WorkLog  # noqa: E402
 from floati.workers import WorkerReceipts  # noqa: E402
 
 
+_FLOATI_BUILDER = fixture_ids.builder("floati")
+_REVIEWER = fixture_ids.reviewer()
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 ANSI_COLOR = re.compile(r"\x1b\[([0-9;]*)m")
 FONT = Path("/System/Library/Fonts/SFNSMono.ttf")
@@ -460,19 +463,19 @@ def _chart_capture(scratch: Path, output: Path) -> dict[str, object]:
     upstream = _new_root(scratch / "harbor-upstream")
     downstream = _new_root(scratch / "harbor-downstream")
     for root, rows in (
-        (upstream, (("architect-codex", "Architect"), ("lane-floati", "Codex"))),
-        (downstream, (("architect-puddle", "Architect"), ("reviewer-fable", "Claude"))),
+        (upstream, (("architect-codex", "Architect"), (_FLOATI_BUILDER, "Codex"))),
+        (downstream, (("architect-puddle", "Architect"), (_REVIEWER, "Claude"))),
     ):
         registry = Registry(root)
         for node, harness in rows:
             registry.register(node, harness)
     EventLog(upstream).send(
-        "architect-codex", "lane-floati", "floati", "b" * 40,
+        "architect-codex", _FLOATI_BUILDER, "floati", "b" * 40,
         "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md", "DRAFT downstream handoff",
         idempotency_key="capture-chart-upstream",
     )
     EventLog(downstream).send(
-        "architect-puddle", "reviewer-fable", "puddle", "c" * 40,
+        "architect-puddle", _REVIEWER, "puddle", "c" * 40,
         "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md", "DRAFT frame review",
         idempotency_key="capture-chart-downstream",
     )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import json
 import os
@@ -64,8 +66,8 @@ class DoctorContractTests(unittest.TestCase):
 
         self.home = self.base / "alpha"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
-        Registry(self.root).register("lane-a", "Codex")
-        LivenessPresenceStore(self.root).observe("lane-a", 120, NOW)
+        Registry(self.root).register(public_ids.builder('a'), "Codex")
+        LivenessPresenceStore(self.root).observe(public_ids.builder('a'), 120, NOW)
         self.destination = self.base / "installed"
         destination_scripts = self.destination / "scripts"
         destination_scripts.mkdir(parents=True)
@@ -125,6 +127,7 @@ class DoctorContractTests(unittest.TestCase):
         profile: str | None = None,
         codex_hooks: Path | None = None,
         codex_config: Path | None = None,
+        codex_gateway_host: Path | None = None,
     ):
         self.assertIsNotNone(Doctor, "typed doctor implementation must exist")
         return Doctor(
@@ -136,10 +139,31 @@ class DoctorContractTests(unittest.TestCase):
             profile=profile,
             codex_hooks=codex_hooks,
             codex_config=codex_config,
+            codex_gateway_host=codex_gateway_host,
         )
 
+    def _vendor_codex_gateway(self, content: bytes) -> None:
+        vendored = self.source / "tools/codex/codex-fleet-bus.py"
+        vendored.parent.mkdir(parents=True, exist_ok=True)
+        vendored.write_bytes(content)
+        (vendored.parent / "codex-fleet-bus.sha256.json").write_text(
+            json.dumps(
+                {
+                    "path": "tools/codex/codex-fleet-bus.py",
+                    "schema_version": 0,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self._git("add", "tools/codex")
+        self._git("commit", "--quiet", "-m", "vendor gateway fixture")
+        self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+
     def _remove_presence(self) -> None:
-        self.root.resolve_relative("liveness-presence/lane-a.jsonl").unlink()
+        self.root.resolve_relative(public_ids.compose('liveness-presence/', public_ids.ledger(public_ids.builder('a')))).unlink()
 
     def _codes(self, artifact: dict) -> list[str]:
         return [row["code"] for row in artifact["findings"]]
@@ -154,6 +178,42 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual("degraded", artifact["state"])
         self.assertIn("registry_live_dirs_mismatch", self._codes(artifact))
         self.assertNotIn("registry_live_dirs_expected_absent", self._codes(artifact))
+
+    def test_codex_gateway_digest_match_is_a_stamped_ok_fact(self) -> None:
+        """A doctor run that cannot attest the installed gateway source is rejected."""
+
+        content = b"governed gateway\n"
+        self._vendor_codex_gateway(content)
+        host = self.base / "codex-fleet-bus"
+        host.write_bytes(content)
+
+        artifact, rc = self.doctor(codex_gateway_host=host).artifact()
+
+        self.assertEqual(0, rc)
+        finding = next(
+            row for row in artifact["findings"]
+            if row["code"] == "codex_gateway_vendored_source_current"
+        )
+        self.assertEqual("ok", finding["severity"])
+        self.assertIsNone(finding["remediation"])
+
+    def test_codex_gateway_host_drift_degrades_with_explicit_install_remedy(self) -> None:
+        """A hand-edited host wrapper remaining invisible to doctor is rejected."""
+
+        self._vendor_codex_gateway(b"governed gateway\n")
+        host = self.base / "codex-fleet-bus"
+        host.write_bytes(b"hand edited\n")
+
+        artifact, rc = self.doctor(codex_gateway_host=host).artifact()
+
+        self.assertEqual(35, rc)
+        finding = next(
+            row for row in artifact["findings"]
+            if row["code"] == "codex_gateway_vendored_source_drift"
+        )
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn("gateway drifted from vendored source", finding["detail"])
+        self.assertIn("scripts/install-codex-gateway.sh", finding["remediation"])
 
     def test_absent_presence_still_degrades_when_the_directory_never_existed(self) -> None:
         """Catches doctor inferring a bus-only fleet from a missing directory."""
@@ -192,8 +252,8 @@ class DoctorContractTests(unittest.TestCase):
                 "tenant_id": self.root.tenant_id,
                 "timestamp": "2026-08-01T14:00:00.000Z",
                 "kind": "node_lease",
-                "node_id": "lane-a",
-                "workspace": str(self.root.path / "nodes" / "lane-a"),
+                "node_id": public_ids.builder('a'),
+                "workspace": str(self.root.path / "nodes" / public_ids.builder('a')),
                 "expires_at": "2026-08-01T14:01:00.000Z",
                 "state": "active",
             },
@@ -208,7 +268,7 @@ class DoctorContractTests(unittest.TestCase):
 
     def test_declared_bus_only_keeps_warning_when_presence_is_only_partly_absent(self) -> None:
         """Honest-absence law: absence is stated, never guessed from a partial set."""
-        Registry(self.root).register("lane-b", "Codex")
+        Registry(self.root).register(public_ids.builder('b'), "Codex")
 
         artifact, rc = self.doctor(profile="bus-only").artifact()
 
@@ -262,7 +322,7 @@ class DoctorContractTests(unittest.TestCase):
         key = f"{hooks_path}:stop:0:0"
         current_hash = codex_hook_current_hash(block)
         self.assertEqual(
-            "sha256:ac3a5c59887f923baa872af6eb031650bfcfd4b4d27461c746c2af530f7645ca",
+            "ac3a5c59887f923baa872af6eb031650bfcfd4b4d27461c746c2af530f7645ca",
             current_hash,
         )
         config_path.write_text(
@@ -283,6 +343,23 @@ class DoctorContractTests(unittest.TestCase):
         )
         self.assertEqual("trusted", row["hook_trust"])
         self.assertEqual(key, row["hook_trust_key"])
+
+        config_path.write_text(
+            "[hooks.state." + json.dumps(key) + "]\n"
+            "trusted_hash = " + json.dumps("sha256:" + current_hash) + "\n",
+            encoding="utf-8",
+        )
+        prefixed, prefixed_rc = self.doctor(
+            codex_hooks=hooks_path,
+            codex_config=config_path,
+        ).artifact()
+        prefixed_row = next(
+            item for item in prefixed["findings"]
+            if item["code"] == "codex_wait_hook_trust"
+        )
+        self.assertEqual(0, prefixed_rc)
+        self.assertEqual("trusted", prefixed_row["hook_trust"])
+        self.assertEqual(current_hash, prefixed_row["hook_trust_current_hash"])
 
         config_path.write_text(
             "[hooks.state." + json.dumps(key) + "]\n"
@@ -342,19 +419,19 @@ class DoctorContractTests(unittest.TestCase):
     def test_registered_set_folds_latest_row_wins_and_excludes_retired_nodes(self) -> None:
         """Catches doctor counting a retired node because its old active row remains."""
         registry = Registry(self.root)
-        registry.register("lane-b", "Codex")
-        registry.retire("lane-b")
+        registry.register(public_ids.builder('b'), "Codex")
+        registry.retire(public_ids.builder('b'))
 
         artifact, rc = self.doctor().artifact()
 
-        self.assertEqual(("lane-a",), registry.active_node_ids())
+        self.assertEqual((public_ids.builder('a'),), registry.active_node_ids())
         self.assertEqual(0, rc, "a retired node with no presence file is not a mismatch")
         self.assertIn("registry_live_dirs_match", self._codes(artifact))
 
     def test_wake_namespace_must_be_a_physically_read_only_subset_of_registry_lineage(self) -> None:
         """Catches an unregistered spelling minting a healthy-looking wake coordinator."""
         canonical = self.root.resolve_relative(
-            "receipts/wake-coordination/lane-a/lane.lock"
+            public_ids.compose('receipts/wake-coordination/', public_ids.builder('a'), '/lane.lock')
         )
         alias = self.root.resolve_relative(
             "receipts/wake-coordination/lane_alias/lane.lock"
@@ -375,7 +452,7 @@ class DoctorContractTests(unittest.TestCase):
         )
         self.assertEqual("warning", finding["severity"])
         self.assertIn("lane_alias", finding["detail"])
-        self.assertNotIn("lane-a]", finding["detail"])
+        self.assertNotIn(public_ids.compose(public_ids.builder('a'), ']'), finding["detail"])
 
     def test_bus_only_visible_copy_is_the_architects_strings(self) -> None:
         """Catches the architect's strings regressing to placeholder keys."""
@@ -419,6 +496,7 @@ class DoctorContractTests(unittest.TestCase):
                 "symlink_identity_valid",
                 "consumption_coordinate_valid",
                 "installer_shadow",
+                "herdr_protocol_pins",
             ],
             [finding["code"] for finding in artifact["findings"]],
         )
@@ -437,7 +515,7 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(20, missing_rc)
         self.assertIn("direct_home_missing", [row["code"] for row in missing["findings"]])
 
-        (self.root.resolve_relative("liveness-presence/lane-a.jsonl")).unlink()
+        (self.root.resolve_relative(public_ids.compose('liveness-presence/', public_ids.ledger(public_ids.builder('a'))))).unlink()
         mismatch, mismatch_rc = self.doctor().artifact()
         self.assertEqual(35, mismatch_rc)
         finding = next(row for row in mismatch["findings"] if row["code"] == "registry_live_dirs_mismatch")

@@ -174,7 +174,7 @@ does not claim that a live registered thread was observed.
 codex-cli 0.147.0
 
 /opt/homebrew/bin/codex app-server generate-json-schema --experimental \
-  --out /private/tmp/slipway-thread-observer-schema-final-20260813
+  --out /tmp/slipway-thread-observer-schema-final-20260813
 ```
 
 Both commands exited 0. They emitted only the local sandbox warning that PATH

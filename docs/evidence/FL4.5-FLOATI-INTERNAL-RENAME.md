@@ -96,7 +96,7 @@ is:
 - Present schema identifiers use the owned
   https://landoclusters.com/floati/schemas/ origin. Floati titles replace
   retired product titles; x-floati-* replaces x-slipway-*; and positive
-  work-root references use /private/tmp/floati-work.
+  work-root references use /tmp/floati-work.
 - Wake schema/runtime labels use the exact
   com.landoclusters.floati.oneshot.* identity, including the JSON-escaped
   regular-expression form. The intentionally missing ten schema $id values
@@ -117,7 +117,7 @@ is:
   refs/heads/lane/hm0 are preserved.
 - Current living documentation was reconciled only in docs/DESIGN.md and
   docs/COPY-LEDGER.md. Those changes replace current .slipway-install,
-  .slipway, and /private/tmp/slipway-work instructions/transcript coordinates
+  .slipway, and /tmp/slipway-work instructions/transcript coordinates
   with their ruled Floati equivalents; no historical material was rewritten.
 
 ### Class 4 — owner-only external coordinates: pending
@@ -146,7 +146,7 @@ contract only. It is not publication or Fable acceptance.
 ## Non-vacuous mutation controls
 
 All four controls began from the same clean candidate, copied the target to
-/private/tmp/floati-task8-mutation.Vjz6lq before mutation, restored the exact
+/tmp/floati-task8-mutation.Vjz6lq before mutation, restored the exact
 backup afterward, and confirmed the stated pre/post SHA-256 equality before
 the next control. Every focused gate exited 1 for its intended reason; status
 was clean after each restoration.

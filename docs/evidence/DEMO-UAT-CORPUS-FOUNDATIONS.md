@@ -6,7 +6,7 @@ Date: 2026-08-16
 
 ## Identity and authority
 
-- Floati worktree: `/private/tmp/slipway-spawn-groups`
+- Floati worktree: `/tmp/slipway-spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - Clean pre-evidence HEAD:
   `1094cf5bd0a3e2a3a980a76507f9f5186c72210a`
@@ -89,7 +89,7 @@ that the committed corpus file exists.
 
 Accepted RED:
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
+- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
 - Exit: 1
 - Result: 3 tests; one expected assertion failure,
   `committed v0 corpus must exist`; both mutation guards passed.
@@ -122,20 +122,20 @@ copy, or copied/redacted bus JSONL entered Slice 1.
 
 Focused gate:
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
+- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
 - Exit: 0
 - Result: 3 tests, 0 failures, 0 errors; no skips reported.
 
 Full suite:
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/floati-demo-uat-pycache python3 -m unittest discover`
+- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest discover`
 - Exit: 0
 - Result: 1,463 tests, 0 failures, 0 errors; no skips reported.
 - Duration: 165.621 seconds.
 
 Bundle self-test:
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/floati-demo-uat-pycache python3 -m floati.selftest`
+- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m floati.selftest`
 - Exit: 0
 - Result: 1,463 tests, 0 failures, 0 errors; no skips reported.
 - Duration: 165.325 seconds.

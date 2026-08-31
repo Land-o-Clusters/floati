@@ -7,17 +7,17 @@
     <tspan x="28" dy="18" fill="#20252c">tenant: demo-fleet</tspan>
     <tspan x="28" dy="18" fill="#20252c"></tspan>
     <tspan x="28" dy="18" fill="#20252c">┌<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>──┐</tspan>
-    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> lane-floati        <tspan fill="#853d07">│</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> builder-floati     <tspan fill="#853d07">│</tspan></tspan>
     <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> ACTIVE · 1 <tspan fill="#853d07">DRIVING</tspan> <tspan fill="#853d07">│</tspan></tspan>
     <tspan x="28" dy="18" fill="#20252c">└<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>──┘</tspan>
     <tspan x="28" dy="18" fill="#20252c"></tspan>
-    <tspan x="28" dy="18" fill="#20252c">┌<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>─┐</tspan>
-    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> puddle-floati-architect <tspan fill="#853d07">│</tspan></tspan>
-    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> ACTIVE · 0 WORKERS      <tspan fill="#853d07">│</tspan></tspan>
-    <tspan x="28" dy="18" fill="#20252c">└<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>─┘</tspan>
+    <tspan x="28" dy="18" fill="#20252c">┌<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>──┐</tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> demo-architect     <tspan fill="#853d07">│</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">│</tspan> ACTIVE · 0 WORKERS <tspan fill="#853d07">│</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c">└<tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan><tspan fill="#55636f">───</tspan>──┘</tspan>
     <tspan x="28" dy="18" fill="#20252c"></tspan>
     <tspan x="28" dy="18" fill="#20252c">TRAFFIC</tspan>
-    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">lane-floati ── 4 envelopes · ! 1 denial ──▶ puddle-floati-architect</tspan></tspan>
-    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">puddle-floati-architect ── 3 envelopes · 0 denials ──▶ lane-floati</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">builder-floati ── 4 envelopes · ! 1 denial ──▶ demo-architect</tspan></tspan>
+    <tspan x="28" dy="18" fill="#20252c"><tspan fill="#853d07">demo-architect ── 3 envelopes · 0 denials ──▶ builder-floati</tspan></tspan>
   </text>
 </svg>

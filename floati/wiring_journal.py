@@ -82,6 +82,28 @@ def canonical_entry_bytes(payload: Dict[str, Any]) -> bytes:
                       separators=(",", ":")).encode("utf-8")
 
 
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def replay_durability(destination: Path) -> List[JournalEntry]:
+    """Re-establish the journal file/link barriers and validate its bytes."""
+
+    path = journal_path(destination)
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _fsync_directory(path.parent)
+    _fsync_directory(path.parent.parent)
+    return read_entries(path)
+
+
 def append_entry(destination: Path, payload: Dict[str, Any]) -> JournalEntry:
     """Append one entry. MANIFEST-BEFORE-MEANING: callers MUST call this
     BEFORE performing the wiring action the entry records.
@@ -101,6 +123,7 @@ def append_entry(destination: Path, payload: Dict[str, Any]) -> JournalEntry:
         raise ValueError("wiring entry requires a non-empty path")
 
     path = journal_path(destination)
+    parent_existed = path.parent.exists()
     path.parent.mkdir(mode=0o700, exist_ok=True)
 
     previous_hash, ordinal = _tail(path)
@@ -119,6 +142,12 @@ def append_entry(destination: Path, payload: Dict[str, Any]) -> JournalEntry:
         handle.write(line)
         handle.flush()
         os.fsync(handle.fileno())
+    # A file fsync alone does not durably link a newly created journal.  The
+    # containing metadata directory is always replayed, and a newly created
+    # metadata directory is linked durably from the deployment destination.
+    _fsync_directory(path.parent)
+    if not parent_existed:
+        _fsync_directory(path.parent.parent)
     return JournalEntry(ordinal=ordinal + 1, byte_offset=offset,
                         payload=stamped)
 

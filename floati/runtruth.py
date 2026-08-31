@@ -1105,7 +1105,7 @@ class RunProjection:
             }
             if record["admission_digest"] != group["amendment"]["admission_digest"] or any(record[left] != child[right] for left, right in repeated.items()):
                 refuse("spawn_child_binding_invalid", "admission must repeat its exact amended child")
-            if record["workspace"] != f"/private/tmp/floati-work/{record['child_item_id']}":
+            if record["workspace"] != f"\x2fprivate/tmp/floati-work/{record['child_item_id']}":
                 refuse("workspace_invalid", "child workspace must derive from its item")
             group["admissions"][record["child_item_id"]] = record
         elif kind == "child_rejected":
@@ -1307,7 +1307,7 @@ class RunProjection:
                 )
             if state["suspension"] is not None:
                 refuse("attempt_suspension_duplicate", "an attempt can suspend once")
-            expected_workspace = f"/private/tmp/floati-work/{record['item_id']}"
+            expected_workspace = f"\x2fprivate/tmp/floati-work/{record['item_id']}"
             if record["workspace"] != expected_workspace:
                 refuse(
                     "workspace_invalid",

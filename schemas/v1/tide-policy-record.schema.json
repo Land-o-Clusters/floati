@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/tide-policy-record.schema.json",
+  "title": "Floati Tide Policy Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "node_id", "harness", "metric", "threshold", "action", "access_class", "stamp", "formula", "receipt_path", "state", "predecessor_policy_id", "idempotency_key"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^tide-policy-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "tide_policy_record"},
+    "node_id": {"$ref": "#/$defs/identifier"},
+    "harness": {"type": "string", "minLength": 1, "maxLength": 64},
+    "metric": {"$ref": "#/$defs/identifier"},
+    "threshold": {"type": "string", "pattern": "^(?:0\\.[0-9]{6}|[1-9][0-9]*)$"},
+    "action": {"enum": ["recommend", "direct"]},
+    "access_class": {"enum": ["A", "B"]},
+    "stamp": {"enum": ["DERIVED", "SELF_REPORTED", "MEASURED_OR_DERIVED"]},
+    "formula": {"type": "string", "minLength": 1, "maxLength": 500},
+    "receipt_path": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "state": {"enum": ["active", "cleared"]},
+    "predecessor_policy_id": {"type": ["string", "null"], "pattern": "^tide-policy-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+  }
+}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -26,7 +28,7 @@ class MultiBusHarborChartTests(unittest.TestCase):
         self.beta = FloatiRoot.open_direct_home(self.base / "beta", create=True)
         self.foreign = FloatiRoot.open_direct_home(self.base / "undeclared", create=True)
         self._registry(self.alpha, "architect-a", "Architect", "2026-08-27T21:58:00.000Z")
-        self._registry(self.alpha, "lane-a", "Codex", "2026-08-27T21:59:00.000Z")
+        self._registry(self.alpha, public_ids.builder('a'), "Codex", "2026-08-27T21:59:00.000Z")
         self._registry(self.beta, "architect-b", "Architect", "2026-08-27T21:55:00.000Z")
         self._registry(self.foreign, "hidden", "Codex", "2026-08-27T21:59:59.000Z")
         self.registry_path = self.base / "declared-roots.json"
@@ -82,7 +84,7 @@ class MultiBusHarborChartTests(unittest.TestCase):
 
         self.assertEqual(["alpha", "beta"], [bus["bus_id"] for bus in artifact["buses"]])
         self.assertEqual(
-            ["architect-a", "lane-a"],
+            ["architect-a", public_ids.builder('a')],
             [node["id"] for node in artifact["buses"][0]["nodes"]],
         )
         self.assertNotIn("undeclared", json.dumps(artifact))

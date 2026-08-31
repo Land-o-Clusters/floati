@@ -1,4 +1,4 @@
-"""Fable-ruled Floati identity marks for interactive milestones."""
+"""Owner-ratified Floati identity marks for interactive milestones."""
 
 from __future__ import annotations
 

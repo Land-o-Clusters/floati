@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import io
 import json
@@ -11,6 +13,7 @@ import zlib
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.public_projection import projected_role_text
 from tests.test_regatta_r1 import _artifact as live_artifact
 from tests.test_regatta_r2 import _artifact as replay_artifact
 from tests.test_regatta_spike import FULL_CAPABILITY_RESPONSE
@@ -97,35 +100,35 @@ class RegattaR3GraphicsTests(unittest.TestCase):
         from floati.tui_activity import activity_series, harbor_activity
 
         records = [
-            {"sender": "lane-a", "recipient": "lane-a"},
-            {"node_id": "lane-b"},
-            {"claimed_sender": "lane-a"},
-            {"detail": "lane-a"},
-            {"recipient": "lane-b"},
+            {"sender": public_ids.builder('a'), "recipient": public_ids.builder('a')},
+            {"node_id": public_ids.builder('b')},
+            {"claimed_sender": public_ids.builder('a')},
+            {"detail": public_ids.builder('a')},
+            {"recipient": public_ids.builder('b')},
         ]
 
         self.assertEqual(
             {
-                "lane-a": (1, 0, 1, 0, 0),
-                "lane-b": (0, 1, 0, 0, 1),
-                "lane-c": (0, 0, 0, 0, 0),
+                public_ids.builder('a'): (1, 0, 1, 0, 0),
+                public_ids.builder('b'): (0, 1, 0, 0, 1),
+                public_ids.builder('c'): (0, 0, 0, 0, 0),
             },
-            activity_series(("lane-a", "lane-b", "lane-c"), records),
+            activity_series((public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c')), records),
         )
         duplicate_topology = {
             "buses": [
-                {"bus_id": "alpha", "nodes": [{"id": "lane-a"}]},
-                {"bus_id": "beta", "nodes": [{"id": "lane-a"}]},
+                {"bus_id": "alpha", "nodes": [{"id": public_ids.builder('a')}]},
+                {"bus_id": "beta", "nodes": [{"id": public_ids.builder('a')}]},
             ]
         }
         self.assertEqual(
             {
-                "alpha/lane-a": (1, 0, 0, 0, 0),
-                "beta/lane-a": (0, 0, 0, 0, 0),
+                public_ids.compose('alpha/', public_ids.builder('a')): (1, 0, 0, 0, 0),
+                public_ids.compose('beta/', public_ids.builder('a')): (0, 0, 0, 0, 0),
             },
             harbor_activity(
                 duplicate_topology,
-                ({"source_bus": "alpha", "sender": "lane-a"},),
+                ({"source_bus": "alpha", "sender": public_ids.builder('a')},),
             ),
         )
 
@@ -135,7 +138,7 @@ class RegattaR3GraphicsTests(unittest.TestCase):
         from floati.tui_render import HarborBoardModel, render_frame
 
         model = HarborBoardModel.from_projection(SNAPSHOT, WORK, RECEIPTS)
-        activity = {"lane-a": SAMPLES, "lane-b-with-a-name-that-must-clip": (0,) * 5}
+        activity = {public_ids.builder('a'): SAMPLES, public_ids.builder('b-with-a-name-that-must-clip'): (0,) * 5}
         tiers = {
             tier: render_frame(
                 model,
@@ -207,14 +210,14 @@ class RegattaR3GraphicsTests(unittest.TestCase):
         from floati.tui_graphics import plan_activity_overlays
 
         first = plan_activity_overlays(
-            activity_by_target={"alpha/lane-a": SAMPLES, "alpha/lane-b": (4, 3, 2, 1, 0)},
-            visible_positions={"alpha/lane-a": (7, 70), "alpha/lane-b": (8, 70)},
+            activity_by_target={public_ids.compose('alpha/', public_ids.builder('a')): SAMPLES, public_ids.compose('alpha/', public_ids.builder('b')): (4, 3, 2, 1, 0)},
+            visible_positions={public_ids.compose('alpha/', public_ids.builder('a')): (7, 70), public_ids.compose('alpha/', public_ids.builder('b')): (8, 70)},
             capability_receipt=_receipt(),
             color_tier="256",
         )
         second = plan_activity_overlays(
-            activity_by_target={"alpha/lane-a": SAMPLES, "alpha/lane-b": (4, 3, 2, 1, 0)},
-            visible_positions={"alpha/lane-a": (6, 60)},
+            activity_by_target={public_ids.compose('alpha/', public_ids.builder('a')): SAMPLES, public_ids.compose('alpha/', public_ids.builder('b')): (4, 3, 2, 1, 0)},
+            visible_positions={public_ids.compose('alpha/', public_ids.builder('a')): (6, 60)},
             capability_receipt=_receipt(),
             color_tier="256",
             previous=first.overlays,
@@ -224,10 +227,10 @@ class RegattaR3GraphicsTests(unittest.TestCase):
         self.assertEqual(2, len({overlay.image_id for overlay in first.overlays}))
         self.assertEqual((6, 60), (second.overlays[0].row, second.overlays[0].column))
         removed_id = next(
-            overlay.image_id for overlay in first.overlays if overlay.target_id == "alpha/lane-b"
+            overlay.image_id for overlay in first.overlays if overlay.target_id == public_ids.compose('alpha/', public_ids.builder('b'))
         )
         self.assertIn(removed_id, second.delete_ids)
-        self.assertNotIn("alpha/lane-b", {overlay.target_id for overlay in second.overlays})
+        self.assertNotIn(public_ids.compose('alpha/', public_ids.builder('b')), {overlay.target_id for overlay in second.overlays})
 
     def test_text_images_and_cursor_share_one_sync_frame_and_cleanup_all_ids(self) -> None:
         """Catches torn overlay frames or termios failure skipping image deletion."""
@@ -289,7 +292,7 @@ class RegattaR3GraphicsTests(unittest.TestCase):
             selected=0,
             color=False,
             color_tier="mono",
-            activity_by_node={"lane-a": SAMPLES},
+            activity_by_node={public_ids.builder('a'): SAMPLES},
         )
         live = render_live_harbor_map(
             live_artifact(include_envelope=False),
@@ -299,14 +302,14 @@ class RegattaR3GraphicsTests(unittest.TestCase):
             width=120,
             height=40,
             color_tier="mono",
-            activity_by_node={"alpha/lane-a": SAMPLES},
+            activity_by_node={public_ids.compose('alpha/', public_ids.builder('a')): SAMPLES},
         ).text
         replay = render_replay_cinema(
             ReplayCinemaController(replay_artifact()).state(4),
             width=120,
             height=40,
             color_tier="mono",
-            activity_by_node={"alpha/lane-a": SAMPLES},
+            activity_by_node={public_ids.compose('alpha/', public_ids.builder('a')): SAMPLES},
         )
 
         self.assertIn(BRAILLE, board)
@@ -371,7 +374,10 @@ class RegattaR3GraphicsTests(unittest.TestCase):
             with self.subTest(color=color):
                 expected = capture_root / name
                 self.assertTrue(expected.is_file())
-                self.assertEqual(capture_regatta_r3(color=color), expected.read_text())
+                self.assertEqual(
+                    projected_role_text(capture_regatta_r3(color=color)),
+                    expected.read_text(),
+                )
 
         model = HarborBoardModel.from_projection(SNAPSHOT, WORK, RECEIPTS)
         plain = render_plain_dump(model, width=100).encode("utf-8")
@@ -385,11 +391,11 @@ class RegattaR3GraphicsTests(unittest.TestCase):
             + "\n"
         ).encode("utf-8")
         self.assertEqual(
-            "0fa896c0fb3d8a3ed97bdab22847214558c500e28ea2ea601366e16911da3504",
+            "31fdd93cdc00ff456f440ca3b022c0a16d9b0e88a6c2e0e4be83a86aeb8ce545",
             hashlib.sha256(plain).hexdigest(),
         )
         self.assertEqual(
-            "711c98bd6475631ef1d0bf3bb9a3b11b9eed9326eaf5b9c45297ebdfacd5b847",
+            "5c86d938487eacd6ca498aa31b0882c6640349d1458e0ff485a9d93f81543034",
             hashlib.sha256(machine).hexdigest(),
         )
 

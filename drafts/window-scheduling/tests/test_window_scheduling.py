@@ -15,6 +15,10 @@ from window_scheduling.scheduler import (
 NOW = datetime(2026, 8, 23, 2, 0, 0, tzinfo=timezone.utc)
 
 
+def _worker(label: str) -> str:
+    return f"worker-{label}"
+
+
 def stated_window(opens="2026-08-23T00:00:00Z", closes="2026-08-23T08:00:00Z",
                   provider="ollama"):
     return Window(
@@ -30,7 +34,7 @@ class TheTwoNamedREDs(unittest.TestCase):
     def test_red_1_an_unknown_window_schedules_nothing(self):
         scheduler = Scheduler(windows=[], paused_nodes=[])
         with self.assertRaises(SchedulingRefusal) as caught:
-            scheduler.schedule("alice", "summarize", "unknown-provider", NOW)
+            scheduler.schedule(_worker("alpha"), "summarize", "unknown-provider", NOW)
         self.assertEqual(caught.exception.cause, "window_unknown")
         # and nothing was scheduled — the refusal is the whole outcome
         self.assertEqual(scheduler._windows, {})
@@ -59,7 +63,7 @@ class TheTwoNamedREDs(unittest.TestCase):
 class MechanicsTests(unittest.TestCase):
     def test_schedule_inside_window_runs_now_with_basis_stamped(self):
         scheduler = Scheduler(windows=[stated_window()])
-        plan = scheduler.schedule("alice", "summarize", "ollama", NOW)
+        plan = scheduler.schedule(_worker("alpha"), "summarize", "ollama", NOW)
         self.assertEqual(plan.run_at, "2026-08-23T02:00:00Z")
         self.assertIn("stated_by_provider", plan.window_basis)
         self.assertEqual(plan.window_provider, "ollama")
@@ -67,14 +71,14 @@ class MechanicsTests(unittest.TestCase):
     def test_request_before_open_defers_to_the_stated_open(self):
         scheduler = Scheduler(windows=[stated_window()])
         early = NOW - timedelta(hours=5)
-        plan = scheduler.schedule("alice", "summarize", "ollama", early)
+        plan = scheduler.schedule(_worker("alpha"), "summarize", "ollama", early)
         self.assertEqual(plan.run_at, "2026-08-23T00:00:00Z")
 
     def test_expired_window_refuses_and_invents_nothing(self):
         scheduler = Scheduler(windows=[stated_window()])
         late = NOW + timedelta(hours=12)
         with self.assertRaises(SchedulingRefusal) as caught:
-            scheduler.schedule("alice", "summarize", "ollama", late)
+            scheduler.schedule(_worker("alpha"), "summarize", "ollama", late)
         self.assertEqual(caught.exception.cause, "window_expired")
         self.assertIn("no later window is known", caught.exception.detail)
 

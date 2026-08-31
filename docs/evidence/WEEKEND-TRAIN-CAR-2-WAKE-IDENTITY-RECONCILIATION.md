@@ -37,7 +37,7 @@ acknowledgment paths continue to use `Registry.resolve_node_id`.
 
 The first default compile attempt was denied only because the process tried to
 write Python bytecode beneath the user cache directory. Repeating the same
-compile with `PYTHONPYCACHEPREFIX` confined to `/private/tmp` passed. This was a
+compile with `PYTHONPYCACHEPREFIX` confined to `/tmp` passed. This was a
 cache-location denial, not a source defect.
 
 ## Executed verification

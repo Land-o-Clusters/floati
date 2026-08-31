@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import os
 import tempfile
 import unittest
@@ -20,8 +22,8 @@ class SeatFenceTests(unittest.TestCase):
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet", create=True
         )
-        Registry(self.root).register("lane-current", "Codex")
-        self.committer_email = f"lane-current@{self.root.tenant_id}"
+        Registry(self.root).register(public_ids.builder('current'), "Codex")
+        self.committer_email = f"builder-current@{self.root.tenant_id}"
 
     def test_active_registry_node_and_root_tenant_define_committer_identity(self) -> None:
         """Catches a fence pinning either the seat or its tenant identity."""
@@ -29,23 +31,23 @@ class SeatFenceTests(unittest.TestCase):
 
         evidence = validate_seat_fence(
             self.root,
-            "lane-current",
-            committer_name="lane-current",
+            public_ids.builder('current'),
+            committer_name=public_ids.builder('current'),
             committer_email=self.committer_email,
         )
 
-        self.assertEqual("lane-current", evidence["node_id"])
+        self.assertEqual(public_ids.builder('current'), evidence["node_id"])
         self.assertEqual("active_registry_entry", evidence["identity_source"])
 
         for name, email in (
-            ("alice-necro", f"alice-necro@{self.root.tenant_id}"),
-            ("lane-current", "owner@example.invalid"),
+            (public_ids.worker('necro'), f"worker-necro@{self.root.tenant_id}"),
+            (public_ids.builder('current'), "owner@example.invalid"),
         ):
             with self.subTest(name=name, email=email):
                 with self.assertRaises(ProtocolRefusal):
                     validate_seat_fence(
                         self.root,
-                        "lane-current",
+                        public_ids.builder('current'),
                         committer_name=name,
                         committer_email=email,
                     )
@@ -62,8 +64,8 @@ class SeatFenceTests(unittest.TestCase):
 
         validate_seat_fence(
             self.root,
-            "lane-current",
-            committer_name="lane-current",
+            public_ids.builder('current'),
+            committer_name=public_ids.builder('current'),
             committer_email=self.committer_email,
         )
 
@@ -73,12 +75,12 @@ class SeatFenceTests(unittest.TestCase):
         """Catches durable worktree configuration outliving the active registry seat."""
         from floati.seat_fence import validate_seat_fence
 
-        Registry(self.root).retire("lane-current")
+        Registry(self.root).retire(public_ids.builder('current'))
         with self.assertRaises(ProtocolRefusal) as raised:
             validate_seat_fence(
                 self.root,
-                "lane-current",
-                committer_name="lane-current",
+                public_ids.builder('current'),
+                committer_name=public_ids.builder('current'),
                 committer_email=self.committer_email,
             )
         self.assertEqual("seat_fence_node_inactive", raised.exception.code)
@@ -87,7 +89,7 @@ class SeatFenceTests(unittest.TestCase):
         """Catches a common hooksPath imposing one seat on every linked worktree."""
         hook = (REPOSITORY_ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
 
-        self.assertNotIn("alice-necro", hook)
+        self.assertNotIn(public_ids.worker('necro'), hook)
         self.assertIn("floati.seatFenceRoot", hook)
         self.assertIn("floati.seatFenceNode", hook)
         self.assertIn("if [ -z \"$seat_root\" ] && [ -z \"$seat_node\" ]", hook)

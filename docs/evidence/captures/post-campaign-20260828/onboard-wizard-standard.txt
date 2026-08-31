@@ -1,4 +1,4 @@
-ROOT=/private/tmp/floati-captures.LtNmwM/other5/onboard-wizard
+ROOT=/tmp/floati-captures.LtNmwM/other5/onboard-wizard
 $ floati node add --root $ROOT --node architect-codex --harness Codex --lifetime permanent
 
 RECORDS PREVIEW — BEFORE WRITE
@@ -19,5 +19,5 @@ COMMIT RECEIPT
   "record_id": "registry-01a04a6852ac76b6bc32d3643730a665",
   "state": "active",
   "status": "ok",
-  "workspace": "/private/tmp/floati-captures.LtNmwM/other5/onboard-wizard/nodes/architect-codex"
+  "workspace": "/tmp/floati-captures.LtNmwM/other5/onboard-wizard/nodes/architect-codex"
 }

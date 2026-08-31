@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import subprocess
 import tempfile
@@ -32,8 +34,8 @@ class HarborGraphContractTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "alpha"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         registry = Registry(self.root)
-        registry.register("lane-b", "Claude")
-        registry.register("lane-a", "Codex")
+        registry.register(public_ids.builder('b'), "Claude")
+        registry.register(public_ids.builder('a'), "Codex")
 
     def graph(self):
         self.assertIsNotNone(HarborGraph, "Harbor Chart projector must exist")
@@ -45,17 +47,17 @@ class HarborGraphContractTests(unittest.TestCase):
 
     def test_topology_is_sorted_typed_and_derived_only_from_ledgers(self) -> None:
         work = WorkLog(self.root)
-        first = work.add("first", "lane-a", [], now=NOW)
-        second = work.add("second", "lane-b", [], needs=[str(first["id"])], now=NOW)
+        first = work.add("first", public_ids.builder('a'), [], now=NOW)
+        second = work.add("second", public_ids.builder('b'), [], needs=[str(first["id"])], now=NOW)
         authority = AuthorityGrantStore(self.root).claim(
-            "build", "lane-a", 300, 240, NOW
+            "build", public_ids.builder('a'), 300, 240, NOW
         )
         work.claim(
-            str(first["id"]), "lane-a", "build", int(authority["epoch"]), now=NOW
+            str(first["id"]), public_ids.builder('a'), "build", int(authority["epoch"]), now=NOW
         )
         session_id = "worker-" + uuid7_hex()
         WorkerReceipts(self.root).append(
-            session_id, str(first["id"]), "lane-a", "codex", "claim", None, [], now=NOW
+            session_id, str(first["id"]), public_ids.builder('a'), "codex", "claim", None, [], now=NOW
         )
 
         first_artifact = self.graph().artifact()
@@ -65,7 +67,7 @@ class HarborGraphContractTests(unittest.TestCase):
         self.assertEqual(0, first_artifact["schema_version"])
         self.assertEqual("0", first_artifact["topology_version"])
         self.assertEqual("alpha", first_artifact["tenant_id"])
-        self.assertEqual(["lane-a", "lane-b"], [row["id"] for row in first_artifact["nodes"]])
+        self.assertEqual([public_ids.builder('a'), public_ids.builder('b')], [row["id"] for row in first_artifact["nodes"]])
         self.assertEqual("node", first_artifact["nodes"][0]["kind"])
         self.assertEqual(
             [{
@@ -100,7 +102,7 @@ class HarborGraphContractTests(unittest.TestCase):
         from floati.jsonl import append_record
         source = "work-018f7e9b3c117abc8def0123456789ab"
         target = "work-018f7e9b3c127abc8def0123456789ab"
-        for item_id, title, owner, needs in ((source, "first", "lane-a", []), (target, "second", "lane-b", [source])):
+        for item_id, title, owner, needs in ((source, "first", public_ids.builder('a'), []), (target, "second", public_ids.builder('b'), [source])):
             append_record(self.root, "work/items.jsonl", {"schema_version": 0, "id": item_id, "tenant_id": "alpha", "timestamp": "2026-08-02T12:00:00.000Z", "kind": "work_item", "title": title, "owner": owner, "artifact_bindings": [], "needs": needs}, allowed_kinds={"work_item", "work_transition"})
         ledger = RunLedger(self.root)
         run_id = "run-" + uuid7_hex()
@@ -112,16 +114,16 @@ class HarborGraphContractTests(unittest.TestCase):
 
     def test_legacy_bare_needs_render_accepted_without_canonical_run_edge(self) -> None:
         work = WorkLog(self.root)
-        source = work.add("legacy source", "lane-a", [], now=NOW)
-        target = work.add("legacy target", "lane-b", [], needs=[str(source["id"])], now=NOW)
+        source = work.add("legacy source", public_ids.builder('a'), [], now=NOW)
+        target = work.add("legacy target", public_ids.builder('b'), [], needs=[str(source["id"])], now=NOW)
         self.assertEqual([{"kind": "work_dependency", "source": str(source["id"]), "target": str(target["id"]), "requires": "accepted", "failure_policy": "fail_run"}], self.graph().artifact()["edges"])
 
     def test_traffic_projection_counts_only_directed_envelopes_and_denials(self) -> None:
         events = EventLog(self.root)
         for index in range(2):
             events.send(
-                "lane-a",
-                "lane-b",
+                public_ids.builder('a'),
+                public_ids.builder('b'),
                 "floati",
                 "a" * 40,
                 "docs/evidence/example.md",
@@ -130,8 +132,8 @@ class HarborGraphContractTests(unittest.TestCase):
             )
         with self.assertRaises(ProtocolRefusal):
             events.send(
-                "lane-a",
-                "lane-b",
+                public_ids.builder('a'),
+                public_ids.builder('b'),
                 "floati",
                 "a" * 40,
                 "docs/evidence/example.md",
@@ -147,8 +149,8 @@ class HarborGraphContractTests(unittest.TestCase):
         self.assertEqual(
             [
                 {
-                    "sender": "lane-a",
-                    "recipient": "lane-b",
+                    "sender": public_ids.builder('a'),
+                    "recipient": public_ids.builder('b'),
                     "envelope_count": 2,
                     "denial_count": 1,
                 },
@@ -176,8 +178,8 @@ class HarborGraphContractTests(unittest.TestCase):
         self.assertIsNotNone(render_harbor_chart, "human Harbor Chart renderer must exist")
         events = EventLog(self.root)
         events.send(
-            "lane-a",
-            "lane-b",
+            public_ids.builder('a'),
+            public_ids.builder('b'),
             "floati",
             "b" * 40,
             "docs/evidence/example.md",
@@ -194,9 +196,9 @@ class HarborGraphContractTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertIn("FLOATI // HARBOR CHART", first)
         self.assertIn("┌", first)
-        self.assertIn("lane-a", first)
-        self.assertIn("lane-b", first)
-        self.assertIn("lane-a ── 1 envelope · 0 denials ──▶ lane-b", first)
+        self.assertIn(public_ids.builder('a'), first)
+        self.assertIn(public_ids.builder('b'), first)
+        self.assertIn(public_ids.compose(public_ids.builder('a'), ' ── 1 envelope · 0 denials ──▶ ', public_ids.builder('b')), first)
         self.assertNotIn("\x1b", first)
         self.assertIn("traffic: unavailable", unavailable)
     def test_cli_emits_human_chart_or_frozen_json_artifact(self) -> None:

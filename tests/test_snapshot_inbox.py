@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,13 +21,13 @@ class InboxSnapshotTests(unittest.TestCase):
             Path(self.temp.name) / "inbox-snapshot", create=True
         )
         registry = Registry(self.root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         self.events = EventLog(self.root)
 
     def send(self, index: int) -> dict[str, object]:
         return self.events.send(
-            "alice",
+            public_ids.worker('alpha'),
             "bob",
             "slipway",
             f"{index + 1:x}" * 40,

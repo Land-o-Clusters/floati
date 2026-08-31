@@ -51,41 +51,43 @@ are the superpower, not the entry fee.
      Every cell links the receipt that earned it; no cell says more than its receipt. -->
 Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.
 
-| harness / surface | bus | work | wake | auto-turnover | native compact verb | boot | managed-send |
-|---|---|---|---|---|---|---|---|
-| codex / cli | [live](docs/evidence/conformance/C1-codex-conformance-live.md) | [adapter](docs/evidence/conformance/C1-codex-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [yes](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [yes](docs/evidence/gate-wsb-b5-2026-08-27.md) |
-| codex / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| claude / cli | [live](docs/evidence/conformance/C2-claude-conformance-live.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-claude-wake-remeasure.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| claude / desktop-chat | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| claude / ide-extension | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| opencode / cli | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) | [adapter](docs/evidence/conformance/C3-opencode-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| opencode / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| cursor / cli | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) | [adapter](docs/evidence/conformance/C4-cursor-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| cursor / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-depth2.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| cline / cli | [live](docs/evidence/conformance/C5-cline-conformance-live.md) | [adapter](docs/evidence/conformance/C5-cline-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| grok / cli | [live](docs/evidence/conformance/C6-grok-build-conformance.md) | [adapter](docs/evidence/conformance/C6-grok-build-conformance.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| grok / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| pi / cli | [live](docs/evidence/conformance/C7-pi-conformance-live.md) | [adapter](docs/evidence/conformance/C7-pi-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| herdr / cli | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) | [—](docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| t3 / cli | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| t3 / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| devin / cli | [CLI](docs/evidence/conformance/C11-devin-conformance-live.md) | [—](docs/evidence/conformance/C11-devin-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| antigravity / cli | [CLI](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [—](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
-| antigravity / desktop | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [—](docs/evidence/conformance/C0-DELTA-surface-axis.md) | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/gauntlet/T1-tide-survey.md) | [—](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) | [—](docs/evidence/conformance/C0-managed-send-surface.md) |
+Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.
 
-Provider notes (wiring matrix; not grid columns):
+Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.
 
-- codex / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
-- claude / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
-- opencode / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
-- cursor / cli — [already-wired-not-reprobed](docs/evidence/HARNESS-WIRING-MATRIX.md): Wiring matrix: already wired and out of scope; not re-probed this row.
-- cline / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): Addendum: ChatGPT sign-in (openai-codex / gpt-5.6-luna). Original OpenRouter literal-key GAP row stays as the photograph.
-- pi / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): OpenRouter via models.json command-lookup; probe exit 0.
-- grok / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): OpenRouter via env_key OPENROUTER_API_KEY; provider pin is a documented surface limitation. C6 receipt is grok-build via this grok override.
-- t3 / cli — [wired](docs/evidence/HARNESS-WIRING-MATRIX.md): Composed through Grok; no native OpenRouter driver.
-- herdr / cli — [—](docs/evidence/HARNESS-WIRING-MATRIX.md): Not an LLM-turn harness; wiring out of scope.
-- devin / cli — [—](docs/evidence/conformance/C11-devin-conformance-live.md): Wiring N/A (vendor account, not OpenRouter).
-- antigravity / cli — [—](docs/evidence/conformance/C12-antigravity-conformance-live.md): Wiring N/A (Google account, not OpenRouter).
+**CLI surfaces**
+
+| harness | bus | work | wake | notes |
+|---|---|---|---|---|
+| codex | [live](docs/evidence/conformance/C1-codex-conformance-live.md) | [adapter](docs/evidence/conformance/C1-codex-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-codex-cli-wake.md) ● | deep integrations below |
+| claude | [live](docs/evidence/conformance/C2-claude-conformance-live.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-claude-wake-remeasure-2-2026-08-29.md) ● | confirmed at 2.1.238 (re-measured 08-29) |
+| opencode | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) | [adapter](docs/evidence/conformance/C3-opencode-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) ● | 3-cycle live hold |
+| cursor | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) | [adapter](docs/evidence/conformance/C4-cursor-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-cursor-cli-wake.md) ● |  |
+| cline | [live](docs/evidence/conformance/C5-cline-conformance-live.md) | [adapter](docs/evidence/conformance/C5-cline-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-cline-cli-wake.md) ● |  |
+| grok | [live](docs/evidence/conformance/C6-grok-build-conformance.md) | [adapter](docs/evidence/conformance/C6-grok-build-conformance.md) | [daemon](docs/evidence/gauntlet/MX1-grok-cli-wake.md) ● | via installed grok binary |
+| pi | [live](docs/evidence/conformance/C7-pi-conformance-live.md) | [adapter](docs/evidence/conformance/C7-pi-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-pi-cli-wake.md) ● |  |
+| zcode | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [daemon](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) ● | wake measured on arrival; the Stop-hook path is superseded by the daemon |
+| herdr | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) | [—](docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-matrix.md) | orchestrator; observation adapter live |
+| t3 | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) | [event-driven](docs/evidence/gauntlet/MX1-t3-cli-wake.md) ● | orchestrator; observed via its own surface |
+| devin | [CLI](docs/evidence/conformance/C11-devin-conformance-live.md) | [—](docs/evidence/conformance/C11-devin-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-devin-cli-wake.md) ● | CLI-compat tier |
+| antigravity | [CLI](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [—](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-antigravity-cli-wake.md) ● | CLI-compat tier |
+
+**Desktop / GUI surfaces**
+
+| harness / surface | wake | notes |
+|---|---|---|
+| codex / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | ChatGPT.app |
+| claude / desktop-chat | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | chat app, not a seat - Claude seats run in the CLI or IDE extension |
+| claude / ide-extension | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | extension ≠ CLI; own row by design |
+| opencode / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
+| cursor / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ● | the measuring seat itself |
+| grok / desktop | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) |  |
+| t3 / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
+| antigravity / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | not inherited from its CLI |
+
+● measured live · ○ classified from surfaces (the unexercised probe is named in the receipt) · — no receipt yet: we do not claim what we have not measured.
+
+**Deep integrations (codex):** [session boot](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) · [managed send](docs/evidence/gate-wsb-b5-2026-08-27.md) — receipt-linked notes rather than grid columns, so one harness's head start does not read as everyone else's gap. The full 19-surface grid, every cell receipt-linked, lives in [docs/capability-matrix.md](docs/capability-matrix.md).
 <!-- capability-matrix:end -->
 
 Platforms: macOS today. Anything POSIX is intended; a platform joins
@@ -108,7 +110,7 @@ truth.
 ### Talk to your fleet
 
 ```bash
-floati send --root /absolute/fleet --from architect --to lane-codex \
+floati send --root /absolute/fleet --from architect --to builder-a \
   --repo myapp --sha <40-hex> --doc docs/briefs/row-1.md --note "Row 1 is yours."
 ```
 
@@ -130,7 +132,7 @@ buses' hooks and mail never touched.
 ### Orchestrate across harnesses
 
 ```bash
-floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex
+floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
 ```
 
 Plans fan work across registered workers with dependency edges —
@@ -252,6 +254,35 @@ written down: **[Truth Guarantees](docs/TRUTH-GUARANTEES.md)**. If a
 promise on that page can't be demonstrated by a test or a receipt,
 it doesn't belong on it.
 
+## What it costs to run
+
+Almost nothing is resident. Every floati verb runs to completion and
+exits — the board, the doctor, a send, a drain are processes that
+live for one command. There is no service, no tray icon, no
+background indexer. The one exception is opt-in: a wake daemon you
+explicitly consent to, per seat, with poll bounds you set at consent
+time — and revoking it removes the process, provably.
+
+The readers stay fast at hostile scale — measured, not promised.
+At 10,000 work items and 100,000 ledger events:
+
+| Reader | Median | Budget |
+| --- | ---: | ---: |
+| inbox | 34 ms | <100 ms |
+| status | 76 ms | <150 ms |
+| replay render start | 47 ms | <300 ms |
+| board full redraw | 92 ms | <250 ms |
+| doctor | 116 ms | <2,000 ms |
+
+Receipts: [the gauntlet record](docs/evidence/HM3H-GAUNTLET.md),
+budgets and harness unchanged between runs.
+
+One number we have not measured yet, so we will not print one: the
+wake daemon's resident footprint over a long window. It is a small
+polling process with ruled bounds, but "small" is not a
+measurement — that receipt is queued, and this section gets the
+number when the number exists.
+
 ## Start alone
 
 Every durable command names an explicit absolute root. There is no
@@ -267,14 +298,27 @@ floati board --root /absolute/my-sessions
 ## Grow the fleet
 
 ```bash
-floati node add --root /absolute/fleet          # the wizard
-floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex
+floati node add --root /absolute/fleet --node builder-a --harness Codex --lifetime permanent
+floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
 floati log --root /absolute/fleet --replay --speed 4
 ```
 
 The installed child harness owns its own provider traffic and
 credentials; floati opens no network connection and reads no
 credential.
+
+And a fleet is not the ceiling. One machine can run several — different harness
+mixes, an architect seat in each, peer architects exchanging artifacts but never
+authority, and no path between fleets unless you build one:
+
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-multifleet-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-multifleet-light.svg">
+    <img src="docs/assets/floati-multifleet-light.svg" alt="Two floati fleets and a solo seat on one machine: each fleet is a star of harnesses around its own append-only root with an architect seat; the architects exchange artifacts as peers; the fleets share nothing by default" width="1440">
+</picture>
+
+Every element in that picture is a shipping mechanism — roots, ledgers, leases,
+star governance. Nothing is aspirational.
 
 ## Leave cleanly
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import subprocess
 import tempfile
@@ -35,13 +37,13 @@ class RegistryRetirementWriterTests(unittest.TestCase):
 
     def test_retire_appends_a_retired_row_without_rewriting_the_active_row(self) -> None:
         """Catches a retirement that mutates history instead of appending to it."""
-        active = self.registry.register("lane-a", "worker")
+        active = self.registry.register(public_ids.builder('a'), "worker")
         before = self.registry.path.read_bytes()
 
-        retired = self.registry.retire("lane-a")
+        retired = self.registry.retire(public_ids.builder('a'))
 
         self.assertEqual("retired", retired["state"])
-        self.assertEqual("lane-a", retired["node_id"])
+        self.assertEqual(public_ids.builder('a'), retired["node_id"])
         self.assertEqual("registry_entry", retired["kind"])
         self.assertNotEqual(active["id"], retired["id"])
         self.assertTrue(str(retired["id"]).startswith("registry-"))
@@ -51,25 +53,25 @@ class RegistryRetirementWriterTests(unittest.TestCase):
 
     def test_retire_preserves_the_registered_role_rather_than_inventing_one(self) -> None:
         """Catches a retirement row that guesses a role the node never held."""
-        self.registry.register("lane-a", "Codex")
+        self.registry.register(public_ids.builder('a'), "Codex")
 
-        self.assertEqual("Codex", self.registry.retire("lane-a")["role"])
+        self.assertEqual("Codex", self.registry.retire(public_ids.builder('a'))["role"])
 
     def test_retired_node_leaves_the_active_projection_and_fails_lookup(self) -> None:
         """The TD-5301 projection floor must see the public writer's row."""
-        for node in ("lane-a", "lane-b"):
+        for node in (public_ids.builder('a'), public_ids.builder('b')):
             self.registry.register(node, "worker")
 
-        self.registry.retire("lane-a")
+        self.registry.retire(public_ids.builder('a'))
 
-        self.assertEqual(("lane-b",), self.registry.active_node_ids())
+        self.assertEqual((public_ids.builder('b'),), self.registry.active_node_ids())
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.registry.require_active("lane-a")
+            self.registry.require_active(public_ids.builder('a'))
         self.assertEqual("unknown_node", caught.exception.code)
 
     def test_retiring_an_unregistered_node_refuses_without_mutation(self) -> None:
         """Catches a retirement that tombstones a node that never registered."""
-        self.registry.register("lane-a", "worker")
+        self.registry.register(public_ids.builder('a'), "worker")
         before = root_entries(self.root)
 
         with self.assertRaises(ProtocolRefusal) as caught:
@@ -80,12 +82,12 @@ class RegistryRetirementWriterTests(unittest.TestCase):
 
     def test_retiring_an_already_retired_node_refuses_without_mutation(self) -> None:
         """Catches a second tombstone stacking on a node already retired."""
-        self.registry.register("lane-a", "worker")
-        self.registry.retire("lane-a")
+        self.registry.register(public_ids.builder('a'), "worker")
+        self.registry.retire(public_ids.builder('a'))
         before = root_entries(self.root)
 
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.registry.retire("lane-a")
+            self.registry.retire(public_ids.builder('a'))
 
         self.assertEqual("registry_already_retired", caught.exception.code)
         self.assertEqual(before, root_entries(self.root))
@@ -105,7 +107,7 @@ class RegistryRetirementWriterTests(unittest.TestCase):
         self.assertFalse(self.registry.path.exists())
 
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.registry.retire("lane-a")
+            self.registry.retire(public_ids.builder('a'))
 
         self.assertEqual("unknown_node", caught.exception.code)
 
@@ -116,7 +118,7 @@ class RegistryRetirementCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / "puddle-fleet"
+        self.home = Path(self.temp.name) / "demo-fleet"
         result = self.run_cli("init", "--root", str(self.home))
         self.assertEqual(0, result.returncode, result.stderr)
 
@@ -141,19 +143,19 @@ class RegistryRetirementCliTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_retire_emits_one_ok_artifact_carrying_the_retired_row(self) -> None:
-        self.register("lane-a")
+        self.register(public_ids.builder('a'))
 
-        result = self.run_cli("retire", "--root", str(self.home), "lane-a")
+        result = self.run_cli("retire", "--root", str(self.home), public_ids.builder('a'))
 
         self.assertEqual(0, result.returncode, result.stderr)
         artifact = self.artifact(result)
         self.assertEqual("retire", artifact["command"])
         self.assertEqual("ok", artifact["status"])
-        self.assertEqual("lane-a", artifact["evidence"]["node_id"])
+        self.assertEqual(public_ids.builder('a'), artifact["evidence"]["node_id"])
         self.assertEqual("retired", artifact["evidence"]["state"])
 
     def test_retire_refuses_an_unregistered_node_with_the_refusal_status(self) -> None:
-        self.register("lane-a")
+        self.register(public_ids.builder('a'))
 
         result = self.run_cli("retire", "--root", str(self.home), "stranger")
 
@@ -164,12 +166,12 @@ class RegistryRetirementCliTests(unittest.TestCase):
         self.assertEqual("unknown_node", artifact["evidence"]["code"])
 
     def test_retire_refuses_a_node_already_retired(self) -> None:
-        self.register("lane-a")
+        self.register(public_ids.builder('a'))
         self.assertEqual(
-            0, self.run_cli("retire", "--root", str(self.home), "lane-a").returncode
+            0, self.run_cli("retire", "--root", str(self.home), public_ids.builder('a')).returncode
         )
 
-        result = self.run_cli("retire", "--root", str(self.home), "lane-a")
+        result = self.run_cli("retire", "--root", str(self.home), public_ids.builder('a'))
 
         self.assertEqual(20, result.returncode)
         self.assertEqual(
@@ -178,13 +180,13 @@ class RegistryRetirementCliTests(unittest.TestCase):
 
     def test_retire_offers_no_actor_override_pending_the_controller_ruling(self) -> None:
         """Self-retirement only: retiring another node is not yet ruled lawful."""
-        self.register("lane-a")
-        self.register("lane-b")
+        self.register(public_ids.builder('a'))
+        self.register(public_ids.builder('b'))
 
         for override in ("--as", "--on-behalf-of", "--actor"):
             with self.subTest(override=override):
                 result = self.run_cli(
-                    "retire", "--root", str(self.home), "lane-b", override, "lane-a"
+                    "retire", "--root", str(self.home), public_ids.builder('b'), override, public_ids.builder('a')
                 )
                 self.assertNotEqual(0, result.returncode)
 
@@ -198,7 +200,7 @@ class RegistryRetirementCliTests(unittest.TestCase):
 
 
 class RegistryRetirementCopyOwnershipTests(unittest.TestCase):
-    """Every visible retirement string stays an unfilled Fable placeholder."""
+    'Every visible retirement string stays an unfilled reviewer placeholder.'
 
     def test_retirement_copy_is_registered_as_placeholders_for_the_architect(self) -> None:
         from floati.copy import copy_ledger_markdown

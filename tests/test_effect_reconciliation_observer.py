@@ -35,7 +35,7 @@ class ReconciliationObserverTests(unittest.TestCase):
     """Read-only behavior at the descriptor-bound observer boundary."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"

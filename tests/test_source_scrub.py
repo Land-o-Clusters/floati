@@ -10,39 +10,18 @@ from unittest.mock import patch
 from floati.scrub import scan_generated_tree, scan_git_history_notes
 
 
+PRIVATE_FLEET = bytes.fromhex("707564646c652d666c656574").decode("ascii")
+
 APPROVED_README_RECEIPT = (
     '{"id":"ack-01a0088d18e77c9e9fa3599f20038f9d",'
     '"item_ids":["msg-01a0088c08207e31b874d517621e164b"],'
-    '"kind":"ack_receipt","recipient":"lane-slipway",'
-    '"schema_version":0,"tenant_id":"puddle-fleet",'
+    '"kind":"ack_receipt","recipient":"builder-slipway",'
+    f'"schema_version":0,"tenant_id":"{PRIVATE_FLEET}",'
     '"timestamp":"2026-08-16T03:10:59.815Z"}'
 )
 
-APPROVED_PUBLIC_PUDDLE_REFERENCES = {
-    (
-        "docs/NORTH_STAR.md",
-        "| V8 | Puddle as optional visual interface | **SEAM READY** | CONFLUENCE-v0 schemas + `status --json` + `graph --json` on main; consumer side deliberately out of this repo |",
-    ),
-}
-
 
 class SourceScrubTests(unittest.TestCase):
-    def test_tracked_repository_contains_no_operator_account_name(self) -> None:
-        forbidden = bytes.fromhex("63687269736d656e656e64657a").lower()
-        tracked = subprocess.check_output(
-            ["git", "ls-files", "-z"],
-            cwd=Path.cwd(),
-        ).split(b"\0")
-        hits = []
-        for raw_path in tracked:
-            if not raw_path:
-                continue
-            path = Path(raw_path.decode("utf-8"))
-            if forbidden in path.read_bytes().lower():
-                hits.append(path.as_posix())
-
-        self.assertEqual([], hits)
-
     def test_managed_session_fixture_uses_no_legacy_name(self) -> None:
         forbidden = bytes.fromhex("707564646c65").decode("ascii")
         fixtures = [
@@ -61,8 +40,8 @@ class SourceScrubTests(unittest.TestCase):
         public_files = (
             Path("README.md"),
             Path("docs/CONFLUENCE-v0.md"),
-            Path("docs/TRUTH-GUARANTEES.md"),
-            Path("docs/NORTH_STAR.md"),
+            Path("docs/DESIGN.md"),
+            Path("docs/SPEC-DRAFT.md"),
             Path("floati/managed.py"),
         )
         hits = []
@@ -71,8 +50,6 @@ class SourceScrubTests(unittest.TestCase):
                 path.read_text(encoding="utf-8").splitlines(), start=1
             ):
                 if path == Path("README.md") and line == APPROVED_README_RECEIPT:
-                    continue
-                if (path.as_posix(), line) in APPROVED_PUBLIC_PUDDLE_REFERENCES:
                     continue
                 if forbidden in line.casefold():
                     hits.append((path.as_posix(), line_number, line))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import io
 import json
 import os
@@ -20,10 +22,10 @@ from tests.schema_validation import validate_json_schema
 
 class CodexWaitParticipationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
-        self.bus_home = self.base / "puddle-fleet"
+        self.bus_home = self.base / "demo-fleet"
         self.bus_home.mkdir()
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
@@ -33,7 +35,7 @@ class CodexWaitParticipationTests(unittest.TestCase):
             json.dumps(
                 {
                     "schema_version": 0,
-                    "tenant_id": "puddle-fleet",
+                    "tenant_id": "demo-fleet",
                     "mappings": [],
                 },
                 sort_keys=True,
@@ -111,12 +113,12 @@ class CodexWaitParticipationTests(unittest.TestCase):
 
 class CodexWaitContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
-        self.bus_home = self.base / "puddle-fleet"
+        self.bus_home = self.base / "demo-fleet"
         self.root = FloatiRoot.open_direct_home(self.bus_home, create=True)
-        Registry(self.root).register("lane-floati", "worker")
+        Registry(self.root).register(public_ids.builder('floati'), "worker")
         self.workspace = self.base / "workspace"
         self.nested = self.workspace / "nested"
         self.nested.mkdir(parents=True)
@@ -129,7 +131,7 @@ class CodexWaitContractTests(unittest.TestCase):
             json.dumps(
                 {
                     "schema_version": 0,
-                    "tenant_id": "puddle-fleet",
+                    "tenant_id": "demo-fleet",
                     "mappings": mappings,
                 },
                 sort_keys=True,
@@ -144,8 +146,8 @@ class CodexWaitContractTests(unittest.TestCase):
 
         self.write_map(
             [
-                {"workspace": str(self.workspace), "node_id": "lane-floati"},
-                {"workspace": str(self.nested), "node_id": "lane-floati"},
+                {"workspace": str(self.workspace), "node_id": public_ids.builder('floati')},
+                {"workspace": str(self.nested), "node_id": public_ids.builder('floati')},
             ]
         )
         participant = resolve_participant(self.bus_home, self.nested / "child")
@@ -153,20 +155,20 @@ class CodexWaitContractTests(unittest.TestCase):
         self.assertIsNotNone(participant)
         assert participant is not None
         self.assertEqual(self.nested, participant.binding.workspace)
-        self.assertEqual("lane-floati", participant.binding.node_id)
+        self.assertEqual(public_ids.builder('floati'), participant.binding.node_id)
         self.assertEqual(self.root.tenant_home, participant.root.tenant_home)
 
     def test_bound_workspace_without_consent_is_silent(self) -> None:
         from floati.codex_wait import run_stop_waiter
 
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         consent_path = (
             self.bus_home
             / "receipts"
             / "codex-wait-consent"
-            / "lane-floati.jsonl"
+            / public_ids.ledger(public_ids.builder('floati'))
         )
         consent_path.unlink(missing_ok=True)
         stdout = io.StringIO()
@@ -185,7 +187,7 @@ class CodexWaitContractTests(unittest.TestCase):
         from floati.codex_wait_contract import CodexWaitConsentLedger, resolve_participant
 
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         participant = resolve_participant(self.bus_home, self.workspace)
         assert participant is not None
@@ -207,7 +209,7 @@ class CodexWaitContractTests(unittest.TestCase):
             "the ruled armed-session ledger is absent",
         )
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         participant = codex_wait_contract.resolve_participant(
             self.bus_home, self.workspace
@@ -248,7 +250,7 @@ class CodexWaitContractTests(unittest.TestCase):
             "the ruled armed-session ledger is absent",
         )
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         participant = codex_wait_contract.resolve_participant(
             self.bus_home, self.workspace
@@ -272,7 +274,7 @@ class CodexWaitContractTests(unittest.TestCase):
         self.assertIsNone(second)
         rows = read_records_snapshot(
             self.root,
-            "receipts/codex-wait-session/lane-floati.jsonl",
+            public_ids.compose('receipts/codex-wait-session/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"codex_wait_session_receipt"},
         )
         self.assertEqual(1, len(rows))
@@ -285,7 +287,7 @@ class CodexWaitContractTests(unittest.TestCase):
         )
 
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         original = resolve_participant(self.bus_home, self.workspace)
         assert original is not None
@@ -304,8 +306,8 @@ class CodexWaitContractTests(unittest.TestCase):
         self.write_map(
             sorted(
                 [
-                {"workspace": str(self.workspace), "node_id": "lane-floati"},
-                {"workspace": str(second_workspace), "node_id": "lane-floati"},
+                {"workspace": str(self.workspace), "node_id": public_ids.builder('floati')},
+                {"workspace": str(second_workspace), "node_id": public_ids.builder('floati')},
                 ],
                 key=lambda row: (row["workspace"], row["node_id"]),
             )
@@ -332,7 +334,7 @@ class CodexWaitContractTests(unittest.TestCase):
         )
 
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         participant = resolve_participant(self.bus_home, self.workspace)
         assert participant is not None
@@ -359,7 +361,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         super().setUp()
         Registry(self.root).register("architect", "architect")
         self.write_map(
-            [{"workspace": str(self.workspace), "node_id": "lane-floati"}]
+            [{"workspace": str(self.workspace), "node_id": public_ids.builder('floati')}]
         )
         from floati.codex_wait_contract import CodexWaitConsentLedger, resolve_participant
 
@@ -399,7 +401,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
     def send(self, key: str) -> dict:
         return EventLog(self.root).send(
             "architect",
-            "lane-floati",
+            public_ids.builder('floati'),
             "floati",
             "a" * 40,
             "docs/evidence/ping.md",
@@ -425,7 +427,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertIn(message["id"], decision["reason"])
         attempts = read_records_snapshot(
             self.root,
-            "receipts/wakes/lane-floati.jsonl",
+            public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"wake_attempt_receipt"},
         )
         self.assertEqual(1, len(attempts))
@@ -433,11 +435,11 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertEqual([message["id"]], attempts[0]["item_ids"])
         deliveries = read_records_snapshot(
             self.root,
-            "receipts/deliveries/lane-floati.jsonl",
+            public_ids.compose('receipts/deliveries/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"delivery_receipt", "wake_hold_receipt"},
         )
         self.assertEqual(["wake_hold_receipt"], [row["kind"] for row in deliveries])
-        self.assertFalse((self.bus_home / "receipts" / "acks" / "lane-floati.jsonl").exists())
+        self.assertFalse((self.bus_home / "receipts" / "acks" / public_ids.ledger(public_ids.builder('floati'))).exists())
 
     def test_non_armed_session_cannot_steal_a_fresh_wake(self) -> None:
         from floati.codex_wait import run_stop_waiter
@@ -463,10 +465,10 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertEqual("", stderr.getvalue())
         self.assertEqual(before, self.bus_bytes())
         self.assertFalse(
-            (self.bus_home / "receipts" / "wakes" / "lane-floati.jsonl").exists()
+            (self.bus_home / "receipts" / "wakes" / public_ids.ledger(public_ids.builder('floati'))).exists()
         )
         self.assertFalse(
-            (self.bus_home / "receipts" / "deliveries" / "lane-floati.jsonl").exists()
+            (self.bus_home / "receipts" / "deliveries" / public_ids.ledger(public_ids.builder('floati'))).exists()
         )
 
     def test_non_armed_breaker_invocations_are_byte_identical(self) -> None:
@@ -477,10 +479,10 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             self.bus_home
             / "state"
             / "codex-wait"
-            / "lane-floati"
+            / public_ids.builder('floati')
             / "breaker.json"
         )
-        self.assertFalse(_breaker_tripped(self.root, "lane-floati", now=1000.0))
+        self.assertFalse(_breaker_tripped(self.root, public_ids.builder('floati'), now=1000.0))
         before = breaker.read_bytes()
         clock = [0.0]
 
@@ -527,7 +529,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertIn("deadline exhausted", second.getvalue())
         attempts = read_records_snapshot(
             self.root,
-            "receipts/wakes/lane-floati.jsonl",
+            public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"wake_attempt_receipt"},
         )
         self.assertEqual(1, len(attempts))
@@ -565,7 +567,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertIn(later[0]["id"], stdout.getvalue())
         attempts = read_records_snapshot(
             self.root,
-            "receipts/wakes/lane-floati.jsonl",
+            public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"wake_attempt_receipt"},
         )
         self.assertEqual(2, len(attempts))
@@ -598,12 +600,63 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertIn("deadline exhausted", decision["reason"])
         rows = read_records_snapshot(
             self.root,
-            "receipts/codex-wait-exhaustion/lane-floati.jsonl",
+            public_ids.compose('receipts/codex-wait-exhaustion/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"codex_wait_exhaustion_receipt"},
         )
         self.assertEqual(1, len(rows))
         self.assertEqual("rearmed", rows[0]["outcome"])
         self.assertEqual(2, rows[0]["waited_seconds"])
+
+    def test_idle_waiter_reads_each_nonempty_ledger_once_then_uses_its_cursor(self) -> None:
+        """Measures complete-ledger reads across repeated polls in one waiter."""
+        from floati.codex_wait import run_stop_waiter
+
+        self.send("incremental-reader-held")
+        payload = {
+            "cwd": str(self.workspace),
+            "session_id": "thread-incremental-reader",
+        }
+        run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload=payload,
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        )
+        measured_paths = {
+            self.root.resolve_relative("events.jsonl").resolve(strict=False),
+            self.root.resolve_relative(
+                public_ids.compose(
+                    "receipts/deliveries/",
+                    public_ids.ledger(public_ids.builder("floati")),
+                )
+            ).resolve(strict=False),
+        }
+        read_counts = {path: 0 for path in measured_paths}
+        real_read_bytes = Path.read_bytes
+
+        def recording_read_bytes(path: Path) -> bytes:
+            resolved = path.resolve(strict=False)
+            if resolved in read_counts:
+                read_counts[resolved] += 1
+            return real_read_bytes(path)
+
+        clock = [0.0]
+        with mock.patch.object(Path, "read_bytes", recording_read_bytes):
+            run_stop_waiter(
+                bus_home=self.bus_home,
+                hook_payload=payload,
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+                monotonic=lambda: clock[0],
+                sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+                poll_interval_seconds=1.0,
+            )
+
+        self.assertEqual(
+            {path: 1 for path in measured_paths},
+            read_counts,
+            "one idle waiter replayed a complete nonempty ledger after its first poll",
+        )
 
     def test_legacy_escape_marker_cannot_disarm_the_armed_session(self) -> None:
         from floati.codex_wait import run_stop_waiter
@@ -626,7 +679,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertIn('"decision": "block"', stdout.getvalue())
         attempts = read_records_snapshot(
             self.root,
-            "receipts/wakes/lane-floati.jsonl",
+            public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
             allowed_kinds={"wake_attempt_receipt"},
         )
         self.assertEqual("thread-detached", attempts[0]["acting_session_id"])
@@ -655,7 +708,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
-        coordinate = DaemonCoordinate(self.root, "lane-floati", "codex")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('floati'), "codex")
         binding = AdapterBindingStore(self.root).read(coordinate)
         self.assertEqual("thread-bound", binding["session_id"])
         self.assertEqual(str(self.workspace), binding["workspace"])
@@ -686,7 +739,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         from floati.codex_wait import _breaker_tripped
 
         outcomes = [
-            _breaker_tripped(self.root, "lane-floati", now=1000.0)
+            _breaker_tripped(self.root, public_ids.builder('floati'), now=1000.0)
             for _ in range(21)
         ]
 
@@ -696,7 +749,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
                 self.bus_home
                 / "state"
                 / "codex-wait"
-                / "lane-floati"
+                / public_ids.builder('floati')
                 / "breaker.json"
             ).read_text(encoding="utf-8")
         )

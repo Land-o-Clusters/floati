@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
+from .git_process import fixed_git_command, fixed_git_environment
 from .role_templates import SHIPPED_ROLE_NAMES
 
 
@@ -18,7 +20,52 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _DARK_DEPLOYMENT_PREFIXES = ("floati/locks/",)
 
 
-def _deployable_paths(repo_root: Path) -> List[str]:
+def _git_tracked_files(
+    repo_root: Path, *, git_executable: str = "git"
+) -> Optional[Set[str]]:
+    """Return tracked paths when repo_root is itself a git worktree toplevel.
+
+    Walk-up discovery is refused: a nested tempdir inside another clone must
+    not inherit that clone's index. Untracked workspace files are not in this
+    set — that is the freeze law the AD-1 GREEN fail named.
+    """
+
+    try:
+        toplevel = subprocess.run(
+            fixed_git_command(
+                git_executable, repo_root, ("rev-parse", "--show-toplevel")
+            ),
+            env=fixed_git_environment(git_executable),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if toplevel.returncode != 0:
+        return None
+    try:
+        if Path(toplevel.stdout.strip()).resolve() != repo_root.resolve():
+            return None
+    except OSError:
+        return None
+    try:
+        listed = subprocess.run(
+            fixed_git_command(git_executable, repo_root, ("ls-files", "-z")),
+            env=fixed_git_environment(git_executable),
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if listed.returncode != 0:
+        return None
+    return {path.decode("utf-8") for path in listed.stdout.split(b"\0") if path}
+
+
+def _deployable_paths(repo_root: Path, *, git_executable: str = "git") -> List[str]:
     paths = []
     for pattern in (
         "LICENSE",
@@ -31,6 +78,7 @@ def _deployable_paths(repo_root: Path) -> List[str]:
         "schemas/v[0-9]*/*.json",
         "scripts/floati",
         "scripts/floati-codex-wait",
+        "scripts/floati-quota-statusline",
     ):
         for path in repo_root.glob(pattern):
             if path.is_file() and "__pycache__" not in path.parts:
@@ -41,6 +89,9 @@ def _deployable_paths(repo_root: Path) -> List[str]:
         path = repo_root / "roles" / "shipped" / f"{role}.json"
         if path.is_file():
             paths.append(path.relative_to(repo_root).as_posix())
+    tracked = _git_tracked_files(repo_root, git_executable=git_executable)
+    if tracked is not None:
+        paths = [path for path in paths if path in tracked]
     return sorted(set(paths))
 
 
@@ -56,30 +107,14 @@ def _has_symlink_component(root: Path, relative: str) -> bool:
     return False
 
 
-def verify_manifest(repo_root: Path) -> List[str]:
-    root = Path(repo_root).resolve()
-    manifest_path = root / MANIFEST_NAME
-    if not manifest_path.is_file():
-        return ["manifest_missing"]
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return ["manifest_unreadable"]
-    if not isinstance(manifest, dict):
-        return ["manifest_not_object"]
+def _validate_manifest_inventory(
+    root: Path, entries: object
+) -> tuple[List[str], List[str]]:
+    """Validate exact contained inventory bytes without consulting Git state."""
 
     errors: List[str] = []
-    if manifest.get("schema_version") != 0 or isinstance(manifest.get("schema_version"), bool):
-        errors.append("manifest_schema_version_mismatch")
-    if manifest.get("protocol_version") != EXPECTED_PROTOCOL_VERSION:
-        errors.append("protocol_version_mismatch")
-    if manifest.get("canonical_ref") != EXPECTED_CANONICAL_REF:
-        errors.append("canonical_ref_mismatch")
-
-    entries = manifest.get("files")
     if not isinstance(entries, list):
-        errors.append("manifest_files_invalid")
-        return errors
+        return ["manifest_files_invalid"], []
 
     listed: List[str] = []
     valid_entries: Dict[str, str] = {}
@@ -109,9 +144,6 @@ def verify_manifest(repo_root: Path) -> List[str]:
 
     if listed != sorted(listed):
         errors.append("manifest_order_invalid")
-    expected = _deployable_paths(root)
-    if set(listed) != set(expected):
-        errors.append("tracked_set_mismatch")
 
     for relative, expected_digest in valid_entries.items():
         path = root / PurePosixPath(relative)
@@ -124,4 +156,41 @@ def verify_manifest(repo_root: Path) -> List[str]:
         actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if actual_digest != expected_digest:
             errors.append(f"digest_mismatch:{relative}")
+    return errors, listed
+
+
+def verify_manifest_inventory(repo_root: Path, entries: object) -> List[str]:
+    """Verify supplied manifest entries without ambient repository discovery."""
+
+    errors, _listed = _validate_manifest_inventory(Path(repo_root).resolve(), entries)
+    return errors
+
+
+def verify_manifest(repo_root: Path, *, git_executable: str = "git") -> List[str]:
+    root = Path(repo_root).resolve()
+    manifest_path = root / MANIFEST_NAME
+    if not manifest_path.is_file():
+        return ["manifest_missing"]
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return ["manifest_unreadable"]
+    if not isinstance(manifest, dict):
+        return ["manifest_not_object"]
+
+    errors: List[str] = []
+    if manifest.get("schema_version") != 0 or isinstance(manifest.get("schema_version"), bool):
+        errors.append("manifest_schema_version_mismatch")
+    if manifest.get("protocol_version") != EXPECTED_PROTOCOL_VERSION:
+        errors.append("protocol_version_mismatch")
+    if manifest.get("canonical_ref") != EXPECTED_CANONICAL_REF:
+        errors.append("canonical_ref_mismatch")
+
+    inventory_errors, listed = _validate_manifest_inventory(root, manifest.get("files"))
+    errors.extend(inventory_errors)
+    if "manifest_files_invalid" in inventory_errors:
+        return errors
+    expected = _deployable_paths(root, git_executable=git_executable)
+    if set(listed) != set(expected):
+        errors.append("tracked_set_mismatch")
     return errors

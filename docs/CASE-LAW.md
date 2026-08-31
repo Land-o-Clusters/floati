@@ -21,3 +21,5 @@ the instrument is in the tree. Second, these documents are working records,
 not marketing. They were written by and for the people and agents building
 the product, and they are published because hiding your receipts while
 selling receipts would be a strange look.
+
+Some dated records here cite files that live in the private workshop they were written in. Those citations are kept as written — rewriting history to tidy its links would forge it. A link that does not resolve in this repository is a pointer into the workshop, not a missing file.

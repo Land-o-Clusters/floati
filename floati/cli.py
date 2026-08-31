@@ -59,9 +59,24 @@ HandlerResult = Tuple[str, Dict[str, Any], int]
 _UUID7 = r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}"
 _HIDDEN_COMMANDS = frozenset({"wake-evaluate", "wake-record", "wake-callback"})
 
+_EXIT_CODE_CONTRACT = (
+    {"code": OK, "status": "ok"},
+    {"code": CONFIGURATION_REFUSED, "status": "refused"},
+    {"code": CANNOT_SPEAK, "status": "cannot_speak"},
+    {"code": INTENTIONAL_SILENCE, "status": "intentional_silence"},
+    {"code": NO_RESULT, "status": "no_result"},
+    {"code": MALFORMED_EVIDENCE, "status": "malformed_evidence"},
+    {"code": 34, "status": "orchestration_deadline"},
+    {"code": DEGRADED, "status": "degraded"},
+)
+
 
 class _ArtifactParser(argparse.ArgumentParser):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.floati_mcp_exposure = kwargs.pop("floati_mcp_exposure", "never")
+        self.floati_mcp_required = tuple(kwargs.pop("floati_mcp_required", ()))
+        self.floati_mcp_omit = tuple(kwargs.pop("floati_mcp_omit", ()))
+        self.floati_public = kwargs.pop("floati_public", True)
         kwargs.setdefault("add_help", False)
         kwargs.setdefault("allow_abbrev", False)
         super().__init__(*args, **kwargs)
@@ -119,8 +134,67 @@ def _retire(args: argparse.Namespace) -> HandlerResult:
     return "ok", entry, OK
 
 
+def _journal(args: argparse.Namespace):
+    from .journal_chain import JournalChain
+
+    return JournalChain(
+        _root(args.root),
+        Path(args.journal),
+        journal_id=args.journal_id,
+        allowed_kinds=set(args.kinds),
+    )
+
+
+def _journal_checkpoint(args: argparse.Namespace) -> HandlerResult:
+    checkpoint = _journal(args).write_checkpoint(Path(args.output))
+    return "ok", {"state": "checkpointed", **checkpoint}, OK
+
+
+def _journal_verify(args: argparse.Namespace) -> HandlerResult:
+    journal = _journal(args)
+    checkpoint = journal.read_checkpoint(Path(args.checkpoint))
+    return "ok", journal.verify(checkpoint, historical=args.historical), OK
+
+
+def _signature_sign(args: argparse.Namespace) -> HandlerResult:
+    from .signing import sign_minisign
+
+    evidence = sign_minisign(
+        _root(args.root),
+        Path(args.artifact),
+        Path(args.signature),
+        secret_key=Path(args.secret_key),
+        version=args.version,
+        journal_id=args.journal_id,
+        through_seq=args.through_seq,
+    )
+    return "ok", evidence, OK
+
+
+def _signature_verify(args: argparse.Namespace) -> HandlerResult:
+    from .signing import verify_minisign
+
+    evidence = verify_minisign(
+        _root(args.root),
+        Path(args.artifact),
+        Path(args.signature),
+        Path(args.public_key),
+        version=args.version,
+        journal_id=args.journal_id,
+        through_seq=args.through_seq,
+    )
+    if evidence["state"] == "signature_unverified":
+        return "no_result", evidence, NO_RESULT
+    return "ok", evidence, OK
+
+
 def _send(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
+    claim = None
+    if args.claim is not None:
+        from .verification import load_claim_document
+
+        claim = load_claim_document(args.claim)
     message = EventLog(root).send(
         args.sender,
         args.recipient,
@@ -130,8 +204,23 @@ def _send(args: argparse.Namespace) -> HandlerResult:
         args.note,
         reply_to=args.reply_to,
         idempotency_key=args.idempotency_key,
+        claim=claim,
     )
     return "ok", message, OK
+
+
+def _verify(args: argparse.Namespace) -> HandlerResult:
+    from .verification import DeliveryVerifier
+
+    receipt = DeliveryVerifier(_root(args.root)).verify(args.actor, args.claim)
+    if receipt["outcome"] == "verification_unrunnable":
+        evidence = dict(
+            receipt,
+            code=receipt["reason_code"],
+            detail=receipt["remedy"],
+        )
+        return "refused", evidence, CONFIGURATION_REFUSED
+    return "ok", receipt, OK
 
 
 def _inbox(args: argparse.Namespace) -> HandlerResult:
@@ -576,6 +665,11 @@ def _worker_run(args: argparse.Namespace) -> HandlerResult:
 
 
 def _deploy(args: argparse.Namespace) -> HandlerResult:
+    if args.source is None or args.destination is None:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "legacy update requires --source and --destination; fleet updates require an explicit preview or apply subcommand",
+        )
     evidence = DeploymentWriter(
         args.source,
         args.destination,
@@ -584,6 +678,137 @@ def _deploy(args: argparse.Namespace) -> HandlerResult:
         committed_tree=args.committed_tree,
     ).run()
     return "ok", evidence, OK
+
+
+def _update(args: argparse.Namespace) -> HandlerResult:
+    action = args.update_action
+    if action is None:
+        missing = [
+            option
+            for option, value in (
+                ("--source", args.source),
+                ("--destination", args.destination),
+            )
+            if value is None
+        ]
+        if missing:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "the following arguments are required: " + ", ".join(missing),
+            )
+        return _deploy(args)
+
+    if args.source is not None or args.committed_tree:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "update actions do not compose with --source or --committed-tree",
+        )
+    if args.channel is None:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "update action requires --channel naming the exact HTTPS coordinate",
+        )
+    from .update_consent import UpdateConsentLedger
+
+    destination = Path(args.destination)
+    ledger = UpdateConsentLedger(destination)
+    if action == "consent":
+        if args.epoch is None or args.idempotency_key is None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update consent requires --epoch and --idempotency-key",
+            )
+        return "ok", ledger.consent(
+            channel=args.channel,
+            epoch=args.epoch,
+            idempotency_key=args.idempotency_key,
+        ), OK
+    if action == "revoke":
+        if args.idempotency_key is None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update revoke requires --idempotency-key",
+            )
+        return "ok", ledger.revoke(
+            channel=args.channel,
+            idempotency_key=args.idempotency_key,
+        ), OK
+    if action == "status":
+        return "ok", ledger.status(args.channel), OK
+    if action == "check":
+        if args.idempotency_key is None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update check requires --idempotency-key",
+            )
+        from .update_check import check_for_updates
+
+        evidence = check_for_updates(
+            destination=destination,
+            channel=args.channel,
+            entrypoint=destination / "scripts" / "floati",
+            idempotency_key=args.idempotency_key,
+        )
+        return "ok", evidence, OK
+    if action == "apply":
+        if args.version is None or args.idempotency_key is None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update apply requires --version and --idempotency-key",
+            )
+        from .update_apply import apply_update
+
+        evidence = apply_update(
+            destination=destination,
+            channel=args.channel,
+            entrypoint=destination / "scripts" / "floati",
+            version=args.version,
+            idempotency_key=args.idempotency_key,
+        )
+        return "ok", evidence, OK
+    raise ProtocolRefusal("arguments_invalid", "unsupported update action")
+
+
+def _fleet_update_preview(_args: argparse.Namespace) -> HandlerResult:
+    raise ProtocolRefusal(
+        "fleet_update_target_unavailable",
+        "the signed AU-1 target staging boundary is not yet installed",
+    )
+
+
+def _fleet_update_apply(_args: argparse.Namespace) -> HandlerResult:
+    raise ProtocolRefusal(
+        "fleet_update_apply_not_available",
+        "the fleet update receipt saga is not yet installed",
+    )
+
+
+def _add_fleet_update_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--as", dest="actor", required=True)
+    parser.add_argument("--destination", required=True)
+    parser.add_argument("--channel", required=True)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--waiter-binding", required=True)
+    parser.add_argument("--transport-registry", required=True)
+    parser.add_argument("--transport", required=True)
+    parser.add_argument("--json", action="store_true")
+
+
+def _add_update_action_arguments(
+    parser: argparse.ArgumentParser,
+    action: str,
+) -> None:
+    parser.add_argument("--source")
+    parser.add_argument("--destination", required=True)
+    parser.add_argument("--ref", default="origin/main")
+    parser.add_argument("--committed-tree", action="store_true")
+    parser.add_argument("--channel")
+    parser.add_argument("--epoch", type=int)
+    parser.add_argument("--idempotency-key")
+    parser.add_argument("--version")
+    parser.add_argument("--json", action="store_true")
+    parser.set_defaults(handler=_update, update_action=action)
 
 
 def _board(args: argparse.Namespace) -> int:
@@ -791,9 +1016,26 @@ def _wake_callback(args: argparse.Namespace) -> HandlerResult:
     return "ok", run_one_shot_wake_callback(request), OK
 
 
+def _describe(args: argparse.Namespace) -> HandlerResult:
+    from .command_contract import describe_parser
+
+    return "ok", describe_parser(_parser()), OK
+
+
+def _mcp_serve(args: argparse.Namespace) -> int:
+    from .mcp import serve_bound_stdio
+
+    return serve_bound_stdio(args.root, args.actor, args.session)
+
+
 def _parser() -> _ArtifactParser:
     parser = _ArtifactParser(prog="floati")
+    parser.floati_exit_codes = _EXIT_CODE_CONTRACT
     commands = parser.add_subparsers(dest="command", required=True)
+
+    describe = commands.add_parser("describe", floati_mcp_exposure="read")
+    describe.add_argument("--json", action="store_true", required=True)
+    describe.set_defaults(handler=_describe)
 
     init = commands.add_parser("init")
     init.add_argument("--root")
@@ -814,7 +1056,60 @@ def _parser() -> _ArtifactParser:
 
     register_legacy_workspace_options(register, retire)
 
-    send = commands.add_parser("send")
+    journal = commands.add_parser("journal")
+    journal_commands = journal.add_subparsers(dest="journal_command", required=True)
+
+    journal_checkpoint = journal_commands.add_parser("checkpoint")
+    journal_checkpoint.add_argument("--root", required=True)
+    journal_checkpoint.add_argument("--journal", required=True)
+    journal_checkpoint.add_argument("--journal-id", required=True)
+    journal_checkpoint.add_argument("--kind", dest="kinds", action="append", required=True)
+    journal_checkpoint.add_argument("--output", required=True)
+    journal_checkpoint.add_argument("--json", action="store_true")
+    journal_checkpoint.set_defaults(handler=_journal_checkpoint)
+
+    journal_verify = journal_commands.add_parser("verify")
+    journal_verify.add_argument("--root", required=True)
+    journal_verify.add_argument("--journal", required=True)
+    journal_verify.add_argument("--journal-id", required=True)
+    journal_verify.add_argument("--kind", dest="kinds", action="append", required=True)
+    journal_verify.add_argument("--checkpoint", required=True)
+    journal_verify.add_argument("--historical", action="store_true")
+    journal_verify.add_argument("--json", action="store_true")
+    journal_verify.set_defaults(handler=_journal_verify)
+
+    signature = commands.add_parser("signature")
+    signature_commands = signature.add_subparsers(
+        dest="signature_command", required=True
+    )
+
+    signature_sign = signature_commands.add_parser("sign")
+    signature_sign.add_argument("--root", required=True)
+    signature_sign.add_argument("--artifact", required=True)
+    signature_sign.add_argument("--signature", required=True)
+    signature_sign.add_argument("--secret-key", required=True)
+    signature_sign.add_argument("--version", required=True)
+    signature_sign.add_argument("--journal-id")
+    signature_sign.add_argument("--through-seq", type=int)
+    signature_sign.add_argument("--json", action="store_true")
+    signature_sign.set_defaults(handler=_signature_sign)
+
+    signature_verify = signature_commands.add_parser("verify")
+    signature_verify.add_argument("--root", required=True)
+    signature_verify.add_argument("--artifact", required=True)
+    signature_verify.add_argument("--signature", required=True)
+    signature_verify.add_argument("--public-key", required=True)
+    signature_verify.add_argument("--version", required=True)
+    signature_verify.add_argument("--journal-id")
+    signature_verify.add_argument("--through-seq", type=int)
+    signature_verify.add_argument("--json", action="store_true")
+    signature_verify.set_defaults(handler=_signature_verify)
+
+    send = commands.add_parser(
+        "send",
+        floati_mcp_exposure="governed",
+        floati_mcp_required=("idempotency_key",),
+    )
     send.add_argument("--root")
     send.add_argument("--from", dest="sender", required=True)
     send.add_argument("--to", dest="recipient", required=True)
@@ -824,14 +1119,24 @@ def _parser() -> _ArtifactParser:
     send.add_argument("--note", required=True)
     send.add_argument("--reply-to")
     send.add_argument("--idempotency-key")
+    send.add_argument("--claim")
     send.set_defaults(handler=_send)
 
-    inbox = commands.add_parser("inbox")
+    verify = commands.add_parser("verify")
+    verify.add_argument("--root", required=True)
+    verify.add_argument("--as", dest="actor", required=True)
+    verify.add_argument("--claim", required=True)
+    verify.add_argument("--json", action="store_true")
+    verify.set_defaults(handler=_verify)
+
+    inbox = commands.add_parser("inbox", floati_mcp_exposure="read")
     inbox.add_argument("--root")
     inbox.add_argument("--as", dest="recipient", required=True)
     inbox.set_defaults(handler=_inbox)
 
-    wake_evaluate = commands.add_parser("wake-evaluate", help=argparse.SUPPRESS)
+    wake_evaluate = commands.add_parser(
+        "wake-evaluate", help=argparse.SUPPRESS, floati_public=False
+    )
     wake_evaluate.add_argument("--root", required=True)
     wake_evaluate.add_argument("--as", dest="recipient", required=True)
     wake_evaluate.add_argument("--idempotency-key", required=True)
@@ -839,7 +1144,9 @@ def _parser() -> _ArtifactParser:
     wake_evaluate.add_argument("--limit", type=int, default=1000)
     wake_evaluate.set_defaults(handler=_wake_evaluate, artifact_schema_version=1)
 
-    wake_record = commands.add_parser("wake-record", help=argparse.SUPPRESS)
+    wake_record = commands.add_parser(
+        "wake-record", help=argparse.SUPPRESS, floati_public=False
+    )
     wake_record.add_argument("--root", required=True)
     wake_record.add_argument("--as", dest="recipient", required=True)
     wake_record.add_argument("--session", required=True)
@@ -851,27 +1158,31 @@ def _parser() -> _ArtifactParser:
     wake_record.add_argument("--reason-code")
     wake_record.set_defaults(handler=_wake_record, artifact_schema_version=1)
 
-    ack = commands.add_parser("ack")
+    ack = commands.add_parser("ack", floati_mcp_exposure="governed")
     ack.add_argument("--root")
     ack.add_argument("--as", dest="recipient", required=True)
     ack.add_argument("--id", dest="message_id", required=True)
     ack.add_argument("--session", required=True)
     ack.set_defaults(handler=_ack)
 
-    log = commands.add_parser("log")
+    log = commands.add_parser(
+        "log",
+        floati_mcp_exposure="read",
+        floati_mcp_omit=("replay", "speed", "plain"),
+    )
     log.add_argument("--root")
     log.add_argument("--replay", action="store_true")
     log.add_argument("--speed", type=float)
     log.add_argument("--plain", action="store_true")
     log.set_defaults(direct_handler=_log_command)
 
-    status = commands.add_parser("status")
+    status = commands.add_parser("status", floati_mcp_exposure="read")
     status.add_argument("--root")
     status.add_argument("--destination")
     status.add_argument("--json", action="store_true")
     status.set_defaults(handler=_status)
 
-    effects = commands.add_parser("effects")
+    effects = commands.add_parser("effects", floati_mcp_exposure="read")
     effects.add_argument("--root")
     effects.add_argument("--run", dest="run_id")
     effects.add_argument("--attempt", dest="attempt_id")
@@ -923,7 +1234,7 @@ def _parser() -> _ArtifactParser:
     thread_show.add_argument("--attachment", dest="attachment_id", required=True)
     thread_show.set_defaults(handler=_thread_show, artifact_schema_version=1)
 
-    graph = commands.add_parser("graph")
+    graph = commands.add_parser("graph", floati_mcp_exposure="read")
     graph.add_argument("--root")
     graph.add_argument("--json", action="store_true")
     graph.set_defaults(direct_handler=_graph_command)
@@ -936,7 +1247,7 @@ def _parser() -> _ArtifactParser:
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(handler=_plan)
 
-    doctor = commands.add_parser("doctor")
+    doctor = commands.add_parser("doctor", floati_mcp_exposure="read")
     doctor.add_argument("--root")
     doctor.add_argument("--source", required=True)
     doctor.add_argument("--ref", default="origin/main")
@@ -970,7 +1281,7 @@ def _parser() -> _ArtifactParser:
     watch.add_argument("--iterations", type=int)
     watch.set_defaults(direct_handler=_watch)
 
-    receipts = commands.add_parser("receipts")
+    receipts = commands.add_parser("receipts", floati_mcp_exposure="read")
     receipts.add_argument("node")
     receipts.add_argument("--root")
     receipts.set_defaults(handler=_receipts)
@@ -1012,7 +1323,9 @@ def _parser() -> _ArtifactParser:
     sequencer_direct.add_argument("--as", dest="actor", required=True)
     sequencer_direct.set_defaults(handler=_sequencer_direct)
 
-    wake_callback = commands.add_parser("wake-callback", help=argparse.SUPPRESS)
+    wake_callback = commands.add_parser(
+        "wake-callback", help=argparse.SUPPRESS, floati_public=False
+    )
     wake_callback.add_argument("--root", required=True)
     wake_callback.add_argument("--tenant", required=True)
     wake_callback.add_argument("--run-id", required=True)
@@ -1035,7 +1348,7 @@ def _parser() -> _ArtifactParser:
     _add_artifact_options(work_add)
     work_add.set_defaults(handler=_work_add)
 
-    work_claim = work_commands.add_parser("claim")
+    work_claim = work_commands.add_parser("claim", floati_mcp_exposure="governed")
     work_claim.add_argument("--root")
     work_claim.add_argument("--id", dest="item_id", required=True)
     work_claim.add_argument("--as", dest="actor")
@@ -1044,7 +1357,7 @@ def _parser() -> _ArtifactParser:
     work_claim.add_argument("--now")
     work_claim.set_defaults(handler=_work_claim)
 
-    work_complete = work_commands.add_parser("complete")
+    work_complete = work_commands.add_parser("complete", floati_mcp_exposure="governed")
     work_complete.add_argument("--root")
     work_complete.add_argument("--id", dest="item_id", required=True)
     work_complete.add_argument("--as", dest="actor")
@@ -1065,14 +1378,49 @@ def _parser() -> _ArtifactParser:
     worker_run.add_argument("--adapter", choices=("claude", "codex", "pi"), required=True)
     worker_run.set_defaults(handler=_worker_run)
 
-    for operation in ("install", "update"):
-        deployment = commands.add_parser(operation)
-        deployment.add_argument("--source", required=True)
-        deployment.add_argument("--destination", required=True)
-        deployment.add_argument("--ref", default="origin/main")
-        deployment.add_argument("--committed-tree", action="store_true")
-        deployment.add_argument("--json", action="store_true")
-        deployment.set_defaults(handler=_deploy)
+    mcp = commands.add_parser("mcp")
+    mcp_commands = mcp.add_subparsers(dest="mcp_command", required=True)
+    mcp_serve = mcp_commands.add_parser("serve")
+    mcp_serve.add_argument("--root", required=True)
+    mcp_serve.add_argument("--as", dest="actor", required=True)
+    mcp_serve.add_argument("--session", required=True)
+    mcp_serve.set_defaults(direct_handler=_mcp_serve)
+
+    install = commands.add_parser("install")
+    install.add_argument("--source", required=True)
+    install.add_argument("--destination", required=True)
+    install.add_argument("--ref", default="origin/main")
+    install.add_argument("--committed-tree", action="store_true")
+    install.add_argument("--json", action="store_true")
+    install.set_defaults(handler=_deploy)
+
+    update = commands.add_parser("update")
+    update.add_argument("--source")
+    update.add_argument("--destination")
+    update.add_argument("--ref", default="origin/main")
+    update.add_argument("--committed-tree", action="store_true")
+    update.add_argument("--json", action="store_true")
+    update.set_defaults(handler=_update, update_action=None)
+    update_commands = update.add_subparsers(dest="update_command")
+    for update_action in ("consent", "revoke", "status", "check", "apply"):
+        update_action_parser = update_commands.add_parser(
+            update_action,
+            help=argparse.SUPPRESS,
+            floati_public=False,
+        )
+        _add_update_action_arguments(update_action_parser, update_action)
+    update_fleet = update_commands.add_parser("fleet")
+    update_fleet_commands = update_fleet.add_subparsers(
+        dest="fleet_update_command", required=True
+    )
+    update_fleet_preview = update_fleet_commands.add_parser("preview")
+    _add_fleet_update_arguments(update_fleet_preview)
+    update_fleet_preview.set_defaults(handler=_fleet_update_preview)
+    update_fleet_apply = update_fleet_commands.add_parser("apply")
+    _add_fleet_update_arguments(update_fleet_apply)
+    update_fleet_apply.add_argument("--plan-digest", required=True)
+    update_fleet_apply.add_argument("--idempotency-key", required=True)
+    update_fleet_apply.set_defaults(handler=_fleet_update_apply)
 
     from .grants import register_cli as register_grant
 
@@ -1113,34 +1461,44 @@ def _emit(
     )
 
 
+def _protocol_refusal_evidence(exc: ProtocolRefusal) -> Dict[str, object]:
+    return {
+        "code": exc.code,
+        "detail": exc.detail,
+        "remedy": exc.remedy or None,
+    }
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     command = arguments[0] if arguments else None
-    artifact_schema_version = (
-        1 if command in {"effects", "effect", "threads", "thread", "wake-evaluate", "wake-record"} else None
-    )
+    parser = _parser()
+    from .command_contract import schema_version_for_arguments
+
+    artifact_schema_version = schema_version_for_arguments(parser, arguments)
     static_help = help_for(arguments)
     if static_help is not None:
         print(static_help, end="")
         return OK
     try:
-        parsed = _parser().parse_args(arguments)
+        parsed = parser.parse_args(arguments)
         if hasattr(parsed, "direct_handler"):
             direct_handler: Callable[[argparse.Namespace], int] = parsed.direct_handler
             return direct_handler(parsed)
         handler: Callable[[argparse.Namespace], HandlerResult] = parsed.handler
         status, evidence, exit_code = handler(parsed)
     except ProtocolRefusal as exc:
+        evidence = _protocol_refusal_evidence(exc)
         if exc.code == "cannot_speak":
             status, evidence, exit_code = (
                 "cannot_speak",
-                {"code": exc.code, "detail": exc.detail},
+                evidence,
                 CANNOT_SPEAK,
             )
         else:
             status, evidence, exit_code = (
                 "refused",
-                {"code": exc.code, "detail": exc.detail},
+                evidence,
                 CONFIGURATION_REFUSED,
             )
     except IntegrityFailure as exc:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -16,7 +18,7 @@ class ForeignBusSurveyTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.ours = FloatiRoot.open_direct_home(self.base / "ours", create=True)
-        (self.ours.path / "nodes" / "lane-a").mkdir(parents=True)
+        (self.ours.path / "nodes" / public_ids.builder('a')).mkdir(parents=True)
         self.foreign = self.base / ".other-bus"
         self.foreign.mkdir()
         (self.foreign / "events.jsonl").write_bytes(b"")
@@ -39,7 +41,7 @@ class ForeignBusSurveyTests(unittest.TestCase):
                     "roots": [{
                         "bus_id": "ours",
                         "root": str(self.ours.path),
-                        "architect_node": "lane-a",
+                        "architect_node": public_ids.builder('a'),
                         "downstream": [],
                     }],
                 },
@@ -62,7 +64,7 @@ class ForeignBusSurveyTests(unittest.TestCase):
         )
         self.targets = self.base / "targets.json"
         self.targets.write_text(
-            json.dumps({str(self.ours.path): "lane-a"}, sort_keys=True),
+            json.dumps({str(self.ours.path): public_ids.builder('a')}, sort_keys=True),
             encoding="utf-8",
         )
 

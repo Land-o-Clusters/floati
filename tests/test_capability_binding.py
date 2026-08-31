@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import dataclasses
 import json
 import tempfile
@@ -54,7 +56,7 @@ def _race_binding(
             result = CapabilityBinder(
                 RunLedger(root), CapabilityGrantLedger(root)
             ).bind(
-                run_id, item_id, attempt_id, "alice", "codex", policy, 0,
+                run_id, item_id, attempt_id, public_ids.worker('alpha'), "codex", policy, 0,
                 now=NOW + timedelta(seconds=11),
             )
         else:
@@ -84,7 +86,7 @@ def _race_dispatch(root_path, policy_path, snapshot_id, start, queue):
         binder = CapabilityBinder(RunLedger(root), CapabilityGrantLedger(root))
         start.wait(5)
         result = binder.dispatch(
-            snapshot_id, ["alice"], "policy.route", policy,
+            snapshot_id, [public_ids.worker('alpha')], "policy.route", policy,
             now=NOW + timedelta(seconds=20),
         )
         queue.put(("ok", result["id"]))
@@ -106,25 +108,25 @@ class CapabilityBindingTests(unittest.TestCase):
         self.policy_path.write_text(policy_text, encoding="utf-8")
         self.policy = Policy.load(self.policy_path)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
-        registry.register("fable", "Claude")
+        registry.register(public_ids.worker('alpha'), "Codex")
+        registry.register(public_ids.reviewer(), "Claude")
         authority = AuthorityGrantStore(self.root).claim(
-            "approve-build", "fable", 300, 300, NOW
+            "approve-build", public_ids.reviewer(), 300, 300, NOW
         )
         self.approvals = ApprovalLedger(self.root)
         self.grants = CapabilityGrantLedger(self.root)
         for offset, capability in enumerate(("review", "workspace_write"), start=1):
             request = self.approvals.request(
-                "alice", capability, "worker:alice", 120,
+                public_ids.worker('alpha'), capability, public_ids.compose('worker:', public_ids.worker('alpha')), 120,
                 "approve-build", authority["epoch"], now=NOW + timedelta(seconds=offset),
             )
             decision = self.approvals.decide(
-                request["id"], "fable", "approved", None,
-                granted_scope="worker:alice", granted_ttl_seconds=90,
+                request["id"], public_ids.reviewer(), "approved", None,
+                granted_scope=public_ids.compose('worker:', public_ids.worker('alpha')), granted_ttl_seconds=90,
                 now=NOW + timedelta(seconds=offset + 2),
             )
             self.grants.grant(
-                "alice", capability, self.policy, request["id"], decision["id"],
+                public_ids.worker('alpha'), capability, self.policy, request["id"], decision["id"],
                 now=NOW + timedelta(seconds=offset + 4),
             )
         self.ledger = RunLedger(self.root)
@@ -143,7 +145,7 @@ class CapabilityBindingTests(unittest.TestCase):
         )
         plan_value = {
             "schema_version": 0,
-            "workers": [{"node_id": "alice", "worker_profile": "codex"}],
+            "workers": [{"node_id": public_ids.worker('alpha'), "worker_profile": "codex"}],
             "max_active_attempts": 2,
             "budget_reservations": [{"budget_id": "build", "amount": 1}],
             "items": [{
@@ -168,7 +170,7 @@ class CapabilityBindingTests(unittest.TestCase):
         self._append("task_contract", "task-contract-", item_id=self.item_id,
                      **self.contract.canonical(), contract_digest=contract_digest(self.contract))
         self._append("run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest)
-        self._append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"])
+        self._append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')])
         AdmissionBinder.bind(
             self.ledger, self.run_id, self.plan, self.policy,
             now=NOW + timedelta(seconds=9),
@@ -219,7 +221,7 @@ class CapabilityBindingTests(unittest.TestCase):
             **contract.canonical(), contract_digest=contract_digest(contract),
         )
         append("run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest)
-        append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"])
+        append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')])
         opened = RunScheduler(self.ledger).open_attempt(
             run_id, item_id, RetryPolicy(1, 0, 0, strategy="fixed"), 1,
             now=NOW + timedelta(seconds=10),
@@ -229,7 +231,7 @@ class CapabilityBindingTests(unittest.TestCase):
     def test_snapshot_digest_and_dispatch_bind_exact_attempt_fence_and_grants(self) -> None:
         """Catches caller-declared capability sets or a snapshot drifting across an attempt fence."""
         snapshot = self.binder.bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=11),
         )
         self.assertEqual("capability_set_bound", snapshot["kind"])
@@ -237,7 +239,7 @@ class CapabilityBindingTests(unittest.TestCase):
         self.assertEqual(2, len(snapshot["effective_grants"]))
         self.assertEqual(capability_set_digest(snapshot["effective_grants"]), snapshot["capability_digest"])
         dispatch = self.binder.dispatch(
-            snapshot["id"], ["alice"], "policy.route", self.policy,
+            snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy,
             now=NOW + timedelta(seconds=12),
         )
         self.assertEqual(snapshot["id"], dispatch["capability_set_bound_id"])
@@ -265,7 +267,7 @@ class CapabilityBindingTests(unittest.TestCase):
             self.run_id,
             self.item_id,
             self.opened["attempt_id"],
-            "alice",
+            public_ids.worker('alpha'),
             "codex",
             self.policy,
             0,
@@ -328,7 +330,7 @@ class CapabilityBindingTests(unittest.TestCase):
             self.run_id,
             self.item_id,
             self.opened["attempt_id"],
-            "alice",
+            public_ids.worker('alpha'),
             "codex",
             self.policy,
             0,
@@ -385,14 +387,14 @@ class CapabilityBindingTests(unittest.TestCase):
         service._send_response = drop_once
         with self.assertRaises(ProtocolRefusal) as caught:
             CapabilityBinder(managed, self.grants).bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 self.policy, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("sequencer_response_lost", caught.exception.code)
         service._send_response = original
 
         retry = CapabilityBinder(managed, self.grants).bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=12),
         )
 
@@ -421,7 +423,7 @@ class CapabilityBindingTests(unittest.TestCase):
             service.close()
 
         self.addCleanup(cleanup)
-        valid = self.grants.effective("alice", self.policy.digest, NOW + timedelta(seconds=11))
+        valid = self.grants.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=11))
         self.assertEqual({"review", "workspace_write"}, {name for name, _, _ in valid.grant_triples})
         managed = RunLedger(
             self.root,
@@ -431,7 +433,7 @@ class CapabilityBindingTests(unittest.TestCase):
         )
         with self.assertRaises(ProtocolRefusal) as caught:
             CapabilityBinder(managed, self.grants).bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 self.policy, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("capability_selector_unsatisfied", caught.exception.code)
@@ -485,7 +487,7 @@ class CapabilityBindingTests(unittest.TestCase):
             "run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest
         )
         append_to_planted_run(
-            "worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"]
+            "worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')]
         )
         planted_admission = AdmissionBinder(self.ledger)._bind(
             planted_run,
@@ -502,7 +504,7 @@ class CapabilityBindingTests(unittest.TestCase):
             "run_id": victim_capability_run,
             "item_id": self.item_id,
             "attempt_id": self.opened["attempt_id"],
-            "chosen_worker": "alice",
+            "chosen_worker": public_ids.worker('alpha'),
             "worker_profile": "codex",
             "policy": _policy_evidence(self.policy),
             "routing_rank": 0,
@@ -514,7 +516,7 @@ class CapabilityBindingTests(unittest.TestCase):
             self.run_id,
             self.item_id,
             self.opened["attempt_id"],
-            "alice",
+            public_ids.worker('alpha'),
             "codex",
             self.policy,
             0,
@@ -564,7 +566,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 victim_capability_run,
                 self.item_id,
                 self.opened["attempt_id"],
-                "alice",
+                public_ids.worker('alpha'),
                 "codex",
                 self.policy,
                 0,
@@ -615,7 +617,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 contract_digest=contract_digest(self.contract),
             )
             append("run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest)
-            append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"])
+            append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')])
 
         def admission_intent(run_id):
             return {
@@ -660,7 +662,7 @@ class CapabilityBindingTests(unittest.TestCase):
             "run_id": self.run_id,
             "item_id": self.item_id,
             "attempt_id": self.opened["attempt_id"],
-            "chosen_worker": "alice",
+            "chosen_worker": public_ids.worker('alpha'),
             "worker_profile": "codex",
             "policy": _policy_evidence(self.policy),
             "routing_rank": 0,
@@ -687,7 +689,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 self.run_id,
                 self.item_id,
                 self.opened["attempt_id"],
-                "alice",
+                public_ids.worker('alpha'),
                 "codex",
                 self.policy,
                 0,
@@ -771,7 +773,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 contract_digest=contract_digest(self.contract),
             )
             append("run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest)
-            append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"])
+            append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')])
 
         def start_service(sequencer_id):
             service = SequencerService(
@@ -815,7 +817,7 @@ class CapabilityBindingTests(unittest.TestCase):
             "run_id": forged_capability_run,
             "item_id": self.item_id,
             "attempt_id": forged_opened["attempt_id"],
-            "chosen_worker": "alice",
+            "chosen_worker": public_ids.worker('alpha'),
             "worker_profile": "codex",
             "policy": _policy_evidence(self.policy),
             "routing_rank": 0,
@@ -830,7 +832,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 self.run_id,
                 self.item_id,
                 self.opened["attempt_id"],
-                "alice",
+                public_ids.worker('alpha'),
                 "codex",
                 self.policy,
                 0,
@@ -877,7 +879,7 @@ class CapabilityBindingTests(unittest.TestCase):
                     forged_capability_run,
                     self.item_id,
                     forged_opened["attempt_id"],
-                    "alice",
+                    public_ids.worker('alpha'),
                     "codex",
                     self.policy,
                     0,
@@ -934,7 +936,7 @@ class CapabilityBindingTests(unittest.TestCase):
         before = list(self.ledger.records())
         with self.assertRaises(ProtocolRefusal) as caught:
             self.binder.bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 self.policy, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("capability_selector_unsatisfied", caught.exception.code)
@@ -958,7 +960,7 @@ class CapabilityBindingTests(unittest.TestCase):
         before = self.ledger.records()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.binder.bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 forged, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("policy_integrity_invalid", caught.exception.code)
@@ -967,12 +969,12 @@ class CapabilityBindingTests(unittest.TestCase):
     def test_snapshot_is_single_use_and_attempt_start_does_not_recheck_expiry(self) -> None:
         """Catches snapshot reuse or a second clock-dependent authorization at attempt start."""
         snapshot = self.binder.bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=11),
         )
-        dispatch = self.binder.dispatch(snapshot["id"], ["alice"], "policy.route", self.policy, now=NOW + timedelta(seconds=12))
+        dispatch = self.binder.dispatch(snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy, now=NOW + timedelta(seconds=12))
         with self.assertRaises(ProtocolRefusal) as reuse:
-            self.binder.dispatch(snapshot["id"], ["alice"], "policy.route", self.policy, now=NOW + timedelta(seconds=13))
+            self.binder.dispatch(snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy, now=NOW + timedelta(seconds=13))
         self.assertEqual("capability_snapshot_consumed", reuse.exception.code)
         started = self.scheduler.start_attempt(
             self.run_id, self.item_id, self.opened["attempt_id"], dispatch["id"],
@@ -983,14 +985,14 @@ class CapabilityBindingTests(unittest.TestCase):
     def test_dispatch_rejects_forged_current_policy_without_consuming_snapshot(self) -> None:
         """Catches dispatch trusting stale policy cache fields or consuming authority on refusal."""
         snapshot = self.binder.bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=11),
         )
         forged = dataclasses.replace(self.policy, limits={**self.policy.limits, "max_active_attempts": 1})
         before = self.ledger.records()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.binder.dispatch(
-                snapshot["id"], ["alice"], "policy.route", forged,
+                snapshot["id"], [public_ids.worker('alpha')], "policy.route", forged,
                 now=NOW + timedelta(seconds=12),
             )
         self.assertEqual("policy_integrity_invalid", caught.exception.code)
@@ -1002,8 +1004,8 @@ class CapabilityBindingTests(unittest.TestCase):
         with self.assertRaises(ProtocolRefusal) as caught:
             self._append(
                 "dispatch_decision", "run-dispatch-decision-", item_id=self.item_id,
-                attempt_id=self.opened["attempt_id"], eligible_workers=["alice"],
-                chosen_worker="alice", capability_digest="c" * 64,
+                attempt_id=self.opened["attempt_id"], eligible_workers=[public_ids.worker('alpha')],
+                chosen_worker=public_ids.worker('alpha'), capability_digest="c" * 64,
                 reason_code="policy.route", policy_digest=self.policy.digest,
                 routing_rank=0, scheduler_epoch=1,
             )
@@ -1015,8 +1017,8 @@ class CapabilityBindingTests(unittest.TestCase):
         run_id, item_id, opened, append = self._legacy_open_attempt()
         legacy = append(
             "dispatch_decision", "run-dispatch-decision-", item_id=item_id,
-            attempt_id=opened["attempt_id"], eligible_workers=["alice"],
-            chosen_worker="alice", capability_digest="c" * 64,
+            attempt_id=opened["attempt_id"], eligible_workers=[public_ids.worker('alpha')],
+            chosen_worker=public_ids.worker('alpha'), capability_digest="c" * 64,
             reason_code="policy.route", policy_digest=self.policy.digest,
             routing_rank=0, scheduler_epoch=1,
         )
@@ -1029,15 +1031,15 @@ class CapabilityBindingTests(unittest.TestCase):
         run_id, item_id, opened, append = self._legacy_open_attempt()
         append(
             "dispatch_decision", "run-dispatch-decision-", item_id=item_id,
-            attempt_id=opened["attempt_id"], eligible_workers=["alice"],
-            chosen_worker="alice", capability_digest="c" * 64,
+            attempt_id=opened["attempt_id"], eligible_workers=[public_ids.worker('alpha')],
+            chosen_worker=public_ids.worker('alpha'), capability_digest="c" * 64,
             reason_code="policy.route", policy_digest=self.policy.digest,
             routing_rank=0, scheduler_epoch=1,
         )
         before = self.ledger.records()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.binder.bind(
-                run_id, item_id, opened["attempt_id"], "alice", "codex",
+                run_id, item_id, opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 self.policy, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("capability_snapshot_late", caught.exception.code)
@@ -1046,11 +1048,11 @@ class CapabilityBindingTests(unittest.TestCase):
     def test_hostile_and_reordered_snapshot_dispatch_frames_fail_closed(self) -> None:
         """Covers semantic corruption and physical reordering for both new run kinds."""
         snapshot = self.binder.bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=11),
         )
         dispatch = self.binder.dispatch(
-            snapshot["id"], ["alice"], "policy.route", self.policy, now=NOW + timedelta(seconds=12)
+            snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy, now=NOW + timedelta(seconds=12)
         )
         records = self.ledger.records()
         path = self.root.resolve_relative(self.ledger.relative_path)
@@ -1145,7 +1147,7 @@ class CapabilityBindingTests(unittest.TestCase):
         )
         plan_value = {
             "schema_version": 0,
-            "workers": [{"node_id": "alice", "worker_profile": "codex"}],
+            "workers": [{"node_id": public_ids.worker('alpha'), "worker_profile": "codex"}],
             "max_active_attempts": 2,
             "budget_reservations": [{"budget_id": "build", "amount": 1}],
             "items": [
@@ -1190,7 +1192,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 **contract.canonical(), contract_digest=contract_digest(contract),
             )
         append("run_policy_bound", "run-policy-bound-", policy_digest=self.policy.digest)
-        append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=["alice"])
+        append("worker_pool_bound", "run-worker-pool-bound-", worker_ids=[public_ids.worker('alpha')])
         AdmissionBinder.bind(
             self.ledger, run_id, plan, self.policy, now=NOW + timedelta(seconds=9)
         )
@@ -1204,12 +1206,12 @@ class CapabilityBindingTests(unittest.TestCase):
             )
             snapshots.append(
                 race_binder.bind(
-                    run_id, item_id, opened["attempt_id"], "alice", "codex",
+                    run_id, item_id, opened["attempt_id"], public_ids.worker('alpha'), "codex",
                     self.policy, 0, now=NOW + timedelta(seconds=11, milliseconds=index),
                 )
             )
         race_binder.dispatch(
-            snapshots[0]["id"], ["alice"], "policy.route", self.policy,
+            snapshots[0]["id"], [public_ids.worker('alpha')], "policy.route", self.policy,
             now=NOW + timedelta(seconds=12),
         )
 
@@ -1252,7 +1254,7 @@ class CapabilityBindingTests(unittest.TestCase):
         before = self.ledger.records()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.binder.bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                 self.policy, 0, now=NOW + timedelta(seconds=11),
             )
         self.assertEqual("ledger_lock_timeout", caught.exception.code)
@@ -1267,21 +1269,21 @@ class CapabilityBindingTests(unittest.TestCase):
         with patch("floati.jsonl.os.write", return_value=1):
             with self.assertRaises(DurabilityFailure) as snapshot_failure:
                 self.binder.bind(
-                    self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+                    self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
                     self.policy, 0, now=NOW + timedelta(seconds=11),
                 )
         self.assertEqual("short_write", snapshot_failure.exception.code)
         self.assertEqual(before, path.read_bytes())
 
         snapshot = self.binder.bind(
-            self.run_id, self.item_id, self.opened["attempt_id"], "alice", "codex",
+            self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
             self.policy, 0, now=NOW + timedelta(seconds=11),
         )
         before = path.read_bytes()
         with patch("floati.jsonl.os.write", return_value=1):
             with self.assertRaises(DurabilityFailure) as dispatch_failure:
                 self.binder.dispatch(
-                    snapshot["id"], ["alice"], "policy.route", self.policy,
+                    snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy,
                     now=NOW + timedelta(seconds=12),
                 )
         self.assertEqual("short_write", dispatch_failure.exception.code)
