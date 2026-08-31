@@ -17,6 +17,7 @@ from floati.registry import REGISTRY_KINDS, Registry
 from floati.role_templates import load_shipped_role_templates
 from floati.root import FloatiRoot
 from floati.work import WorkLog
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 NOW = datetime(2026, 8, 28, 12, 0, tzinfo=timezone.utc)
@@ -24,7 +25,7 @@ NOW = datetime(2026, 8, 28, 12, 0, tzinfo=timezone.utc)
 
 class AuthorityGrantCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet", create=True

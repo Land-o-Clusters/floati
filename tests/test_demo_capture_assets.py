@@ -9,6 +9,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from tests.temp_roots import REAL_TEMP_ROOT
 
 if importlib.util.find_spec("PIL") is not None:
     from PIL import Image
@@ -218,7 +219,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=demo_root) as output_text:
             with tempfile.TemporaryDirectory(
                 prefix="floati-demo-master-test-",
-                dir="\x2fprivate/tmp",
+                dir=REAL_TEMP_ROOT,
             ) as master_text:
                 artifacts = capture.build_candidates(
                     Path(output_text),

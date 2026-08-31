@@ -17,6 +17,7 @@ from floati.adapters.herdr import (
     MAX_HERDR_FRAME_BYTES,
 )
 from floati.errors import ProtocolRefusal
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 PING = b'{"version":"0.8.2","protocol":19,"capabilities":[]}\n'
@@ -191,7 +192,7 @@ class HerdrClientAdapterTests(unittest.TestCase):
         self.assertNotIn("herdr_client_payload", kinds)
 
     def test_file_token_source_is_passed_through_but_not_recorded(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             token_path = Path(temporary) / "herdr.token"
             token_path.write_text("file-token-value\n", encoding="utf-8")
             adapter, channel, ledger, _calls = self.adapter(

@@ -11,11 +11,12 @@ from pathlib import Path
 
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class CodexHookInstallerTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.source = Path(__file__).resolve().parents[1]

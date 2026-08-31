@@ -16,6 +16,7 @@ from floati.errors import ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.records import validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 SCHEMA_DIR = Path("schemas/v0")
@@ -143,7 +144,7 @@ class SchemaContractTests(unittest.TestCase):
         from floati.registry import Registry
         from floati.root import FloatiRoot
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             base = Path(temporary)
             home = base / "demo-fleet"
             root = FloatiRoot.open_direct_home(home, create=True)

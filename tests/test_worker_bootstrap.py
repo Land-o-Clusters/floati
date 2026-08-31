@@ -33,6 +33,7 @@ from floati.worker_isolation import (
     cleanup_worker_isolation,
     prepare_worker_isolation,
 )
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 BOOTSTRAP = (Path(__file__).parents[1] / "floati" / "worker_bootstrap.py").resolve()
@@ -272,7 +273,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_fresh_exec_runs_no_multiprocessing_or_os_atfork_callback_before_isolation(self) -> None:
         """Catches regression from fresh exec to any fork-based child launch."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             multiprocessing_proof = root / "multiprocessing-fork-hook-ran"
             os_proof = root / "os-fork-hook-ran"
@@ -326,7 +327,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_fresh_exec_ignores_pythonpath_sitecustomize_usercustomize_and_pth(self) -> None:
         """Catches Python startup hooks executing before the isolation boundary."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             hooks = root / "hooks"
             hooks.mkdir()
@@ -364,7 +365,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_closes_every_unruled_inherited_descriptor_before_apply(self) -> None:
         """Catches inherited tenant descriptors surviving until policy activation."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             policy = self._policy(root / "policy")
             trace = root / "trace"
@@ -443,7 +444,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_rejects_unknown_adapter_factory_module_class_and_pickle_fields(self) -> None:
         """Catches open-ended launch configuration reaching imports or callbacks."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             for field in ("factory", "module", "class", "pickle"):
                 with self.subTest(field=field):
@@ -476,7 +477,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_unsupported_backend_sends_one_typed_failure_and_imports_no_adapter(self) -> None:
         """Catches adapter import or duplicate testimony after isolation refusal."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             policy = self._policy(root / "policy")
             trace = root / "trace"
@@ -504,7 +505,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_isolation_ready_precedes_builtin_import_and_every_callback(self) -> None:
         """Catches any built-in import or callback before successful activation."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             policy = self._policy(root / "policy")
             trace = root / "trace"
@@ -566,7 +567,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_reconstructs_codex_claude_and_pi_from_closed_specs(self) -> None:
         """Catches wrong literal adapter selection or command reconstruction."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             for kind in ("codex", "claude", "pi"):
                 with self.subTest(kind=kind):
@@ -602,7 +603,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_post_isolation_runtime_preserves_spawn_effect_result_close_and_process_group_frames(self) -> None:
         """Catches semantic drift while extracting the legacy callback runtime."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             policy = self._policy(Path(temporary))
             channel = _RecordingChannel((
                 ("effect_reporting_closed", None),
@@ -735,7 +736,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_signal_cancel_occurs_only_after_isolation_ready(self) -> None:
         """Catches signal cancellation becoming executable before readiness."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
             policy = self._policy(root / "policy")
             trace = root / "trace"

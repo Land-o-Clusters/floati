@@ -12,6 +12,7 @@ from pathlib import Path
 
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
@@ -25,7 +26,7 @@ def compact(value: object) -> str:
 
 class McpStdioTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet",

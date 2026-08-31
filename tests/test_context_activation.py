@@ -21,6 +21,7 @@ from floati.manifest import _deployable_paths
 from floati.registry import Registry
 from floati.role_templates import SHIPPED_ROLE_NAMES
 from floati.root import FloatiRoot
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
@@ -28,7 +29,7 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 
 class ContextActivationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.root_path = Path(self.temporary.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.root_path, create=True)

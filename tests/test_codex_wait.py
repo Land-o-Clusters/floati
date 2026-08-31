@@ -18,11 +18,12 @@ from floati.events import EventLog
 from floati.jsonl import read_records_snapshot
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class CodexWaitParticipationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.bus_home = self.base / "demo-fleet"
@@ -113,7 +114,7 @@ class CodexWaitParticipationTests(unittest.TestCase):
 
 class CodexWaitContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.bus_home = self.base / "demo-fleet"

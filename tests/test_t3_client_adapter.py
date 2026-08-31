@@ -18,6 +18,7 @@ from floati.adapters.t3 import (
     T3TokenSource,
 )
 from floati.errors import ProtocolRefusal
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 OK = b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nsecret-body\n"
@@ -190,7 +191,7 @@ class T3ClientAdapterTests(unittest.TestCase):
         self.assertTrue(all(record.get("token_source_configured") is True for record in ledger.records()))
 
     def test_file_token_source_is_passed_through_but_not_recorded(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             token_path = Path(temporary) / "t3.token"
             token_path.write_text("file-token-value\n", encoding="utf-8")
             adapter, channel, ledger, _calls = self.adapter(

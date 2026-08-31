@@ -48,6 +48,7 @@ from floati.wake_daemon_adapters import AdapterBinding, WakeAdapterResult, adapt
 from floati.wake_daemon_contract import AdapterBindingStore, DaemonConsentLedger, DaemonCoordinate
 from floati.wake_hold import WakeAttemptLedger, WakeHoldController
 from tests.schema_validation import SchemaValidationError, validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -433,7 +434,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
     """G5 rotates one byte-exact event/delivery/ack epoch as a unit."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.home = self.base / "epoch-tenant"
@@ -1274,7 +1275,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         module = cls._epoch_module()
         guards = []
         probe_root = FloatiRoot.open_direct_home(
-            Path(tempfile.mkdtemp(dir="\x2fprivate/tmp")) / "epoch-guard-probe", create=True
+            Path(tempfile.mkdtemp(dir=REAL_TEMP_ROOT)) / "epoch-guard-probe", create=True
         )
         for value in vars(module).values():
             if not callable(value):

@@ -14,6 +14,7 @@ from unittest import mock
 from floati.errors import ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 HARNESS = Path(__file__).parent / "fixtures" / "pi-rpc" / "reference_harness.py"
@@ -29,7 +30,7 @@ except (ImportError, ModuleNotFoundError):
 
 class PiRpcSessionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.workspace = Path(self.temp.name) / "workspace"
         self.workspace.mkdir()
