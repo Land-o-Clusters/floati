@@ -61,6 +61,10 @@
         {
           "name": "Run byte-level public name fence",
           "run": "python3 scripts/public_name_fence.py ."
+        },
+        {
+          "name": "Refuse a version spelled two different ways",
+          "run": "python3 -m floati.release --repository-root ."
         }
       ]
     }
