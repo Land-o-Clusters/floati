@@ -58,7 +58,7 @@ shutdown, and artifact questions. The implementation checkpoint is
 `baafa20c3881dc5d40c63eead96cc5cfa5abc065`.
 
 Work items opt into one derived mapping at
-`/private/tmp/slipway-work/<work-id>`. The worker creates it only after the
+`/tmp/slipway-work/<work-id>`. The worker creates it only after the
 authority-checked claim. The local reference harness executes the exact stdio
 sequence `initialize → initialized → thread/start → turn/start`, interleaves
 unrelated responses and notifications, and completes one real local file
@@ -90,9 +90,9 @@ and remains available to the outer runner for abrupt-death cleanup.
 ### Real-provider proof boundary
 
 A fresh fleet was created at
-`/private/tmp/slipway-hm1b-live-20260731-1`. The first real item was
+`/tmp/slipway-hm1b-live-20260731-1`. The first real item was
 `work-019fba52105171f2b9473c25db908d78`, with retained workspace
-`/private/tmp/slipway-work/work-019fba52105171f2b9473c25db908d78`.
+`/tmp/slipway-work/work-019fba52105171f2b9473c25db908d78`.
 The exact CLI command durably wrote claim receipt
 `worker-receipt-019fba523cfe74729d29b1034a897809`, then degradation receipt
 `worker-receipt-019fba523de7790aae834c20cd9b9441` with
@@ -126,7 +126,7 @@ command executed once unsandboxed:
 
 ```sh
 python3 -m slip worker run \
-  --root /private/tmp/slipway-hm1b-live-20260731-1 \
+  --root /tmp/slipway-hm1b-live-20260731-1 \
   --as floati-proof --adapter codex
 ```
 
@@ -141,7 +141,7 @@ It returned exit 0 with `transition=complete` for work item
 5. `complete` — `worker-receipt-019fba82fe06725bada7bdb343c0c383`
 
 Both binding receipts and the completed work item name the retained workspace
-`/private/tmp/slipway-work/work-019fba52a0f77de6a5d41c0a0080b359`,
+`/tmp/slipway-work/work-019fba52a0f77de6a5d41c0a0080b359`,
 repository `local/work-019fba52a0f77de6a5d41c0a0080b359`, document
 `PROOF.txt`, and commit `746dc783b96f75b586fa77ab9bd1aa90fe730af8`.
 Independent verification observed commit type `commit`, exact tree

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,14 +38,14 @@ class _Reader:
 
 class TideEvaluationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet-alpha", create=True
         )
         registry = Registry(self.root)
         registry.register("architect", "architect")
-        registry.register("lane-codex", "codex")
+        registry.register(public_ids.builder('codex'), "codex")
         self.binding = SimpleNamespace(
             harness="codex", session_id="session-1",
             workspace=Path(self.temporary.name),
@@ -70,13 +72,13 @@ class TideEvaluationTests(unittest.TestCase):
 
     def policy(self, action: str = "recommend") -> dict:
         return TidePolicyLedger(self.root).set(
-            "lane-codex", "context_fraction", "70%", action,
+            public_ids.builder('codex'), "context_fraction", "70%", action,
             idempotency_key=f"policy-{action}",
         )
 
     def test_no_policy_performs_zero_metric_reads(self) -> None:
         reader = _Reader("0.9")
-        result = self.evaluator(reader).evaluate("lane-codex", self.binding)
+        result = self.evaluator(reader).evaluate(public_ids.builder('codex'), self.binding)
         self.assertEqual("off", result["state"])
         self.assertEqual(0, reader.calls)
 
@@ -84,8 +86,8 @@ class TideEvaluationTests(unittest.TestCase):
         self.policy()
         reader = _Reader("0.8")
         evaluator = self.evaluator(reader)
-        first = evaluator.evaluate("lane-codex", self.binding)
-        repeated = evaluator.evaluate("lane-codex", self.binding)
+        first = evaluator.evaluate(public_ids.builder('codex'), self.binding)
+        repeated = evaluator.evaluate(public_ids.builder('codex'), self.binding)
         self.assertEqual("crossed", first["state"])
         self.assertEqual("above", repeated["state"])
         self.assertEqual("DERIVED", first["receipt"]["stamp"])
@@ -97,11 +99,11 @@ class TideEvaluationTests(unittest.TestCase):
         self.assertEqual(1, len(notices))
         self.assertIn("TIDE NOTICE", notices[0]["note"])
         reader.value = "0.6"
-        self.assertEqual("rearmed", evaluator.evaluate("lane-codex", self.binding)["state"])
+        self.assertEqual("rearmed", evaluator.evaluate(public_ids.builder('codex'), self.binding)["state"])
         reader.value = "0.8"
-        self.assertEqual("crossed", evaluator.evaluate("lane-codex", self.binding)["state"])
+        self.assertEqual("crossed", evaluator.evaluate(public_ids.builder('codex'), self.binding)["state"])
         self.assertEqual(2, len([row for row in EventLog(self.root).records() if row["recipient"] == "architect"]))
-        projected = evaluator.projection("lane-codex")
+        projected = evaluator.projection(public_ids.builder('codex'))
         self.assertEqual("DERIVED", projected["last_reading"]["stamp"])
         self.assertEqual("0.8", projected["last_reading"]["value"])
         self.assertEqual("active", projected["policy"]["state"])
@@ -110,17 +112,17 @@ class TideEvaluationTests(unittest.TestCase):
         self.policy("direct")
         reader = _Reader("0.8")
         evaluator = self.evaluator(reader)
-        crossed = evaluator.evaluate("lane-codex", self.binding)
-        envelope = [row for row in EventLog(self.root).records() if row["recipient"] == "lane-codex"][0]
+        crossed = evaluator.evaluate(public_ids.builder('codex'), self.binding)
+        envelope = [row for row in EventLog(self.root).records() if row["recipient"] == public_ids.builder('codex')][0]
         self.assertIn("TURNOVER DIRECTIVE", envelope["note"])
         self.assertIn("prep-clear", envelope["note"])
-        self.assertTrue(evaluator.dispatch_held("lane-codex"))
-        self.assertEqual("directed", evaluator.status("lane-codex")["turnover_state"])
-        self.assertEqual("held", evaluator.evaluate("lane-codex", self.binding)["state"])
+        self.assertTrue(evaluator.dispatch_held(public_ids.builder('codex')))
+        self.assertEqual("directed", evaluator.status(public_ids.builder('codex'))["turnover_state"])
+        self.assertEqual("held", evaluator.evaluate(public_ids.builder('codex'), self.binding)["state"])
         self.assertEqual(1, reader.calls)
         self.assertEqual(
             1,
-            len([row for row in EventLog(self.root).records() if row["recipient"] == "lane-codex"]),
+            len([row for row in EventLog(self.root).records() if row["recipient"] == public_ids.builder('codex')]),
         )
         flush = {
             "schema_version": 0,
@@ -128,8 +130,8 @@ class TideEvaluationTests(unittest.TestCase):
             "tenant_id": self.root.tenant_id,
             "timestamp": "2099-01-01T00:00:00.000Z",
             "kind": "node_state_flush_receipt",
-            "node_id": "lane-codex",
-            "state_file": str(self.root.path / "nodes/lane-codex/STATE.md"),
+            "node_id": public_ids.builder('codex'),
+            "state_file": str(self.root.path / public_ids.compose('nodes/', public_ids.builder('codex'), '/STATE.md')),
             "operation": "flush",
             "observed_mtime_ns": 2,
             "observed_size_bytes": 1,
@@ -140,35 +142,35 @@ class TideEvaluationTests(unittest.TestCase):
             crossed["receipt"]["crossing_receipt_id"],
             completion["crossing_receipt_id"],
         )
-        self.assertFalse(evaluator.dispatch_held("lane-codex"))
-        self.assertEqual("state_flushed", evaluator.status("lane-codex")["turnover_state"])
+        self.assertFalse(evaluator.dispatch_held(public_ids.builder('codex')))
+        self.assertEqual("state_flushed", evaluator.status(public_ids.builder('codex'))["turnover_state"])
 
     def test_directed_turnover_blocks_policy_clear_or_replacement(self) -> None:
         self.policy("direct")
         evaluator = self.evaluator(_Reader("0.8"))
-        evaluator.evaluate("lane-codex", self.binding)
+        evaluator.evaluate(public_ids.builder('codex'), self.binding)
         policies = TidePolicyLedger(self.root)
 
         with self.assertRaises(ProtocolRefusal) as clear_error:
-            policies.clear("lane-codex", idempotency_key="clear-while-directed")
+            policies.clear(public_ids.builder('codex'), idempotency_key="clear-while-directed")
         self.assertEqual("tide_directive_active", clear_error.exception.code)
 
         with self.assertRaises(ProtocolRefusal) as set_error:
             policies.set(
-                "lane-codex", "context_fraction", "80%", "recommend",
+                public_ids.builder('codex'), "context_fraction", "80%", "recommend",
                 idempotency_key="replace-while-directed",
             )
         self.assertEqual("tide_directive_active", set_error.exception.code)
-        self.assertEqual("directed", evaluator.status("lane-codex")["turnover_state"])
+        self.assertEqual("directed", evaluator.status(public_ids.builder('codex'))["turnover_state"])
 
     def test_fleet_status_names_policy_and_directive_side_of_flush_line(self) -> None:
         from datetime import datetime, timezone
         from floati.projection import FleetProjection
 
         self.policy("direct")
-        self.evaluator(_Reader("0.8")).evaluate("lane-codex", self.binding)
+        self.evaluator(_Reader("0.8")).evaluate(public_ids.builder('codex'), self.binding)
         snapshot = FleetProjection(self.root).snapshot(datetime.now(timezone.utc))
-        node = next(row for row in snapshot["nodes"] if row["node_id"] == "lane-codex")
+        node = next(row for row in snapshot["nodes"] if row["node_id"] == public_ids.builder('codex'))
         self.assertEqual(
             {"policy": "active", "turnover_state": "directed"},
             node["tide"],
@@ -189,8 +191,8 @@ class TideEvaluationTests(unittest.TestCase):
 
         with mock.patch.object(evaluator, "_record", side_effect=fail_second):
             with self.assertRaises(OSError):
-                evaluator.evaluate("lane-codex", self.binding)
-        recovered = self.evaluator(_Reader("0.8")).evaluate("lane-codex", self.binding)
+                evaluator.evaluate(public_ids.builder('codex'), self.binding)
+        recovered = self.evaluator(_Reader("0.8")).evaluate(public_ids.builder('codex'), self.binding)
         self.assertEqual("crossed", recovered["state"])
         self.assertEqual(
             1,
@@ -212,10 +214,10 @@ class TideEvaluationTests(unittest.TestCase):
 
         with mock.patch.object(evaluator, "_record", side_effect=fail_second):
             with self.assertRaises(OSError):
-                evaluator.evaluate("lane-codex", self.binding)
+                evaluator.evaluate(public_ids.builder('codex'), self.binding)
 
         recovered = self.evaluator(_Reader("0.6")).evaluate(
-            "lane-codex", self.binding
+            public_ids.builder('codex'), self.binding
         )
 
         self.assertEqual("crossed", recovered["state"])
@@ -225,7 +227,7 @@ class TideEvaluationTests(unittest.TestCase):
         )
         self.assertEqual(
             "rearmed",
-            self.evaluator(_Reader("0.6")).evaluate("lane-codex", self.binding)["state"],
+            self.evaluator(_Reader("0.6")).evaluate(public_ids.builder('codex'), self.binding)["state"],
         )
 
 

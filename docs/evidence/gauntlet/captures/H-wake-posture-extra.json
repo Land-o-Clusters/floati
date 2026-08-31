@@ -69,7 +69,7 @@
       "exit": 0,
       "stderr": "",
       "stderr_bytes": 0,
-      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: \u002fUsers/penguinspecz/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
       "stdout_bytes": 221
     }
   },

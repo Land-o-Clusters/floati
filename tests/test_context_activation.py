@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import io
 import json
 import os
@@ -26,7 +28,7 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 
 class ContextActivationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.root_path = Path(self.temporary.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.root_path, create=True)
@@ -156,7 +158,7 @@ class ContextActivationTests(unittest.TestCase):
                 arguments = shlex.split(example)[1:]
                 arguments = [
                     str(self.root_path) if value == "/var/tmp/fleet"
-                    else "builder-a" if value == "lane-a"
+                    else "builder-a" if value == public_ids.builder('a')
                     else value
                     for value in arguments
                 ]

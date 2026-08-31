@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -23,8 +25,8 @@ class StatusSnapshotTests(unittest.TestCase):
         self.root = FloatiRoot.open_direct_home(
             Path(self.temp.name) / "status-snapshot", create=True
         )
-        Registry(self.root).register("alice", "worker")
-        WorkLog(self.root).add("first item", "alice", [], now=NOW)
+        Registry(self.root).register(public_ids.worker('alpha'), "worker")
+        WorkLog(self.root).add("first item", public_ids.worker('alpha'), [], now=NOW)
 
     def test_stable_status_and_work_tail_do_not_full_scan(self) -> None:
         projection = FleetProjection(self.root)
@@ -40,7 +42,7 @@ class StatusSnapshotTests(unittest.TestCase):
         self.assertEqual(first["work_counts"], stable["work_counts"])
 
         WorkLog(self.root).add(
-            "second item", "alice", [], now=NOW + timedelta(seconds=2)
+            "second item", public_ids.worker('alpha'), [], now=NOW + timedelta(seconds=2)
         )
         with patch.object(
             FleetProjection,
@@ -54,7 +56,7 @@ class StatusSnapshotTests(unittest.TestCase):
         )
 
     def test_liveness_clock_boundary_falls_back_and_expires(self) -> None:
-        LivenessPresenceStore(self.root).observe("alice", 10, NOW)
+        LivenessPresenceStore(self.root).observe(public_ids.worker('alpha'), 10, NOW)
         projection = FleetProjection(self.root)
         before = projection.status_artifact(NOW + timedelta(seconds=4))
 

@@ -1,29 +1,29 @@
 ⊙ FLOATI // HARBOR BOARD
 OBSERVED 2026-07-31T12:00:10.000Z
-[38;5;208m! DENIAL IDEMPOTENCY_CONFLICT fable → lane-floati[0m
-[38;5;208m! STALE AUTHORITY app-build holder:lane-app[0m
-[38;5;208m! STALE MUTEX fable-workspace holder:fable[0m
+[38;5;208m! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core[0m
+[38;5;208m! STALE AUTHORITY app-build holder:builder-app[0m
+[38;5;208m! STALE MUTEX builder-review-workspace holder:builder-review[0m
 
 NODE               LIVE       AUTH       MUTEX      INBOX  LAST
-[38;5;208m>[0m fable              [38;5;208mEXPIRED[0m    NONE       [38;5;208mEXPIRED[0m        0  12:00:06.000
-  lane-app           [38;5;208mSILENT[0m     [38;5;208mEXPIRED[0m    ACTIVE         0  11:59:40.000
-  lane-floati        PRESENT    ACTIVE     NONE           1  12:00:09.000
+[38;5;208m>[0m builder-review     [38;5;208mEXPIRED[0m    NONE       [38;5;208mEXPIRED[0m        0  12:00:06.000
+  builder-app        [38;5;208mSILENT[0m     [38;5;208mEXPIRED[0m    ACTIVE         0  11:59:40.000
+  builder-core       PRESENT    ACTIVE     NONE           1  12:00:09.000
 
 WORK DAG  [[38;5;208m▓[0m[38;5;208m▓[0m░░░░░░░░]  20%
   READY     review provisional copy  holder:-
-  CLAIMED   polish harbor board  holder:lane-floati
-  DONE      verify protocol gate  holder:lane-floati
-  CLAIMED   claim worker item  holder:lane-floati
-  CLAIMED   drive worker item  holder:lane-floati
+  CLAIMED   polish harbor board  holder:builder-core
+  DONE      verify protocol gate  holder:builder-core
+  CLAIMED   claim worker item  holder:builder-core
+  CLAIMED   drive worker item  holder:builder-core
 
 CONSUMPTION  WORK AVAILABLE
   coordinate: work/items.jsonl
 
 WORKERS
-[38;5;208m  DEGRADED  lane-floati codex demo-work-2 PROCESS DIED[0m
-  COMPLETE  lane-floati acp demo-work-3
-  CLAIM     lane-floati codex demo-work-4
-[38;5;208m  DRIVING   lane-floati codex demo-work-5[0m
+[38;5;208m  DEGRADED  builder-core codex demo-work-2 PROCESS DIED[0m
+  COMPLETE  builder-core acp demo-work-3
+  CLAIM     builder-core codex demo-work-4
+[38;5;208m  DRIVING   builder-core codex demo-work-5[0m
 
 RECEIPTS
   DELIVERY 1 ITEM

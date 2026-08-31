@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 from .errors import ProtocolRefusal
 from .storage_identity import INSTALL_METADATA_DIRECTORY
+from .update_ownership import validate_install_ownership
 
 
 _METADATA_RELATIVE = PurePosixPath(INSTALL_METADATA_DIRECTORY, "manifest.v0.json")
@@ -51,7 +52,11 @@ def _owned_tool_path(relative: PurePosixPath) -> bool:
     value = relative.as_posix()
     return (
         value == "LICENSE"
-        or value in {"scripts/floati", "scripts/floati-codex-wait"}
+        or value in {
+            "scripts/floati",
+            "scripts/floati-codex-wait",
+            "scripts/floati-quota-statusline",
+        }
         or value.startswith("floati/")
         or value.startswith("schemas/")
         or value.startswith("bundle/")
@@ -143,17 +148,32 @@ class UninstallWriter:
                 "uninstall_manifest_invalid",
                 "install ownership metadata is unreadable",
             ) from exc
-        if not isinstance(payload, dict) or set(payload) != {
-            "schema_version", "source_ref", "source_sha", "files"
-        }:
+        if not isinstance(payload, dict):
             raise ProtocolRefusal(
                 "uninstall_manifest_invalid",
                 "install ownership metadata has an unexpected shape",
             )
-        if payload["schema_version"] != 0 or isinstance(payload["schema_version"], bool):
+        schema_version = payload.get("schema_version")
+        if isinstance(schema_version, bool) or schema_version not in {0, 1}:
             raise ProtocolRefusal(
                 "uninstall_manifest_invalid", "install ownership schema is unsupported"
             )
+        expected_fields = {"schema_version", "source_ref", "source_sha", "files"}
+        ownership = None
+        if schema_version == 1:
+            expected_fields.add("ownership")
+        if set(payload) != expected_fields:
+            raise ProtocolRefusal(
+                "uninstall_manifest_invalid",
+                "install ownership metadata has an unexpected shape",
+            )
+        if schema_version == 1:
+            try:
+                ownership = validate_install_ownership(payload["ownership"])
+            except ProtocolRefusal as exc:
+                raise ProtocolRefusal(
+                    "uninstall_manifest_invalid", exc.detail
+                ) from exc
         if not isinstance(payload["source_ref"], str) or not payload["source_ref"]:
             raise ProtocolRefusal(
                 "uninstall_manifest_invalid", "install source ref is invalid"
@@ -212,6 +232,23 @@ class UninstallWriter:
             raise ProtocolRefusal(
                 "uninstall_manifest_invalid", "install ownership paths are not ordered"
             )
+        if ownership is not None:
+            entrypoint_digest = next(
+                (
+                    entry["sha256"]
+                    for entry in entries
+                    if entry["path"] == ownership["entrypoint"]
+                ),
+                None,
+            )
+            if (
+                ownership["destination"] != str(destination)
+                or entrypoint_digest != ownership["entrypoint_sha256"]
+            ):
+                raise ProtocolRefusal(
+                    "uninstall_manifest_invalid",
+                    "install ownership binding does not match the removable file set",
+                )
         metadata_digest = _digest_bytes(raw)
         metadata_receipt = {
             "path": _METADATA_RELATIVE.as_posix(),

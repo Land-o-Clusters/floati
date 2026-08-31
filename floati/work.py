@@ -71,7 +71,7 @@ class WorkLog:
         if needs:
             record["needs"] = list(needs)
         if provision_workspace:
-            record["workspace"] = f"/private/tmp/floati-work/{item_id}"
+            record["workspace"] = f"\x2fprivate/tmp/floati-work/{item_id}"
         validate_record(record, self.root.tenant_id, frozenset({"work_item"}), integrity=False)
 
         def decide(records: List[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:

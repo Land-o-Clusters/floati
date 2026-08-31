@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Floati multi-fleet topology</title>
+  <desc id="desc">One machine running three independent floati fleets: a product fleet and a research fleet, each a star around its own append-only root with an architect seat, plus a solo seat with its own root. Architects exchange artifacts as peers; fleets have no path between them unless one is built.</desc>
+
+  <rect width="1440" height="900" rx="28" fill="#101820"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+
+    <!-- machine boundary -->
+    <rect x="30" y="30" width="1380" height="800" rx="24" fill="none" stroke="#55636F" stroke-width="2.5" stroke-dasharray="10 8"/>
+    <text x="60" y="66" fill="#AAB6BF" font-size="20" font-weight="700" letter-spacing="3">ONE MACHINE</text>
+    <text x="1380" y="66" fill="#AAB6BF" font-size="15" text-anchor="end">three fleets · zero crosstalk by default</text>
+
+    <!-- ============ BUS A: PRODUCT FLEET ============ -->
+    <rect x="70" y="95" width="620" height="675" rx="20" fill="#131C25" stroke="#55636F" stroke-width="2"/>
+    <text x="100" y="133" fill="#AAB6BF" font-size="21" font-weight="700" letter-spacing="3">PRODUCT FLEET</text>
+
+    <!-- architect A -->
+    <rect x="270" y="155" width="220" height="62" rx="14" fill="#18232D" stroke="#52B788" stroke-width="3.5"/>
+    <text x="380" y="182" fill="#F1EFE8" font-size="20" font-weight="700" text-anchor="middle">ARCHITECT</text>
+    <text x="380" y="204" fill="#AAB6BF" font-size="15" text-anchor="middle">a Claude seat</text>
+
+    <!-- root A -->
+    <rect x="262" y="385" width="236" height="160" rx="18" fill="#18232D" stroke="#E8622C" stroke-width="4"/>
+    <rect x="262" y="385" width="236" height="13" rx="6.5" fill="#E8622C"/>
+    <text x="380" y="425" fill="#F1EFE8" font-size="18" font-weight="800" text-anchor="middle" letter-spacing="1">ROOT ~/.bus/product</text>
+    <text x="380" y="455" fill="#AAB6BF" font-size="15" text-anchor="middle">MAIL · WORK · RECEIPTS</text>
+    <text x="380" y="479" fill="#AAB6BF" font-size="15" text-anchor="middle">append-only ledgers</text>
+    <text x="380" y="523" fill="#E8622C" font-size="14" font-weight="700" text-anchor="middle">the only meeting place</text>
+
+    <!-- seats A -->
+    <g fill="#18232D" stroke="#55636F" stroke-width="2">
+      <rect x="88"  y="310" width="162" height="56" rx="12"/>
+      <rect x="88"  y="490" width="162" height="56" rx="12"/>
+      <rect x="510" y="310" width="162" height="56" rx="12"/>
+      <rect x="510" y="490" width="162" height="56" rx="12"/>
+    </g>
+    <g fill="#F1EFE8" font-size="18" font-weight="700" text-anchor="middle">
+      <text x="169" y="338">Codex</text>
+      <text x="169" y="518">Codex</text>
+      <text x="591" y="338">Grok</text>
+      <text x="591" y="518">OpenCode</text>
+    </g>
+    <g fill="#AAB6BF" font-size="13" text-anchor="middle">
+      <text x="169" y="357">builder</text>
+      <text x="169" y="537">builder</text>
+      <text x="591" y="357">verifier</text>
+      <text x="591" y="537">scout</text>
+    </g>
+
+    <!-- spokes A: seats to root (blue) -->
+    <g fill="none" stroke="#35B8D0" stroke-width="3" stroke-linecap="round">
+      <path d="M 180 366 C 205 396 232 412 262 420"/>
+      <path d="M 250 512 L 262 506"/>
+      <path d="M 580 366 C 555 396 528 412 498 420"/>
+      <path d="M 510 512 L 498 506"/>
+    </g>
+    <!-- architect spoke (green, heavier) -->
+    <path d="M 380 217 L 380 383" fill="none" stroke="#52B788" stroke-width="4.5" stroke-linecap="round"/>
+    <text x="398" y="300" fill="#52B788" font-size="14" font-weight="700">dispatch · gate</text>
+
+    <text x="380" y="620" fill="#AAB6BF" font-size="16" text-anchor="middle">star governance: asks route to the architect,</text>
+    <text x="380" y="644" fill="#AAB6BF" font-size="16" text-anchor="middle">and everything rides the ledger — no side channels</text>
+    <text x="380" y="700" fill="#AAB6BF" font-size="14" text-anchor="middle" font-style="italic">four harnesses, one bus, one authority</text>
+
+    <!-- ============ BUS B: RESEARCH FLEET ============ -->
+    <rect x="740" y="95" width="620" height="330" rx="20" fill="#131C25" stroke="#55636F" stroke-width="2"/>
+    <text x="770" y="133" fill="#AAB6BF" font-size="21" font-weight="700" letter-spacing="3">RESEARCH FLEET</text>
+
+    <!-- architect B -->
+    <rect x="770" y="160" width="200" height="62" rx="14" fill="#18232D" stroke="#52B788" stroke-width="3.5"/>
+    <text x="870" y="187" fill="#F1EFE8" font-size="20" font-weight="700" text-anchor="middle">ARCHITECT</text>
+    <text x="870" y="209" fill="#AAB6BF" font-size="15" text-anchor="middle">a Codex seat</text>
+
+    <!-- root B -->
+    <rect x="1100" y="150" width="235" height="150" rx="18" fill="#18232D" stroke="#E8622C" stroke-width="4"/>
+    <rect x="1100" y="150" width="235" height="12" rx="6" fill="#E8622C"/>
+    <text x="1217" y="192" fill="#F1EFE8" font-size="16" font-weight="800" text-anchor="middle">ROOT ~/.bus/research</text>
+    <text x="1217" y="220" fill="#AAB6BF" font-size="14" text-anchor="middle">MAIL · WORK · RECEIPTS</text>
+    <text x="1217" y="246" fill="#AAB6BF" font-size="13" text-anchor="middle">its own ledgers,</text>
+    <text x="1217" y="264" fill="#AAB6BF" font-size="13" text-anchor="middle">its own law</text>
+
+    <!-- seats B: one clean row -->
+    <g fill="#18232D" stroke="#55636F" stroke-width="2">
+      <rect x="770"  y="330" width="150" height="56" rx="12"/>
+      <rect x="945"  y="330" width="150" height="56" rx="12"/>
+      <rect x="1120" y="330" width="150" height="56" rx="12"/>
+    </g>
+    <g fill="#F1EFE8" font-size="17" font-weight="700" text-anchor="middle">
+      <text x="845"  y="356">Pi</text>
+      <text x="1020" y="356">Devin</text>
+      <text x="1195" y="356">Cline</text>
+    </g>
+    <g fill="#AAB6BF" font-size="12.5" text-anchor="middle">
+      <text x="845"  y="375">reader</text>
+      <text x="1020" y="375">runner</text>
+      <text x="1195" y="375">builder</text>
+    </g>
+
+    <!-- spokes B: seats rise to the root, architect joins from the left -->
+    <g fill="none" stroke="#35B8D0" stroke-width="3" stroke-linecap="round">
+      <path d="M 860 330 C 920 305 1010 282 1100 262"/>
+      <path d="M 1020 330 C 1070 322 1130 312 1178 300"/>
+      <path d="M 1198 330 C 1210 320 1222 310 1233 300"/>
+    </g>
+    <path d="M 970 191 C 1020 192 1060 199 1100 208" fill="none" stroke="#52B788" stroke-width="4.5" stroke-linecap="round"/>
+
+    <!-- ============ PEER LINK between architects ============ -->
+    <path d="M 490 178 C 565 148 695 150 770 180" fill="none" stroke="#AAB6BF" stroke-width="3" stroke-dasharray="9 7" stroke-linecap="round"/>
+    <circle cx="490" cy="178" r="5" fill="#AAB6BF"/>
+    <circle cx="770" cy="180" r="5" fill="#AAB6BF"/>
+    <path d="M 630 158 L 630 210" fill="none" stroke="#AAB6BF" stroke-width="2" stroke-dasharray="5 5"/>
+    <rect x="522" y="210" width="216" height="64" rx="11" fill="#18232D" stroke="#55636F" stroke-width="1.5"/>
+    <text x="630" y="233" fill="#F1EFE8" font-size="14" font-weight="700" text-anchor="middle">peer architects</text>
+    <text x="630" y="252" fill="#AAB6BF" font-size="12.5" text-anchor="middle" font-style="italic">artifacts travel,</text>
+    <text x="630" y="267" fill="#AAB6BF" font-size="12.5" text-anchor="middle" font-style="italic">authority doesn't</text>
+
+    <!-- ============ BUS C: SOLO ============ -->
+    <rect x="740" y="460" width="620" height="310" rx="20" fill="#131C25" stroke="#55636F" stroke-width="2"/>
+    <text x="770" y="498" fill="#AAB6BF" font-size="21" font-weight="700" letter-spacing="3">SOLO</text>
+    <text x="945" y="498" fill="#AAB6BF" font-size="15">— same product, one seat</text>
+
+    <rect x="790" y="560" width="210" height="62" rx="14" fill="#18232D" stroke="#55636F" stroke-width="2"/>
+    <text x="895" y="587" fill="#F1EFE8" font-size="19" font-weight="700" text-anchor="middle">Claude</text>
+    <text x="895" y="608" fill="#AAB6BF" font-size="14" text-anchor="middle">one seat, whole fleet</text>
+
+    <rect x="1120" y="545" width="210" height="130" rx="18" fill="#18232D" stroke="#E8622C" stroke-width="4"/>
+    <rect x="1120" y="545" width="210" height="12" rx="6" fill="#E8622C"/>
+    <text x="1225" y="583" fill="#F1EFE8" font-size="17" font-weight="800" text-anchor="middle">ROOT ~/.bus/solo</text>
+    <text x="1225" y="611" fill="#AAB6BF" font-size="14" text-anchor="middle">the receipts don't care</text>
+    <text x="1225" y="633" fill="#AAB6BF" font-size="14" text-anchor="middle">how big you are</text>
+
+    <path d="M 1000 590 C 1040 595 1070 600 1116 607" fill="none" stroke="#35B8D0" stroke-width="3" stroke-linecap="round"/>
+
+    <text x="1050" y="720" fill="#AAB6BF" font-size="15" text-anchor="middle" font-style="italic">no path between fleets unless you build one —</text>
+    <text x="1050" y="742" fill="#AAB6BF" font-size="15" text-anchor="middle" font-style="italic">isolation is a feature, not a limitation</text>
+
+    <!-- honesty strip -->
+    <text x="720" y="862" fill="#AAB6BF" font-size="15" text-anchor="middle">Every element above is a shipping mechanism — roots, ledgers, leases, star governance. Nothing is aspirational.</text>
+  </g>
+</svg>

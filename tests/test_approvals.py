@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import tempfile
 import unittest
@@ -25,17 +27,17 @@ class ApprovalLedgerTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         self.registry = Registry(self.root)
-        self.registry.register("alice", "Codex")
-        self.registry.register("fable", "Claude")
+        self.registry.register(public_ids.worker('alpha'), "Codex")
+        self.registry.register(public_ids.reviewer(), "Claude")
         self.grant = AuthorityGrantStore(self.root).claim(
-            "approve-build", "fable", 120, 120, NOW
+            "approve-build", public_ids.reviewer(), 120, 120, NOW
         )
 
     def request(self):
         from floati.approvals import ApprovalLedger
 
         return ApprovalLedger(self.root).request(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:slipway",
             60,
@@ -49,7 +51,7 @@ class ApprovalLedgerTests(unittest.TestCase):
 
         digest = hashlib.sha256(b"git push origin guarded").hexdigest()
         request = ApprovalLedger(self.root).request_for_action(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:slipway",
             60,
@@ -67,7 +69,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         request = self.request()
         decision = ledger.decide(
             request["id"],
-            "fable",
+            public_ids.reviewer(),
             "approved",
             None,
             granted_scope="repo:slipway",
@@ -87,7 +89,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         digest, request = self.action_request()
         decision = ledger.decide(
             request["id"],
-            "fable",
+            public_ids.reviewer(),
             "approved",
             None,
             granted_scope="repo:slipway",
@@ -109,7 +111,7 @@ class ApprovalLedgerTests(unittest.TestCase):
 
         denied_digest = hashlib.sha256(b"git reset --hard guarded").hexdigest()
         denied_request = ledger.request_for_action(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:slipway",
             60,
@@ -120,7 +122,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         )
         denied = ledger.decide(
             denied_request["id"],
-            "fable",
+            public_ids.reviewer(),
             "denied",
             "operator_denied",
             now=NOW + timedelta(seconds=4),
@@ -142,20 +144,20 @@ class ApprovalLedgerTests(unittest.TestCase):
         ledger = ApprovalLedger(self.root)
         digest, request = self.action_request()
         decision = ledger.decide(
-            request["id"], "fable", "approved", None,
+            request["id"], public_ids.reviewer(), "approved", None,
             granted_scope="repo:slipway", granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
         selected_request, selected_decision = ledger.require_approved_action(
-            request["id"], decision["id"], requester="alice",
+            request["id"], decision["id"], requester=public_ids.worker('alpha'),
             exact_action_digest=digest, now=NOW + timedelta(seconds=3),
         )
         self.assertEqual(request, selected_request)
         self.assertEqual(decision, selected_decision)
 
         for requester, action_digest in (
-            ("fable", digest),
-            ("alice", "9" * 64),
+            (public_ids.reviewer(), digest),
+            (public_ids.worker('alpha'), "9" * 64),
         ):
             with self.subTest(requester=requester, digest=action_digest):
                 with self.assertRaises(ProtocolRefusal) as caught:
@@ -177,7 +179,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         )
         with self.assertRaises(ProtocolRefusal) as semantic:
             ledger.require_approved_action(
-                request["id"], forged["id"], requester="alice",
+                request["id"], forged["id"], requester=public_ids.worker('alpha'),
                 exact_action_digest=digest, now=NOW + timedelta(seconds=3),
             )
         self.assertEqual("effect_approval_action_mismatch", semantic.exception.code)
@@ -193,7 +195,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     ledger.request_for_action(
-                        "alice",
+                        public_ids.worker('alpha'),
                         "workspace.patch",
                         "repo:slipway",
                         60,
@@ -218,7 +220,7 @@ class ApprovalLedgerTests(unittest.TestCase):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     ledger.decide(
                         request["id"],
-                        "fable",
+                        public_ids.reviewer(),
                         "approved",
                         None,
                         now=NOW + timedelta(seconds=2),
@@ -228,7 +230,7 @@ class ApprovalLedgerTests(unittest.TestCase):
 
         with self.assertRaises(ProtocolRefusal) as authority:
             ledger.request_for_action(
-                "alice",
+                public_ids.worker('alpha'),
                 "workspace.patch",
                 "repo:slipway",
                 60,
@@ -246,7 +248,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         request = self.request()
         decision = ledger.decide(
             request["id"],
-            "fable",
+            public_ids.reviewer(),
             "approved",
             None,
             granted_scope="repo:slipway",
@@ -263,7 +265,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         self.assertEqual(30, decision["granted_ttl_seconds"])
         with self.assertRaises(ProtocolRefusal) as duplicate:
             ledger.decide(
-                request["id"], "fable", "denied", "operator_denied",
+                request["id"], public_ids.reviewer(), "denied", "operator_denied",
                 now=NOW + timedelta(seconds=3),
             )
         self.assertEqual("approval_already_decided", duplicate.exception.code)
@@ -289,7 +291,7 @@ class ApprovalLedgerTests(unittest.TestCase):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     ledger.decide(
                         request["id"],
-                        "fable",
+                        public_ids.reviewer(),
                         "approved",
                         None,
                         now=NOW + timedelta(seconds=2),
@@ -305,7 +307,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         request = self.request()
         denied = ledger.decide(
             request["id"],
-            "fable",
+            public_ids.reviewer(),
             "denied",
             "operator_denied",
             now=NOW + timedelta(seconds=2),
@@ -330,7 +332,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             with self.subTest(code=code):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     ledger.request(
-                        "alice", "workspace.patch", "repo:slipway", 60,
+                        public_ids.worker('alpha'), "workspace.patch", "repo:slipway", 60,
                         subject, epoch, now=current,
                     )
                 self.assertEqual(code, caught.exception.code)
@@ -340,16 +342,16 @@ class ApprovalLedgerTests(unittest.TestCase):
 
         ledger = CapabilityLedger(self.root)
         record = ledger.declare(
-            "alice", "workspace.patch", "read_only", "repo:slipway", 30, now=NOW
+            public_ids.worker('alpha'), "workspace.patch", "read_only", "repo:slipway", 30, now=NOW
         )
 
         self.assertEqual("capability", record["kind"])
-        self.assertEqual("read_only", ledger.current("alice", "workspace.patch", NOW)["mode"])
+        self.assertEqual("read_only", ledger.current(public_ids.worker('alpha'), "workspace.patch", NOW)["mode"])
         self.assertEqual("expired", ledger.current(
-            "alice", "workspace.patch", NOW + timedelta(seconds=30)
+            public_ids.worker('alpha'), "workspace.patch", NOW + timedelta(seconds=30)
         )["status"])
         with self.assertRaises(ProtocolRefusal) as boolean_mode:
-            ledger.declare("alice", "workspace.patch", True, "repo:slipway", 30, now=NOW)
+            ledger.declare(public_ids.worker('alpha'), "workspace.patch", True, "repo:slipway", 30, now=NOW)
         self.assertEqual("capability_mode_invalid", boolean_mode.exception.code)
 
 

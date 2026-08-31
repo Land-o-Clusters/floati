@@ -9,8 +9,8 @@ environment-root fallback, daemon, or wake command.
 | Node | Harness | Repository |
 | --- | --- | --- |
 | reviewer | Claude | no fixed repository; receives repository-bound fleet notifications |
-| lane-app | Codex | `~/fleet/app` |
-| lane-floati | Codex | `~/fleet/floati` |
+| builder-app | Codex | `~/fleet/app` |
+| builder-floati | Codex | `~/fleet/floati` |
 
 These are the only example node identities. Each node registers itself; an
 operator must not pre-create another node's row. Initialize the durable home
@@ -26,11 +26,11 @@ Then each harness runs only its own first registration command:
 # Run by the reviewer from the Claude harness.
 /repo/floati/scripts/floati register --root /var/tmp/floati-tenant-a reviewer --harness Claude
 
-# Run by lane-app from its Codex harness.
-/repo/floati/scripts/floati register --root /var/tmp/floati-tenant-a lane-app --harness Codex
+# Run by builder-app from its Codex harness.
+/repo/floati/scripts/floati register --root /var/tmp/floati-tenant-a builder-app --harness Codex
 
-# Run by lane-floati from its Codex harness.
-/repo/floati/scripts/floati register --root /var/tmp/floati-tenant-a lane-floati --harness Codex
+# Run by builder-floati from its Codex harness.
+/repo/floati/scripts/floati register --root /var/tmp/floati-tenant-a builder-floati --harness Codex
 ```
 
 ## Polling and receipts
@@ -40,8 +40,8 @@ HM-0.5:
 
 ```sh
 /repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as reviewer
-/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as lane-app
-/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as lane-floati
+/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-app
+/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-floati
 ```
 
 An inbox presentation writes a delivery receipt. After reviewing the Git
@@ -62,7 +62,7 @@ A sender names a repository, exact lowercase 40- or 64-character Git SHA,
 repository-relative evidence document, and bounded note:
 
 ```sh
-/repo/floati/scripts/floati send --root /var/tmp/floati-tenant-a --from lane-floati --to reviewer --repo floati --sha <checkpoint-sha> --doc docs/evidence/checkpoint.md --note checkpoint
+/repo/floati/scripts/floati send --root /var/tmp/floati-tenant-a --from builder-floati --to reviewer --repo floati --sha <checkpoint-sha> --doc docs/evidence/checkpoint.md --note checkpoint
 /repo/floati/scripts/floati log --root /var/tmp/floati-tenant-a
 ```
 

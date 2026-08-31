@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -448,12 +450,12 @@ class RegistryEventTests(unittest.TestCase):
         """Catches retraction racing outside the controller coordination boundary."""
         from floati.wake_hold import WakeHoldController
 
-        for node in ("alice", "bob"):
+        for node in (public_ids.worker('alpha'), "bob"):
             self.registry.register(node, "worker")
         session = "worker-018f7e9b3c137abc8def0123456789ab"
-        item = self.events.send("alice", "bob", "slipway", "a" * 40, "docs/evidence/held.md", "held", idempotency_key="held", worker_session_id=session)
+        item = self.events.send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/held.md", "held", idempotency_key="held", worker_session_id=session)
         WakeHoldController(self.root).evaluate("bob", idempotency_key="held-key", worker_session_id=session)
-        self.events.retract(item["id"], worker_session_id=session, reason="sent_in_error", author="alice")
+        self.events.retract(item["id"], worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'))
         artifact = WakeHoldController(self.root).evaluate("bob", idempotency_key="later-key", worker_session_id=session)
         self.assertEqual("caught_up", artifact["state"])
 

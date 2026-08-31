@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 import json
@@ -55,7 +57,7 @@ class WorkLogTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         self.registry = Registry(self.root)
-        self.registry.register("alice", "Codex")
+        self.registry.register(public_ids.worker('alpha'), "Codex")
         self.registry.register("bravo", "Codex")
 
     @staticmethod
@@ -67,23 +69,23 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        item_a = work.add("frame mail", "alice", [self.binding(SHA_A, "docs/a.md")])
-        item_b = work.add("build board", "alice", [])
+        item_a = work.add("frame mail", public_ids.worker('alpha'), [self.binding(SHA_A, "docs/a.md")])
+        item_b = work.add("build board", public_ids.worker('alpha'), [])
         item_c = work.add("study acp", "bravo", [])
 
         grant = AuthorityGrantStore(self.root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
         claimed = work.claim(
             item_b["id"],
-            "alice",
+            public_ids.worker('alpha'),
             "work-claims",
             grant["epoch"],
             now=NOW,
         )
         completed = work.complete(
             item_b["id"],
-            "alice",
+            public_ids.worker('alpha'),
             [self.binding(SHA_B, "docs/evidence/b.md")],
             now=NOW,
         )
@@ -115,17 +117,17 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        item = work.add("bind authority", "alice", [])
+        item = work.add("bind authority", public_ids.worker('alpha'), [])
         grant = AuthorityGrantStore(self.root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
         path = self.home / "work" / "items.jsonl"
         before = path.read_bytes()
 
         cases = (
             ("bravo", "work-claims", grant["epoch"], "authority_holder_mismatch"),
-            ("alice", "work-claims", grant["epoch"] + 1, "authority_epoch_mismatch"),
-            ("alice", "other-subject", grant["epoch"], "authority_missing"),
+            (public_ids.worker('alpha'), "work-claims", grant["epoch"] + 1, "authority_epoch_mismatch"),
+            (public_ids.worker('alpha'), "other-subject", grant["epoch"], "authority_missing"),
         )
         for actor, subject, epoch, code in cases:
             with self.subTest(code=code):
@@ -138,12 +140,12 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        item = work.add("ordered transitions", "alice", [])
+        item = work.add("ordered transitions", public_ids.worker('alpha'), [])
         path = self.home / "work" / "items.jsonl"
         before = path.read_bytes()
 
         with self.assertRaises(ProtocolRefusal) as caught:
-            work.complete(item["id"], "alice", [], now=NOW)
+            work.complete(item["id"], public_ids.worker('alpha'), [], now=NOW)
         self.assertEqual("work_not_claimed", caught.exception.code)
         self.assertEqual(before, path.read_bytes())
 
@@ -151,15 +153,15 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        oldest_alice = work.add("oldest alice", "alice", [])
+        oldest_alice = work.add(public_ids.compose('oldest ', public_ids.worker('alpha')), public_ids.worker('alpha'), [])
         work.add("bravo work", "bravo", [])
-        work.add("newer alice", "alice", [])
+        work.add(public_ids.compose('newer ', public_ids.worker('alpha')), public_ids.worker('alpha'), [])
         grant = AuthorityGrantStore(self.root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
 
         claimed = work.claim_owned_oldest(
-            "alice", "work-claims", grant["epoch"], now=NOW
+            public_ids.worker('alpha'), "work-claims", grant["epoch"], now=NOW
         )
 
         self.assertEqual(oldest_alice["id"], claimed["id"])
@@ -171,7 +173,7 @@ class WorkLogTests(unittest.TestCase):
             sorted(
                 item["state"]
                 for item in states.values()
-                if item["owner"] == "alice"
+                if item["owner"] == public_ids.worker('alpha')
             ),
         )
 
@@ -179,17 +181,17 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        legacy = work.add("legacy sparse work", "alice", [])
+        legacy = work.add("legacy sparse work", public_ids.worker('alpha'), [])
         live = work.add(
             "create one local artifact",
-            "alice",
+            public_ids.worker('alpha'),
             [],
             provision_workspace=True,
         )
 
         self.assertNotIn("workspace", legacy)
         self.assertEqual(
-            f"/private/tmp/floati-work/{live['id']}",
+            f"\x2fprivate/tmp/floati-work/{live['id']}",
             live["workspace"],
         )
         projected = {item["id"]: item for item in work.show()}
@@ -200,7 +202,7 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        prerequisite = work.add("prepare input", "alice", [])
+        prerequisite = work.add("prepare input", public_ids.worker('alpha'), [])
 
         for needs, code in (
             (["work-018f0f23abcd71238000000000000000"], "work_dependency_unknown"),
@@ -209,20 +211,20 @@ class WorkLogTests(unittest.TestCase):
         ):
             with self.subTest(code=code):
                 with self.assertRaises(ProtocolRefusal) as caught:
-                    work.add("dependent", "alice", [], needs=needs)
+                    work.add("dependent", public_ids.worker('alpha'), [], needs=needs)
                 self.assertEqual(code, caught.exception.code)
 
     def test_blocked_claims_refuse_until_dependencies_complete(self) -> None:
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        prerequisite = work.add("prepare input", "alice", [])
+        prerequisite = work.add("prepare input", public_ids.worker('alpha'), [])
         dependent = work.add(
-            "consume input", "alice", [], needs=[prerequisite["id"]]
+            "consume input", public_ids.worker('alpha'), [], needs=[prerequisite["id"]]
         )
-        unrelated = work.add("independent work", "alice", [])
+        unrelated = work.add("independent work", public_ids.worker('alpha'), [])
         grant = AuthorityGrantStore(self.root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
 
         projected = {item["id"]: item for item in work.show()}
@@ -232,15 +234,15 @@ class WorkLogTests(unittest.TestCase):
 
         with self.assertRaises(ProtocolRefusal) as caught:
             work.claim(
-                dependent["id"], "alice", "work-claims", grant["epoch"], now=NOW
+                dependent["id"], public_ids.worker('alpha'), "work-claims", grant["epoch"], now=NOW
             )
         self.assertEqual("work_dependencies_blocked", caught.exception.code)
 
         selected = work.claim_owned_oldest(
-            "alice", "work-claims", grant["epoch"], now=NOW
+            public_ids.worker('alpha'), "work-claims", grant["epoch"], now=NOW
         )
         self.assertEqual(prerequisite["id"], selected["id"])
-        work.complete(prerequisite["id"], "alice", [], now=NOW)
+        work.complete(prerequisite["id"], public_ids.worker('alpha'), [], now=NOW)
 
         projected = {item["id"]: item for item in work.show()}
         self.assertEqual("done", projected[prerequisite["id"]]["readiness"])
@@ -251,8 +253,8 @@ class WorkLogTests(unittest.TestCase):
         from floati.work import WorkLog
 
         work = WorkLog(self.root)
-        first = work.add("first", "alice", [])
-        second = work.add("second", "alice", [])
+        first = work.add("first", public_ids.worker('alpha'), [])
+        second = work.add("second", public_ids.worker('alpha'), [])
         path = self.home / "work" / "items.jsonl"
         records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
         records[0]["needs"] = [second["id"]]

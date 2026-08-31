@@ -1,4 +1,4 @@
-ROOT=/private/tmp/floati-captures.LtNmwM/other5/harbor-board
+ROOT=/tmp/floati-captures.LtNmwM/other5/harbor-board
 $ floati board --root $ROOT --session capture-session --no-animation
 
 ⊙ FLOATI // HARBOR BOARD

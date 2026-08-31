@@ -1,0 +1,21 @@
+{
+  "labels": [
+    "area:board",
+    "area:bus",
+    "area:docs",
+    "area:doctor",
+    "area:ledger",
+    "area:orchestrate",
+    "area:replay",
+    "area:roles",
+    "area:schemas",
+    "area:wake",
+    "blocked",
+    "needs-repro",
+    "receipts",
+    "ruled",
+    "security",
+    "tech-debt"
+  ],
+  "schema_version": 0
+}

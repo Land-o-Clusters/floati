@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -113,9 +115,9 @@ class _RunLimitCase:
         registry = Registry(self.root)
         for worker in ("node-a", "node-b"):
             registry.register(worker, "Codex")
-        registry.register("fable", "Claude")
+        registry.register(public_ids.reviewer(), "Claude")
         authority = AuthorityGrantStore(self.root).claim(
-            "approve-build", "fable", 300, 300, NOW
+            "approve-build", public_ids.reviewer(), 300, 300, NOW
         )
         approvals = ApprovalLedger(self.root)
         self.grants = CapabilityGrantLedger(self.root)
@@ -129,7 +131,7 @@ class _RunLimitCase:
                     now=NOW + timedelta(seconds=offset),
                 )
                 decision = approvals.decide(
-                    request["id"], "fable", "approved", None,
+                    request["id"], public_ids.reviewer(), "approved", None,
                     granted_scope="worker:" + worker, granted_ttl_seconds=90,
                     now=NOW + timedelta(seconds=offset, milliseconds=100),
                 )

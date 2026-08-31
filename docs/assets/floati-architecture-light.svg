@@ -14,8 +14,11 @@
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
     <text x="70" y="70" fill="#55636F" font-size="24" font-weight="700" letter-spacing="3">HARNESSES</text>
+    <text x="70" y="93" fill="#55636F" font-size="15" font-style="italic">your agents, as they are</text>
     <text x="700" y="70" fill="#23313C" font-size="28" font-weight="800" text-anchor="middle" letter-spacing="2">ONE FLOATI ROOT</text>
+    <text x="700" y="93" fill="#55636F" font-size="15" font-style="italic" text-anchor="middle">one folder of plain files</text>
     <text x="1040" y="70" fill="#55636F" font-size="24" font-weight="700" letter-spacing="3">PROJECTIONS</text>
+    <text x="1040" y="93" fill="#55636F" font-size="15" font-style="italic">views computed on demand</text>
 
     <g fill="#FFFFFF" stroke="#AAB6BF" stroke-width="2">
       <rect x="70" y="105" width="290" height="72" rx="14"/>

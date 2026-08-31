@@ -13,7 +13,7 @@ command, bundle entry, packaging entry, installed hook, or live transport.
 
 ## 2. Placeholder copy keys
 
-Future visible output may resolve only these Fable-owned placeholders:
+Future visible output may resolve only these architect-owned placeholders:
 
 - `[[locks.escalation.action_taken_not_role]]`
 - `[[locks.handoff.pending]]`

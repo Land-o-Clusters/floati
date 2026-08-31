@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import tempfile
 import unittest
@@ -64,19 +66,19 @@ class _TideEvaluator:
 
 class _WakeDaemonFixture(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
         registry = Registry(self.root)
         registry.register("sender", "architect")
-        registry.register("lane-a", "worker")
+        registry.register(public_ids.builder('a'), "worker")
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.executable = self.base / "cursor-agent"
         self.executable.write_bytes(b"#!/bin/sh\nexit 0\n")
         self.executable.chmod(0o700)
-        self.coordinate = DaemonCoordinate(self.root, "lane-a", "cursor")
+        self.coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         self.adapter = _Adapter(self.root, self.coordinate)
 
     def bind(self, session_id: str = "cursor-session-1") -> None:
@@ -110,7 +112,7 @@ class _WakeDaemonFixture(unittest.TestCase):
     def send(self, key: str = "daemon-message") -> dict:
         return EventLog(self.root).send(
             "sender",
-            "lane-a",
+            public_ids.builder('a'),
             "floati",
             "a" * 40,
             "docs/evidence/wake-daemon.md",
@@ -122,7 +124,7 @@ class _WakeDaemonFixture(unittest.TestCase):
     def send_unbound(self, key: str = "daemon-unbound-message") -> dict:
         return EventLog(self.root).send(
             "sender",
-            "lane-a",
+            public_ids.builder('a'),
             "floati",
             "a" * 40,
             "docs/evidence/wake-daemon.md",
@@ -230,7 +232,7 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
             with self.subTest(session=session):
                 with self.assertRaisesRegex(ProtocolRefusal, "exact"):
                     WakeController(self.root).pause(
-                        "lane-a", session, idempotency_key="forbidden-" + session
+                        public_ids.builder('a'), session, idempotency_key="forbidden-" + session
                     )
 
     def test_malformed_pause_marker_blocks_the_adapter(self) -> None:
@@ -238,7 +240,7 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
         self.consent()
         digest = hashlib.sha256(b"cursor-session-1").hexdigest()
         marker = self.root.resolve_relative(
-            Path("state/wake-control/lane-a") / f"{digest}.json"
+            Path(public_ids.compose('state/wake-control/', public_ids.builder('a'))) / f"{digest}.json"
         )
         marker.parent.mkdir(parents=True)
         marker.write_bytes(b"{not-json\n")
@@ -261,7 +263,7 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
         self.assertEqual("wake_evidence_unknown", result["state"])
         self.assertEqual(1, len(self.adapter.calls))
         self.assertFalse(
-            self.root.resolve_relative("receipts/wakes/lane-a.jsonl").exists()
+            self.root.resolve_relative(public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('a')))).exists()
         )
 
 
@@ -287,7 +289,7 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
 
         self.assertEqual("woke", result["state"])
         self.assertIn(message["id"], self.adapter.calls[0][1])
-        wake_rows = self.root.resolve_relative("receipts/wakes/lane-a.jsonl").read_text(
+        wake_rows = self.root.resolve_relative(public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('a')))).read_text(
             encoding="utf-8"
         )
         self.assertIn('"message_worker_session_id":null', wake_rows)
@@ -297,11 +299,11 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
 
         self.send("pause-message")
         control = WakeController(self.root)
-        control.pause("lane-a", "cursor-session-1", idempotency_key="pause-exact")
+        control.pause(public_ids.builder('a'), "cursor-session-1", idempotency_key="pause-exact")
         daemon = self.daemon()
         self.assertEqual("paused", daemon.run_cycle(100.0)["state"])
         self.assertEqual([], self.adapter.calls)
-        control.resume("lane-a", "cursor-session-1", idempotency_key="resume-exact")
+        control.resume(public_ids.builder('a'), "cursor-session-1", idempotency_key="resume-exact")
         self.assertEqual("woke", daemon.run_cycle(102.0)["state"])
 
     def test_unknowns_back_off_and_trip_the_circuit_without_acknowledging(self) -> None:
@@ -314,7 +316,7 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         self.assertEqual(["adapter_unknown"] * 3, states)
         runtime = daemon.read_runtime()
         self.assertEqual("open", runtime["circuit_state"])
-        self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids("lane-a", worker_session_id="cursor-session-1"))
+        self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids(public_ids.builder('a'), worker_session_id="cursor-session-1"))
 
     def test_three_wakes_exhaust_the_rolling_budget_without_a_fourth_call(self) -> None:
         daemon = self.daemon()

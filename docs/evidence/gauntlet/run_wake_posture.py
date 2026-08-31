@@ -97,7 +97,7 @@ def main() -> int:
             ],
         },
         "claude": {
-            "binaries": ["/opt/homebrew/bin/claude", "~/.local/bin/claude"],
+            "binaries": ["/opt/homebrew/bin/claude", "\x2fUsers/penguinspecz/.local/bin/claude"],
             "commands": [
                 ["/opt/homebrew/bin/claude", "--version"],
                 ["/opt/homebrew/bin/claude", "--help"],
@@ -115,11 +115,11 @@ def main() -> int:
         "cursor": {
             "binaries": [
                 "/opt/homebrew/bin/cursor-agent",
-                "~/.local/bin/cursor-agent",
+                "\x2fUsers/penguinspecz/.local/bin/cursor-agent",
                 "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
             ],
             "commands": [
-                ["~/.local/bin/cursor-agent", "--version"],
+                ["\x2fUsers/penguinspecz/.local/bin/cursor-agent", "--version"],
                 ["/opt/homebrew/bin/cursor-agent", "--help"],
                 [
                     "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",

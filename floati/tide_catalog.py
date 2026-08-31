@@ -10,6 +10,16 @@ from .errors import ProtocolRefusal
 
 T1_SURVEY = "docs/evidence/gauntlet/T1-tide-survey.md"
 T1_DEPTH2 = "docs/evidence/gauntlet/T1-depth2.md"
+V4_QUOTA_BRIEF = "docs/design/v4-quota-truth-brief-2026-08-28.md"
+
+_HARNESS_PROVIDERS = {
+    "claude": "anthropic_claude_code",
+    "codex": "openai_codex",
+    "gemini": "google_gemini",
+    "cursor": "cursor_individual",
+    "grok-build": "xai_grok",
+    "github-copilot": "github_copilot",
+}
 
 
 @dataclass(frozen=True)
@@ -37,6 +47,18 @@ _ROWS = (
     TideMetric("claude", "self_reported_context_fraction", "B", "SELF_REPORTED", "fraction", "latest testimony from the node's /context command", T1_SURVEY),
     TideMetric("cursor", "self_reported_context_fraction", "B", "SELF_REPORTED", "fraction", "latest human-typed composer /context testimony from the node", T1_SURVEY),
     TideMetric("grok-build", "self_reported_context_fraction", "B", "SELF_REPORTED", "fraction", "latest testimony from the node's /context command", T1_SURVEY),
+    *(
+        TideMetric(
+            harness,
+            "quota_fraction",
+            "A",
+            "MEASURED_OR_DERIVED",
+            "fraction",
+            "latest cited provider consumed_fraction quota fact",
+            V4_QUOTA_BRIEF,
+        )
+        for harness in _HARNESS_PROVIDERS
+    ),
 )
 
 _BY_KEY: Dict[Tuple[str, str], TideMetric] = {
@@ -48,7 +70,8 @@ def canonical_harness(value: object) -> str:
     if not isinstance(value, str):
         raise ProtocolRefusal("tide_harness_invalid", "tide harness must be text")
     key = value.strip().casefold()
-    aliases = {"grok": "grok-build", "claude-code": "claude"}
+    grok_build = "grok-build"
+    aliases = {grok_build.removesuffix("-build"): grok_build, "claude-code": "claude"}
     return aliases.get(key, key)
 
 
@@ -60,19 +83,31 @@ def metrics_for(harness: object) -> tuple[TideMetric, ...]:
 def policy_metrics_for(harness: object) -> tuple[TideMetric, ...]:
     """Return only metrics backed by the shipped wake-daemon evaluator."""
     key = canonical_harness(harness)
-    if key not in {"codex", "cursor"}:
-        return ()
-    return metrics_for(key)
+    rows = metrics_for(key)
+    if key in {"codex", "cursor"}:
+        return rows
+    return tuple(row for row in rows if row.name == "quota_fraction")
 
 
 def policy_metric_for(harness: object, metric: object) -> TideMetric:
     selected = metric_for(harness, metric)
-    if selected.harness not in {"codex", "cursor"}:
+    if selected.name != "quota_fraction" and selected.harness not in {"codex", "cursor"}:
         raise ProtocolRefusal(
             "tide_evaluator_unavailable",
             f"{selected.harness} has no shipped wake-daemon evaluator; authority: {selected.receipt_path}",
         )
     return selected
+
+
+def provider_for_harness(harness: object) -> str:
+    key = canonical_harness(harness)
+    provider = _HARNESS_PROVIDERS.get(key)
+    if provider is None:
+        raise ProtocolRefusal(
+            "quota_harness_unmapped",
+            f"harness {key} has no ruled local quota provider",
+        )
+    return provider
 
 
 def metric_for(harness: object, metric: object) -> TideMetric:

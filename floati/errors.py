@@ -15,6 +15,15 @@ class FloatiError(RuntimeError):
 class ProtocolRefusal(FloatiError):
     """A requested operation was rejected before its primary mutation."""
 
+    def __init__(
+        self,
+        code: str,
+        detail: str,
+        remedy: str | None = None,
+    ) -> None:
+        super().__init__(code, detail)
+        self.remedy = remedy
+
 
 class IntegrityFailure(FloatiError):
     """Durable evidence is malformed or internally inconsistent."""

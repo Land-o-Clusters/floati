@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -70,7 +72,7 @@ class RecordValidationTests(unittest.TestCase):
             "tenant_id": "alpha",
             "timestamp": "2026-07-31T12:00:00.000Z",
             "kind": "message_envelope",
-            "sender": "alice",
+            "sender": public_ids.worker('alpha'),
             "recipient": "bob",
             "repo": "owner/slipway",
             "sha": "a" * 40,
@@ -94,7 +96,7 @@ class RecordValidationTests(unittest.TestCase):
             "author_authority": "worker",
             "source_artifact_ids": ["run:run-" + uuid7_hex()],
             "task_contract_id": None,
-            "decided_by": "fable",
+            "decided_by": public_ids.reviewer(),
             "supersedes": None,
         }
         record["decision_digest"] = decision_digest(record)
@@ -120,7 +122,7 @@ class RecordValidationTests(unittest.TestCase):
         }
 
     def valid_run_admission(self) -> dict:
-        workers = [{"node_id": "alice", "worker_profile": "codex"}]
+        workers = [{"node_id": public_ids.worker('alpha'), "worker_profile": "codex"}]
         reservations = [{"budget_id": "build", "amount": 1}]
         items = [{
             "item_id": "work-018f7e9b3c117abc8def0123456789ab",
@@ -153,7 +155,7 @@ class RecordValidationTests(unittest.TestCase):
             "tenant_id": "alpha",
             "timestamp": "2026-08-09T12:00:00.000Z",
             "kind": "approval_request",
-            "requester": "alice",
+            "requester": public_ids.worker('alpha'),
             "capability": "workspace.patch",
             "scope": "repo:slipway",
             "requested_ttl_seconds": 60,
@@ -171,7 +173,7 @@ class RecordValidationTests(unittest.TestCase):
             "timestamp": "2026-08-09T12:00:01.000Z",
             "kind": "approval_decision",
             "request_id": request["id"],
-            "decider": "fable",
+            "decider": public_ids.reviewer(),
             "decision": decision,
             "granted_scope": "repo:slipway" if approved else None,
             "granted_ttl_seconds": 30 if approved else None,
@@ -481,7 +483,7 @@ class RecordValidationTests(unittest.TestCase):
         self.assertEqual(legacy["id"], durable[1]["reply_to"])
 
     def test_message_session_binding_and_retraction_use_only_fable_shapes(self) -> None:
-        """Fable TD3/TD4 keeps legacy binding literal and retraction vocabulary closed."""
+        'reviewer TD3/TD4 keeps legacy binding literal and retraction vocabulary closed.'
         legacy = self.valid_message()
         legacy["attempt_binding"] = "absent_legacy"
         append_record(
@@ -516,7 +518,7 @@ class RecordValidationTests(unittest.TestCase):
             "retracted_message_id": bound["id"],
             "worker_session_id": binding["worker_session_id"],
             "reason": "security_scrub",
-            "author": "alice",
+            "author": public_ids.worker('alpha'),
         }
         append_record(
             self.root,

@@ -91,32 +91,32 @@
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3"
     },
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3-code"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3-code"
     },
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3code"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3code"
     },
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3_code"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3_code"
     },
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3code-cli"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3code-cli"
     },
     {
       "exists": false,
       "is_symlink": false,
-      "path": "~/.local/bin/t3-cli"
+      "path": "\u002fUsers/penguinspecz/.local/bin/t3-cli"
     }
   ],
   "npm_dep_count": 4,

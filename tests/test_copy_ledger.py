@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import unittest
+import tempfile
 from pathlib import Path
 import subprocess
 
@@ -44,6 +47,7 @@ class CopyLedgerTests(unittest.TestCase):
             "help.wake.daemon.stop", "help.wake.daemon.remove",
             "help.wake.daemon.revoke",
             "help.wake.arm",
+            "help.quota", "help.quota.collect", "help.quota.show",
             "replay.header", "replay.plain_prefix", "replay.summary",
             "replay.event.claim", "replay.event.turn",
             "replay.event.degraded", "replay.event.denied",
@@ -61,8 +65,27 @@ class CopyLedgerTests(unittest.TestCase):
         self.assertTrue(path.is_file(), "visible provisional strings require a tracked copy ledger")
         self.assertEqual(copy_ledger_markdown(), path.read_text(encoding="utf-8"))
 
+    def test_copy_examples_use_role_neutral_fictional_nodes(self) -> None:
+        """Projecting a seat-shaped example into an invalid two-word argv is rejected."""
+
+        from floati.copy import copy_ledger_markdown
+        from scripts.public_name_fence import scan_tree
+
+        ledger = copy_ledger_markdown()
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "docs" / "COPY-LEDGER.md"
+            path.parent.mkdir(parents=True)
+            path.write_text(ledger, encoding="utf-8")
+            findings = [
+                finding
+                for finding in scan_tree(Path(temporary))
+                if finding["code"] == "seat_name"
+            ]
+            self.assertEqual([], findings)
+        self.assertIn(public_ids.builder("a"), ledger)
+
     def test_hidden_wake_evaluation_has_no_registered_copy_entry(self) -> None:
-        """Catches the internal wake gate entering Fable-owned visible copy."""
+        'Catches the internal wake gate entering reviewer-owned visible copy.'
         from floati.copy import copy_ledger_markdown
         from floati.helptext import _RAW
 

@@ -1,12 +1,12 @@
 {
   "schema_version": 0,
   "id": "gateway-ingress-019fbb00000070008000000000000011",
-  "tenant_id": "puddle-fleet",
+  "tenant_id": "demo-fleet",
   "timestamp": "2026-08-01T15:00:00.000Z",
   "kind": "gateway_session_ingress",
   "gateway_version": 0,
   "session_id": "session-019fbb00000070008000000000000011",
-  "actor": "lane-a",
-  "workspace": "/private/tmp/slipway-gateway-work/session-a",
+  "actor": "builder-a",
+  "workspace": "\u002fprivate/tmp/slipway-gateway-work/session-a",
   "transport": "stdio"
 }

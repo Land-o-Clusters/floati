@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -27,15 +29,15 @@ class FleetProjectionTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
+        registry.register(public_ids.worker('alpha'), "Codex")
         registry.register("bravo", "Codex")
-        LivenessPresenceStore(self.root).observe("alice", 60, NOW)
-        AuthorityGrantStore(self.root).claim("work-claims", "alice", 60, 60, NOW)
-        WorkLog(self.root).add("open item", "alice", [], now=NOW)
+        LivenessPresenceStore(self.root).observe(public_ids.worker('alpha'), 60, NOW)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.worker('alpha'), 60, 60, NOW)
+        WorkLog(self.root).add("open item", public_ids.worker('alpha'), [], now=NOW)
 
         events = EventLog(self.root)
         self.message = events.send(
-            "alice", "bravo", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="projection-mail",
         )
         events.present("bravo")
@@ -44,7 +46,7 @@ class FleetProjectionTests(unittest.TestCase):
         )
         with self.assertRaises(ProtocolRefusal) as caught:
             events.send(
-                "alice", "bravo", "slipway", "a" * 40,
+                public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
                 "docs/evidence/checkpoint.md", "denied",
                 idempotency_key="projection-mail",
             )
@@ -60,7 +62,7 @@ class FleetProjectionTests(unittest.TestCase):
         self.assertNotIn("root", snapshot)
         self.assertNotIn("tenant_id", snapshot)
         self.assertNotIn("mode", snapshot)
-        self.assertEqual(["alice", "bravo"], [node["node_id"] for node in snapshot["nodes"]])
+        self.assertEqual([public_ids.worker('alpha'), "bravo"], [node["node_id"] for node in snapshot["nodes"]])
         self.assertEqual({"open": 1, "claimed": 0, "completed": 0}, snapshot["work_counts"])
         self.assertEqual({"delivery": 1, "ack": 1, "denial": 1}, snapshot["receipt_counts"])
         self.assertEqual(0, snapshot["stale_lease_count"])
@@ -91,8 +93,8 @@ class FleetProjectionTests(unittest.TestCase):
                 "tenant_id": self.root.tenant_id,
                 "timestamp": "2026-07-31T12:00:00.000Z",
                 "kind": "node_lease",
-                "node_id": "alice",
-                "workspace": str(self.root.path / "nodes" / "alice"),
+                "node_id": public_ids.worker('alpha'),
+                "workspace": str(self.root.path / "nodes" / public_ids.worker('alpha')),
                 "expires_at": "2026-07-31T12:01:00.000Z",
                 "state": "active",
             },
@@ -103,7 +105,7 @@ class FleetProjectionTests(unittest.TestCase):
             NOW + timedelta(minutes=2)
         )
 
-        self.assertEqual(["alice", "bravo"], [row["node_id"] for row in snapshot["nodes"]])
+        self.assertEqual([public_ids.worker('alpha'), "bravo"], [row["node_id"] for row in snapshot["nodes"]])
 
     def test_receipts_keeps_delivery_ack_and_denial_histories_distinct(self) -> None:
         from floati.projection import FleetProjection
@@ -120,10 +122,10 @@ class FleetProjectionTests(unittest.TestCase):
     def test_status_projects_worker_state_from_receipts_only(self) -> None:
         work = WorkLog(self.root)
         item = work.show()[0]
-        work.claim(item["id"], "alice", "work-claims", 1, now=NOW)
+        work.claim(item["id"], public_ids.worker('alpha'), "work-claims", 1, now=NOW)
         WorkerReceipts(self.root).append(
             "worker-018f0f23abcd71238000000000000000",
-            item["id"], "alice", "codex", "claim", None, [], now=NOW,
+            item["id"], public_ids.worker('alpha'), "codex", "claim", None, [], now=NOW,
         )
 
         from floati.projection import FleetProjection

@@ -5,8 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from floati.adapters.antigravity import AntigravityAdapter
 from floati.adapters.cline import ClineAdapter
 from floati.adapters.cursor import CursorAgentAdapter
+from floati.adapters.devin import DevinAdapter
 from floati.adapters.grok_build import GrokBuildAdapter
 from floati.adapters.headless_template import (
     HeadlessProfileAdapter,
@@ -44,11 +46,13 @@ ROSTER = [
     ("opencode", OpenCodeAdapter),
     ("cline", ClineAdapter),
     ("pi-observation", PiObservationAdapter),
+    ("devin", DevinAdapter),
+    ("antigravity", AntigravityAdapter),
 ]
 
 
 class RosterOracleTests(unittest.TestCase):
-    """CHECK-ONE applied to ALL FIVE adapters via the runtime-derived
+    """CHECK-ONE applied to every roster adapter via the runtime-derived
     oracle — one law, every roster member."""
 
     def setUp(self) -> None:
@@ -78,14 +82,15 @@ class RosterOracleTests(unittest.TestCase):
 
     def test_availability_absent_binary_is_typed_absent(self):
         """RESTORED LOSS 2 (named for what it checks): availability() on
-        every roster adapter reports a typed ABSENT binary — present=False,
-        surface_verified=False — never a guess."""
+        every roster adapter reports a typed ABSENT binary — present=False
+        — never a guess. surface_verified is the class CHECK-TWO flag, not
+        a claim about the probed path."""
         for name, adapter_cls in ROSTER:
             with self.subTest(adapter=name):
                 probe = adapter_cls.availability(
                     command=(f"/nonexistent/{name}-binary",))
                 self.assertFalse(probe["present"])
-                self.assertFalse(probe["surface_verified"])
+                self.assertEqual(probe["surface_verified"], adapter_cls.surface_verified)
                 self.assertEqual(probe["harness"], name)
 
     def test_constructor_refuses_empty_command(self):
@@ -167,7 +172,7 @@ class ContainmentAndProbeTests(unittest.TestCase):
 
     def test_each_adapter_refuses_relative_command(self):
         for name, adapter_cls in ROSTER:
-            with self.subTest(adapter=name), \
+            with self.subTest(adapter=name),\
                  self.assertRaises(WorkerAdapterFailure):
                 profile = HarnessProfile(
                     name=name, command=("relative-" + name,),

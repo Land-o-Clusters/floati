@@ -9,7 +9,7 @@
   "direction": "outbound",
   "source_tenant_id": "alpha",
   "destination_tenant_id": "beta",
-  "sender": "alice",
+  "sender": "worker-alpha",
   "recipient": "bob",
   "repo": "slipway",
   "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

@@ -2,15 +2,15 @@ FLOATI // HARBOR CHART
 tenant: demo-fleet
 
 ┌────────────────────┐
-│ lane-floati        │
+│ builder-floati     │
 │ ACTIVE · 1 DRIVING │
 └────────────────────┘
 
-┌─────────────────────────┐
-│ puddle-floati-architect │
-│ ACTIVE · 0 WORKERS      │
-└─────────────────────────┘
+┌────────────────────┐
+│ demo-architect     │
+│ ACTIVE · 0 WORKERS │
+└────────────────────┘
 
 TRAFFIC
-lane-floati ── 4 envelopes · ! 1 denial ──▶ puddle-floati-architect
-puddle-floati-architect ── 3 envelopes · 0 denials ──▶ lane-floati
+builder-floati ── 4 envelopes · ! 1 denial ──▶ demo-architect
+demo-architect ── 3 envelopes · 0 denials ──▶ builder-floati

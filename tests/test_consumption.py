@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -32,7 +34,7 @@ class ConsumptionLedgerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open_direct_home(Path(self.temp.name) / "fleet", create=True)
-        Registry(self.root).register("lane-a", "Codex")
+        Registry(self.root).register(public_ids.builder('a'), "Codex")
 
     def test_corrupt_consumption_ledger_is_not_projected_as_empty(self) -> None:
         from floati.consumption import ConsumptionLedger
@@ -65,11 +67,11 @@ class ConsumptionLedgerTests(unittest.TestCase):
         self.assertIn("CAUGHT UP", board)
 
     def test_no_work_refusal_is_visible_as_unsatisfied_wake(self) -> None:
-        AuthorityGrantStore(self.root).claim("work-claims", "lane-a", 60, 60, NOW)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
 
         with self.assertRaises(ProtocolRefusal) as caught:
             WorkerRunner(self.root, {"fixture": _MustNotSpawn()}).run(
-                "lane-a", "fixture", now=NOW
+                public_ids.builder('a'), "fixture", now=NOW
             )
 
         self.assertEqual("worker_work_absent", caught.exception.code)
@@ -78,26 +80,26 @@ class ConsumptionLedgerTests(unittest.TestCase):
         self.assertEqual("worker_work_absent", snapshot["worker_refusals"][-1]["reason_code"])
 
     def test_consumption_never_creates_delivery_or_ack_receipts(self) -> None:
-        AuthorityGrantStore(self.root).claim("work-claims", "lane-a", 60, 60, NOW)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
         with self.assertRaises(ProtocolRefusal):
             WorkerRunner(self.root, {"fixture": _MustNotSpawn()}).run(
-                "lane-a", "fixture", now=NOW
+                public_ids.builder('a'), "fixture", now=NOW
             )
 
-        self.assertFalse(self.root.resolve_relative("receipts/deliveries/lane-a.jsonl").exists())
-        self.assertFalse(self.root.resolve_relative("receipts/acks/lane-a.jsonl").exists())
+        self.assertFalse(self.root.resolve_relative(public_ids.compose('receipts/deliveries/', public_ids.ledger(public_ids.builder('a')))).exists())
+        self.assertFalse(self.root.resolve_relative(public_ids.compose('receipts/acks/', public_ids.ledger(public_ids.builder('a')))).exists())
 
     def test_worker_refusal_distinguishes_blocked_dependencies_from_no_work(self) -> None:
-        Registry(self.root).register("lane-b", "Codex")
-        dependency = WorkLog(self.root).add("upstream", "lane-b", [], now=NOW)
+        Registry(self.root).register(public_ids.builder('b'), "Codex")
+        dependency = WorkLog(self.root).add("upstream", public_ids.builder('b'), [], now=NOW)
         WorkLog(self.root).add(
-            "downstream", "lane-a", [], needs=[dependency["id"]], now=NOW
+            "downstream", public_ids.builder('a'), [], needs=[dependency["id"]], now=NOW
         )
-        AuthorityGrantStore(self.root).claim("work-claims", "lane-a", 60, 60, NOW)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
 
         with self.assertRaises(ProtocolRefusal) as caught:
             WorkerRunner(self.root, {"fixture": _MustNotSpawn()}).run(
-                "lane-a", "fixture", now=NOW
+                public_ids.builder('a'), "fixture", now=NOW
             )
 
         self.assertEqual("worker_work_blocked", caught.exception.code)

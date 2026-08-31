@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -26,7 +28,7 @@ class CrossVersionReaderLawTests(unittest.TestCase):
             Path(self.temporary.name) / "cross-version", create=True
         )
         registry = Registry(self.root)
-        registry.register("alice", "architect")
+        registry.register(public_ids.worker('alpha'), "architect")
         registry.register("bravo", "worker")
 
     def append_raw_event(self, record: object) -> None:

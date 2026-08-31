@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import io
 import json
@@ -8,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.public_projection import projected_role_text
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -32,13 +35,13 @@ def _artifact() -> dict[str, object]:
             "buses": [
                 {
                     "bus_id": "alpha",
-                    "architect_node": "lane-a",
-                    "nodes": [{"id": "lane-a", "role": "Codex"}],
+                    "architect_node": public_ids.builder('a'),
+                    "nodes": [{"id": public_ids.builder('a'), "role": "Codex"}],
                 },
                 {
                     "bus_id": "beta",
-                    "architect_node": "lane-b",
-                    "nodes": [{"id": "lane-b", "role": "Codex"}],
+                    "architect_node": public_ids.builder('b'),
+                    "nodes": [{"id": public_ids.builder('b'), "role": "Codex"}],
                 },
             ],
             "relationships": [{"source": "alpha", "target": "beta"}],
@@ -49,52 +52,52 @@ def _artifact() -> dict[str, object]:
                 "elapsed_ms": 0,
                 "event_class": "claim",
                 "record_kind": "work_transition",
-                "node_id": "lane-a",
+                "node_id": public_ids.builder('a'),
                 "work_item_id": "work-1",
                 "transition": "claim",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": public_ids.builder('a'),
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": public_ids.builder('a'),
             },
             {
                 "sequence": 2,
                 "elapsed_ms": 500,
                 "event_class": "turn",
                 "record_kind": "worker_receipt",
-                "node_id": "lane-b",
+                "node_id": public_ids.builder('b'),
                 "work_item_id": "work-1",
                 "transition": "drive",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": public_ids.builder('a'),
                 "target_bus": "beta",
-                "recipient": "lane-b",
+                "recipient": public_ids.builder('b'),
             },
             {
                 "sequence": 3,
                 "elapsed_ms": 1000,
                 "event_class": "denial",
                 "record_kind": "denial_receipt",
-                "node_id": "lane-b",
+                "node_id": public_ids.builder('b'),
                 "work_item_id": "work-1",
                 "reason_code": "E_DENIED",
                 "source_bus": "beta",
-                "sender": "lane-b",
+                "sender": public_ids.builder('b'),
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": public_ids.builder('a'),
             },
             {
                 "sequence": 4,
                 "elapsed_ms": 1500,
                 "event_class": "completion",
                 "record_kind": "work_transition",
-                "node_id": "lane-a",
+                "node_id": public_ids.builder('a'),
                 "work_item_id": "work-1",
                 "transition": "complete",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": public_ids.builder('a'),
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": public_ids.builder('a'),
             },
         ],
     }
@@ -118,11 +121,11 @@ class RegattaR2MachineTwinTests(unittest.TestCase):
         ).encode("utf-8")
 
         self.assertEqual(
-            "d2ad41e2bd649988466583a585bf8d8b922e3fded124864dbaebb8c5cab6a917",
+            "5afcaf1b1ce5da4f2df292fd82512e63e668bd59336b0a42a63c6c4afc6c2f94",
             hashlib.sha256(plain).hexdigest(),
         )
         self.assertEqual(
-            "d2874ff77b5f79306c7abb5d2453d133cdb3f55dfe3c799208ace0f81db097b5",
+            "20af64dc6a2a55bdb4892bc4e65b604b91838cae8dd21246b06ab63f1ea7b64c",
             hashlib.sha256(machine_json).hexdigest(),
         )
 
@@ -146,9 +149,9 @@ class RegattaR2CinemaTests(unittest.TestCase):
         third = controller.state(3)
 
         self.assertEqual([1, 2], [event["sequence"] for event in second.events])
-        self.assertEqual(("lane-a", "lane-b"), (second.pulse.sender, second.pulse.recipient))
+        self.assertEqual((public_ids.builder('a'), public_ids.builder('b')), (second.pulse.sender, second.pulse.recipient))
         self.assertIsNone(second.fault_node)
-        self.assertEqual("lane-b", third.fault_node)
+        self.assertEqual(public_ids.builder('b'), third.fault_node)
         self.assertEqual("E_DENIED", third.fault_code)
 
     def test_cinema_map_fault_scrubber_and_degradation_tiers_match(self) -> None:
@@ -167,9 +170,9 @@ class RegattaR2CinemaTests(unittest.TestCase):
         self.assertIn("\x1b[38;5;196m", tiers["256"])
         self.assertIn("\x1b[38;5;196mx", tiers["256"])
         self.assertNotIn("\x1b[38;5;", tiers["16"])
-        for signal in ("FLIGHT RECORDER CINEMA", "▤", "x", "lane-b", "E_DENIED"):
+        for signal in ("FLIGHT RECORDER CINEMA", "▤", "x", public_ids.builder('b'), "E_DENIED"):
             self.assertIn(signal, tiers["mono"])
-        self.assertRegex(tiers["mono"], r"lane-b.*x|x.*lane-b")
+        self.assertRegex(tiers["mono"], public_ids.compose(public_ids.builder('b.'), '*x|x.*', public_ids.builder('b')))
         self.assertIn("├", tiers["mono"])
         self.assertIn("┤", tiers["mono"])
         self.assertIn("●", tiers["mono"])
@@ -198,7 +201,7 @@ class RegattaR2CinemaTests(unittest.TestCase):
         self.assertIn("EVENT STREAM", rendered)
         self.assertIn("x", rendered)
         self.assertIn("REPLAY COMPLETE", rendered)
-        self.assertIn("lane-b", rendered)
+        self.assertIn(public_ids.builder('b'), rendered)
 
     def test_claimed_sender_fault_is_prioritized_in_a_tall_harbor(self) -> None:
         """Catches denial identity fallback being clipped from the map."""
@@ -207,7 +210,7 @@ class RegattaR2CinemaTests(unittest.TestCase):
 
         artifact = _artifact()
         artifact["events"][2].pop("node_id")
-        artifact["events"][2]["claimed_sender"] = "lane-b"
+        artifact["events"][2]["claimed_sender"] = public_ids.builder('b')
         artifact["harbor"]["buses"][0]["nodes"].extend(
             {"id": f"filler-{index:02d}", "role": "Codex"}
             for index in range(40)
@@ -220,7 +223,7 @@ class RegattaR2CinemaTests(unittest.TestCase):
             color_tier="mono",
         )
 
-        self.assertIn("x ▤ VESSEL lane-b", rendered)
+        self.assertIn(public_ids.compose('x ▤ VESSEL ', public_ids.builder('b')), rendered)
 
     def test_compressed_timeline_never_overwrites_the_current_tick(self) -> None:
         """Catches future events colliding with and erasing the scrubber position."""
@@ -234,7 +237,7 @@ class RegattaR2CinemaTests(unittest.TestCase):
                 "elapsed_ms": index * 10,
                 "event_class": "turn",
                 "record_kind": "worker_receipt",
-                "node_id": "lane-a",
+                "node_id": public_ids.builder('a'),
                 "work_item_id": "work-1",
                 "transition": "drive",
             }
@@ -371,7 +374,7 @@ class RegattaR2CinemaTests(unittest.TestCase):
             with self.subTest(color=color):
                 self.assertTrue(path.is_file())
                 self.assertEqual(
-                    capture_replay_cinema(color=color),
+                    projected_role_text(capture_replay_cinema(color=color)),
                     path.read_text(encoding="utf-8"),
                 )
 

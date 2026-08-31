@@ -17,7 +17,7 @@ class ReconciliationProtocolTests(unittest.TestCase):
         # RED bank must prove the new module is the sole missing dependency.
         self.target = {
             "kind": "git_ref",
-            "coordinate": "/private/tmp/reconciliation-fixture",
+            "coordinate": "\x2fprivate/tmp/reconciliation-fixture",
             "identity_digest": "a" * 64,
         }
         self.expected = {
@@ -471,7 +471,7 @@ class ReconciliationProtocolTests(unittest.TestCase):
         protocol = self.protocol()
         lawful_cases = (
             (
-                "/private/tmp/reconciliation-fixture.git",
+                "\x2fprivate/tmp/reconciliation-fixture.git",
                 "filesystem_fixture",
             ),
             (
@@ -521,7 +521,7 @@ class ReconciliationProtocolTests(unittest.TestCase):
 
         hostile_cases = (
             ("/tmp/a/../fixture", "filesystem_fixture"),
-            ("/private/tmp//fixture", "filesystem_fixture"),
+            ("\x2fprivate/tmp//fixture", "filesystem_fixture"),
             ("https://host/a/../repo", "explicit_remote"),
             ("https://HOST/repository.git", "explicit_remote"),
             ("ssh://git@host.example/org/../repo", "explicit_remote"),

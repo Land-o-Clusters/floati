@@ -1,0 +1,68 @@
+{
+  "name": "release gate",
+  "on": {
+    "pull_request": {},
+    "workflow_call": {},
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "full-selftest": {
+      "if": "github.repository == 'Land-o-Clusters/floati'",
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "os": ["ubuntu-latest", "macos-latest"]
+        }
+      },
+      "runs-on": "${{ matrix.os }}",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.9"
+          }
+        },
+        {
+          "name": "Run complete artifact selftest",
+          "run": "python3 -m floati.selftest"
+        }
+      ]
+    },
+    "public-fences": {
+      "if": "github.repository == 'Land-o-Clusters/floati'",
+      "needs": "full-selftest",
+      "runs-on": "ubuntu-latest",
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.9"
+          }
+        },
+        {
+          "name": "Run source scrub",
+          "run": "python3 -c 'from pathlib import Path; from floati.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print(hits); raise SystemExit(bool(hits))'"
+        },
+        {
+          "name": "Run byte-level public name fence",
+          "run": "python3 scripts/public_name_fence.py ."
+        }
+      ]
+    }
+  }
+}

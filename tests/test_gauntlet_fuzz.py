@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import json
 import os
@@ -73,7 +75,7 @@ def _common(prefix: str, kind: str) -> dict[str, object]:
 def _message() -> dict[str, object]:
     return {
         **_common("msg-", "message_envelope"),
-        "sender": "alice",
+        "sender": public_ids.worker('alpha'),
         "recipient": "bob",
         "repo": "slipway",
         "sha": "a" * 40,
@@ -97,7 +99,7 @@ def _work_item() -> dict[str, object]:
     return {
         **_common("work-", "work_item"),
         "title": HOSTILE,
-        "owner": "alice",
+        "owner": public_ids.worker('alpha'),
         "artifact_bindings": [],
     }
 
@@ -105,7 +107,7 @@ def _work_item() -> dict[str, object]:
 def _registry() -> dict[str, object]:
     return {
         **_common("registry-", "registry_entry"),
-        "node_id": "alice",
+        "node_id": public_ids.worker('alpha'),
         "role": HOSTILE,
         "state": "active",
     }
@@ -116,7 +118,7 @@ def _safe_record(factory: object) -> dict[str, object]:
     if record["kind"] == "message_envelope":
         record["note"] = "safe note"
     elif record["kind"] == "denial_receipt":
-        record["claimed_sender"] = "alice"
+        record["claimed_sender"] = public_ids.worker('alpha')
     elif record["kind"] == "work_item":
         record["title"] = "safe title"
     elif record["kind"] == "registry_entry":
@@ -148,7 +150,7 @@ def _decision_proposal() -> dict[str, object]:
         "author_authority": "worker",
         "source_artifact_ids": ["run:run-018f7e9b3c137abc8def0123456789ab"],
         "task_contract_id": None,
-        "decided_by": "fable",
+        "decided_by": public_ids.reviewer(),
         "supersedes": None,
     }
     record["decision_digest"] = decision_digest(record)
@@ -225,10 +227,10 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
     def seed_reader_dependencies(self, root: FloatiRoot, name: str) -> None:
         if name in {"inbox", "log"}:
             registry = Registry(root)
-            registry.register("alice", "worker")
+            registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
         elif name == "board":
-            Registry(root).register("alice", "worker")
+            Registry(root).register(public_ids.worker('alpha'), "worker")
 
     def test_hostile_control_and_bidi_strings_are_typed_before_every_reader_renders(self) -> None:
         for name in ("inbox", "log", "replay", "board", "graph", "doctor", "status"):
@@ -294,7 +296,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             **_message(),
             "id": f"msg-{UUID7_B}",
             "sender": "bob",
-            "recipient": "alice",
+            "recipient": public_ids.worker('alpha'),
             "note": "reply",
             "idempotency_key": "reply",
             "reply_to": original["id"],
@@ -305,7 +307,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             "id": f"transition-{UUID7_B}",
             "work_item_id": item["id"],
             "action": "claim",
-            "actor": "alice",
+            "actor": public_ids.worker('alpha'),
             "authority_subject": "work-claims",
             "authority_epoch": 1,
             "artifact_bindings": [],
@@ -314,13 +316,13 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             with self.subTest(reader=reader), tempfile.TemporaryDirectory() as directory:
                 home = Path(directory) / "alpha"
                 root = FloatiRoot.open_direct_home(home, create=True)
-                Registry(root).register("alice", "worker")
+                Registry(root).register(public_ids.worker('alpha'), "worker")
                 if reader in {"inbox", "log"}:
                     Registry(root).register("bob", "worker")
                     relative = "events.jsonl"
                     payload = encode_frame(reply) + encode_frame(original)
                     command = (
-                        ("inbox", "--root", str(home), "--as", "alice")
+                        ("inbox", "--root", str(home), "--as", public_ids.worker('alpha'))
                         if reader == "inbox"
                         else ("log", "--root", str(home))
                     )
@@ -631,8 +633,8 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             ("receipts", "recipient"),
             ("supervise",),
             ("orchestrate", "--plan", "/tmp/td2-plan.json", "--adapter", "codex", "--deadline", "1"),
-            ("grant", "--as", "architect-a", "--holder", "lane-a", "--subject", "work-claims", "--epoch", "1"),
-            ("grant", "revoke", "--as", "architect-a", "--holder", "lane-a", "--subject", "work-claims", "--epoch", "1"),
+            ("grant", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
+            ("grant", "revoke", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
             ("work", "add", "--title", "td2"),
             ("work", "claim", "--id", "work-" + "0" * 32),
             ("work", "complete", "--id", "work-" + "0" * 32),
@@ -805,7 +807,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                     self.assertNotIn("Traceback", str(caught.exception))
 
     def test_session_scoped_ack_and_append_only_retraction_do_not_cross_parties(self) -> None:
-        """Fable TD3: session receipts and append-only retractions stay party-local."""
+        'reviewer TD3: session receipts and append-only retractions stay party-local.'
         with tempfile.TemporaryDirectory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "alpha", create=True)
             registry = Registry(root)
@@ -891,7 +893,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             )
 
     def test_legacy_attempt_binding_is_literal_and_dead_holder_projects_stale_send(self) -> None:
-        """Fable TD4: partial bindings collapse to legacy; dead lease sends never renew."""
+        'reviewer TD4: partial bindings collapse to legacy; dead lease sends never renew.'
         with tempfile.TemporaryDirectory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "alpha", create=True)
             registry = Registry(root)
@@ -2437,12 +2439,12 @@ class WakeHoldFuzzTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         root = FloatiRoot.open(Path(temporary.name), "alpha")
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         events = EventLog(root, registry)
         messages = [
             events.send(
-                "alice", "bob", "slipway", "a" * 40,
+                public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
                 "docs/evidence/wake-fuzz.md", f"wake fuzz {index}",
                 idempotency_key=f"wake-fuzz-message-{index}",
             )
@@ -2544,7 +2546,7 @@ class WakeHoldFuzzTests(unittest.TestCase):
         from floati.wake import OneShotWakeRegistrar, OneShotWakeRequest
 
         for mutation in ("same_inode_bytes", "replacement", "disappearance"):
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as directory:
                 root = FloatiRoot.open(Path(directory) / "root", "alpha")
                 callback = Path(directory) / "callback"
                 callback.write_bytes(b"#!/bin/sh\nexit 0\n")

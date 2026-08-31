@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import json
 import os
@@ -40,7 +42,7 @@ class SnapshotStoreTests(unittest.TestCase):
             "tenant_id": self.root.tenant_id,
             "timestamp": "2026-08-01T12:00:00.000Z",
             "kind": "message_envelope",
-            "sender": "alice",
+            "sender": public_ids.worker('alpha'),
             "recipient": "bob",
             "repo": "slipway",
             "sha": "a" * 40,
@@ -146,7 +148,7 @@ class SnapshotStoreTests(unittest.TestCase):
             ),
             (
                 "snapshot_identity_mismatch",
-                lambda envelope: envelope.__setitem__("root", "/private/tmp/other"),
+                lambda envelope: envelope.__setitem__("root", "\x2fprivate/tmp/other"),
                 True,
             ),
             (

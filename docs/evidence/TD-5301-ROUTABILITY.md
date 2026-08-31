@@ -2,7 +2,7 @@
 
 ## Candidate identity and caveat
 
-- Worktree: `/private/tmp/slipway-spawn-groups`
+- Worktree: `/tmp/slipway-spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - TD-5301 feature-scope base:
   `d91d3562247db5520cdcc9f85e23e8bae8252ecd`.

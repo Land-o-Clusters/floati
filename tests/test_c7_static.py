@@ -25,7 +25,7 @@ PROJECTION_POINTERS = {
 }
 
 
-# These are the Fable-ratified Q1 pointers, copied as literals from the
+# These are the reviewer-ratified Q1 pointers, copied as literals from the
 # authoritative Item 11 brief and architecture receipt rather than derived
 # from the bundle under test.  A catalog omission or a schema-file retargeting
 # must therefore make this test fail.

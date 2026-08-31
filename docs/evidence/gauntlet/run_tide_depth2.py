@@ -120,19 +120,19 @@ def sibling_files(directory: Path) -> List[str]:
 
 
 def main() -> int:
-    home = Path("~")
+    home = Path("\x2fUsers/penguinspecz")
     cursor_jsonl = Path(
-        "~/.cursor/projects/Users-operator-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl"
+        "\x2fUsers/penguinspecz/.cursor/projects/Users-penguinspecz-Projects-floati-grok/agent-transcripts/44b70300-ddc4-4869-a4ce-a0e15d2e12f5/44b70300-ddc4-4869-a4ce-a0e15d2e12f5.jsonl"
     )
     # Prefer a small Codex jsonl so line-one truncation is not the whole story.
     codex_small = Path(
-        "~/.codex/sessions/2026/08/09/rollout-2026-08-09T01-17-48-019fe4f4-aeca-7e33-b884-db3a7671b317.jsonl"
+        "\x2fUsers/penguinspecz/.codex/sessions/2026/08/09/rollout-2026-08-09T01-17-48-019fe4f4-aeca-7e33-b884-db3a7671b317.jsonl"
     )
     codex_mid = Path(
-        "~/.codex/sessions/2026/07/14/rollout-2026-07-14T22-06-41-019f6386-ba54-7c82-8091-d3d490cf24d4.jsonl"
+        "\x2fUsers/penguinspecz/.codex/sessions/2026/07/14/rollout-2026-07-14T22-06-41-019f6386-ba54-7c82-8091-d3d490cf24d4.jsonl"
     )
     grok_session = Path(
-        "~/.grok/sessions/%2FUsers%2Foperator%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3"
+        "\x2fUsers/penguinspecz/.grok/sessions/%2FUsers%2Fpenguinspecz%2FProjects%2Ffloati-luna/01a04646-85fe-7e13-9530-29d015132df3"
     )
     payload = {
         "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -145,7 +145,7 @@ def main() -> int:
         "grok_summary": probe_json(grok_session / "summary.json") if grok_session.is_dir() else {"absent": True},
         "grok_updates": probe_jsonl(grok_session / "updates.jsonl") if grok_session.is_dir() else {"absent": True},
         "claude_control_depth2": probe_jsonl(
-            home / ".claude/projects/-Users-operator-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl"
+            home / ".claude/projects/-Users-penguinspecz-Projects-floati-grok/f2dba0d4-977b-461a-bfcf-6f34e8c3b18a.jsonl"
         ),
     }
     # One more grok sibling if present.

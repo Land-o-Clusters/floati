@@ -2,17 +2,17 @@
 ~ ≈ ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ESTATE // 2 PIERS // 4 VESSELS
 
-╭─ ▶ ● PIER puddle-fleet  LAST 12s ──────────
-│    ● ▤ VESSEL puddle-floati-architect ⚑  Architect  ⣀⣠⣤⣶⣿
-│    ◐ ▤ VESSEL lane-floati  Codex  ⣿⣶⣤⣠⣀
+╭─ ▶ ● PIER demo-fleet  LAST 12s ──────────
+│    ● ▤ VESSEL demo-architect ⚑  Architect  ⣀⣠⣤⣶⣿
+│    ◐ ▤ VESSEL builder-core  Codex  ⣿⣶⣤⣠⣀
 ╰──────────────────────────────────────────
 
 ╭─   ○ PIER regatta  LAST 305s ──────────
 │    ○ ▤ VESSEL harbor-master ⚑  Architect  ⣀⣀⣀⣀⣀
-│    ● ▤ VESSEL lane-sol  Codex  ⣀⣤⣠⣶⣿
+│    ● ▤ VESSEL builder-six  Codex  ⣀⣤⣠⣶⣿
 ╰──────────────────────────────────────────
 
 CHANNELS ────────────────────
-  puddle-fleet ─────────▶ regatta
+  demo-fleet ─────────▶ regatta
 
 ↑/k ↓/j select  enter detail  q quit

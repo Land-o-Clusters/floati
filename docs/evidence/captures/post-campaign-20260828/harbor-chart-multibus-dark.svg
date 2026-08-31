@@ -3,7 +3,7 @@
   <desc>Real Floati scratch-ledger terminal capture.</desc>
   <rect width="1920" height="280" fill="#12161c"/>
   <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
-    <tspan x="28" dy="0" fill="#d8dee9">DECLARED_ROOTS=/private/tmp/floati-captures.LtNmwM/other5/declared-roots.json</tspan>
+    <tspan x="28" dy="0" fill="#d8dee9">DECLARED_ROOTS=/tmp/floati-captures.LtNmwM/other5/declared-roots.json</tspan>
     <tspan x="28" dy="19" fill="#d8dee9">$ floati chart --declared-roots $DECLARED_ROOTS</tspan>
     <tspan x="28" dy="19" fill="#d8dee9"></tspan>
     <tspan x="28" dy="19" fill="#d8dee9">FLOATI // MULTI-BUS HARBOR CHART</tspan>

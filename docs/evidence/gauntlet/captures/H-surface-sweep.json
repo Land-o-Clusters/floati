@@ -246,133 +246,133 @@
       "is_dir": false,
       "is_file": true,
       "is_symlink": false,
-      "path": "~/.codex/hooks.json"
+      "path": "\u002fUsers/penguinspecz/.codex/hooks.json"
     },
     {
       "exists": true,
       "is_dir": false,
       "is_file": true,
       "is_symlink": false,
-      "path": "~/.claude/settings.json"
+      "path": "\u002fUsers/penguinspecz/.claude/settings.json"
     },
     {
       "exists": true,
       "is_dir": false,
       "is_file": true,
       "is_symlink": false,
-      "path": "~/.cursor/hooks.json"
+      "path": "\u002fUsers/penguinspecz/.cursor/hooks.json"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/opencode"
+      "path": "\u002fUsers/penguinspecz/.config/opencode"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.cline/hooks"
+      "path": "\u002fUsers/penguinspecz/.cline/hooks"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/herdr"
+      "path": "\u002fUsers/penguinspecz/.config/herdr"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.devin"
+      "path": "\u002fUsers/penguinspecz/.devin"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/devin"
+      "path": "\u002fUsers/penguinspecz/.config/devin"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.antigravity"
+      "path": "\u002fUsers/penguinspecz/.antigravity"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/.config/antigravity"
+      "path": "\u002fUsers/penguinspecz/.config/antigravity"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Claude"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Claude"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Codex"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Codex"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/OpenCode"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/OpenCode"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Cursor"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Cursor"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Antigravity"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Antigravity"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Devin"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Devin"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/T3 Code"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/T3 Code"
     },
     {
       "exists": true,
       "is_dir": true,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/t3code"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/t3code"
     },
     {
       "exists": false,
       "is_dir": false,
       "is_file": false,
       "is_symlink": false,
-      "path": "~/Library/Application Support/Grok"
+      "path": "\u002fUsers/penguinspecz/Library/Application Support/Grok"
     }
   ],
   "control": {
@@ -413,7 +413,7 @@
       "typescriptteam.native-preview-0.20260826.1-darwin-arm64",
       "typescriptteam.native-preview-0.20260827.1-darwin-arm64"
     ],
-    "path": "~/.cursor/extensions",
+    "path": "\u002fUsers/penguinspecz/.cursor/extensions",
     "present": true,
     "truncated": false
   },
@@ -626,7 +626,7 @@
   },
   "vscode_extensions": {
     "names": [],
-    "path": "~/.vscode/extensions",
+    "path": "\u002fUsers/penguinspecz/.vscode/extensions",
     "present": false
   },
   "which": {

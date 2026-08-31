@@ -1,4 +1,4 @@
-"""Deterministic synthetic fleet for the Fable live-polish gate."""
+"""Deterministic synthetic fleet for the reviewer live-polish gate."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from typing import Callable, Mapping, Optional, Sequence, Union
 from .cursor import SparseCursor
 from .errors import ProtocolRefusal
 from .events import EventLog
+from . import fixture_ids
 from .planes import AuthorityGrantStore, LivenessPresenceStore, MutualExclusionHoldStore
 from .registry import Registry
 from .root import FloatiRoot
@@ -31,6 +32,7 @@ from .workers import WorkerReceipts
 
 
 DEMO_NOW = datetime(2026, 7, 31, 12, 0, 10, tzinfo=timezone.utc)
+_REVIEW_DOC = f"docs/evidence/{fixture_ids.reviewer().upper()}-TUI.md"
 
 
 def _time(hour: int, minute: int, second: int) -> datetime:
@@ -45,83 +47,83 @@ def seed_demo(path: Union[Path, str]) -> FloatiRoot:
         raise ProtocolRefusal("demo_root_not_empty", "demo root must be empty")
     root = FloatiRoot.open_direct_home(candidate, create=True)
     registry = Registry(root)
-    for node, role in (("fable", "Claude"), ("lane-app", "Codex"), ("lane-floati", "Codex")):
+    for node, role in (("builder-review", "Claude"), ("builder-app", "Codex"), ("builder-core", "Codex")):
         registry.register(node, role)
 
     liveness = LivenessPresenceStore(root)
-    liveness.observe("fable", 60, _time(11, 58, 0))
-    liveness.observe("lane-app", 60, _time(11, 59, 40))
-    liveness.observe("lane-floati", 60, _time(12, 0, 0))
+    liveness.observe("builder-review", 60, _time(11, 58, 0))
+    liveness.observe("builder-app", 60, _time(11, 59, 40))
+    liveness.observe("builder-core", 60, _time(12, 0, 0))
 
     authority = AuthorityGrantStore(root)
-    authority.claim("app-build", "lane-app", 60, 60, _time(11, 58, 0))
-    work_grant = authority.claim("work-claims", "lane-floati", 60, 60, _time(12, 0, 0))
+    authority.claim("app-build", "builder-app", 60, 60, _time(11, 58, 0))
+    work_grant = authority.claim("work-claims", "builder-core", 60, 60, _time(12, 0, 0))
     mutex = MutualExclusionHoldStore(root)
-    mutex.acquire("fable-workspace", "fable", 60, 60, _time(11, 58, 0))
-    mutex.acquire("app-workspace", "lane-app", 60, 60, _time(12, 0, 0))
+    mutex.acquire("builder-review-workspace", "builder-review", 60, 60, _time(11, 58, 0))
+    mutex.acquire("app-workspace", "builder-app", 60, 60, _time(12, 0, 0))
 
     work = WorkLog(root)
-    work.add("review provisional copy", "fable", [], now=_time(12, 0, 0))
-    claimed = work.add("polish harbor board", "lane-floati", [], now=_time(12, 0, 1))
-    work.claim(claimed["id"], "lane-floati", "work-claims", work_grant["epoch"], now=_time(12, 0, 2))
-    completed = work.add("verify protocol gate", "lane-floati", [], now=_time(12, 0, 3))
-    work.claim(completed["id"], "lane-floati", "work-claims", work_grant["epoch"], now=_time(12, 0, 4))
+    work.add("review provisional copy", "builder-review", [], now=_time(12, 0, 0))
+    claimed = work.add("polish harbor board", "builder-core", [], now=_time(12, 0, 1))
+    work.claim(claimed["id"], "builder-core", "work-claims", work_grant["epoch"], now=_time(12, 0, 2))
+    completed = work.add("verify protocol gate", "builder-core", [], now=_time(12, 0, 3))
+    work.claim(completed["id"], "builder-core", "work-claims", work_grant["epoch"], now=_time(12, 0, 4))
 
     worker_receipts = WorkerReceipts(root)
     degraded_session = "worker-018f0f23abcd71238000000000000000"
     for transition in ("claim", "spawn", "drive"):
         worker_receipts.append(
-            degraded_session, claimed["id"], "lane-floati", "codex",
+            degraded_session, claimed["id"], "builder-core", "codex",
             transition, None, [], now=_time(12, 0, 6),
         )
     worker_receipts.append(
-        degraded_session, claimed["id"], "lane-floati", "codex",
+        degraded_session, claimed["id"], "builder-core", "codex",
         "degrade", "process_died", [], now=_time(12, 0, 6),
     )
     complete_session = "worker-018f0f23abce71238000000000000000"
     for transition in ("claim", "spawn", "drive", "bind_artifact"):
         worker_receipts.append(
-            complete_session, completed["id"], "lane-floati", "acp",
+            complete_session, completed["id"], "builder-core", "acp",
             transition, None, [], now=_time(12, 0, 7),
         )
-    work.complete(completed["id"], "lane-floati", [], now=_time(12, 0, 7))
+    work.complete(completed["id"], "builder-core", [], now=_time(12, 0, 7))
     worker_receipts.append(
-        complete_session, completed["id"], "lane-floati", "acp",
+        complete_session, completed["id"], "builder-core", "acp",
         "complete", None, [], now=_time(12, 0, 7),
     )
-    claim_item = work.add("claim worker item", "lane-floati", [], now=_time(12, 0, 6))
-    work.claim(claim_item["id"], "lane-floati", "work-claims", work_grant["epoch"], now=_time(12, 0, 7))
+    claim_item = work.add("claim worker item", "builder-core", [], now=_time(12, 0, 6))
+    work.claim(claim_item["id"], "builder-core", "work-claims", work_grant["epoch"], now=_time(12, 0, 7))
     worker_receipts.append(
         "worker-018f0f23abcf71238000000000000000",
-        claim_item["id"], "lane-floati", "codex", "claim", None, [], now=_time(12, 0, 7),
+        claim_item["id"], "builder-core", "codex", "claim", None, [], now=_time(12, 0, 7),
     )
-    driving_item = work.add("drive worker item", "lane-floati", [], now=_time(12, 0, 7))
-    work.claim(driving_item["id"], "lane-floati", "work-claims", work_grant["epoch"], now=_time(12, 0, 8))
+    driving_item = work.add("drive worker item", "builder-core", [], now=_time(12, 0, 7))
+    work.claim(driving_item["id"], "builder-core", "work-claims", work_grant["epoch"], now=_time(12, 0, 8))
     driving_session = "worker-018f0f23abd071238000000000000000"
     for transition in ("claim", "spawn", "drive"):
         worker_receipts.append(
-            driving_session, driving_item["id"], "lane-floati", "codex",
+            driving_session, driving_item["id"], "builder-core", "codex",
             transition, None, [], now=_time(12, 0, 9),
         )
 
     events = EventLog(root)
     accepted = events.send(
-        "lane-floati", "fable", "floati", "a" * 40,
+        "builder-core", "builder-review", "floati", "a" * 40,
         "docs/evidence/HM1-PHASE-C.md", "checkpoint", idempotency_key="demo-accepted",
     )
-    events.present("fable")
+    events.present("builder-review")
     SparseCursor(root).ack(
-        "fable", [accepted["id"]], acting_session_id="demo-session"
+        "builder-review", [accepted["id"]], acting_session_id="demo-session"
     )
     events.send(
-        "fable", "lane-floati", "floati", "b" * 40,
-        "docs/evidence/FABLE-TUI.md", "review", idempotency_key="demo-review",
+        "builder-review", "builder-core", "floati", "b" * 40,
+        _REVIEW_DOC, "review", idempotency_key="demo-review",
     )
-    events.present("lane-floati")
+    events.present("builder-core")
     try:
         events.send(
-            "fable", "lane-floati", "floati", "b" * 40,
-            "docs/evidence/FABLE-TUI.md", "refused", idempotency_key="demo-review",
+            "builder-review", "builder-core", "floati", "b" * 40,
+            _REVIEW_DOC, "refused", idempotency_key="demo-review",
         )
     except ProtocolRefusal as exc:
         if exc.code != "idempotency_conflict":
@@ -132,9 +134,9 @@ def seed_demo(path: Union[Path, str]) -> FloatiRoot:
 def build_demo_model(root: FloatiRoot) -> HarborBoardModel:
     model = model_from_root(root, DEMO_NOW)
     activity = {
-        "fable": "2026-07-31T12:00:06.000Z",
-        "lane-app": "2026-07-31T11:59:40.000Z",
-        "lane-floati": "2026-07-31T12:00:09.000Z",
+        "builder-review": "2026-07-31T12:00:06.000Z",
+        "builder-app": "2026-07-31T11:59:40.000Z",
+        "builder-core": "2026-07-31T12:00:09.000Z",
     }
     nodes = tuple({**node, "last_activity": activity[str(node["node_id"])]} for node in model.nodes)
     stable_work_ids = {
@@ -169,20 +171,20 @@ def harbor_map_demo_artifact(*, include_envelope: bool) -> dict[str, object]:
         "source": "synthetic_declared_roots_and_ledgers",
         "buses": [
             {
-                "bus_id": "puddle-fleet",
-                "architect_node": "puddle-floati-architect",
+                "bus_id": "demo-fleet",
+                "architect_node": "demo-architect",
                 "last_activity_age_seconds": 12,
                 "ledger_event_count": 41,
                 "nodes": [
                     {
-                        "id": "puddle-floati-architect",
+                        "id": "demo-architect",
                         "role": "Architect",
                         "last_activity_age_seconds": 12,
                         "inbox_count": 1,
                         "receipt_count": 20,
                     },
                     {
-                        "id": "lane-floati",
+                        "id": "builder-core",
                         "role": "Codex",
                         "last_activity_age_seconds": 75,
                         "inbox_count": 0,
@@ -205,7 +207,7 @@ def harbor_map_demo_artifact(*, include_envelope: bool) -> dict[str, object]:
                         "receipt_count": 4,
                     },
                     {
-                        "id": "lane-sol",
+                        "id": "builder-six",
                         "role": "Codex",
                         "last_activity_age_seconds": 31,
                         "inbox_count": 2,
@@ -215,17 +217,17 @@ def harbor_map_demo_artifact(*, include_envelope: bool) -> dict[str, object]:
                 "downstream": [],
             },
         ],
-        "relationships": [{"source": "puddle-fleet", "target": "regatta"}],
+        "relationships": [{"source": "demo-fleet", "target": "regatta"}],
         "envelopes": [],
     }
     if include_envelope:
         artifact["envelopes"] = [
             {
                 "id": "envelope-demo-002",
-                "source_bus": "puddle-fleet",
-                "sender": "lane-floati",
+                "source_bus": "demo-fleet",
+                "sender": "builder-core",
                 "target_bus": "regatta",
-                "recipient": "lane-sol",
+                "recipient": "builder-six",
             }
         ]
     return artifact
@@ -266,10 +268,10 @@ def capture_regatta_r3(*, color: bool) -> str:
         height=30,
         color_tier="256" if color else "mono",
         activity_by_node={
-            "puddle-fleet/puddle-floati-architect": (0, 1, 2, 3, 4),
-            "puddle-fleet/lane-floati": (4, 3, 2, 1, 0),
+            "demo-fleet/demo-architect": (0, 1, 2, 3, 4),
+            "demo-fleet/builder-core": (4, 3, 2, 1, 0),
             "regatta/harbor-master": (0, 0, 0, 0, 0),
-            "regatta/lane-sol": (0, 2, 1, 3, 4),
+            "regatta/builder-six": (0, 2, 1, 3, 4),
         },
     )
     return rendered.text + "\n"
@@ -331,13 +333,13 @@ def replay_cinema_demo_artifact() -> dict[str, object]:
             "buses": [
                 {
                     "bus_id": "alpha",
-                    "architect_node": "lane-a",
-                    "nodes": [{"id": "lane-a", "role": "Codex"}],
+                    "architect_node": "builder-a",
+                    "nodes": [{"id": "builder-a", "role": "Codex"}],
                 },
                 {
                     "bus_id": "beta",
-                    "architect_node": "lane-b",
-                    "nodes": [{"id": "lane-b", "role": "Codex"}],
+                    "architect_node": "builder-b",
+                    "nodes": [{"id": "builder-b", "role": "Codex"}],
                 },
             ],
             "relationships": [{"source": "alpha", "target": "beta"}],
@@ -348,52 +350,52 @@ def replay_cinema_demo_artifact() -> dict[str, object]:
                 "elapsed_ms": 0,
                 "event_class": "claim",
                 "record_kind": "work_transition",
-                "node_id": "lane-a",
+                "node_id": "builder-a",
                 "work_item_id": "work-1",
                 "transition": "claim",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": "builder-a",
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": "builder-a",
             },
             {
                 "sequence": 2,
                 "elapsed_ms": 500,
                 "event_class": "turn",
                 "record_kind": "worker_receipt",
-                "node_id": "lane-b",
+                "node_id": "builder-b",
                 "work_item_id": "work-1",
                 "transition": "drive",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": "builder-a",
                 "target_bus": "beta",
-                "recipient": "lane-b",
+                "recipient": "builder-b",
             },
             {
                 "sequence": 3,
                 "elapsed_ms": 1000,
                 "event_class": "denial",
                 "record_kind": "denial_receipt",
-                "node_id": "lane-b",
+                "node_id": "builder-b",
                 "work_item_id": "work-1",
                 "reason_code": "E_DENIED",
                 "source_bus": "beta",
-                "sender": "lane-b",
+                "sender": "builder-b",
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": "builder-a",
             },
             {
                 "sequence": 4,
                 "elapsed_ms": 1500,
                 "event_class": "completion",
                 "record_kind": "work_transition",
-                "node_id": "lane-a",
+                "node_id": "builder-a",
                 "work_item_id": "work-1",
                 "transition": "complete",
                 "source_bus": "alpha",
-                "sender": "lane-a",
+                "sender": "builder-a",
                 "target_bus": "alpha",
-                "recipient": "lane-a",
+                "recipient": "builder-a",
             },
         ],
     }

@@ -159,7 +159,7 @@ class RegattaR3CapabilityTests(unittest.TestCase):
         """Catches an outer terminal brand overriding the directly queried tmux pane."""
         cap = _cap_api()
         environment = {
-            "TMUX": "/private/tmp/tmux-501/default,123,0",
+            "TMUX": "\x2fprivate/tmp/tmux-501/default,123,0",
             "TERM": "tmux-256color",
             "TERM_PROGRAM": "WezTerm",
             "KITTY_WINDOW_ID": "77",

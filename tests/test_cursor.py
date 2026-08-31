@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,13 +29,13 @@ class SparseCursorTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         self.registry = Registry(self.root)
-        for node in ("alice", "bob", "charlie"):
+        for node in (public_ids.worker('alpha'), "bob", "charlie"):
             self.registry.register(node, "worker")
         self.events = EventLog(self.root, self.registry)
         self.cursor = SparseCursor(self.root)
         self.messages = [
             self.events.send(
-                "alice", "bob", "slipway", character.lower() * 40,
+                public_ids.worker('alpha'), "bob", "slipway", character.lower() * 40,
                 f"docs/evidence/{character}.md", f"notification {character}",
                 idempotency_key=f"key-{character}",
             )
@@ -76,11 +78,11 @@ class SparseCursorTests(unittest.TestCase):
     def test_unknown_foreign_or_unseen_item_refuses_without_ack_mutation(self) -> None:
         self.events.present("bob")
         unseen = self.events.send(
-            "alice", "bob", "slipway", "d" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "d" * 40,
             "docs/evidence/D.md", "notification D", idempotency_key="key-D",
         )
         foreign = self.events.send(
-            "alice", "charlie", "slipway", "e" * 40,
+            public_ids.worker('alpha'), "charlie", "slipway", "e" * 40,
             "docs/evidence/E.md", "notification E", idempotency_key="key-E",
         )
         self.events.present("charlie")
@@ -198,7 +200,7 @@ class SparseCursorTests(unittest.TestCase):
         """Cursor reads and writes must consume EventLog's semantic retraction projection."""
         session = "worker-" + uuid7_hex()
         message = self.events.send(
-            "alice", "bob", "slipway", "d" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "d" * 40,
             "docs/evidence/retraction.md", "session message",
             idempotency_key="forged-retraction", worker_session_id=session,
         )
@@ -256,7 +258,7 @@ class SparseCursorTests(unittest.TestCase):
 
         session = "worker-" + uuid7_hex()
         message = self.events.send(
-            "alice", "bob", "slipway", "f" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "f" * 40,
             "docs/evidence/ack-then-retract.md", "historical ack",
             idempotency_key="ack-then-retract-cursor", worker_session_id=session,
         )
@@ -269,7 +271,7 @@ class SparseCursorTests(unittest.TestCase):
         )
         self.events.retract(
             message["id"], worker_session_id=session,
-            reason="sent_in_error", author="alice",
+            reason="sent_in_error", author=public_ids.worker('alpha'),
         )
 
         self.assertEqual(
@@ -287,7 +289,7 @@ class SparseCursorTests(unittest.TestCase):
         self.assertIsNone(decision["receipt"])
 
         unseen = self.events.send(
-            "alice", "bob", "slipway", "1" * 40,
+            public_ids.worker('alpha'), "bob", "slipway", "1" * 40,
             "docs/evidence/unpresented-after-retraction.md", "still unseen",
             idempotency_key="unpresented-after-retraction", worker_session_id=session,
         )

@@ -24,7 +24,7 @@ DAEMON_KINDS = frozenset({
     "wake_daemon_consent_receipt",
     "wake_daemon_lifecycle_receipt",
 })
-SUPPORTED_HARNESSES = frozenset({"codex", "cursor"})
+SUPPORTED_HARNESSES = frozenset({"codex", "cursor", "grok-build"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _VERSION = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$")
 _BINDING_FIELDS = frozenset({
@@ -33,6 +33,10 @@ _BINDING_FIELDS = frozenset({
     "executable", "executable_digest", "adapter_version", "adapter_digest",
     "binding_epoch",
 })
+
+
+def _schema_version(harness: str) -> int:
+    return 1 if harness == "grok-build" else 0
 
 
 def _sha256(value: object, field: str) -> str:
@@ -68,7 +72,7 @@ class DaemonCoordinate:
         if self.harness not in SUPPORTED_HARNESSES:
             raise ProtocolRefusal(
                 "wake_daemon_harness_unsupported",
-                "wake daemon v1 supports only codex or cursor",
+                "wake daemon v1 supports only codex, cursor, or grok-build",
             )
         object.__setattr__(self, "node_id", node)
 
@@ -125,7 +129,7 @@ class DaemonConsentLedger:
             raise ProtocolRefusal("wake_daemon_backoff_bounds_invalid", "maximum backoff is below maximum poll")
         key = self._key(idempotency_key)
         row = {
-            "schema_version": 0,
+            "schema_version": _schema_version(coordinate.harness),
             "id": "wake-daemon-consent-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
             "timestamp": utc_now(),
@@ -240,7 +244,7 @@ class DaemonLifecycleLedger:
         if coordinate.root is not self.root:
             raise ProtocolRefusal("wake_daemon_coordinate_invalid", "lifecycle coordinate belongs to another root")
         row = {
-            "schema_version": 0,
+            "schema_version": _schema_version(coordinate.harness),
             "id": "wake-daemon-lifecycle-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
             "timestamp": utc_now(),
@@ -310,7 +314,7 @@ class AdapterBindingStore:
         workspace_path = self._ordinary_directory(workspace, "workspace")
         executable_path = self._ordinary_executable(executable)
         record = {
-            "schema_version": 0,
+            "schema_version": _schema_version(coordinate.harness),
             "tenant_id": self.root.tenant_id,
             "node_id": coordinate.node_id,
             "harness": coordinate.harness,
@@ -360,7 +364,7 @@ class AdapterBindingStore:
             raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding shape is invalid")
         session = validate_session_id(record.get("session_id"))
         if (
-            record.get("schema_version") != 0
+            record.get("schema_version") != _schema_version(coordinate.harness)
             or record.get("tenant_id") != self.root.tenant_id
             or record.get("node_id") != coordinate.node_id
             or record.get("harness") != coordinate.harness

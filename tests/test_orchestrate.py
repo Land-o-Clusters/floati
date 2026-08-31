@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import multiprocessing
 import os
@@ -160,25 +162,25 @@ class OrchestrationPlanTests(unittest.TestCase):
 
         valid = {
             "schema_version": 0,
-            "workers": ["lane-a", "lane-b", "lane-c"],
+            "workers": [public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c')],
             "items": [
-                {"key": "a", "title": "Create A.txt", "owner": "lane-a", "needs": []},
-                {"key": "b", "title": "Create B.txt", "owner": "lane-b", "needs": []},
-                {"key": "c", "title": "Create C.txt", "owner": "lane-c", "needs": ["a"]},
-                {"key": "d", "title": "Create D.txt", "owner": "lane-a", "needs": ["b", "c"]},
+                {"key": "a", "title": "Create A.txt", "owner": public_ids.builder('a'), "needs": []},
+                {"key": "b", "title": "Create B.txt", "owner": public_ids.builder('b'), "needs": []},
+                {"key": "c", "title": "Create C.txt", "owner": public_ids.builder('c'), "needs": ["a"]},
+                {"key": "d", "title": "Create D.txt", "owner": public_ids.builder('a'), "needs": ["b", "c"]},
             ],
         }
 
         plan = OrchestrationPlan.load(self.write(valid))
 
-        self.assertEqual(("lane-a", "lane-b", "lane-c"), plan.workers)
+        self.assertEqual((public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c')), plan.workers)
         self.assertEqual(("b", "c"), plan.items[-1].needs)
 
         invalid_cases = (
-            ({**valid, "workers": ["lane-a", "lane-b"]}, "orchestrate_worker_count_invalid"),
-            ({**valid, "workers": ["lane-a", "lane-a", "lane-c"]}, "orchestrate_workers_invalid"),
+            ({**valid, "workers": [public_ids.builder('a'), public_ids.builder('b')]}, "orchestrate_worker_count_invalid"),
+            ({**valid, "workers": [public_ids.builder('a'), public_ids.builder('a'), public_ids.builder('c')]}, "orchestrate_workers_invalid"),
             ({**valid, "items": valid["items"][:3]}, "orchestrate_item_count_invalid"),
-            ({**valid, "items": [*valid["items"][:2], {"key": "c", "title": "C", "owner": "lane-c", "needs": ["future"]}, valid["items"][3]]}, "orchestrate_dependency_invalid"),
+            ({**valid, "items": [*valid["items"][:2], {"key": "c", "title": "C", "owner": public_ids.builder('c'), "needs": ["future"]}, valid["items"][3]]}, "orchestrate_dependency_invalid"),
         )
         for value, code in invalid_cases:
             with self.subTest(code=code):
@@ -209,7 +211,7 @@ class FleetOrchestratorTests(unittest.TestCase):
         self.directory = Path(self.temp.name)
         self.root = FloatiRoot.open_direct_home(self.directory / "fleet", create=True)
         current = datetime.now(timezone.utc)
-        for node in ("lane-a", "lane-b", "lane-c"):
+        for node in (public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c')):
             Registry(self.root).register(node, "Codex")
             AuthorityGrantStore(self.root).claim(
                 f"work-{node}", node, 30, 20, current
@@ -223,12 +225,12 @@ class FleetOrchestratorTests(unittest.TestCase):
             json.dumps(
                 {
                     "schema_version": 0,
-                    "workers": ["lane-a", "lane-b", "lane-c"],
+                    "workers": [public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c')],
                     "items": [
-                        {"key": "a", "title": "Create A.txt", "owner": "lane-a", "needs": []},
-                        {"key": "b", "title": "Create B.txt", "owner": "lane-b", "needs": []},
-                        {"key": "c", "title": "Create C.txt", "owner": "lane-c", "needs": []},
-                        {"key": "d", "title": "Create D.txt", "owner": "lane-a", "needs": ["a", "b", "c"]},
+                        {"key": "a", "title": "Create A.txt", "owner": public_ids.builder('a'), "needs": []},
+                        {"key": "b", "title": "Create B.txt", "owner": public_ids.builder('b'), "needs": []},
+                        {"key": "c", "title": "Create C.txt", "owner": public_ids.builder('c'), "needs": []},
+                        {"key": "d", "title": "Create D.txt", "owner": public_ids.builder('a'), "needs": ["a", "b", "c"]},
                     ],
                 }
             ),
@@ -243,9 +245,9 @@ class FleetOrchestratorTests(unittest.TestCase):
         frames: list[dict] = []
         controller_names: set[str] = set()
         expected_controller_names = {
-            "floati-orchestrator-lane-a",
-            "floati-orchestrator-lane-b",
-            "floati-orchestrator-lane-c",
+            public_ids.compose('floati-orchestrator-', public_ids.builder('a')),
+            public_ids.compose('floati-orchestrator-', public_ids.builder('b')),
+            public_ids.compose('floati-orchestrator-', public_ids.builder('c')),
         }
 
         def capture_frame(frame: dict) -> None:
@@ -253,7 +255,7 @@ class FleetOrchestratorTests(unittest.TestCase):
             controller_names.update(
                 process.name
                 for process in multiprocessing.active_children()
-                if process.name.endswith(("-lane-a", "-lane-b", "-lane-c"))
+                if process.name.endswith((public_ids.compose('-', public_ids.builder('a')), public_ids.compose('-', public_ids.builder('b')), public_ids.compose('-', public_ids.builder('c'))))
             )
 
         result = FleetOrchestrator(
@@ -407,9 +409,9 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
             self.plan(),
             deadline_seconds=3,
             drills=(
-                DrillAction("kill_worker", "lane-a"),
-                DrillAction("expire_authority", "lane-b"),
-                DrillAction("hang_child", "lane-c"),
+                DrillAction("kill_worker", public_ids.builder('a')),
+                DrillAction("expire_authority", public_ids.builder('b')),
+                DrillAction("hang_child", public_ids.builder('c')),
             ),
         )
 
@@ -419,9 +421,9 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
         outcomes = {row["node"]: row["outcome"] for row in result["drills"]}
         self.assertEqual(
             {
-                "lane-a": "process_cancelled",
-                "lane-b": "authority_expired_mid_claim",
-                "lane-c": "process_timeout",
+                public_ids.builder('a'): "process_cancelled",
+                public_ids.builder('b'): "authority_expired_mid_claim",
+                public_ids.builder('c'): "process_timeout",
             },
             outcomes,
         )
@@ -461,7 +463,7 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
         ).run(
             self.plan(),
             deadline_seconds=3,
-            drills=(DrillAction("expire_authority", "lane-b"),),
+            drills=(DrillAction("expire_authority", public_ids.builder('b')),),
         )
 
         self.assertEqual("degraded", result["state"])
@@ -479,7 +481,7 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
         ).run(
             self.plan(),
             deadline_seconds=3,
-            drills=(DrillAction("kill_worker", "lane-a"),),
+            drills=(DrillAction("kill_worker", public_ids.builder('a')),),
         )
 
         self.assertEqual("degraded", result["state"])

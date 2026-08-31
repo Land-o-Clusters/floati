@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import dataclasses
 import tempfile
 import unittest
@@ -36,12 +38,12 @@ def _race_grant_and_authority_release(
         start.wait(5)
         if action == "grant":
             result = CapabilityGrantLedger(root).grant(
-                "alice", "workspace_write", Policy.load(Path(policy_path)),
+                public_ids.worker('alpha'), "workspace_write", Policy.load(Path(policy_path)),
                 request_id, decision_id, now=NOW + timedelta(seconds=3),
             )
         else:
             result = AuthorityGrantStore(root).release(
-                "approve-build", "fable", epoch, NOW + timedelta(seconds=3)
+                "approve-build", public_ids.reviewer(), epoch, NOW + timedelta(seconds=3)
             )
         queue.put(("ok", result["kind"]))
     except ProtocolRefusal as exc:
@@ -60,20 +62,20 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         self.policy_path.write_text(VALID_POLICY, encoding="utf-8")
         self.policy = Policy.load(self.policy_path)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
-        registry.register("fable", "Claude")
+        registry.register(public_ids.worker('alpha'), "Codex")
+        registry.register(public_ids.reviewer(), "Claude")
         self.authority_store = AuthorityGrantStore(self.root)
         self.authority = self.authority_store.claim(
-            "approve-build", "fable", 120, 120, NOW
+            "approve-build", public_ids.reviewer(), 120, 120, NOW
         )
         approvals = ApprovalLedger(self.root)
         self.request = approvals.request(
-            "alice", "workspace_write", "worker:alice", 60,
+            public_ids.worker('alpha'), "workspace_write", public_ids.compose('worker:', public_ids.worker('alpha')), 60,
             "approve-build", self.authority["epoch"], now=NOW + timedelta(seconds=1),
         )
         self.decision = approvals.decide(
-            self.request["id"], "fable", "approved", None,
-            granted_scope="worker:alice", granted_ttl_seconds=30,
+            self.request["id"], public_ids.reviewer(), "approved", None,
+            granted_scope=public_ids.compose('worker:', public_ids.worker('alpha')), granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
         self.assertIsNotNone(CapabilityGrantLedger, "floati.capabilities must provide the v1 grant ledger")
@@ -81,7 +83,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
 
     def grant(self, **overrides):
         arguments = {
-            "worker_id": "alice",
+            "worker_id": public_ids.worker('alpha'),
             "capability_name": "workspace_write",
             "policy": self.policy,
             "approval_request_id": self.request["id"],
@@ -102,7 +104,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         self.assertEqual(self.decision["id"], grant["approval_decision_id"])
         self.assertEqual(capability_grant_digest(grant), grant["grant_digest"])
         effective = self.ledger.effective(
-            "alice", self.policy.digest, NOW + timedelta(seconds=4)
+            public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4)
         )
         self.assertEqual(
             [("workspace_write", grant["id"], 1)],
@@ -114,7 +116,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         """Catches a grant that broadens approval identity, vocabulary, or lifetime."""
         path = self.root.resolve_relative("capabilities/grants.jsonl")
         cases = (
-            ({"worker_id": "fable"}, "capability_worker_mismatch"),
+            ({"worker_id": public_ids.reviewer()}, "capability_worker_mismatch"),
             ({"capability_name": "review"}, "capability_approval_mismatch"),
             ({"capability_name": "shell_exec"}, "capability_unregistered"),
             ({"now": NOW + timedelta(seconds=32)}, "capability_approval_expired"),
@@ -129,7 +131,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
     def test_grant_refuses_stale_or_released_approval_authority(self) -> None:
         """Catches an approved decision becoming fresh grant authority after its authority epoch closes."""
         self.authority_store.release(
-            "approve-build", "fable", self.authority["epoch"],
+            "approve-build", public_ids.reviewer(), self.authority["epoch"],
             NOW + timedelta(seconds=3),
         )
         with self.assertRaises(ProtocolRefusal) as caught:
@@ -199,7 +201,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         )
         self.assertEqual("capability_revoked", revoked["kind"])
         self.assertEqual([], self.ledger.effective(
-            "alice", self.policy.digest, NOW + timedelta(seconds=5)
+            public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=5)
         ).grant_triples)
 
         with self.assertRaises(ProtocolRefusal) as duplicate:
@@ -210,12 +212,12 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
 
         approvals = ApprovalLedger(self.root)
         second_request = approvals.request(
-            "alice", "workspace_write", "worker:alice", 60,
+            public_ids.worker('alpha'), "workspace_write", public_ids.compose('worker:', public_ids.worker('alpha')), 60,
             "approve-build", self.authority["epoch"], now=NOW + timedelta(seconds=4),
         )
         second_decision = approvals.decide(
-            second_request["id"], "fable", "approved", None,
-            granted_scope="worker:alice", granted_ttl_seconds=20,
+            second_request["id"], public_ids.reviewer(), "approved", None,
+            granted_scope=public_ids.compose('worker:', public_ids.worker('alpha')), granted_ttl_seconds=20,
             now=NOW + timedelta(seconds=5),
         )
         second = self.grant(
@@ -224,7 +226,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             now=NOW + timedelta(seconds=6),
         )
         self.assertEqual([], self.ledger.effective(
-            "alice", self.policy.digest, NOW + timedelta(seconds=32)
+            public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=32)
         ).grant_triples)
         with self.assertRaises(ProtocolRefusal) as replacement:
             self.ledger.revoke(
@@ -248,7 +250,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         )
         path.write_text(data, encoding="utf-8")
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=4))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4))
         self.assertEqual("capability_grant_digest_invalid", caught.exception.code)
 
     def test_grant_reader_framing_vectors_fail_closed_with_typed_integrity(self) -> None:
@@ -300,7 +302,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             "tenant_id": self.root.tenant_id,
             "timestamp": "2026-08-08T12:00:03.000Z",
             "kind": "capability_grant",
-            "worker_id": "alice",
+            "worker_id": public_ids.worker('alpha'),
             "capability_name": "workspace_write",
             "policy_digest": self.policy.digest,
             "approval_request_id": self.request["id"],
@@ -326,25 +328,25 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             approval_decision_id="approval-decision-" + uuid7_hex(),
         )
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=4))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4))
         self.assertEqual("capability_approval_missing", caught.exception.code)
 
     def test_persisted_grant_mismatched_approval_evidence_is_integrity_failure(self) -> None:
         """Catches a real approval being rebound to a different capability during replay."""
         self._append_forged_grant(capability_name="review")
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=4))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4))
         self.assertEqual("capability_approval_mismatch", caught.exception.code)
 
     def test_persisted_grant_denied_approval_evidence_is_integrity_failure(self) -> None:
         """Catches a denied decision being presented as durable grant authority."""
         approvals = ApprovalLedger(self.root)
         request = approvals.request(
-            "alice", "review", "worker:alice", 60,
+            public_ids.worker('alpha'), "review", public_ids.compose('worker:', public_ids.worker('alpha')), 60,
             "approve-build", self.authority["epoch"], now=NOW + timedelta(seconds=4),
         )
         decision = approvals.decide(
-            request["id"], "fable", "denied", "operator_denied",
+            request["id"], public_ids.reviewer(), "denied", "operator_denied",
             now=NOW + timedelta(seconds=5),
         )
         self._append_forged_grant(
@@ -354,14 +356,14 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             expires_at="2026-08-08T12:00:20.000Z",
         )
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=6))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=6))
         self.assertEqual("capability_approval_denied", caught.exception.code)
 
     def test_persisted_approval_ttl_arithmetic_is_rederived(self) -> None:
         """Catches forged expiry testimony broadening a decision's declared TTL."""
         approvals = ApprovalLedger(self.root)
         request = approvals.request(
-            "alice", "review", "worker:alice", 60,
+            public_ids.worker('alpha'), "review", public_ids.compose('worker:', public_ids.worker('alpha')), 60,
             "approve-build", self.authority["epoch"], now=NOW + timedelta(seconds=4),
         )
         decision = {
@@ -371,9 +373,9 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             "timestamp": "2026-08-08T12:00:05.000Z",
             "kind": "approval_decision",
             "request_id": request["id"],
-            "decider": "fable",
+            "decider": public_ids.reviewer(),
             "decision": "approved",
-            "granted_scope": "worker:alice",
+            "granted_scope": public_ids.compose('worker:', public_ids.worker('alpha')),
             "granted_ttl_seconds": 1,
             "reason_code": None,
             "decided_at": "2026-08-08T12:00:05.000Z",
@@ -394,14 +396,14 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             expires_at=decision["expires_at"],
         )
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=40))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=40))
         self.assertEqual("capability_approval_lifetime_invalid", caught.exception.code)
 
     def test_forward_revocation_is_integrity_failure_and_timestamp_is_testimony(self) -> None:
         """Catches lifecycle projection sorting by timestamp or accepting a forward revocation."""
         grant = self.grant()
         baseline = self.ledger.effective(
-            "alice", self.policy.digest, NOW + timedelta(seconds=4)
+            public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4)
         ).grant_triples
         path = self.root.resolve_relative("capabilities/grants.jsonl")
         testimony_changed = dict(grant, timestamp="2030-01-01T00:00:00.000Z")
@@ -409,7 +411,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         self.assertEqual(
             baseline,
             self.ledger.effective(
-                "alice", self.policy.digest, NOW + timedelta(seconds=4)
+                public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=4)
             ).grant_triples,
         )
 
@@ -419,7 +421,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         )
         path.write_bytes(encode_frame(revoked) + encode_frame(grant))
         with self.assertRaises(IntegrityFailure) as caught:
-            self.ledger.effective("alice", self.policy.digest, NOW + timedelta(seconds=6))
+            self.ledger.effective(public_ids.worker('alpha'), self.policy.digest, NOW + timedelta(seconds=6))
         self.assertEqual("capability_revocation_forward", caught.exception.code)
 
     def test_grant_and_revocation_short_writes_roll_back_exactly(self) -> None:

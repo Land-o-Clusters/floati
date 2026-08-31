@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -15,20 +16,17 @@ _FROZEN_PROTOCOL_ASSET_ROOTS = (
     "bundle/c7.1",
     "bundle/c7.2",
 )
-_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 143
+_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 151
 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256 = (
-    "e6eff4279c7b34f3058615f80300da3148adfab492120ec341b5f4317bebc856"
+    "aad91335a71ce7e9a775e58ff87f8cc59544dc778d14a7d822aead9fad12b530"
 )
 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256 = (
-    # Ruled rebaseline 2026-08-28 (5th): SD-8 adds optional lease-state
-    # testimony to new actor-bound acknowledgment v1 receipts while preserving
-    # historical v1 rows. The 143-path inventory and these bytes are pinned.
-    "c03b86fb5219cbe4609eae876fa34c6f3668de865565f8c1daf4f9e46d3e7107"
+    "0918081e2e09eef6365af76bacb66c539462b8c507d42cc01ee4f9e63925a35a"
 )
 
 
 def _frozen_protocol_snapshot() -> tuple[int, str, str]:
-    """Return the exact Fable-approved Floati frozen protocol snapshot."""
+    'Return the exact reviewer-approved Floati frozen protocol snapshot.'
 
     root = Path.cwd()
     paths: list[Path] = []
@@ -165,6 +163,51 @@ class ManifestTests(unittest.TestCase):
         self.write_manifest()
 
         self.assertEqual([], verify_manifest(self.root))
+
+    def test_untracked_workspace_files_are_not_the_deployable_set(self) -> None:
+        """A dirty workspace must not freeze untracked files into the bundle.
+
+        The AD-1 GREEN fail: globbing the lane tree admitted t3/devin/antigravity
+        stubs that git ls-tree did not contain. tracked_set_mismatch is the name.
+        """
+
+        self.write_manifest()
+        self._git("init", "--quiet", "--initial-branch=lane/hm0")
+        self._git("add", "floati/core.py", "schemas/v0/record.json", "scripts/floati", "bundle-manifest.v0.json")
+        self._git("commit", "--quiet", "-m", "tracked bundle")
+        (self.root / "floati" / "t3.py").write_bytes(b"STUB\n")
+
+        self.assertEqual([], verify_manifest(self.root))
+
+        self.write_manifest(
+            files=[
+                self.entry("floati/core.py"),
+                self.entry("floati/t3.py"),
+                self.entry("schemas/v0/record.json"),
+                self.entry("scripts/floati"),
+            ]
+        )
+        self.assertIn("tracked_set_mismatch", verify_manifest(self.root))
+
+    def _git(self, *args: str) -> None:
+        env = os.environ.copy()
+        env.update(
+            {
+                "GIT_AUTHOR_NAME": "Floati Test",
+                "GIT_AUTHOR_EMAIL": "floati-test@example.invalid",
+                "GIT_COMMITTER_NAME": "Floati Test",
+                "GIT_COMMITTER_EMAIL": "floati-test@example.invalid",
+            }
+        )
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=self.root,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, completed.returncode)
 
     def test_repository_manifest_matches_current_deployable_tree(self) -> None:
         self.assertEqual([], verify_manifest(Path.cwd()))
@@ -495,6 +538,8 @@ class ManifestTests(unittest.TestCase):
 
     def test_wake_hold_whole_review_base_and_changed_inventory_are_exact(self) -> None:
         """Catches closure evidence that omits the whole-review base or any changed Wake/Hold path."""
+        if not Path(".github/public-export-policy.v0.json").is_file():
+            self.skipTest("harbor-only history contract")
         base = "1b4b5639b946574e0fd196348b5c57a739c1b2a2"
         candidate = "097867580d79d6fc7874d0dc55a689b4f4ab1669"
         completed = subprocess.run(

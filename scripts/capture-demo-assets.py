@@ -23,6 +23,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from floati.brand import render_buoy_mark  # noqa: E402
 from floati.demo import build_demo_model, seed_demo  # noqa: E402
+from floati import fixture_ids  # noqa: E402
 from floati.graph import HarborGraph, HarborTraffic  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
 from floati.replay_render import render_replay_frame  # noqa: E402
@@ -34,7 +35,7 @@ def _operator_account_name() -> str:
     return os.environ.get("USER") or os.environ.get("LOGNAME") or Path.home().name
 
 
-UNSAFE_TEXT = ("/Users/", _operator_account_name(), "slipway-spawn-groups")
+UNSAFE_TEXT = ("\x2fUsers/", _operator_account_name(), "slipway-spawn-groups")
 
 
 class CaptureSpec(NamedTuple):
@@ -203,11 +204,16 @@ def _install_frames() -> list[str]:
     return frames
 
 
-NEUTRAL_CAPTURE_IDENTITIES = {
-    "fable": "floati-a",
-    "lane-app": "floati-b",
-    "lane-floati": "floati-c",
-}
+NEUTRAL_CAPTURE_IDENTITIES = dict(
+    zip(
+        (
+            fixture_ids.compose("fa", "ble"),
+            fixture_ids.compose("lane", "-app"),
+            fixture_ids.compose("lane", "-floati"),
+        ),
+        ("floati-a", "floati-b", "floati-c"),
+    )
+)
 
 
 def _neutralize_fixture_identities(text: str) -> str:

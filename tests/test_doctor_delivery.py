@@ -12,6 +12,8 @@ cut, owner-ratified @09283dc7). Laws under test:
 
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -64,9 +66,9 @@ class DeliveryHealthTestBase(unittest.TestCase):
 class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
     def test_doctor_artifact_supplies_a_datetime_to_live_delivery_health(self):
         """Catches the Doctor boundary passing its RFC3339 string clock to datetime arithmetic."""
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("bob", "opencode")
-        self._send_at(3, "alice", "bob")
+        self._send_at(3, public_ids.worker('alpha'), "bob")
         self._drain_at(1, "bob")
 
         artifact, _status = Doctor(Path.cwd(), self.home, ref="HEAD").artifact()
@@ -74,15 +76,15 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self.assertIn("findings", artifact)
 
     def test_aged_pending_is_red_with_intake_sentence(self):
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("bob", "opencode")
-        self._send_at(61, "alice", "bob", "old")
-        self._send_at(42, "alice", "bob", "younger")
+        self._send_at(61, public_ids.worker('alpha'), "bob", "old")
+        self._send_at(42, public_ids.worker('alpha'), "bob", "younger")
         # bob never drained.
         report = DeliveryHealthAnalyzer.analyze(
             events=self.log.records(),
             root=self.root,
-            nodes=["alice", "bob"],
+            nodes=[public_ids.worker('alpha'), "bob"],
             now=NOW,
         )
         bob = report.by_node["bob"]
@@ -100,14 +102,14 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self.assertEqual(finding["code"], "delivery_health")
 
     def test_fresh_pending_with_recent_drain_is_stated_not_red(self):
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("bob", "opencode")
-        self._send_at(3, "alice", "bob")
+        self._send_at(3, public_ids.worker('alpha'), "bob")
         self._drain_at(1, "bob")  # drains everything pending at t-1m
-        self._send_at(0.5, "alice", "bob")  # arrives after the drain
+        self._send_at(0.5, public_ids.worker('alpha'), "bob")  # arrives after the drain
         report = DeliveryHealthAnalyzer.analyze(
             events=self.log.records(), root=self.root,
-            nodes=["alice", "bob"], now=NOW,
+            nodes=[public_ids.worker('alpha'), "bob"], now=NOW,
         )
         bob = report.by_node["bob"]
         self.assertFalse(bob.red)
@@ -116,24 +118,24 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self.assertEqual(f"{bob.undelivered_count}", "1")
 
     def test_zero_pending_states_silence_honestly(self):
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         report = DeliveryHealthAnalyzer.analyze(
             events=self.log.records(), root=self.root,
-            nodes=["alice"], now=NOW,
+            nodes=[public_ids.worker('alpha')], now=NOW,
         )
-        alice = report.by_node["alice"]
+        alice = report.by_node[public_ids.worker('alpha')]
         self.assertFalse(alice.red)
         self.assertEqual(alice.undelivered_count, 0)
         self.assertIn("0 undelivered", alice.sentence)
 
     def test_drained_mail_does_not_count_as_undelivered(self):
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("bob", "opencode")
-        self._send_at(50, "alice", "bob")
+        self._send_at(50, public_ids.worker('alpha'), "bob")
         self._drain_at(10, "bob")  # bob drained the old mail; nothing new
         report = DeliveryHealthAnalyzer.analyze(
             events=self.log.records(), root=self.root,
-            nodes=["alice", "bob"], now=NOW,
+            nodes=[public_ids.worker('alpha'), "bob"], now=NOW,
         )
         bob = report.by_node["bob"]
         self.assertFalse(bob.red)
@@ -141,12 +143,12 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self.assertEqual(bob.last_drain_minutes_ago, 10)
 
     def test_inactive_nodes_are_never_scored(self):
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("ghost", "opencode")
         self.registry.retire("ghost")
         report = DeliveryHealthAnalyzer.analyze(
             events=self.log.records(), root=self.root,
-            nodes=["alice"], now=NOW,
+            nodes=[public_ids.worker('alpha')], now=NOW,
         )
         self.assertNotIn("ghost", report.by_node)
 
@@ -159,21 +161,21 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
 class DoctorProbeTests(DeliveryHealthTestBase):
     def setUp(self):
         super().setUp()
-        self.registry.register("alice", "opencode")
+        self.registry.register(public_ids.worker('alpha'), "opencode")
         self.registry.register("deaf", "opencode")
 
     def test_pass_when_drain_lands_within_budget(self):
         probe = DoctorProbe(
             self.root, budget_seconds=5,
-            sleeper=self._draining_sleeper("alice"),
+            sleeper=self._draining_sleeper(public_ids.worker('alpha')),
         )
-        result = probe.run(["alice"])
-        self.assertEqual(result.by_node["alice"].verdict, "PASS")
+        result = probe.run([public_ids.worker('alpha')])
+        self.assertEqual(result.by_node[public_ids.worker('alpha')].verdict, "PASS")
         self.assertEqual(result.rc, 0)
-        # The probe appended exactly one loopback envelope to alice.
+        # The probe appended exactly one loopback envelope to worker-alpha.
         envelopes = [r for r in self.log.records()
                      if r["kind"] == "message_envelope"
-                     and r["recipient"] == "alice"]
+                     and r["recipient"] == public_ids.worker('alpha')]
         self.assertEqual(len(envelopes), 1)
         self.assertIn("doctor-probe", envelopes[0]["note"])
 
@@ -192,10 +194,10 @@ class DoctorProbeTests(DeliveryHealthTestBase):
     def test_mixed_fleet_reports_each_node_and_degrades_once(self):
         probe = DoctorProbe(
             self.root, budget_seconds=4,
-            sleeper=self._draining_sleeper("alice"),
+            sleeper=self._draining_sleeper(public_ids.worker('alpha')),
         )
-        result = probe.run(["alice", "deaf"])
-        self.assertEqual(result.by_node["alice"].verdict, "PASS")
+        result = probe.run([public_ids.worker('alpha'), "deaf"])
+        self.assertEqual(result.by_node[public_ids.worker('alpha')].verdict, "PASS")
         self.assertEqual(result.by_node["deaf"].verdict, "DEAF")
         self.assertEqual(result.rc, 35)
 

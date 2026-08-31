@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/wake-daemon-adapter-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tenant_id", "node_id", "harness", "coordinate_digest", "session_id", "session_digest", "workspace", "executable", "executable_digest", "adapter_version", "adapter_digest", "binding_epoch"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "harness": {"enum": ["codex", "cursor", "grok-build"]},
+    "coordinate_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "session_id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"},
+    "session_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "workspace": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/"},
+    "executable": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/"},
+    "executable_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "adapter_version": {"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"},
+    "adapter_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "binding_epoch": {"type": "integer", "minimum": 1}
+  }
+}

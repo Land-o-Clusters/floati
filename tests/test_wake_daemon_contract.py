@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -12,15 +14,16 @@ from tests.schema_validation import validate_json_schema
 
 
 SCHEMA_ROOT = Path("schemas/v0")
+SCHEMA_V1_ROOT = Path("schemas/v1")
 
 
 class WakeDaemonContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
-        Registry(self.root).register("lane-a", "Cursor")
+        Registry(self.root).register(public_ids.builder('a'), "Cursor")
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.executable = self.base / "cursor-agent"
@@ -30,7 +33,7 @@ class WakeDaemonContractTests(unittest.TestCase):
     def coordinate(self, harness: str = "cursor"):
         from floati.wake_daemon_contract import DaemonCoordinate
 
-        return DaemonCoordinate(self.root, "lane-a", harness)
+        return DaemonCoordinate(self.root, public_ids.builder('a'), harness)
 
     def test_consent_is_closed_root_bound_and_idempotent(self) -> None:
         from floati.wake_daemon_contract import DaemonConsentLedger
@@ -115,13 +118,46 @@ class WakeDaemonContractTests(unittest.TestCase):
                 **dict(base, activation_epoch=2, idempotency_key="foreign-root"),
             )
 
+    def test_grok_build_consent_receipt_is_closed(self) -> None:
+        from floati.wake_daemon_contract import DaemonConsentLedger
+
+        try:
+            receipt = DaemonConsentLedger(self.root).consent(
+                self.coordinate("grok-build"),
+                adapter_version="1",
+                adapter_digest="a" * 64,
+                min_poll_seconds=1,
+                max_poll_seconds=30,
+                max_backoff_seconds=120,
+                activation_epoch=1,
+                idempotency_key=public_ids.compose(public_ids.verifier(), '-consent-1'),
+            )
+        except ProtocolRefusal as exc:
+            self.fail(f"grok-build consent was refused: {exc}")
+
+        validate_json_schema(
+            receipt,
+            SCHEMA_V1_ROOT / "wake-daemon-consent-receipt.schema.json",
+        )
+        self.assertEqual(1, receipt["schema_version"])
+        self.assertEqual("grok-build", receipt["harness"])
+
     def test_coordinate_requires_active_node_and_supported_harness(self) -> None:
         from floati.wake_daemon_contract import DaemonCoordinate
 
-        for node, harness in (("missing", "cursor"), ("lane-a", "claude")):
+        for node, harness in (("missing", "cursor"), (public_ids.builder('a'), "claude")):
             with self.subTest(node=node, harness=harness):
                 with self.assertRaises(ProtocolRefusal):
                     DaemonCoordinate(self.root, node, harness)
+
+    def test_coordinate_accepts_grok_build_harness(self) -> None:
+        try:
+            coordinate = self.coordinate("grok-build")
+        except ProtocolRefusal as exc:
+            self.fail(f"grok-build coordinate was refused: {exc}")
+
+        self.assertEqual("grok-build", coordinate.harness)
+        self.assertEqual(public_ids.builder('a'), coordinate.node_id)
 
     def test_binding_is_exact_digest_bound_and_closed(self) -> None:
         from floati.wake_daemon_contract import AdapterBindingStore
@@ -183,6 +219,26 @@ class WakeDaemonContractTests(unittest.TestCase):
                 binding_epoch=2,
             )
 
+    def test_grok_build_binding_record_is_closed(self) -> None:
+        from floati.wake_daemon_contract import AdapterBindingStore
+
+        binding = AdapterBindingStore(self.root).write(
+            self.coordinate("grok-build"),
+            session_id=public_ids.compose(public_ids.verifier(), '-session-1'),
+            workspace=self.workspace,
+            executable=self.executable,
+            adapter_version="1",
+            adapter_digest="b" * 64,
+            binding_epoch=1,
+        )
+
+        validate_json_schema(
+            binding,
+            SCHEMA_V1_ROOT / "wake-daemon-adapter-record.schema.json",
+        )
+        self.assertEqual(1, binding["schema_version"])
+        self.assertEqual("grok-build", binding["harness"])
+
     def test_lifecycle_receipt_is_closed(self) -> None:
         from floati.wake_daemon_contract import DaemonLifecycleLedger
 
@@ -222,6 +278,60 @@ class WakeDaemonContractTests(unittest.TestCase):
             pause_unknown,
             SCHEMA_ROOT / "wake-daemon-lifecycle-receipt.schema.json",
         )
+
+    def test_grok_build_lifecycle_receipt_is_closed(self) -> None:
+        from floati.wake_daemon_contract import DaemonLifecycleLedger
+
+        receipt = DaemonLifecycleLedger(self.root).record(
+            self.coordinate("grok-build"),
+            daemon_instance_id=public_ids.compose(public_ids.verifier(), '-daemon-1'),
+            activation_epoch=1,
+            event="installed",
+            state="installed",
+            reason_code=None,
+            adapter_digest="b" * 64,
+            plist_digest="c" * 64,
+            session_digest="d" * 64,
+            predecessor_receipt_id=None,
+            idempotency_key=public_ids.compose(public_ids.verifier(), '-install-1'),
+        )
+
+        validate_json_schema(
+            receipt,
+            SCHEMA_V1_ROOT / "wake-daemon-lifecycle-receipt.schema.json",
+        )
+        self.assertEqual(1, receipt["schema_version"])
+        self.assertEqual("grok-build", receipt["harness"])
+
+    def test_wake_daemon_ledger_reads_legacy_v0_and_grok_v1_rows_together(self) -> None:
+        from floati.wake_daemon_contract import DaemonConsentLedger
+
+        ledger = DaemonConsentLedger(self.root)
+        cursor = ledger.consent(
+            self.coordinate("cursor"),
+            adapter_version="1",
+            adapter_digest="a" * 64,
+            min_poll_seconds=1,
+            max_poll_seconds=30,
+            max_backoff_seconds=120,
+            activation_epoch=1,
+            idempotency_key="cursor-v0",
+        )
+        grok = ledger.consent(
+            self.coordinate("grok-build"),
+            adapter_version="1",
+            adapter_digest="b" * 64,
+            min_poll_seconds=1,
+            max_poll_seconds=30,
+            max_backoff_seconds=120,
+            activation_epoch=1,
+            idempotency_key=public_ids.compose(public_ids.verifier(), '-v1'),
+        )
+
+        self.assertEqual(0, cursor["schema_version"])
+        self.assertEqual(1, grok["schema_version"])
+        self.assertEqual(cursor, ledger.require_active(self.coordinate("cursor")))
+        self.assertEqual(grok, ledger.require_active(self.coordinate("grok-build")))
 
 
 if __name__ == "__main__":

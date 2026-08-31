@@ -123,7 +123,7 @@ class TidePolicyLedger:
         self._assert_mutable(node, key)
         latest = self.latest(node)
         return self._append({
-            "schema_version": 0,
+            "schema_version": 1 if selected.name == "quota_fraction" else 0,
             "id": "tide-policy-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
             "timestamp": utc_now(),

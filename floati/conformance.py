@@ -18,6 +18,7 @@ from .cursor import SparseCursor
 from .adapters.acp import ACPAdapter, ACPRefusal, probe_reference_harness
 from .errors import IntegrityFailure, ProtocolRefusal
 from .events import EventLog
+from . import fixture_ids
 from .ids import uuid7_hex
 from .jsonl import append_record, read_records_snapshot
 from .planes import AuthorityGrantStore, LivenessPresenceStore, MutualExclusionHoldStore
@@ -34,6 +35,7 @@ NO_RESULT = 32
 MALFORMED_EVIDENCE = 33
 MANIFEST_MISMATCH = 34
 DEFAULT_CALL_TIMEOUT = 2.0
+_PRIMARY_NODE = fixture_ids.worker("alpha")
 
 
 @dataclass(frozen=True)
@@ -330,7 +332,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
     """Exercise the fixed v0 cases and return the artifact exit code."""
 
     try:
-        for node in ("charlie", "retired", "bob", "alice", "delta"):
+        for node in ("charlie", "retired", "bob", _PRIMARY_NODE, "delta"):
             evidence = _expect_ok(adapter, "register", node, "worker")
             if evidence.get("node_id") != node or evidence.get("state") != "active":
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "registry evidence mismatch")
@@ -349,7 +351,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
             evidence = _expect_ok(
                 adapter,
                 "send",
-                "alice",
+                _PRIMARY_NODE,
                 "bob",
                 "slipway",
                 character.lower() * 40,
@@ -373,7 +375,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 or len(after_events) != len(before_events) + 1
                 or after_events[-1].get("kind") != "message_envelope"
                 or after_events[-1].get("id") != evidence.get("id")
-                or after_events[-1].get("sender") != "alice"
+                or after_events[-1].get("sender") != _PRIMARY_NODE
                 or after_events[-1].get("recipient") != "bob"
                 or after_events[-1].get("repo") != "slipway"
                 or after_events[-1].get("sha") != character.lower() * 40
@@ -401,10 +403,12 @@ def run(adapter: object, root: FloatiRoot) -> int:
         if second_ids != [sent[0]["id"], sent[2]["id"]]:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "sparse acknowledgment mismatch")
 
-        roster_suffix = "registered active nodes: alice, bob, charlie, delta"
+        roster_suffix = "registered active nodes: " + ", ".join(
+            sorted((_PRIMARY_NODE, "bob", "charlie", "delta"))
+        )
         for code, sender, recipient, key in (
             ("unknown_sender", "stranger", "bob", "unknown-sender"),
-            ("unknown_recipient", "alice", "stranger", "unknown-recipient"),
+            ("unknown_recipient", _PRIMARY_NODE, "stranger", "unknown-recipient"),
             ("unknown_sender", "retired", "bob", "retired-sender"),
         ):
             before_denial = _root_snapshot(root)
@@ -428,50 +432,50 @@ def run(adapter: object, root: FloatiRoot) -> int:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "denial evidence mismatch")
 
         now = datetime(2026, 7, 31, 12, 0, tzinfo=timezone.utc)
-        liveness = _expect_ok(adapter, "observe_liveness", "alice", 10, now)
+        liveness = _expect_ok(adapter, "observe_liveness", _PRIMARY_NODE, 10, now)
         if liveness.get("kind") != "liveness_presence":
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "liveness evidence mismatch")
-        silent = _expect_ok(adapter, "liveness_status", "alice", now + timedelta(seconds=5))
+        silent = _expect_ok(adapter, "liveness_status", _PRIMARY_NODE, now + timedelta(seconds=5))
         if silent.get("liveness_state") != "silent":
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "silent state mismatch")
-        expired_presence = _expect_ok(adapter, "liveness_status", "alice", now + timedelta(seconds=10))
+        expired_presence = _expect_ok(adapter, "liveness_status", _PRIMARY_NODE, now + timedelta(seconds=10))
         if expired_presence.get("liveness_state") != "expired":
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "expired liveness state mismatch")
-        authority = _expect_ok(adapter, "claim_authority", "build", "alice", 10, 10, now)
+        authority = _expect_ok(adapter, "claim_authority", "build", _PRIMARY_NODE, 10, 10, now)
         if authority.get("kind") != "authority_grant" or authority.get("epoch") != 1:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "authority evidence mismatch")
-        _expect_refused(adapter, "deadline_exceeds_ttl", "claim_authority", "invalid", "alice", 9, 10, now)
+        _expect_refused(adapter, "deadline_exceeds_ttl", "claim_authority", "invalid", _PRIMARY_NODE, 9, 10, now)
         _expect_refused(adapter, "authority_held", "claim_authority", "build", "charlie", 10, 10, now)
-        renewed_authority = _expect_ok(adapter, "renew_authority", "build", "alice", 1, 10, 8, now + timedelta(seconds=1))
+        renewed_authority = _expect_ok(adapter, "renew_authority", "build", _PRIMARY_NODE, 1, 10, 8, now + timedelta(seconds=1))
         if renewed_authority.get("epoch") != 1:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "authority renewal mismatch")
-        _expect_refused(adapter, "epoch_mismatch", "renew_authority", "build", "alice", 2, 10, 8, now + timedelta(seconds=2))
-        released_authority = _expect_ok(adapter, "release_authority", "build", "alice", 1, now + timedelta(seconds=2))
+        _expect_refused(adapter, "epoch_mismatch", "renew_authority", "build", _PRIMARY_NODE, 2, 10, 8, now + timedelta(seconds=2))
+        released_authority = _expect_ok(adapter, "release_authority", "build", _PRIMARY_NODE, 1, now + timedelta(seconds=2))
         if released_authority.get("state") != "released":
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "authority release mismatch")
-        _expect_refused(adapter, "authority_released", "renew_authority", "build", "alice", 1, 10, 8, now + timedelta(seconds=3))
+        _expect_refused(adapter, "authority_released", "renew_authority", "build", _PRIMARY_NODE, 1, 10, 8, now + timedelta(seconds=3))
         next_authority = _expect_ok(adapter, "claim_authority", "build", "charlie", 10, 8, now + timedelta(seconds=3))
         if next_authority.get("epoch") != 2:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "authority epoch did not advance")
-        _expect_ok(adapter, "claim_authority", "expiring", "alice", 1, 1, now)
-        _expect_refused(adapter, "authority_expired", "renew_authority", "expiring", "alice", 1, 1, 1, now + timedelta(seconds=1))
-        exclusion = _expect_ok(adapter, "acquire_exclusion", "workspace", "alice", 10, 8, now)
+        _expect_ok(adapter, "claim_authority", "expiring", _PRIMARY_NODE, 1, 1, now)
+        _expect_refused(adapter, "authority_expired", "renew_authority", "expiring", _PRIMARY_NODE, 1, 1, 1, now + timedelta(seconds=1))
+        exclusion = _expect_ok(adapter, "acquire_exclusion", "workspace", _PRIMARY_NODE, 10, 8, now)
         if exclusion.get("kind") != "mutual_exclusion_hold" or exclusion.get("epoch") != 1:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "exclusion evidence mismatch")
         _expect_refused(adapter, "exclusion_held", "acquire_exclusion", "workspace", "charlie", 10, 8, now)
-        renewed_exclusion = _expect_ok(adapter, "renew_exclusion", "workspace", "alice", 1, 10, 8, now + timedelta(seconds=1))
+        renewed_exclusion = _expect_ok(adapter, "renew_exclusion", "workspace", _PRIMARY_NODE, 1, 10, 8, now + timedelta(seconds=1))
         if renewed_exclusion.get("epoch") != 1:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "exclusion renewal mismatch")
-        _expect_refused(adapter, "epoch_mismatch", "renew_exclusion", "workspace", "alice", 2, 10, 8, now + timedelta(seconds=2))
-        released_exclusion = _expect_ok(adapter, "release_exclusion", "workspace", "alice", 1, now + timedelta(seconds=2))
+        _expect_refused(adapter, "epoch_mismatch", "renew_exclusion", "workspace", _PRIMARY_NODE, 2, 10, 8, now + timedelta(seconds=2))
+        released_exclusion = _expect_ok(adapter, "release_exclusion", "workspace", _PRIMARY_NODE, 1, now + timedelta(seconds=2))
         if released_exclusion.get("state") != "released":
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "exclusion release mismatch")
-        _expect_refused(adapter, "exclusion_released", "renew_exclusion", "workspace", "alice", 1, 10, 8, now + timedelta(seconds=3))
+        _expect_refused(adapter, "exclusion_released", "renew_exclusion", "workspace", _PRIMARY_NODE, 1, 10, 8, now + timedelta(seconds=3))
         next_exclusion = _expect_ok(adapter, "acquire_exclusion", "workspace", "charlie", 10, 8, now + timedelta(seconds=3))
         if next_exclusion.get("epoch") != 2:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "exclusion epoch did not advance")
-        _expect_ok(adapter, "acquire_exclusion", "expiring", "alice", 1, 1, now)
-        _expect_refused(adapter, "exclusion_expired", "renew_exclusion", "expiring", "alice", 1, 1, 1, now + timedelta(seconds=1))
+        _expect_ok(adapter, "acquire_exclusion", "expiring", _PRIMARY_NODE, 1, 1, now)
+        _expect_refused(adapter, "exclusion_expired", "renew_exclusion", "expiring", _PRIMARY_NODE, 1, 1, 1, now + timedelta(seconds=1))
         required_directories = ("liveness-presence", "authority-grants", "mutual-exclusion-holds")
         if not all((root.tenant_home / directory).is_dir() for directory in required_directories):
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "plane paths are not separated")

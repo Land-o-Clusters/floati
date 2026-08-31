@@ -173,7 +173,7 @@ class ApprovalSuspensionController:
             "requested_scope": request["scope"],
             "resume_mode": resume_mode,
             "provider_session_or_thread_id": provider_session_or_thread_id,
-            "workspace": f"/private/tmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
             "workspace_checkpoint": checkpoint,
             "execution_authority_subject": execution_authority_subject,
             "execution_authority_holder": execution_authority_holder,

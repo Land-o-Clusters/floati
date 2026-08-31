@@ -11,7 +11,7 @@
     },
     "state": "degraded"
   },
-  "scratch": "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
+  "scratch": "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
   "sequencer_direct": {
     "argv": [
       "/usr/bin/python3",
@@ -20,11 +20,11 @@
       "sequencer",
       "direct",
       "--root",
-      "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
+      "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
       "--as",
       "operator-h3c"
     ],
-    "cwd": "~/Projects/floati-grok",
+    "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok",
     "elapsed_s": 0.068,
     "ended_utc": "2026-08-28T00:47:51Z",
     "exit": 0,
@@ -46,12 +46,12 @@
       "sequencer",
       "serve",
       "--root",
-      "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
+      "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
       "--as",
       "seq-h3c",
       "--takeover"
     ],
-    "cwd": "~/Projects/floati-grok",
+    "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok",
     "elapsed_s": 0.072,
     "ended_utc": "2026-08-28T00:47:51Z",
     "exit": 20,
@@ -73,9 +73,9 @@
       "sequencer",
       "status",
       "--root",
-      "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750"
+      "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750"
     ],
-    "cwd": "~/Projects/floati-grok",
+    "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok",
     "elapsed_s": 0.068,
     "ended_utc": "2026-08-28T00:47:51Z",
     "exit": 0,
@@ -97,9 +97,9 @@
       "floati",
       "supervise",
       "--root",
-      "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750"
+      "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750"
     ],
-    "cwd": "~/Projects/floati-grok",
+    "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok",
     "elapsed_s": 0.067,
     "ended_utc": "2026-08-28T00:47:51Z",
     "exit": 0,
@@ -173,13 +173,13 @@
       "worker",
       "run",
       "--root",
-      "~/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
+      "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h3c20260828004750",
       "--as",
       "lane-a",
       "--adapter",
       "pi"
     ],
-    "cwd": "~/Projects/floati-grok",
+    "cwd": "\u002fUsers/penguinspecz/Projects/floati-grok",
     "elapsed_s": 0.066,
     "ended_utc": "2026-08-28T00:47:51Z",
     "exit": 20,

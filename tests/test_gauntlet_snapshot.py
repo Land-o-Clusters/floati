@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import json
 import os
@@ -83,12 +85,12 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
     def build_case(self, base: Path, name: str) -> ReaderCase:
         root = FloatiRoot.open_direct_home(base / f"gauntlet-{name}", create=True)
         registry = Registry(root)
-        registry.register("alice", "worker")
-        WorkLog(root).add("gauntlet item", "alice", [], now=NOW)
+        registry.register(public_ids.worker('alpha'), "worker")
+        WorkLog(root).add("gauntlet item", public_ids.worker('alpha'), [], now=NOW)
         if name == "inbox":
             registry.register("bob", "worker")
             EventLog(root).send(
-                "alice",
+                public_ids.worker('alpha'),
                 "bob",
                 "slipway",
                 "a" * 40,
@@ -112,7 +114,7 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
                     "timestamp": "2026-08-01T12:00:00.000Z",
                     "kind": "denial_receipt",
                     "attempt_id": f"attempt-{UUID}",
-                    "claimed_sender": "alice",
+                    "claimed_sender": public_ids.worker('alpha'),
                     "claimed_recipient": "missing",
                     "reason_code": "unknown_recipient",
                 },
@@ -214,8 +216,8 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             root = FloatiRoot.open_direct_home(base / "gauntlet-symlink", create=True)
-            Registry(root).register("alice", "worker")
-            WorkLog(root).add("symlink item", "alice", [], now=NOW)
+            Registry(root).register(public_ids.worker('alpha'), "worker")
+            WorkLog(root).add("symlink item", public_ids.worker('alpha'), [], now=NOW)
             outside = base / "outside"
             outside.mkdir()
             (root.tenant_home / ".floati-snapshots").symlink_to(

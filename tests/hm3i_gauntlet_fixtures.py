@@ -6,6 +6,8 @@ through the public owners before a gauntlet mutates persisted bytes.
 
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -721,7 +723,7 @@ def build_decision_case(root: FloatiRoot) -> DecisionCase:
         timestamp=NOW,
         scope={"kind": "repository"},
         statement="Physical append order remains authoritative.",
-        decided_by="fable",
+        decided_by=public_ids.reviewer(),
         author_authority="worker",
         source_artifact_ids=["run:" + trace.run_id],
     )

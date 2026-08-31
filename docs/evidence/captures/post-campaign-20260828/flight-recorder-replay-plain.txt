@@ -1,4 +1,4 @@
-ROOT=/private/tmp/floati-captures.LtNmwM/other5/flight-recorder
+ROOT=/tmp/floati-captures.LtNmwM/other5/flight-recorder
 $ floati log --root $ROOT --replay --plain
 
 PLAIN REPLAY // v0

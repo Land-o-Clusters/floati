@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import errno
 import json
 import os
@@ -47,7 +49,7 @@ def _decision_proposal(tenant_id: str, suffix: str) -> dict[str, object]:
         "author_authority": "worker",
         "source_artifact_ids": ["run:run-018f7e9b3c137abc8def0123456789ab"],
         "task_contract_id": None,
-        "decided_by": "fable",
+        "decided_by": public_ids.reviewer(),
         "supersedes": None,
     }
     record["decision_digest"] = decision_digest(record)
@@ -74,10 +76,10 @@ class RecoveryGauntletTests(unittest.TestCase):
     def seeded_root(self, directory: str) -> FloatiRoot:
         root = FloatiRoot.open_direct_home(Path(directory) / "recovery", create=True)
         registry = Registry(root)
-        registry.register("alice", "worker")
+        registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root).send(
-            "alice",
+            public_ids.worker('alpha'),
             "bob",
             "slipway",
             "a" * 40,
@@ -102,7 +104,7 @@ class RecoveryGauntletTests(unittest.TestCase):
             try:
                 with mock.patch("floati.jsonl.os.write", side_effect=partial_enospc):
                     EventLog(root).send(
-                        "alice",
+                        public_ids.worker('alpha'),
                         "bob",
                         "slipway",
                         "b" * 40,
@@ -133,7 +135,7 @@ class RecoveryGauntletTests(unittest.TestCase):
             caught: BaseException | None = None
             try:
                 EventLog(root).send(
-                    "alice",
+                    public_ids.worker('alpha'),
                     "bob",
                     "slipway",
                     "b" * 40,

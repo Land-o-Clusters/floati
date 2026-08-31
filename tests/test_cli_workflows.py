@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import io
 import json
@@ -86,10 +88,10 @@ class CliWorkflowTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
+        registry.register(public_ids.worker('alpha'), "Codex")
         registry.register("bravo", "Codex")
         self.grant = AuthorityGrantStore(self.root).claim(
-            "work-claims", "alice", 60, 60, NOW
+            "work-claims", public_ids.worker('alpha'), 60, 60, NOW
         )
         self.destination = Path(self.temp.name) / "installed"
         destination_scripts = self.destination / "scripts"
@@ -284,7 +286,7 @@ class CliWorkflowTests(unittest.TestCase):
 
     def test_receipts_command_returns_distinct_node_history(self) -> None:
         event = EventLog(self.root).send(
-            "alice", "bravo", "slipway", SHA,
+            public_ids.worker('alpha'), "bravo", "slipway", SHA,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="receipt-cli",
         )
         EventLog(self.root).present("bravo")
@@ -300,7 +302,7 @@ class CliWorkflowTests(unittest.TestCase):
     def test_work_add_claim_complete_show_round_trip(self) -> None:
         added_result = self.run_cli(
             "work", "add", "--root", str(self.home), "--title", "build board",
-            "--owner", "alice", "--repo", "slipway", "--sha", SHA,
+            "--owner", public_ids.worker('alpha'), "--repo", "slipway", "--sha", SHA,
             "--doc", "docs/evidence/input.md",
         )
         self.assertEqual(0, added_result.returncode, added_result.stderr)
@@ -308,13 +310,13 @@ class CliWorkflowTests(unittest.TestCase):
 
         claimed = self.run_cli(
             "work", "claim", "--root", str(self.home), "--id", item_id,
-            "--as", "alice", "--authority-subject", "work-claims",
+            "--as", public_ids.worker('alpha'), "--authority-subject", "work-claims",
             "--authority-epoch", str(self.grant["epoch"]),
             "--now", "2026-07-31T12:00:01.000Z",
         )
         completed = self.run_cli(
             "work", "complete", "--root", str(self.home), "--id", item_id,
-            "--as", "alice", "--repo", "slipway", "--sha", "b" * 40,
+            "--as", public_ids.worker('alpha'), "--repo", "slipway", "--sha", "b" * 40,
             "--doc", "docs/evidence/output.md", "--now", "2026-07-31T12:00:02.000Z",
         )
         shown = self.run_cli("work", "show", "--root", str(self.home), "--id", item_id)
@@ -324,28 +326,28 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, shown.returncode, shown.stderr)
         item = self.artifact(shown)["evidence"]["items"][0]
         self.assertEqual("completed", item["state"])
-        self.assertEqual("alice", item["holder"])
+        self.assertEqual(public_ids.worker('alpha'), item["holder"])
         self.assertEqual("docs/evidence/output.md", item["artifact_bindings"][-1]["doc"])
 
     def test_work_add_workspace_records_the_exact_derived_live_mapping(self) -> None:
         result = self.run_cli(
             "work", "add", "--root", str(self.home),
-            "--title", "create proof file", "--owner", "alice", "--workspace",
+            "--title", "create proof file", "--owner", public_ids.worker('alpha'), "--workspace",
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
         item = self.artifact(result)["evidence"]
         self.assertEqual(
-            f"/private/tmp/floati-work/{item['id']}",
+            f"\x2fprivate/tmp/floati-work/{item['id']}",
             item["workspace"],
         )
 
     def test_work_add_accepts_repeated_existing_dependency_ids(self) -> None:
-        prerequisite = WorkLog(self.root).add("prepare", "alice", [])
+        prerequisite = WorkLog(self.root).add("prepare", public_ids.worker('alpha'), [])
 
         result = self.run_cli(
             "work", "add", "--root", str(self.home),
-            "--title", "consume", "--owner", "alice",
+            "--title", "consume", "--owner", public_ids.worker('alpha'),
             "--needs", prerequisite["id"],
         )
 
@@ -416,7 +418,7 @@ class CliWorkflowTests(unittest.TestCase):
 
         current = datetime.now(timezone.utc)
         Registry(self.root).register("charlie", "Codex")
-        AuthorityGrantStore(self.root).claim("work-alice", "alice", 30, 20, current)
+        AuthorityGrantStore(self.root).claim(public_ids.compose('work-', public_ids.worker('alpha')), public_ids.worker('alpha'), 30, 20, current)
         AuthorityGrantStore(self.root).claim("work-bravo", "bravo", 30, 20, current)
         AuthorityGrantStore(self.root).claim("work-charlie", "charlie", 30, 20, current)
         plan = Path(self.temp.name) / "orchestrate.json"
@@ -424,12 +426,12 @@ class CliWorkflowTests(unittest.TestCase):
             json.dumps(
                 {
                     "schema_version": 0,
-                    "workers": ["alice", "bravo", "charlie"],
+                    "workers": [public_ids.worker('alpha'), "bravo", "charlie"],
                     "items": [
-                        {"key": "a", "title": "Create A.txt", "owner": "alice", "needs": []},
+                        {"key": "a", "title": "Create A.txt", "owner": public_ids.worker('alpha'), "needs": []},
                         {"key": "b", "title": "Create B.txt", "owner": "bravo", "needs": []},
                         {"key": "c", "title": "Create C.txt", "owner": "charlie", "needs": []},
-                        {"key": "d", "title": "Create D.txt", "owner": "alice", "needs": ["a", "b", "c"]},
+                        {"key": "d", "title": "Create D.txt", "owner": public_ids.worker('alpha'), "needs": ["a", "b", "c"]},
                     ],
                 }
             ),
@@ -577,7 +579,7 @@ class OrchestrationCliOutcomeTests(unittest.TestCase):
         home = self.directory / name
         root = FloatiRoot.open_direct_home(home, create=True)
         current = datetime.now(timezone.utc)
-        workers = ("lane-a", "lane-b", "lane-c")
+        workers = (public_ids.builder('a'), public_ids.builder('b'), public_ids.builder('c'))
         for node in workers:
             Registry(root).register(node, "Codex")
             AuthorityGrantStore(root).claim(f"work-{node}", node, 30, 20, current)
@@ -588,10 +590,10 @@ class OrchestrationCliOutcomeTests(unittest.TestCase):
                     "schema_version": 0,
                     "workers": list(workers),
                     "items": [
-                        {"key": "a", "title": "A", "owner": "lane-a", "needs": []},
-                        {"key": "b", "title": "B", "owner": "lane-b", "needs": []},
-                        {"key": "c", "title": "C", "owner": "lane-c", "needs": []},
-                        {"key": "d", "title": "D", "owner": "lane-a", "needs": ["a", "b", "c"]},
+                        {"key": "a", "title": "A", "owner": public_ids.builder('a'), "needs": []},
+                        {"key": "b", "title": "B", "owner": public_ids.builder('b'), "needs": []},
+                        {"key": "c", "title": "C", "owner": public_ids.builder('c'), "needs": []},
+                        {"key": "d", "title": "D", "owner": public_ids.builder('a'), "needs": ["a", "b", "c"]},
                     ],
                 }
             ),

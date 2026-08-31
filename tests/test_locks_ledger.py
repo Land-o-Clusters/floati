@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,9 +36,9 @@ class LocksLedgerTests(unittest.TestCase):
     def acquire(self) -> None:
         self.ledger.acquire(
             lock_id="merge-main",
-            holder="lane-floati",
+            holder=public_ids.builder('floati'),
             expires_at=FUTURE,
-            escalation_holder="fable",
+            escalation_holder=public_ids.reviewer(),
             now=NOW,
         )
 
@@ -44,7 +46,7 @@ class LocksLedgerTests(unittest.TestCase):
         self.acquire()
         self.ledger.escalate(
             lock_id="merge-main",
-            requested_by="fable",
+            requested_by=public_ids.reviewer(),
             now=EXPIRED,
             expires_at=NEXT_EXPIRY,
             escalation_holder="backup",
@@ -55,9 +57,9 @@ class LocksLedgerTests(unittest.TestCase):
         """Catches any lock acquisition path persisting an incomplete promise."""
 
         cases = (
-            {"holder": None, "expires_at": FUTURE, "escalation_holder": "fable"},
-            {"holder": "lane-floati", "expires_at": None, "escalation_holder": "fable"},
-            {"holder": "lane-floati", "expires_at": FUTURE, "escalation_holder": None},
+            {"holder": None, "expires_at": FUTURE, "escalation_holder": public_ids.reviewer()},
+            {"holder": public_ids.builder('floati'), "expires_at": None, "escalation_holder": public_ids.reviewer()},
+            {"holder": public_ids.builder('floati'), "expires_at": FUTURE, "escalation_holder": None},
         )
         for values in cases:
             with self.subTest(values=values), self.assertRaises(ProtocolRefusal):
@@ -105,7 +107,7 @@ class LocksLedgerTests(unittest.TestCase):
         self.acquire()
         row = self.ledger.escalate(
             lock_id="merge-main",
-            requested_by="fable",
+            requested_by=public_ids.reviewer(),
             now=EXPIRED,
             expires_at=NEXT_EXPIRY,
             escalation_holder="backup",
@@ -113,9 +115,9 @@ class LocksLedgerTests(unittest.TestCase):
         )
 
         lock = self.ledger.snapshot().locks["merge-main"]
-        self.assertEqual("fable", lock.holder)
+        self.assertEqual(public_ids.reviewer(), lock.holder)
         self.assertEqual("pending", lock.announcement.status)
-        self.assertEqual("lane-floati", lock.announcement.recipient)
+        self.assertEqual(public_ids.builder('floati'), lock.announcement.recipient)
         self.assertEqual("delivery-path-rearmed", lock.announcement.rearm_event)
         self.assertEqual(
             "[[locks.escalation.action_taken_not_role]]",
@@ -135,7 +137,7 @@ class LocksLedgerTests(unittest.TestCase):
         with self.assertRaises(InjectedCrash):
             self.ledger.escalate(
                 lock_id="merge-main",
-                requested_by="fable",
+                requested_by=public_ids.reviewer(),
                 now=EXPIRED,
                 expires_at=NEXT_EXPIRY,
                 escalation_holder="backup",
@@ -144,7 +146,7 @@ class LocksLedgerTests(unittest.TestCase):
             )
 
         fresh = LockLedger(self.root).snapshot().locks["merge-main"]
-        self.assertEqual("lane-floati", fresh.holder)
+        self.assertEqual(public_ids.builder('floati'), fresh.holder)
         self.assertIsNone(fresh.announcement)
 
     def test_silence_never_delivers_or_releases_an_announcement(self) -> None:

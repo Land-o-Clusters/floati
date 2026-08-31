@@ -84,6 +84,8 @@ class WallCaptureTests(unittest.TestCase):
             for state, marker in required.items():
                 standard = (wall / f"{state}-standard-dark.txt").read_text(encoding="utf-8")
                 self.assertIn(marker, standard)
+            graph = (wall / "graph-standard-dark.txt").read_text(encoding="utf-8")
+            self.assertIn("demo-architect", graph)
             for state in STATES:
                 for mode in MODES:
                     dark = (wall / f"{state}-{mode}-dark.txt").read_bytes()

@@ -9,7 +9,7 @@ Branch: `repair/sd1-uninstall-20260828`
 This repair is limited to the manifest-exact Floati uninstall path and its
 regression coverage. It does not edit a README, activate or flip any wake
 surface, remove a fleet root, or touch any foreign-project artifact. The governed
-chaos fleet at `/Users/Shared/floati-chaos-20260828/fleet` is retained.
+chaos fleet at `~/floati-chaos-20260828/fleet` is retained.
 
 ## Root cause
 
@@ -42,7 +42,7 @@ round trip.
 ## Live acceptance preview
 
 The repaired source ran a non-mutating dry-run against exactly
-`/Users/Shared/floati-chaos-20260828/floati`. It returned `status: ok`,
+`~/floati-chaos-20260828/floati`. It returned `status: ok`,
 `dry_run: true`, `removed_count: 0`, no foreign files, and digest-bound
 receipts for all 267 installed owned files plus the ownership manifest. The
 preview included `scripts/floati-codex-wait`. No live byte was removed during

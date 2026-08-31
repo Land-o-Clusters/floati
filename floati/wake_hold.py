@@ -12,7 +12,14 @@ from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import _locked_path, _transact_wake_hold_records, read_records, read_records_with_prefix_digests, transact
+from .jsonl import (
+    VerifiedLedgerCursor,
+    _locked_path,
+    _transact_wake_hold_records,
+    read_records,
+    read_records_with_prefix_digests,
+    transact,
+)
 from .records import WAKE_HOLD_KINDS, validate_record, wake_hold_decision_digest
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
@@ -475,6 +482,19 @@ class WakeHoldController:
         if not isinstance(root, FloatiRoot):
             raise ProtocolRefusal("root_required", "wake controller requires a validated writable root")
         self.root = root
+        self._prefix_cursors: Dict[
+            Tuple[str, str, Optional[str]], VerifiedLedgerCursor
+        ] = {}
+
+    def _prefix_cursor(
+        self, plane: str, recipient: str, worker_session_id: Optional[str],
+    ) -> VerifiedLedgerCursor:
+        key = (plane, recipient, worker_session_id)
+        cursor = self._prefix_cursors.get(key)
+        if cursor is None:
+            cursor = VerifiedLedgerCursor()
+            self._prefix_cursors[key] = cursor
+        return cursor
 
     def _read(
         self, recipient: str, worker_session_id: Optional[str],
@@ -486,15 +506,18 @@ class WakeHoldController:
         try:
             events, event_prefixes = read_records_with_prefix_digests(
                 self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS), domain=self._EVENT_DOMAIN,
+                cursor=self._prefix_cursor("events", "", None),
             )
             validate_event_records(events)
             deliveries, delivery_prefixes = read_records_with_prefix_digests(
                 self.root, cursor._delivery_relative_path_for(recipient, worker_session_id=worker_session_id),
                 allowed_kinds=set(WAKE_HOLD_KINDS), domain=self._DELIVERY_DOMAIN,
+                cursor=self._prefix_cursor("deliveries", recipient, worker_session_id),
             )
             acknowledgments, acknowledgment_prefixes = read_records_with_prefix_digests(
                 self.root, cursor._relative_path_for(recipient, worker_session_id=worker_session_id),
                 allowed_kinds={"ack_receipt"}, domain=self._ACK_DOMAIN,
+                cursor=self._prefix_cursor("acknowledgments", recipient, worker_session_id),
             )
         except (IntegrityFailure, ProtocolRefusal, KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, IntegrityFailure) and exc.code == "consumption_state_unavailable":

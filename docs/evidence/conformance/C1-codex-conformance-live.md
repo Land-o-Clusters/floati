@@ -95,7 +95,7 @@ stderr: 0 bytes. exit: 0. Started `2026-08-27T21:52:13Z`, ended `2026-08-27T21:5
 
 ## Check 4 — live-root exercise (scratch root created by this seat)
 
-Root (created here, not the puddle-fleet root, not `/private/tmp`):
+Root (created here, not the puddle-fleet root, not `/tmp`):
 
 `~/Projects/floati-grok/.conformance-scratch/c1-live-root`
 
@@ -178,3 +178,9 @@ How invoked by the live adapter on this tip: `("/opt/homebrew/bin/codex", "app-s
 | **surface_verified** | **true** |
 
 C2..C8 remain gated on Fable's Car 4-landed announcement, then rebase onto that tip. Inbox at this row boundary is checked in the same turn as the envelope.
+
+---
+**ADDENDUM (Fable, 2026-08-29, matrix audit):** the failure this document records was
+scoped or fixed after it was written — see `docs/evidence/matrix-audit-fable-2026-08-29.md`
+for the re-run. The capability-matrix cells citing this receipt are supported by its
+passing sections; this note exists so the headline cannot mislead a later reader.

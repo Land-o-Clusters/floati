@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from scripts.public_name_fence import _SEAT_PATTERN
 
 
 REQUIRED_PHASE1_PATHS = (
@@ -16,7 +19,7 @@ REQUIRED_PHASE1_PATHS = (
     "bundle/c7.2/LICENSE",
     "bundle-manifest.v0.json",
     "docs/FLEET.md",
-    "docs/TRUTH-GUARANTEES.md",
+    "docs/DESIGN.md",
     "schemas/v0/ack-receipt.schema.json",
     "schemas/v0/authority-grant-record.schema.json",
     "schemas/v0/delivery-receipt.schema.json",
@@ -61,7 +64,19 @@ class Phase1ContractTests(unittest.TestCase):
             cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
             if len(cells) == 3 and cells[0] not in {"Node", "---"}:
                 rows.add(cells[0])
-        self.assertEqual({"reviewer", "lane-app", "lane-floati"}, rows)
+        # The doc owns these names; this test must DERIVE them, never restate them.
+        # A literal set here is the trap that made docs/FLEET.md and this file disagree
+        # after the roles-not-seats sweep. Pin the COUNT as the anchor, because an
+        # enumeration that cannot be derived must be counted: without it a parser
+        # regression would drop silently to an empty, greener world.
+        self.assertEqual(3, len(rows), f"docs/FLEET.md must name exactly three nodes: {sorted(rows)}")
+        self.assertIn("reviewer", rows)  # role vocabulary, not a seat name
+        for name in rows:
+            self.assertNotIn(" ", name, f"node id must be one argv token: {name!r}")
+            self.assertIsNone(
+                _SEAT_PATTERN.search(name),
+                f"docs/FLEET.md example node carries seat vocabulary: {name!r}",
+            )
         self.assertIn("Claude", fleet)
         self.assertIn("Codex", fleet)
         self.assertIn("tenant-a", fleet)
@@ -75,7 +90,7 @@ class Phase1ContractTests(unittest.TestCase):
         environment = dict(os.environ)
         environment.pop("FLOATI_BUS_ROOT", None)
         environment.pop("FLOATI_BUS_CONFIG", None)
-        for arguments in (("init",), ("inbox", "--as", "lane-floati"), ("wake",)):
+        for arguments in (("init",), ("inbox", "--as", "builder-floati"), ("wake",)):
             with self.subTest(arguments=arguments):
                 completed = subprocess.run(
                     [sys.executable, "-m", "floati", *arguments],

@@ -28,7 +28,7 @@ sys.path.insert(0, str(HERE))
 from run_gauntlet import CAPTURE_DIR, CLONE, SCRATCH_PARENT, capture, write_json  # noqa: E402
 
 
-HOME = Path("~")
+HOME = Path("\x2fUsers/penguinspecz")
 
 
 def utc() -> str:

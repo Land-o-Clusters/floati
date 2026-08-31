@@ -7,6 +7,10 @@ exists, the fix is never another test; it is moving the existing one
 earlier." This hook runs floati.manifest.verify_manifest as the LAST
 keystroke before every `git commit`.
 
+On a git worktree, deployable paths are intersected with `git ls-files`
+so untracked workspace files cannot freeze into the bundle
+(AD-1 GREEN fail, tracked_set_mismatch).
+
 Install (per clone or worktree):
     cp scripts/pre-commit-manifest-guard .git/hooks/pre-commit
     chmod +x .git/hooks/pre-commit

@@ -124,6 +124,7 @@ class NodeWizardTests(unittest.TestCase):
                 "transcript_bytes",
                 "turn_count",
                 "self_reported_context_fraction",
+                "quota_fraction",
             ],
             result["tide_metrics"],
         )

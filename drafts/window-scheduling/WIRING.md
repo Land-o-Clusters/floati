@@ -72,7 +72,7 @@ recorded in the gate verdict (this draft gates at its own SHA).
 ## 6. Estimate
 
 ESTIMATE: 2–4 hours wiring (verb + handler + vendoring + manifest regen +
-receipts), excluding copy authoring (Fable-owned) and any H1 wait-layer
+receipts), excluding copy authoring (architect-owned) and any H1 wait-layer
 composition decisions.
 
 ## 7. Refusals carried by the build (closed set)

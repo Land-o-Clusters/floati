@@ -19,7 +19,7 @@ from .root import FloatiRoot, validate_identifier
 
 REGISTRY_KINDS = {
     "registry_entry", "node_lease", "provider_switch_receipt",
-    "registry_role_record",
+    "registry_role_record", "lane_spawn_receipt", "lane_teardown_receipt",
 }
 
 
@@ -61,7 +61,7 @@ class Registry:
         def decide(records: list[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
             latest: Optional[Dict[str, object]] = None
             for item in records:
-                if item.get("node_id") == node:
+                if item.get("kind") == "registry_entry" and item.get("node_id") == node:
                     latest = item
             if latest is None:
                 raise ProtocolRefusal("unknown_node", REGISTRY_RETIRE_UNKNOWN_NODE_DETAIL)

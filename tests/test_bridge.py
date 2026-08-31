@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -30,7 +32,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         base = Path(self.temp.name)
         self.left = FloatiRoot.open_direct_home(base / "alpha", create=True)
         self.right = FloatiRoot.open_direct_home(base / "beta", create=True)
-        Registry(self.left).register("alice", "Codex")
+        Registry(self.left).register(public_ids.worker('alpha'), "Codex")
         Registry(self.right).register("bob", "Claude")
 
     def bridge(self, left=None, right=None):
@@ -41,7 +43,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         return read_records_snapshot(root, relative, allowed_kinds=kinds)
 
     def consent_both(self, bridge):
-        left = bridge.consent(self.left, self.right, "alice", now=NOW)
+        left = bridge.consent(self.left, self.right, public_ids.worker('alpha'), now=NOW)
         right = bridge.consent(self.right, self.left, "bob", now=NOW)
         return left, right
 
@@ -51,11 +53,11 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.establish(now=NOW)
 
         outbound = bridge.forward(
-            self.left, "alice", "bob", "slipway", "a" * 40,
+            self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
             "docs/evidence/alpha.md", "alpha to beta", now=NOW,
         )
         inbound = bridge.forward(
-            self.right, "bob", "alice", "slipway", "b" * 40,
+            self.right, "bob", public_ids.worker('alpha'), "slipway", "b" * 40,
             "docs/evidence/beta.md", "beta to alpha", now=NOW,
         )
 
@@ -78,7 +80,7 @@ class LocalBridgeContractTests(unittest.TestCase):
 
     def test_missing_or_revoked_consent_refuses_and_records_both_sides(self) -> None:
         bridge = self.bridge()
-        bridge.consent(self.left, self.right, "alice", now=NOW)
+        bridge.consent(self.left, self.right, public_ids.worker('alpha'), now=NOW)
         with self.assertRaises(ProtocolRefusal) as missing:
             bridge.establish(now=NOW)
         self.assertEqual("bridge_consent_missing", missing.exception.code)
@@ -92,7 +94,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.revoke(self.right, self.left, "bob", now=NOW)
         with self.assertRaises(ProtocolRefusal) as revoked:
             bridge.forward(
-                self.left, "alice", "bob", "slipway", "a" * 40,
+                self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
                 "docs/evidence/refused.md", "must refuse", now=NOW,
             )
         self.assertEqual("bridge_consent_revoked", revoked.exception.code)
@@ -117,7 +119,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.establish(now=NOW)
         with self.assertRaises(ProtocolRefusal) as remote:
             bridge.forward(
-                self.left, "alice", "bob", "slipway", "a" * 40,
+                self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
                 "docs/evidence/refused.md", "must refuse", now=NOW,
                 transport="https",
             )

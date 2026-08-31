@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import gc
 import inspect
@@ -178,7 +180,7 @@ class _EffectCase:
     def approve_action(self, *, digest: str = REQUEST_DIGEST):
         authorities = AuthorityGrantStore(self.root)
         grant = authorities.claim(
-            "effect-approval", "fable", 240, 240,
+            "effect-approval", public_ids.reviewer(), 240, 240,
             NOW + timedelta(seconds=22),
         )
         approvals = ApprovalLedger(self.root)
@@ -188,7 +190,7 @@ class _EffectCase:
             now=NOW + timedelta(seconds=23),
         )
         decision = approvals.decide(
-            request["id"], "fable", "approved", None,
+            request["id"], public_ids.reviewer(), "approved", None,
             granted_scope="repo:slipway", granted_ttl_seconds=90,
             now=NOW + timedelta(seconds=24),
         )
@@ -197,7 +199,7 @@ class _EffectCase:
     def suspend_for_action(self, *, resume: bool):
         authorities = AuthorityGrantStore(self.root)
         approval_authority = authorities.claim(
-            "resume-approval", "fable", 240, 240,
+            "resume-approval", public_ids.reviewer(), 240, 240,
             NOW + timedelta(seconds=22),
         )
         execution = authorities.claim(
@@ -230,7 +232,7 @@ class _EffectCase:
         if not resume:
             return request, None, suspended, None
         decision = approvals.decide(
-            request["id"], "fable", "approved", None,
+            request["id"], public_ids.reviewer(), "approved", None,
             granted_scope="repo:slipway", granted_ttl_seconds=90,
             now=NOW + timedelta(seconds=25),
         )
@@ -1338,7 +1340,7 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
             attempt_id=case.run.opened["attempt_id"],
         )
 
-        evidence_path = Path("/private/tmp/floati-work") / case.run.parent / "isolation-evidence.json"
+        evidence_path = Path("\x2fprivate/tmp/floati-work") / case.run.parent / "isolation-evidence.json"
         if result.get("outcome_code") == "effect_worker_isolation_unavailable":
             self.assertFalse(evidence_path.exists(), result)
             self.assertEqual([], case.effect_ledger.records())

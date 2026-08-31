@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -78,7 +80,7 @@ class ExternalResourceHook(FileHook):
 
     def prepare(self, staging_root: Path) -> dict[str, object]:
         self.prepared_root = staging_root
-        return {"resource": "/private/tmp/outside-locks-staging"}
+        return {"resource": "\x2fprivate/tmp/outside-locks-staging"}
 
 
 class SymlinkResourceHook(FileHook):
@@ -122,7 +124,7 @@ class LocksProvisioningTests(unittest.TestCase):
         first = FileHook()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.controller.provision(
-                seat_id="lane-one",
+                seat_id=public_ids.builder('one'),
                 hooks=(first, FailingHook()),
                 now=NOW,
             )
@@ -138,7 +140,7 @@ class LocksProvisioningTests(unittest.TestCase):
         first = FileHook(rollback_succeeds=False)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.controller.provision(
-                seat_id="lane-one",
+                seat_id=public_ids.builder('one'),
                 hooks=(first, FailingHook()),
                 now=NOW,
             )
@@ -152,7 +154,7 @@ class LocksProvisioningTests(unittest.TestCase):
         partial = PartiallyFailingHook()
         with self.assertRaises(ProtocolRefusal) as caught:
             self.controller.provision(
-                seat_id="lane-one",
+                seat_id=public_ids.builder('one'),
                 hooks=(partial,),
                 now=NOW,
             )
@@ -164,23 +166,23 @@ class LocksProvisioningTests(unittest.TestCase):
         """Catches seat testimony preceding complete resource publication."""
 
         seat = self.controller.provision(
-            seat_id="lane-one",
+            seat_id=public_ids.builder('one'),
             hooks=(FileHook(),),
             now=NOW,
         )
         self.assertTrue((seat.resource_root / "first.prepared").is_file())
         self.assertEqual(("first",), seat.hook_names)
-        projected = self.ledger.snapshot().seats["lane-one"]
+        projected = self.ledger.snapshot().seats[public_ids.builder('one')]
         self.assertEqual(seat.manifest_digest, projected.manifest_digest)
         self.assertEqual(("first",), projected.hook_names)
 
     def test_duplicate_seat_refuses_before_a_second_hook_prepares(self) -> None:
         """Catches duplicate seat identity creating a second resource root."""
 
-        self.controller.provision(seat_id="lane-one", hooks=(FileHook(),), now=NOW)
+        self.controller.provision(seat_id=public_ids.builder('one'), hooks=(FileHook(),), now=NOW)
         second = FileHook()
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.controller.provision(seat_id="lane-one", hooks=(second,), now=NOW)
+            self.controller.provision(seat_id=public_ids.builder('one'), hooks=(second,), now=NOW)
         self.assertEqual("seat_already_provisioned", caught.exception.code)
         self.assertIsNone(second.prepared_root)
 
@@ -189,7 +191,7 @@ class LocksProvisioningTests(unittest.TestCase):
 
         with self.assertRaises(ProtocolRefusal) as caught:
             self.controller.provision(
-                seat_id="lane-one",
+                seat_id=public_ids.builder('one'),
                 hooks=(ExternalResourceHook(),),
                 now=NOW,
             )
@@ -204,7 +206,7 @@ class LocksProvisioningTests(unittest.TestCase):
         hook = SymlinkResourceHook(outside)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.controller.provision(
-                seat_id="lane-one",
+                seat_id=public_ids.builder('one'),
                 hooks=(hook,),
                 now=NOW,
             )
@@ -217,7 +219,7 @@ class LocksProvisioningTests(unittest.TestCase):
         """Catches a caller-controlled iterable escaping the input snapshot."""
 
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.controller.provision(seat_id="lane-one", hooks=IterationFailure(), now=NOW)
+            self.controller.provision(seat_id=public_ids.builder('one'), hooks=IterationFailure(), now=NOW)
         self.assertEqual("provisioning_hooks_invalid", caught.exception.code)
         self.assertEqual({}, self.ledger.snapshot().seats)
 

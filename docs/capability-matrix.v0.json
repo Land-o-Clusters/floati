@@ -3,17 +3,19 @@
   "spec_path": "docs/design/capability-matrix-spec-2026-08-28.md",
   "seeded_by": "grok",
   "seeded_at": "2026-08-28",
-  "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.",
+  "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals \u2014 those do not vary by surface.",
+  "orchestrator_note": "Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.",
+  "surface_scope_note": "Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.",
   "columns": [
     {
       "id": "bus",
       "title": "bus",
-      "vocabulary": "live / CLI / —"
+      "vocabulary": "live / CLI / \u2014"
     },
     {
       "id": "work",
       "title": "work",
-      "vocabulary": "adapter / —"
+      "vocabulary": "adapter / \u2014"
     },
     {
       "id": "wake",
@@ -23,22 +25,22 @@
     {
       "id": "auto_turnover",
       "title": "auto-turnover",
-      "vocabulary": "auto / assisted / —"
+      "vocabulary": "auto / assisted / \u2014"
     },
     {
       "id": "compaction",
       "title": "native compact verb",
-      "vocabulary": "native / —"
+      "vocabulary": "native / \u2014"
     },
     {
       "id": "boot",
       "title": "boot",
-      "vocabulary": "yes / —"
+      "vocabulary": "yes / \u2014"
     },
     {
       "id": "managed_send",
       "title": "managed-send",
-      "vocabulary": "yes / —"
+      "vocabulary": "yes / \u2014"
     }
   ],
   "row_order": [
@@ -95,6 +97,10 @@
       "cli"
     ],
     [
+      "zcode",
+      "cli"
+    ],
+    [
       "herdr",
       "cli"
     ],
@@ -147,17 +153,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-matrix.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-codex-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
         "cli": "codex-cli 0.150.0"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "codex",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -169,7 +176,7 @@
       "harness": "codex",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -202,7 +209,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -213,7 +220,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -229,13 +236,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "desktop": "ChatGPT.app 26.820.60940"
-      }
+      },
+      "grade": "classified"
     },
     {
       "harness": "codex",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -246,7 +254,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -257,7 +265,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -268,7 +276,7 @@
       "harness": "codex",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -302,17 +310,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-claude-wake-remeasure.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/H-claude-wake-remeasure-2-2026-08-29.md",
+      "measured_at": "2026-08-29",
       "versions": {
-        "cli": "2.1.231 (Claude Code)"
-      }
+        "cli": "2.1.238 (Claude Code)"
+      },
+      "grade": "measured"
     },
     {
       "harness": "claude",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -324,7 +333,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -335,7 +344,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -346,7 +355,7 @@
       "harness": "claude",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -357,7 +366,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -368,7 +377,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -390,7 +399,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -401,7 +410,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -412,7 +421,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -423,7 +432,7 @@
       "harness": "claude",
       "surface": "desktop-chat",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -434,7 +443,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -445,7 +454,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -461,13 +470,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "ide-extension": "anthropic.claude-code-2.1.247-darwin-arm64"
-      }
+      },
+      "grade": "classified"
     },
     {
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -478,7 +488,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -489,7 +499,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -500,7 +510,7 @@
       "harness": "claude",
       "surface": "ide-extension",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -538,13 +548,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "cli": "1.18.9"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "opencode",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -556,7 +567,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -567,7 +578,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -578,7 +589,7 @@
       "harness": "opencode",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -589,7 +600,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -600,7 +611,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -616,13 +627,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "desktop": "OpenCode.app 1.18.23"
-      }
+      },
+      "grade": "classified"
     },
     {
       "harness": "opencode",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -633,7 +645,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -644,7 +656,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -655,7 +667,7 @@
       "harness": "opencode",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -689,17 +701,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-surfaces.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-cursor-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
-        "cli": "cursor-agent 2026.07.09-a3815c0 (~/.local/bin; Homebrew wrapper exits 1)"
-      }
+        "cli": "cursor-agent 2026.08.25-3e8eec8 (~/.local/bin; Homebrew wrapper exits 1)"
+      },
+      "grade": "measured"
     },
     {
       "harness": "cursor",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -710,7 +723,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -721,7 +734,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -732,7 +745,7 @@
       "harness": "cursor",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -743,7 +756,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -754,7 +767,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -770,13 +783,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "desktop": "Cursor.app 3.17.21"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "cursor",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-depth2.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -787,7 +801,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -798,7 +812,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -809,7 +823,7 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -842,18 +856,19 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "wake",
-      "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-matrix.md",
-      "measured_at": "2026-08-28",
+      "value": "event-driven",
+      "receipt_path": "docs/evidence/gauntlet/MX1-cline-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
         "cli": "3.0.60"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "cline",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -864,7 +879,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -875,7 +890,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -886,7 +901,7 @@
       "harness": "cline",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -920,17 +935,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-matrix.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-grok-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
         "cli": "grok 1.0.5 (5115b46bc909); grok-build ABSENT"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "grok",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -942,7 +958,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -953,7 +969,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -964,7 +980,7 @@
       "harness": "grok",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -975,7 +991,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -986,7 +1002,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1008,7 +1024,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1019,7 +1035,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1030,7 +1046,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1041,7 +1057,7 @@
       "harness": "grok",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1075,17 +1091,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "event-driven",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-matrix.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-pi-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
         "cli": "0.84.3"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "pi",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1097,7 +1114,7 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1108,7 +1125,7 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1119,11 +1136,96 @@
       "harness": "pi",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
         "cli": "0.84.3"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "bus",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "work",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "wake",
+      "value": "daemon",
+      "receipt_path": "docs/evidence/gauntlet/MX1-zcode-cli-wake.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      },
+      "grade": "measured"
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "auto_turnover",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "compaction",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "boot",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
+      }
+    },
+    {
+      "harness": "zcode",
+      "surface": "cli",
+      "capability": "managed_send",
+      "value": "\u2014",
+      "receipt_path": "docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md",
+      "measured_at": "2026-08-30",
+      "versions": {
+        "cli": "0.16.5",
+        "app": "3.10.1"
       }
     },
     {
@@ -1141,7 +1243,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1163,7 +1265,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1174,7 +1276,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1185,7 +1287,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1196,7 +1298,7 @@
       "harness": "herdr",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1218,7 +1320,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C9-t3-compatibility-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1230,17 +1332,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "event-driven",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-matrix.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-t3-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
         "cli": "t3 v0.0.35"
-      }
+      },
+      "grade": "measured"
     },
     {
       "harness": "t3",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1251,7 +1354,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1262,7 +1365,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1273,7 +1376,7 @@
       "harness": "t3",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1284,7 +1387,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1295,7 +1398,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1311,13 +1414,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "desktop": "T3 Code Nightly 0.0.35-nightly.20260826.1195"
-      }
+      },
+      "grade": "classified"
     },
     {
       "harness": "t3",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1328,7 +1432,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1339,7 +1443,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1350,7 +1454,7 @@
       "harness": "t3",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1372,7 +1476,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C11-devin-conformance-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1384,17 +1488,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "event-driven",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-surfaces.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-devin-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
-        "cli": "devin 3000.2.17 (2c489dfc)"
-      }
+        "cli": "devin 3000.6.7 (260a97c8)"
+      },
+      "grade": "measured"
     },
     {
       "harness": "devin",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1405,7 +1510,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1416,7 +1521,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1427,7 +1532,7 @@
       "harness": "devin",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1449,7 +1554,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C12-antigravity-conformance-live.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1461,17 +1566,18 @@
       "surface": "cli",
       "capability": "wake",
       "value": "event-driven",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-surfaces.md",
-      "measured_at": "2026-08-28",
+      "receipt_path": "docs/evidence/gauntlet/MX1-antigravity-cli-wake.md",
+      "measured_at": "2026-08-29",
       "versions": {
-        "cli": "agy PATH 1.1.5 (second copy ~/.local/bin 1.1.22)"
-      }
+        "cli": "agy 1.1.22 (~/.local/bin, the AD-1 binding; 1.1.5 cask also present)"
+      },
+      "grade": "measured"
     },
     {
       "harness": "antigravity",
       "surface": "cli",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1482,7 +1588,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1493,7 +1599,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1504,7 +1610,7 @@
       "harness": "antigravity",
       "surface": "cli",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1515,7 +1621,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "bus",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1526,7 +1632,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "work",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-DELTA-surface-axis.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1542,13 +1648,14 @@
       "measured_at": "2026-08-28",
       "versions": {
         "desktop": "Antigravity.app 2.11.0"
-      }
+      },
+      "grade": "classified"
     },
     {
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "auto_turnover",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1559,7 +1666,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "compaction",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/gauntlet/T1-tide-survey.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1570,7 +1677,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "boot",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1581,7 +1688,7 @@
       "harness": "antigravity",
       "surface": "desktop",
       "capability": "managed_send",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C0-managed-send-surface.md",
       "measured_at": "2026-08-27",
       "versions": {
@@ -1681,7 +1788,7 @@
     {
       "harness": "herdr",
       "surface": "cli",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/HARNESS-WIRING-MATRIX.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1692,7 +1799,7 @@
     {
       "harness": "devin",
       "surface": "cli",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C11-devin-conformance-live.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1703,7 +1810,7 @@
     {
       "harness": "antigravity",
       "surface": "cli",
-      "value": "—",
+      "value": "\u2014",
       "receipt_path": "docs/evidence/conformance/C12-antigravity-conformance-live.md",
       "measured_at": "2026-08-28",
       "versions": {
@@ -1714,11 +1821,12 @@
   ],
   "honesty": [
     "No cell spans CLI and desktop (dual-surface law).",
+    "wake says HOW a seat is woken, not how well. zcode/cli is the one surface measured observed-on-arrival (WD-R2): a waiting message made a stopped seat run. The codex cells are observed-on-stop and read identically here, because the graded vocabulary is not in this column yet.",
     "claude/cli wake stays daemon: H-claude-wake-remeasure refused the flip.",
-    "compaction is — everywhere: T1 found no non-interactive compact argv.",
-    "auto_turnover stays — until T2-T4; five CLI surfaces keep derivable=A.",
+    "compaction is \u2014 everywhere: T1 found no non-interactive compact argv.",
+    "auto_turnover stays \u2014 until T2-T4; five CLI surfaces keep derivable=A.",
     "work adapter cells cite C-rows that launched floati/adapters/ modules on main (Car 4 roster: cline, cursor, grok-build, opencode, plus claude reference and C1/C7). COPY-LEDGER is not the proof.",
-    "herdr.py is observation-only (wave2-r3), not a worker adapter; work is —.",
+    "herdr.py is observation-only (wave2-r3), not a worker adapter; work is \u2014.",
     "boot yes only for Codex CLI: D3 tests photograph ManagedVerbShape(Codex, ~/.codex/bin/codex-fleet-bus). Other surfaces dash with that same D3 citation (genuine lack).",
     "managed_send yes cites gate-wsb-b5 transport-test envelope msg-01a0455838977b229394bcf297b43034; profile binding is fleet-bus-profile-repoint. WEEKEND_PROGRAM documents the contract and does not prove it. Dashes cite the Codex-only profile photograph.",
     "t3/devin/antigravity bus is CLI not live.",
@@ -1726,5 +1834,21 @@
   ],
   "amended_at": "2026-08-28",
   "amendment": "receipt-class re-round: work cites adapter modules via C-rows/Car 4; boot cites D3 (only Codex CLI shape photographed); managed_send cites B5 transport-test + profile repoint, not WEEKEND_PROGRAM",
-  "spec_sha": "b9e5d2ec857e77498d9d047b672a8373b137cf1e"
+  "spec_sha": "b9e5d2ec857e77498d9d047b672a8373b137cf1e",
+  "row_notes": {
+    "codex/cli": "deep integrations below",
+    "claude/cli": "confirmed at 2.1.238 (re-measured 08-29)",
+    "opencode/cli": "3-cycle live hold",
+    "grok/cli": "via installed grok binary",
+    "herdr/cli": "orchestrator; observation adapter live",
+    "t3/cli": "orchestrator; observed via its own surface",
+    "devin/cli": "CLI-compat tier",
+    "antigravity/cli": "CLI-compat tier",
+    "codex/desktop": "ChatGPT.app",
+    "claude/desktop-chat": "chat app, not a seat - Claude seats run in the CLI or IDE extension",
+    "claude/ide-extension": "extension \u2260 CLI; own row by design",
+    "cursor/desktop": "the measuring seat itself",
+    "antigravity/desktop": "not inherited from its CLI",
+    "zcode/cli": "wake measured on arrival; the Stop-hook path is superseded by the daemon"
+  }
 }

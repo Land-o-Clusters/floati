@@ -1,0 +1,625 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://landoclusters.com/floati/schemas/v1/fleet-update-receipt.schema.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "id",
+        "tenant_id",
+        "timestamp",
+        "kind",
+        "plan_digest",
+        "actor",
+        "consent_receipt_id",
+        "operation",
+        "step_kind",
+        "pre_digest",
+        "post_digest",
+        "step_ordinal",
+        "step_coordinate",
+        "commit_disposition",
+        "step_evidence",
+        "state",
+        "predecessor_receipt_id",
+        "idempotency_key",
+        "owner_review_batch_digest",
+        "reader_consequences",
+        "seat_binding_consequences",
+        "seat_exclusions"
+    ],
+    "oneOf": [
+        {
+            "properties": {
+                "kind": {"const": "fleet_update_started"},
+                "operation": {"const": "start"},
+                "state": {"const": "started"},
+                "step_kind": {"const": null},
+                "pre_digest": {"const": null},
+                "post_digest": {"const": null},
+                "step_ordinal": {"const": null},
+                "step_coordinate": {"const": null},
+                "commit_disposition": {"const": null},
+                "step_evidence": {"const": null}
+            },
+            "allOf": [
+                {"required": ["recovery_witness"]},
+                {"not": {"required": ["step_receipt_ids"]}},
+                {"not": {"required": ["moves"]}},
+                {"not": {"required": ["unchanged"]}}
+            ]
+        },
+        {
+            "properties": {
+                "kind": {"const": "fleet_update_step"},
+                "operation": {"const": "step"},
+                "state": {"const": "completed"},
+                "step_kind": {"const": "shared_install"},
+                "pre_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "post_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "step_ordinal": {"type": "integer", "minimum": 1},
+                "commit_disposition": {"enum": ["applied", "recovered_post_state"]},
+                "step_coordinate": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "destination", "metadata_relative"],
+                    "properties": {
+                        "kind": {"const": "shared_install"},
+                        "destination": {"type": "string", "pattern": "^/"},
+                        "metadata_relative": {"const": ".floati-install/manifest.v0.json"}
+                    }
+                },
+                "step_evidence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "journal_path", "join_id", "predecessor_ordinal", "predecessor_entry_hash", "first_ordinal", "last_ordinal", "entry_hashes"],
+                    "properties": {
+                        "kind": {"const": "shared_install"},
+                        "journal_path": {"type": "string", "pattern": "^/"},
+                        "join_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                        "predecessor_ordinal": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]},
+                        "predecessor_entry_hash": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]},
+                        "first_ordinal": {"type": "integer", "minimum": 1},
+                        "last_ordinal": {"type": "integer", "minimum": 1},
+                        "entry_hashes": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+                    }
+                }
+            },
+            "allOf": [
+                {"not": {"required": ["step_receipt_ids"]}},
+                {"not": {"required": ["moves"]}},
+                {"not": {"required": ["unchanged"]}}
+            ]
+        },
+        {
+            "properties": {
+                "kind": {"const": "fleet_update_step"},
+                "operation": {"const": "step"},
+                "state": {"const": "completed"},
+                "step_kind": {"const": "waiter_binding"},
+                "pre_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "post_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "step_ordinal": {"type": "integer", "minimum": 1},
+                "commit_disposition": {"enum": ["applied", "recovered_post_state", "unchanged"]},
+                "step_coordinate": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "index", "configuration", "store", "trust_key"],
+                    "properties": {
+                        "kind": {"const": "waiter_binding"},
+                        "index": {"type": "integer", "minimum": 0},
+                        "configuration": {"type": "string", "pattern": "^/"},
+                        "store": {"type": "string", "pattern": "^/"},
+                        "trust_key": {"oneOf": [{"type": "null"}, {"type": "string"}]}
+                    }
+                },
+                "step_evidence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "hook_post_observation"],
+                    "properties": {
+                        "kind": {"const": "waiter_binding"},
+                        "hook_post_observation": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["hook_trust_key", "current_hook_hash", "observed_trusted_hash", "observed_enabled"],
+                            "properties": {
+                                "hook_trust_key": {"type": "string"},
+                                "current_hook_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                                "observed_trusted_hash": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]},
+                                "observed_enabled": {"oneOf": [{"type": "null"}, {"type": "boolean"}]}
+                            }
+                        }
+                    }
+                }
+            },
+            "allOf": [
+                {"not": {"required": ["step_receipt_ids"]}},
+                {"not": {"required": ["moves"]}},
+                {"not": {"required": ["unchanged"]}}
+            ]
+        },
+        {
+            "properties": {
+                "kind": {"const": "fleet_update_step"},
+                "operation": {"const": "step"},
+                "state": {"const": "completed"},
+                "step_kind": {"const": "transport_pins"},
+                "pre_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "post_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "step_ordinal": {"type": "integer", "minimum": 1},
+                "commit_disposition": {"enum": ["applied", "recovered_post_state", "unchanged"]},
+                "step_coordinate": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "registry", "transport"],
+                    "properties": {"kind": {"const": "transport_pins"}, "registry": {"type": "string", "pattern": "^/"}, "transport": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}}
+                },
+                "step_evidence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "registry", "transport", "registry_before_sha256", "registry_after_sha256", "previous_source_sha", "target_source_sha", "epoch_roll_state"],
+                    "properties": {
+                        "kind": {"const": "transport_pins"},
+                        "registry": {"type": "string", "pattern": "^/"},
+                        "transport": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+                        "registry_before_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                        "registry_after_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                        "previous_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                        "target_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                        "epoch_roll_state": {"enum": ["not_required", "completed"]}
+                    }
+                }
+            },
+            "allOf": [
+                {"not": {"required": ["step_receipt_ids"]}},
+                {"not": {"required": ["moves"]}},
+                {"not": {"required": ["unchanged"]}}
+            ]
+        },
+        {
+            "properties": {
+                "kind": {"const": "fleet_update_step"},
+                "operation": {"const": "step"},
+                "state": {"const": "completed"},
+                "step_kind": {"const": "epoch_roll"},
+                "pre_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "post_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "step_ordinal": {"type": "integer", "minimum": 1},
+                "commit_disposition": {"enum": ["applied", "recovered_post_state", "unchanged"]},
+                "step_coordinate": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind"],
+                    "properties": {"kind": {"const": "epoch_roll"}}
+                },
+                "step_evidence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind"],
+                    "properties": {"kind": {"const": "epoch_roll"}}
+                }
+            },
+            "allOf": [
+                {"not": {"required": ["step_receipt_ids"]}},
+                {"not": {"required": ["moves"]}},
+                {"not": {"required": ["unchanged"]}}
+            ]
+        },
+        {
+            "required": ["step_receipt_ids", "moves", "unchanged", "previous_source_sha", "target_source_sha", "epoch_roll_state", "registry_before_sha256", "registry_after_sha256"],
+            "properties": {
+                "kind": {"const": "fleet_update_completed"},
+                "operation": {"const": "complete"},
+                "state": {"const": "completed"},
+                "step_kind": {"const": null},
+                "pre_digest": {"const": null},
+                "post_digest": {"const": null},
+                "step_ordinal": {"const": null},
+                "step_coordinate": {"const": null},
+                "commit_disposition": {"const": null},
+                "step_evidence": {"const": null}
+            }
+        }
+    ],
+    "allOf": [
+        {
+            "if": {"properties": {"kind": {"const": "fleet_update_completed"}}},
+            "then": {"required": ["previous_source_sha", "target_source_sha", "epoch_roll_state", "registry_before_sha256", "registry_after_sha256"]},
+            "else": {
+                "allOf": [
+                    {"not": {"required": ["previous_source_sha"]}},
+                    {"not": {"required": ["target_source_sha"]}},
+                    {"not": {"required": ["epoch_roll_state"]}},
+                    {"not": {"required": ["registry_before_sha256"]}},
+                    {"not": {"required": ["registry_after_sha256"]}}
+                ]
+            }
+        }
+        ,
+        {
+            "if": {"properties": {"kind": {"const": "fleet_update_started"}}},
+            "then": {"required": ["recovery_witness"]},
+            "else": {"not": {"required": ["recovery_witness"]}}
+        }
+    ],
+    "properties": {
+        "schema_version": {
+            "const": 1
+        },
+        "id": {
+            "type": "string",
+            "pattern": "^fleet-update-(?:started|step|completed)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+        },
+        "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+        },
+        "timestamp": {
+            "type": "string"
+        },
+        "kind": {
+            "enum": [
+                "fleet_update_started",
+                "fleet_update_step",
+                "fleet_update_completed"
+            ]
+        },
+        "plan_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+        },
+        "recovery_witness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "kind", "inputs", "current_source_sha", "target_source_sha", "current_manifest_sha256", "target_manifest_sha256", "binding_inventory_sha256", "transport_registry_sha256", "target_transport_registry_sha256", "waiter_bindings", "target_waiter_digest", "current_encoder_sha256", "target_encoder_sha256", "current_transport_pins", "target_transport_pins", "current_managed_paths", "shared_install_intents", "reader_consequences", "seat_binding_consequences", "seat_exclusions", "owner_review_batch_digest", "requires_epoch_roll", "stale_pins", "moves", "unchanged"],
+            "properties": {
+                "schema_version": {"const": 0}, "kind": {"const": "fleet_update_plan"},
+                "inputs": {"type": "object", "additionalProperties": false, "required": ["root", "actor", "destination", "channel", "version", "waiter_binding", "transport_registry", "transport"], "properties": {"root": {"type": "string", "pattern": "^/"}, "actor": {"type": "string"}, "destination": {"type": "string", "pattern": "^/"}, "channel": {"type": "string"}, "version": {"type": "string"}, "waiter_binding": {"type": "string", "pattern": "^/"}, "transport_registry": {"type": "string", "pattern": "^/"}, "transport": {"type": "string"}}}, "current_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "target_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                "current_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "target_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "binding_inventory_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "transport_registry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "target_transport_registry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "waiter_bindings": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["kind", "configuration", "store", "configuration_sha256", "named_tree_digest", "current_tree_digest", "current_tree", "target_configuration_sha256"], "properties": {"kind": {"const": "codex_stop_hook"}, "configuration": {"type": "string", "pattern": "^/"}, "store": {"type": "string", "pattern": "^/"}, "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "named_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "current_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "current_tree": {"type": "string", "pattern": "^/"}, "target_configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}, "target_waiter_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "current_encoder_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "target_encoder_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "current_transport_pins": {"$ref": "#/$defs/transport_pins"}, "target_transport_pins": {"$ref": "#/$defs/transport_pins"}, "current_managed_paths": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"}}, "shared_install_intents": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/shared_install_intent"}}, "reader_consequences": {"$ref": "#/properties/reader_consequences"}, "seat_binding_consequences": {"$ref": "#/properties/seat_binding_consequences"}, "seat_exclusions": {"$ref": "#/properties/seat_exclusions"}, "owner_review_batch_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "requires_epoch_roll": {"type": "boolean"}, "stale_pins": {"type": "array", "items": {"$ref": "#/$defs/stale_pin"}}, "moves": {"$ref": "#/properties/moves"}, "unchanged": {"$ref": "#/properties/unchanged"}
+            }
+        },
+        "actor": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+        },
+        "consent_receipt_id": {
+            "type": "string",
+            "pattern": "^update-consent-"
+        },
+        "operation": {
+            "enum": [
+                "start",
+                "step",
+                "complete"
+            ]
+        },
+        "step_kind": {
+            "oneOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "enum": [
+                        "shared_install",
+                        "waiter_binding",
+                        "transport_pins",
+                        "epoch_roll"
+                    ]
+                }
+            ]
+        },
+        "pre_digest": {
+            "oneOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                }
+            ]
+        },
+        "post_digest": {
+            "oneOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                }
+            ]
+        },
+        "step_ordinal": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]},
+        "step_coordinate": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+        "commit_disposition": {"oneOf": [{"type": "null"}, {"enum": ["applied", "recovered_post_state", "unchanged"]}]},
+        "step_evidence": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+        "previous_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "target_source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "epoch_roll_state": {"enum": ["not_required", "completed"]},
+        "registry_before_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "registry_after_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "state": {
+            "enum": [
+                "started",
+                "completed"
+            ]
+        },
+        "predecessor_receipt_id": {
+            "oneOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "string",
+                    "pattern": "^fleet-update-"
+                }
+            ]
+        },
+        "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "owner_review_batch_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+        },
+        "reader_consequences": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "reader",
+                    "surface",
+                    "registry",
+                    "transport",
+                    "manifest_path",
+                    "current_schema_version",
+                    "target_schema_version",
+                    "added_fields",
+                    "removed_fields",
+                    "change",
+                    "compatibility_after_update",
+                    "remedy"
+                ],
+                "properties": {
+                    "reader": {"const": "codex_fleet_bus_gateway"},
+                    "surface": {"const": "install_manifest"},
+                    "registry": {"type": "string", "pattern": "^/"},
+                    "transport": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+                    },
+                    "manifest_path": {"type": "string", "pattern": "^/"},
+                    "current_schema_version": {"const": 0},
+                    "target_schema_version": {"const": 1},
+                    "added_fields": {"const": ["ownership"]},
+                    "removed_fields": {"const": []},
+                    "change": {"const": "additive_widened"},
+                    "compatibility_after_update": {"const": "not_observed"},
+                    "remedy": {
+                        "const": "review the Codex fleet gateway reader before applying the widened manifest vocabulary"
+                    }
+                }
+            }
+        },
+        "seat_binding_consequences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "node_id",
+                    "workspace",
+                    "harness",
+                    "configuration",
+                    "store",
+                    "association_basis",
+                    "hook_trust_key",
+                    "current_hook_hash",
+                    "target_hook_hash",
+                    "observed_trusted_hash",
+                    "observed_enabled",
+                    "current_waiter_digest",
+                    "target_waiter_digest",
+                    "trust_rotated_by_update",
+                    "review_required_after_update",
+                    "enable_required_after_update",
+                    "relaunch_required_after_update",
+                    "reachability_after_update",
+                    "remedy"
+                ],
+                "properties": {
+                    "node_id": {
+                        "type": "string"
+                    },
+                    "workspace": {
+                        "type": "string",
+                        "pattern": "^/"
+                    },
+                    "harness": {
+                        "type": "string"
+                    },
+                    "configuration": {
+                        "type": "string",
+                        "pattern": "^/"
+                    },
+                    "store": {
+                        "type": "string",
+                        "pattern": "^/"
+                    },
+                    "association_basis": {
+                        "const": "conservative_root_scope"
+                    },
+                    "hook_trust_key": {
+                        "type": "string"
+                    },
+                    "current_hook_hash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "target_hook_hash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "observed_trusted_hash": {
+                        "oneOf": [
+                            {"type": "null"},
+                            {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                        ]
+                    },
+                    "observed_enabled": {
+                        "type": "boolean"
+                    },
+                    "current_waiter_digest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "target_waiter_digest": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "trust_rotated_by_update": {
+                        "type": "boolean"
+                    },
+                    "review_required_after_update": {
+                        "type": "boolean"
+                    },
+                    "enable_required_after_update": {
+                        "type": "boolean"
+                    },
+                    "relaunch_required_after_update": {
+                        "type": "boolean"
+                    },
+                    "reachability_after_update": {
+                        "enum": [
+                            "unknown_until_review_and_relaunch",
+                            "not_observed"
+                        ]
+                    },
+                    "remedy": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        "seat_exclusions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "node_id",
+                    "workspace",
+                    "authoritative_state",
+                    "harness",
+                    "reason"
+                ],
+                "properties": {
+                    "node_id": {
+                        "type": "string"
+                    },
+                    "workspace": {
+                        "type": "string",
+                        "pattern": "^/"
+                    },
+                    "authoritative_state": {
+                        "enum": [
+                            "retired",
+                            "lease_expired",
+                            "active"
+                        ]
+                    },
+                    "harness": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "enum": [
+                            "node_retired",
+                            "lease_expired",
+                            "harness_not_codex"
+                        ]
+                    }
+                }
+            }
+        },
+        "step_receipt_ids": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "pattern": "^fleet-update-step-"
+            }
+        },
+        "moves": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {"$ref": "#/$defs/shared_install_move"},
+                    {"$ref": "#/$defs/transport_pins_move"},
+                    {"$ref": "#/$defs/waiter_binding_move"}
+                ]
+            }
+        },
+        "unchanged": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {"$ref": "#/$defs/shared_install_move"},
+                    {"$ref": "#/$defs/transport_pins_move"},
+                    {"$ref": "#/$defs/waiter_binding_move"},
+                    {"$ref": "#/$defs/waiter_generation_unchanged"}
+                ]
+            }
+        }
+    },
+    "$defs": {
+        "transport_pins": {
+            "type": "object", "additionalProperties": false,
+            "required": ["manifest_sha256", "source_sha"],
+            "properties": {"manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+        },
+        "shared_install_intent": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "op", "path", "sha256"],
+            "properties": {"kind": {"const": "file"}, "op": {"enum": ["create", "replace"]}, "path": {"type": "string", "pattern": "^/"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        },
+        "stale_pin": {
+            "type": "object", "additionalProperties": false,
+            "required": ["field", "registry", "transport", "pinned", "observed"],
+            "properties": {"field": {"enum": ["manifest_sha256", "source_sha"]}, "registry": {"type": "string", "pattern": "^/"}, "transport": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}, "pinned": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{40}$"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]}, "observed": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{40}$"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]}}
+        },
+        "shared_install_move": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "path", "from", "to"],
+            "properties": {"kind": {"const": "shared_install"}, "path": {"type": "string", "pattern": "^/"}, "from": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "to": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        },
+        "transport_pins_move": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "path", "from", "to"],
+            "properties": {"kind": {"const": "transport_pins"}, "path": {"type": "string", "pattern": "^/"}, "from": {"$ref": "#/$defs/transport_pins"}, "to": {"$ref": "#/$defs/transport_pins"}}
+        },
+        "waiter_binding_move": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "path", "store", "configuration_from_sha256", "configuration_to_sha256", "current_tree_digest", "target_tree_digest"],
+            "properties": {"kind": {"const": "waiter_binding"}, "path": {"type": "string", "pattern": "^/"}, "store": {"type": "string", "pattern": "^/"}, "configuration_from_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "configuration_to_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "current_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "target_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        },
+        "waiter_generation_unchanged": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "path", "named_tree_digest", "current_tree_digest", "retained"],
+            "properties": {"kind": {"const": "waiter_generation"}, "path": {"type": "string", "pattern": "^/"}, "named_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "current_tree_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "retained": {"const": true}}
+        }
+    }
+}

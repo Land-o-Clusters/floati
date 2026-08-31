@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import hashlib
 import tempfile
 import unittest
@@ -34,13 +36,13 @@ class SupervisorTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
+        registry.register(public_ids.worker('alpha'), "Codex")
         registry.register("bravo", "Codex")
-        LivenessPresenceStore(self.root).observe("alice", 60, NOW)
-        AuthorityGrantStore(self.root).claim("build", "alice", 60, 60, NOW)
+        LivenessPresenceStore(self.root).observe(public_ids.worker('alpha'), 60, NOW)
+        AuthorityGrantStore(self.root).claim("build", public_ids.worker('alpha'), 60, 60, NOW)
         MutualExclusionHoldStore(self.root).acquire("workspace", "bravo", 5, 5, NOW)
         EventLog(self.root).send(
-            "alice", "bravo", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="supervisor-mail",
         )
 
@@ -50,14 +52,14 @@ class SupervisorTests(unittest.TestCase):
         snapshot = Supervisor(self.root).snapshot(NOW + timedelta(seconds=10))
         nodes = {node["node_id"]: node for node in snapshot["nodes"]}
 
-        self.assertEqual("present", nodes["alice"]["liveness"])
-        self.assertEqual("active", nodes["alice"]["authority"])
-        self.assertEqual("none", nodes["alice"]["mutex"])
+        self.assertEqual("present", nodes[public_ids.worker('alpha')]["liveness"])
+        self.assertEqual("active", nodes[public_ids.worker('alpha')]["authority"])
+        self.assertEqual("none", nodes[public_ids.worker('alpha')]["mutex"])
         self.assertEqual("unknown", nodes["bravo"]["liveness"])
         self.assertEqual("none", nodes["bravo"]["authority"])
         self.assertEqual("expired", nodes["bravo"]["mutex"])
         self.assertEqual(1, nodes["bravo"]["inbox_depth"])
-        self.assertEqual(0, nodes["alice"]["inbox_depth"])
+        self.assertEqual(0, nodes[public_ids.worker('alpha')]["inbox_depth"])
         self.assertEqual(
             [{
                 "plane": "mutex",
@@ -102,11 +104,11 @@ class SupervisorTests(unittest.TestCase):
 
     def test_snapshot_reports_workers_from_receipts_without_taking_action(self) -> None:
         work = WorkLog(self.root)
-        item = work.add("worker report", "alice", [], now=NOW)
-        work.claim(item["id"], "alice", "build", 1, now=NOW)
+        item = work.add("worker report", public_ids.worker('alpha'), [], now=NOW)
+        work.claim(item["id"], public_ids.worker('alpha'), "build", 1, now=NOW)
         WorkerReceipts(self.root).append(
             "worker-018f0f23abcd71238000000000000000",
-            item["id"], "alice", "codex", "claim", None, [], now=NOW,
+            item["id"], public_ids.worker('alpha'), "codex", "claim", None, [], now=NOW,
         )
         before = tree_digest(self.home)
 

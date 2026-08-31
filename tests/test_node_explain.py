@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -74,7 +76,7 @@ class NodeExplainProjectionTests(unittest.TestCase):
             "WORKSPACE:",
             "STATE FILE:",
             "WAKE: armed; poll at row boundaries: yes",
-            "MANAGED BUS: ~/.codex/bin/codex-fleet-bus puddle-floati-lane-puddle",
+            public_ids.compose('MANAGED BUS: ~/.codex/bin/codex-fleet-bus puddle-floati-', public_ids.builder('puddle')),
         ):
             self.assertIn(expected, rendered)
 

@@ -1,61 +1,65 @@
 from __future__ import annotations
 
-import json
 import unittest
 from pathlib import Path
 
 
-HM3I_RECEIPT = Path("docs/evidence/HM3I-ORCHESTRATION-TRUTH.md")
-
-
 class HM3IContractTests(unittest.TestCase):
-    def test_retained_receipt_cites_the_exact_hm3i_authority_and_scope(self) -> None:
-        receipt = HM3I_RECEIPT.read_text()
-        runtruth = Path("floati/runtruth.py").read_text()
+    def test_charter_amendment_is_mirrored_with_exact_authority(self) -> None:
+        design = Path("docs/DESIGN.md").read_text()
+        spec = Path("docs/SPEC-DRAFT.md").read_text()
+        for text in (design, spec):
+            self.assertIn("bounded local run graph", text.lower())
+            self.assertIn("a111202b228d34c2b371bcc5e2c4798206474439", text)
+            self.assertIn(
+                "no model-authored graph mutation without a durable plan_amendment",
+                text,
+            )
+            self.assertIn("never the reasoning framework", text)
 
-        self.assertIn("bounded local run graph", receipt.lower())
-        self.assertIn("a111202b228d34c2b371bcc5e2c4798206474439", receipt)
-        self.assertIn("plan_amendment", runtruth)
-        self.assertFalse(Path("docs/DESIGN.md").exists())
-        self.assertFalse(Path("docs/SPEC-DRAFT.md").exists())
-
-    def test_item_ten_and_item_eleven_public_contracts_are_local_and_fail_closed(self) -> None:
-        receipt = HM3I_RECEIPT.read_text()
-        index = json.loads(Path("bundle/c7.1/bundle-index.json").read_text())
-        catalog = json.loads(Path("bundle/c7.1/schema-catalog.json").read_text())
-        readme = Path("bundle/c7.1/README.md").read_text()
+    def test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims(self) -> None:
+        spec = Path("docs/SPEC-DRAFT.md").read_text()
+        checklist = Path("docs/PUBLICATION-CHECKLIST.md").read_text()
         for literal in (
             "runs/events.jsonl",
             "FLOATI.toml",
+            "plan_admission",
             "attempt_harness_session_bound",
             "supervisor_orphaned",
+            "exact candidate",
+            "C7.1 candidate read bundle",
+            "bundle/c7.1/schema-catalog.json",
+            "approvals: \"excluded-c7.1\"",
             "conflicting_binding",
             "auxiliary_sources",
+            "reprojects those exact captured bytes",
         ):
-            self.assertIn(literal, receipt)
-        self.assertIn("no exact committed-candidate, Fable final gate, publication,", receipt)
-        self.assertEqual("excluded-c7.1", index["approvals"])
-        self.assertEqual("schema-catalog.json", index["schema_catalog"])
-        self.assertTrue(any(entry.get("ledger_template") == "raw/repositories/<repository-coordinate>/decisions.jsonl" for entry in catalog["entries"]))
-        self.assertIn("deterministically reprojects", readme)
-        self.assertFalse(Path("docs/PUBLICATION-CHECKLIST.md").exists())
+            self.assertIn(literal, spec)
+        self.assertIn("does not publish, install,", spec)
+        self.assertIn("deploy, or activate", spec)
+        self.assertIn("HM3I_BRIEF.md", checklist)
+        self.assertIn("exact-candidate local evidence", checklist)
+        self.assertIn("does not publish, install, deploy, activate", checklist)
+        self.assertIn("completed Items 1–11", checklist)
+        self.assertIn("post-HM3I C7.2 sibling package", checklist)
+        self.assertIn("segment_id", checklist)
+        self.assertIn("segment_kind", checklist)
+        self.assertNotIn("post-Item-11, prepublication C7.2 debt", checklist)
+        self.assertNotIn("`relation`", checklist)
 
-    def test_item_nine_decision_boundary_remains_in_receipt_and_schema(self) -> None:
-        """The retained receipt and schema preserve Item 9's durable boundary."""
-        receipt = HM3I_RECEIPT.read_text()
-        schema = json.loads(Path("schemas/v0/decision-record.schema.json").read_text())
+    def test_item_nine_decision_boundary_is_bounded_in_the_item_ten_draft(self) -> None:
+        """The Item 10 draft names Item 9's actual durable boundary without extending Item 11."""
+        spec = Path("docs/SPEC-DRAFT.md").read_text()
         for literal in (
-            "Item 9 coordinate, closed source taxonomy and injected document resolver",
-            "`operator|architect` terminal authority",
-            "optional same-repository",
-            "legacy fail-closed behavior",
-            "full-record digest",
-            "accepted-only physical-order capsule",
+            "repositories/<repository-coordinate>/decisions.jsonl",
+            "closed durable taxonomy",
+            "injected read-only repository/SHA/path resolver",
+            "`operator` or `architect` authority",
+            "legacy or unavailable binding proof fails closed",
+            "entire validated record except that digest field itself",
+            "accepted-frame physical order",
         ):
-            self.assertIn(literal, receipt)
-        self.assertIn("decision_digest", schema["required"])
-        terminal_authorities = schema["allOf"][1]["then"]["properties"]["author_authority"]["enum"]
-        self.assertEqual(["operator", "architect"], terminal_authorities)
+            self.assertIn(literal, spec)
 
 
 if __name__ == "__main__":

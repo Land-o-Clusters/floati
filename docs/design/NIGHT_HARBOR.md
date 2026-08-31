@@ -1,4 +1,4 @@
-# NIGHT HARBOR — the floati TUI eye-candy direction (Fable, 2026-08-28; owner-ordered)
+# NIGHT HARBOR — the floati TUI eye-candy direction (the architect, 2026-08-28; owner-ordered)
 
 The owner asked for a super sexy pass, not a re-cut of what exists. This doc
 is the direction; the build row applies it across every TUI surface. The
@@ -101,7 +101,7 @@ does not reach them). `NO_COLOR` respected. Everything readable at 80 cols.
   measurable — the dressing inherits the honesty laws, it does not soften
   them.
 
-Build seat: post-daemon lane-floati, or an owner-booted sol lane in
+Build seat: the floati builder post-daemon, or a dedicated owner-booted Codex build seat in
 parallel (territory is disjoint from the daemon: `floati/tui*`, render
 modules, demo). The re-cut row and this direction are ONE row — the old
 branch's ideas pass through this doc or not at all.
@@ -176,8 +176,8 @@ event boundaries is. Idle CPU stays zero (Part I §7 fence, re-measured).
 3. Then R1 → R2 → R4 → R3, each behind the Part I fences (machine twins
    byte-identical, copy DRAFT-stamped, captures re-banked).
 
-Seat: a dedicated owner-booted sol lane (territory: `floati/tui*`, render
-modules, demo — fully disjoint from the daemon build), or lane-floati
+Seat: a dedicated owner-booted Codex build seat (territory: `floati/tui*`, render
+modules, demo — fully disjoint from the daemon build), or the floati builder
 post-daemon. The spike is the boot row either way.
 
 ## PART II ADDENDUM (owner, 2026-08-28): CLINE JOINS THE STUDY QUARRY — for the doors

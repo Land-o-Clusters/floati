@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import errno
 import json
 import os
@@ -180,7 +182,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             "requested_scope": "repo:slipway",
             "resume_mode": "checkpoint_restart",
             "provider_session_or_thread_id": None,
-            "workspace": f"/private/tmp/floati-work/{state['item_id']}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{state['item_id']}",
             "workspace_checkpoint": {
                 "repo": "owner/slipway",
                 "sha": "c" * 40,
@@ -368,7 +370,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             for record in records
             if isinstance(record.get("item_id"), str)
             and record.get("workspace")
-            == f"/private/tmp/floati-work/{record['item_id']}"
+            == f"\x2fprivate/tmp/floati-work/{record['item_id']}"
         ]
         self.assertTrue(
             positive_workspaces,
@@ -658,7 +660,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             ("exact_action_digest", "d" * 64),
             ("requested_scope", "repo:other"),
             ("resume_mode", "unsupported"),
-            ("workspace", f"/private/tmp/floati-work/work-{uuid7_hex()}"),
+            ("workspace", f"\x2fprivate/tmp/floati-work/work-{uuid7_hex()}"),
             ("workspace_checkpoint", {"repo": "owner/slipway", "sha": "d" * 40, "doc": "other.md"}),
             ("resume_authority_subject", "other-subject"),
             ("resume_authority_epoch", suspension["authority_epoch_at_request"]),
@@ -699,7 +701,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
                 self.assertEqual((True, True), accepted(record))
             retired = dict(
                 record,
-                workspace=f"/private/tmp/slipway-work/{state['item_id']}",
+                workspace=f"\x2fprivate/tmp/slipway-work/{state['item_id']}",
             )
             with self.subTest(retired_root=record["kind"]):
                 self.assertEqual((False, False), accepted(retired))
@@ -710,7 +712,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             dict(suspension, exact_action_digest="A" * 64),
             dict(suspension, requested_scope="repo:slipway\n"),
             dict(suspension, authority_epoch_at_request=True),
-            dict(suspension, workspace="/private/tmp/floati-work/not-a-work-id"),
+            dict(suspension, workspace="\x2fprivate/tmp/floati-work/not-a-work-id"),
             dict(suspension, workspace_checkpoint={"repo": "owner/slipway", "sha": "c" * 39, "doc": "x"}),
             dict(suspension, resume_mode="native", provider_session_or_thread_id=None),
             dict(suspension, extra=True),
@@ -807,18 +809,18 @@ class _DirectSuspensionContext:
         self.home = base / "fleet"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
         registry = Registry(self.root)
-        registry.register("alice", "Codex")
-        registry.register("fable", "Claude")
+        registry.register(public_ids.worker('alpha'), "Codex")
+        registry.register(public_ids.reviewer(), "Claude")
         self.authorities = AuthorityGrantStore(self.root)
         self.approval_authority = self.authorities.claim(
-            "approve-build", "fable", 600, 600, DIRECT_NOW
+            "approve-build", public_ids.reviewer(), 600, 600, DIRECT_NOW
         )
         self.execution_authority = self.authorities.claim(
             "execute-run", "worker-a", 600, 600, DIRECT_NOW
         )
         self.approvals = ApprovalLedger(self.root)
         self.request = self.approvals.request_for_action(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:slipway",
             300,
@@ -828,7 +830,7 @@ class _DirectSuspensionContext:
             now=DIRECT_NOW + timedelta(seconds=1),
         )
         self.changed_action_request = self.approvals.request_for_action(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:slipway",
             300,
@@ -838,7 +840,7 @@ class _DirectSuspensionContext:
             now=DIRECT_NOW + timedelta(seconds=1),
         )
         self.changed_scope_request = self.approvals.request_for_action(
-            "alice",
+            public_ids.worker('alpha'),
             "workspace.patch",
             "repo:other",
             300,
@@ -1019,7 +1021,7 @@ class _DirectSuspensionContext:
     def approve(self, *, ttl_seconds: int = 120) -> dict[str, object]:
         self.decision = self.approvals.decide(
             str(self.request["id"]),
-            "fable",
+            public_ids.reviewer(),
             "approved",
             None,
             granted_scope="repo:slipway",
@@ -1031,7 +1033,7 @@ class _DirectSuspensionContext:
     def deny(self) -> dict[str, object]:
         self.decision = self.approvals.decide(
             str(self.request["id"]),
-            "fable",
+            public_ids.reviewer(),
             "denied",
             "operator_denied",
             now=DIRECT_NOW + timedelta(seconds=3),

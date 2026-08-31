@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import fcntl
 import errno
 import hashlib
@@ -111,22 +112,16 @@ def _locked_path(
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def _read_path_records(
+def _decode_path_records(
     path: Path,
     tenant: str,
     allowed_kinds: FrozenSet[str],
+    data: bytes,
     *,
     max_bytes: int = MAX_RECORD_BYTES,
     unrecognized: Optional[Dict[str, Dict[str, object]]] = None,
 ) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
-    try:
-        stat = path.stat()
-        data = path.read_bytes()
-    except OSError as exc:
-        raise _durability_failure(exc, path) from exc
-    if stat.st_size > MAX_LEDGER_BYTES:
+    if len(data) > MAX_LEDGER_BYTES:
         raise IntegrityFailure("ledger_too_large", f"{path.name} exceeds {MAX_LEDGER_BYTES} bytes")
     for line_number, raw in enumerate(data.splitlines(), start=1):
         if len(raw) + 1 > max_bytes:
@@ -170,6 +165,30 @@ def _read_path_records(
         if unrecognized is None or is_known_record_kind(kind):
             records.append(record)
     return records
+
+
+def _read_path_records(
+    path: Path,
+    tenant: str,
+    allowed_kinds: FrozenSet[str],
+    *,
+    max_bytes: int = MAX_RECORD_BYTES,
+    unrecognized: Optional[Dict[str, Dict[str, object]]] = None,
+) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise _durability_failure(exc, path) from exc
+    return _decode_path_records(
+        path,
+        tenant,
+        allowed_kinds,
+        data,
+        max_bytes=max_bytes,
+        unrecognized=unrecognized,
+    )
 
 
 def _unrecognized_rows(
@@ -389,6 +408,50 @@ def transact_records(
                 "duplicate_record_id", f"record id {duplicate} already exists"
             )
         _append_frame(path, b"".join(encoded))
+        return result
+
+
+def transact_exact_frame(
+    authority: FloatiRoot,
+    relative: Union[Path, str],
+    decide: Callable[
+        [List[Dict[str, Any]], Tuple[bytes, ...]],
+        Tuple[Any, Optional[Dict[str, Any]]],
+    ],
+    *,
+    allowed_kinds: Optional[Set[str]] = None,
+    max_bytes: int = MAX_RECORD_BYTES,
+) -> Any:
+    """Append one record decided from validated rows and their exact line bytes."""
+
+    kinds = _kinds(allowed_kinds)
+    path, tenant = _resolve(authority, relative, write=True)
+    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+        existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
+        try:
+            data = path.read_bytes() if path.exists() else b""
+            exact_lines = tuple(data.split(b"\n")[:-1])
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+        if len(exact_lines) != len(existing):
+            raise IntegrityFailure(
+                "journal_frame_count_invalid",
+                "validated journal rows do not match exact frame testimony",
+            )
+        result, record = decide(existing, exact_lines)
+        if record is None:
+            return result
+        if len(existing) >= MAX_LEDGER_RECORDS:
+            raise ProtocolRefusal(
+                "ledger_record_limit",
+                f"ledger maximum is {MAX_LEDGER_RECORDS} records",
+            )
+        encoded = _encode_record(record, tenant, kinds, max_bytes=max_bytes)
+        if any(item["id"] == record.get("id") for item in existing):
+            raise ProtocolRefusal(
+                "duplicate_record_id", f"record id {record.get('id')} already exists"
+            )
+        _append_frame(path, encoded)
         return result
 
 
@@ -633,6 +696,241 @@ def read_records_compatible(
     return records, _unrecognized_rows(summaries)
 
 
+class VerifiedLedgerCursor:
+    """Retain one validated ledger prefix and inspect only later frames.
+
+    The cursor is memory-only and binds itself to one exact path, tenant,
+    kind set, digest domain, and record bound.  A shorter file, a missing file
+    after prior data, or a changed device/inode identity discards the cached
+    prefix and performs one complete replay.
+    """
+
+    def __init__(self) -> None:
+        self._binding: Optional[Tuple[Path, str, FrozenSet[str], str, int]] = None
+        self._identity: Optional[Tuple[int, int]] = None
+        self._byte_length = 0
+        self._records: List[Dict[str, Any]] = []
+        self._prefixes: Tuple[str, ...] = ()
+        self._digest: Optional[Any] = None
+
+    def snapshot(self) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        return copy.deepcopy(self._records), tuple(self._prefixes)
+
+    @staticmethod
+    def _initial_digest(domain: str) -> Any:
+        digest = hashlib.sha256()
+        digest.update(domain.encode("ascii") + b"\0")
+        return digest
+
+    @staticmethod
+    def _frame_failure(path: Path, exc: FrameError, *, line_offset: int = 0) -> IntegrityFailure:
+        code = {
+            "incomplete_frame": "incomplete_jsonl_line",
+            "blank_frame": "blank_jsonl_line",
+        }.get(exc.code, exc.code)
+        line_number = line_offset + exc.line_number if exc.line_number else 0
+        where = f" line {line_number}" if line_number else ""
+        return IntegrityFailure(code, f"{path.name}{where}: {exc.detail}")
+
+    def _reset_empty(self, domain: str) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        digest = self._initial_digest(domain)
+        self._identity = None
+        self._byte_length = 0
+        self._records = []
+        self._prefixes = (digest.hexdigest(),)
+        self._digest = digest
+        return self.snapshot()
+
+    def _full_replay(
+        self,
+        path: Path,
+        tenant: str,
+        kinds: FrozenSet[str],
+        domain: str,
+        max_bytes: int,
+    ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        try:
+            before = path.stat()
+            data = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+        before_identity = (int(before.st_dev), int(before.st_ino))
+        after_identity = (int(after.st_dev), int(after.st_ino))
+        if (
+            before_identity != after_identity
+            or before.st_size != after.st_size
+            or len(data) != after.st_size
+        ):
+            raise IntegrityFailure(
+                "ledger_identity_changed_during_read",
+                f"{path.name} changed identity or length during replay",
+            )
+        records = _decode_path_records(
+            path, tenant, kinds, data, max_bytes=max_bytes,
+        )
+        frames = data.splitlines(keepends=True)
+        if len(frames) != len(records):
+            raise IntegrityFailure(
+                "noncanonical_frame",
+                "durable framing does not match validated records",
+            )
+        digest = self._initial_digest(domain)
+        prefixes = [digest.hexdigest()]
+        for record, frame in zip(records, frames):
+            if frame != encode_frame(record):
+                raise IntegrityFailure(
+                    "noncanonical_frame",
+                    "durable frame differs from canonical encoding",
+                )
+            digest.update(frame)
+            prefixes.append(digest.hexdigest())
+        self._identity = after_identity
+        self._byte_length = len(data)
+        self._records = [dict(record) for record in records]
+        self._prefixes = tuple(prefixes)
+        self._digest = digest
+        return self.snapshot()
+
+    def _read_locked(
+        self,
+        path: Path,
+        tenant: str,
+        kinds: FrozenSet[str],
+        domain: str,
+        max_bytes: int,
+    ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        if not path.exists():
+            if self._identity is None and self._prefixes:
+                return self.snapshot()
+            return self._reset_empty(domain)
+        try:
+            stat = path.stat()
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+        identity = (int(stat.st_dev), int(stat.st_ino))
+        if (
+            self._identity is None
+            or identity != self._identity
+            or stat.st_size < self._byte_length
+        ):
+            return self._full_replay(path, tenant, kinds, domain, max_bytes)
+        if stat.st_size > MAX_LEDGER_BYTES:
+            raise IntegrityFailure(
+                "ledger_too_large", f"{path.name} exceeds {MAX_LEDGER_BYTES} bytes"
+            )
+        if stat.st_size == self._byte_length:
+            return self.snapshot()
+        try:
+            with path.open("rb") as handle:
+                opened = os.fstat(handle.fileno())
+                opened_identity = (int(opened.st_dev), int(opened.st_ino))
+                if opened_identity != identity or opened.st_size != stat.st_size:
+                    raise IntegrityFailure(
+                        "ledger_identity_changed_during_read",
+                        f"{path.name} changed identity or length before incremental read",
+                    )
+                handle.seek(self._byte_length)
+                appended = handle.read(stat.st_size - self._byte_length)
+                final = os.fstat(handle.fileno())
+        except IntegrityFailure:
+            raise
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+        if (
+            (int(final.st_dev), int(final.st_ino)) != identity
+            or final.st_size != stat.st_size
+            or len(appended) != stat.st_size - self._byte_length
+        ):
+            raise IntegrityFailure(
+                "ledger_identity_changed_during_read",
+                f"{path.name} changed identity or length during incremental read",
+            )
+        line_offset = len(self._records)
+        for line_number, raw in enumerate(appended.splitlines(), start=line_offset + 1):
+            if len(raw) + 1 > max_bytes:
+                raise IntegrityFailure(
+                    "record_too_large",
+                    f"{path.name} line {line_number} exceeds {max_bytes} bytes",
+                )
+        try:
+            decoded = decode_frames(appended)
+        except FrameError as exc:
+            raise self._frame_failure(path, exc, line_offset=line_offset) from exc
+        if line_offset + len(decoded) > MAX_LEDGER_RECORDS:
+            raise IntegrityFailure(
+                "ledger_record_limit",
+                f"{path.name} exceeds {MAX_LEDGER_RECORDS} records",
+            )
+        frames = appended.splitlines(keepends=True)
+        seen = {str(record["id"]) for record in self._records}
+        validated: List[Dict[str, Any]] = []
+        for index, raw_record in enumerate(decoded):
+            line_number = line_offset + index + 1
+            record_id = raw_record.get("id", "<absent>") if isinstance(raw_record, dict) else "<absent>"
+            kind = raw_record.get("kind", "<absent>") if isinstance(raw_record, dict) else "<absent>"
+            try:
+                record = validate_record(raw_record, tenant, kinds, integrity=True)
+            except IntegrityFailure as exc:
+                raise IntegrityFailure(
+                    exc.code,
+                    f"ledger {path}: record {record_id}: kind {kind}: {exc.detail}",
+                ) from exc
+            if str(record["id"]) in seen:
+                raise IntegrityFailure(
+                    "duplicate_record_id",
+                    f"ledger {path}: record {record['id']}: kind {record['kind']}: duplicate id",
+                )
+            if frames[index] != encode_frame(record):
+                raise IntegrityFailure(
+                    "noncanonical_frame",
+                    f"{path.name} line {line_number} differs from canonical encoding",
+                )
+            seen.add(str(record["id"]))
+            validated.append(record)
+        if self._digest is None:
+            raise IntegrityFailure("ledger_cursor_uninitialized", "incremental digest state is absent")
+        digest = self._digest.copy()
+        prefixes = list(self._prefixes)
+        for frame in frames:
+            digest.update(frame)
+            prefixes.append(digest.hexdigest())
+        self._identity = identity
+        self._byte_length = int(stat.st_size)
+        self._records.extend(dict(record) for record in validated)
+        self._prefixes = tuple(prefixes)
+        self._digest = digest
+        return self.snapshot()
+
+    def read(
+        self,
+        authority: Authority,
+        relative: Union[Path, str],
+        *,
+        allowed_kinds: Optional[Set[str]] = None,
+        domain: str,
+        max_bytes: int = MAX_RECORD_BYTES,
+    ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        if not isinstance(domain, str) or not domain.isascii() or not domain:
+            raise ProtocolRefusal(
+                "prefix_digest_domain_invalid", "digest domain must be nonempty ASCII"
+            )
+        kinds = _kinds(allowed_kinds)
+        path, tenant = _resolve(authority, relative, write=False)
+        binding = (path.resolve(strict=False), tenant, kinds, domain, max_bytes)
+        if self._binding is None:
+            self._binding = binding
+        elif self._binding != binding:
+            raise ProtocolRefusal(
+                "ledger_cursor_binding_mismatch",
+                "verified ledger cursor is already bound to another ledger contract",
+            )
+        if isinstance(authority, TenantObservation):
+            return self._read_locked(path, tenant, kinds, domain, max_bytes)
+        with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+            return self._read_locked(path, tenant, kinds, domain, max_bytes)
+
+
 def read_records_with_prefix_digests(
     authority: Authority,
     relative: Union[Path, str],
@@ -640,6 +938,7 @@ def read_records_with_prefix_digests(
     allowed_kinds: Optional[Set[str]] = None,
     domain: str,
     max_bytes: int = MAX_RECORD_BYTES,
+    cursor: Optional[VerifiedLedgerCursor] = None,
 ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
     """Read validated canonical frames and every inclusive SHA-256 prefix.
 
@@ -648,33 +947,11 @@ def read_records_with_prefix_digests(
     mappings because every stored frame must equal its canonical encoding.
     """
 
-    if not isinstance(domain, str) or not domain.isascii() or not domain:
-        raise ProtocolRefusal("prefix_digest_domain_invalid", "digest domain must be nonempty ASCII")
-    kinds = _kinds(allowed_kinds)
-    path, tenant = _resolve(authority, relative, write=False)
-    if not path.exists():
-        initial = hashlib.sha256(domain.encode("ascii") + b"\0").hexdigest()
-        return [], (initial,)
-    def read() -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
-        records = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:
-            raise _durability_failure(exc, path) from exc
-        frames = raw.splitlines(keepends=True)
-        if len(frames) != len(records):
-            raise IntegrityFailure("noncanonical_frame", "durable framing does not match validated records")
-        digest = hashlib.sha256()
-        digest.update(domain.encode("ascii") + b"\0")
-        prefixes = [digest.hexdigest()]
-        for record, frame in zip(records, frames):
-            canonical = encode_frame(record)
-            if frame != canonical:
-                raise IntegrityFailure("noncanonical_frame", "durable frame differs from canonical encoding")
-            digest.update(frame)
-            prefixes.append(digest.hexdigest())
-        return records, tuple(prefixes)
-    if isinstance(authority, TenantObservation):
-        return read()
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
-        return read()
+    selected = cursor if cursor is not None else VerifiedLedgerCursor()
+    return selected.read(
+        authority,
+        relative,
+        allowed_kinds=allowed_kinds,
+        domain=domain,
+        max_bytes=max_bytes,
+    )

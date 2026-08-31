@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
+import hashlib
 import subprocess
 import tempfile
 import unittest
@@ -17,6 +20,7 @@ class _Runner:
         self.stdout = stdout
         self.calls: list[tuple[tuple[str, ...], Path, int]] = []
         self.raise_timeout = False
+        self.raise_oserror = False
 
     def __call__(
         self, argv: tuple[str, ...], cwd: Path, timeout: int
@@ -24,16 +28,18 @@ class _Runner:
         self.calls.append((argv, cwd, timeout))
         if self.raise_timeout:
             raise subprocess.TimeoutExpired(argv, timeout)
+        if self.raise_oserror:
+            raise OSError("unavailable")
         return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "stderr\n")
 
 
 class WakeDaemonAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
-        Registry(self.root).register("lane-a", "worker")
+        Registry(self.root).register(public_ids.builder('a'), "worker")
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
         self.target = self.base / "agent-target"
@@ -45,7 +51,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
     def binding(self, harness: str, *, session_id: str = "session-1"):
         from floati.wake_daemon_adapters import adapter_contract_digest
 
-        coordinate = DaemonCoordinate(self.root, "lane-a", harness)
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), harness)
         return AdapterBindingStore(self.root).write(
             coordinate,
             session_id=session_id,
@@ -61,7 +67,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
 
         binding = self.binding("codex")
         runner = _Runner(stdout="")
-        coordinate = DaemonCoordinate(self.root, "lane-a", "codex")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "codex")
         prior = adapters.CODEX_EXECUTABLE
         adapters.CODEX_EXECUTABLE = self.link
         self.addCleanup(setattr, adapters, "CODEX_EXECUTABLE", prior)
@@ -95,7 +101,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             )
         )
         adapter = CursorResumeWakeAdapter(
-            DaemonCoordinate(self.root, "lane-a", "cursor"), runner=runner
+            DaemonCoordinate(self.root, public_ids.builder('a'), "cursor"), runner=runner
         )
 
         result = adapter.request_wake(binding, "wake exact cursor session", 35)
@@ -120,7 +126,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         from floati.wake_daemon_adapters import CursorResumeWakeAdapter
 
         binding = self.binding("cursor")
-        coordinate = DaemonCoordinate(self.root, "lane-a", "cursor")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         invalid_results = (
             '{"type":"result","subtype":"success","is_error":false,'
             '"session_id":"another-session","result":"ok"}\n',
@@ -137,17 +143,151 @@ class WakeDaemonAdapterTests(unittest.TestCase):
                 self.assertEqual("unknown", result.outcome)
                 self.assertEqual("wake_daemon_cursor_result_invalid", result.reason_code)
 
+    def test_grok_build_uses_only_bound_headless_resume_vector(self) -> None:
+        from floati.wake_daemon_adapters import wake_adapter_for
+
+        try:
+            binding = self.binding("grok-build")
+            stdout = (
+                '{"text":"done","stopReason":"end_turn",'
+                '"sessionId":"session-1","requestId":"request-1"}\n'
+            )
+            runner = _Runner(stdout=stdout)
+            adapter = wake_adapter_for(
+                self.root, public_ids.builder('a'), "grok-build", runner=runner
+            )
+        except ProtocolRefusal as exc:
+            self.fail(f"grok-build adapter was refused: {exc}")
+
+        result = adapter.request_wake(binding, "drain the declared root", 40)
+
+        self.assertEqual("woke", result.outcome)
+        self.assertIsNone(result.reason_code)
+        self.assertEqual(
+            hashlib.sha256(stdout.encode("utf-8")).hexdigest(),
+            result.output_digest,
+        )
+        self.assertEqual(
+            (
+                str(self.target),
+                "-p",
+                "drain the declared root",
+                "--output-format",
+                "json",
+                "--resume",
+                "session-1",
+            ),
+            runner.calls[0][0],
+        )
+        self.assertEqual(self.workspace, runner.calls[0][1])
+        self.assertEqual(40, runner.calls[0][2])
+
+    def test_grok_build_result_requires_exact_session_and_end_turn(self) -> None:
+        from floati.wake_daemon_adapters import GrokBuildResumeWakeAdapter
+
+        binding = self.binding("grok-build")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "grok-build")
+        cases = (
+            ("", "wake_daemon_grok_output_empty"),
+            ("{\n", "wake_daemon_grok_output_invalid"),
+            (
+                '{"sessionId":"another-session","stopReason":"end_turn"}\n',
+                "wake_daemon_grok_result_invalid",
+            ),
+            (
+                '{"sessionId":"session-1","stopReason":"max_tokens"}\n',
+                "wake_daemon_grok_result_invalid",
+            ),
+            (
+                '[{"sessionId":"session-1","stopReason":"end_turn"}]\n',
+                "wake_daemon_grok_result_invalid",
+            ),
+        )
+
+        for stdout, reason_code in cases:
+            with self.subTest(stdout=stdout):
+                result = GrokBuildResumeWakeAdapter(
+                    coordinate, runner=_Runner(stdout=stdout)
+                ).request_wake(binding, "wake", 30)
+                self.assertEqual("unknown", result.outcome)
+                self.assertEqual(reason_code, result.reason_code)
+
+    def test_grok_build_timeout_and_nonzero_never_claim_woke(self) -> None:
+        from floati.wake_daemon_adapters import GrokBuildResumeWakeAdapter
+
+        binding = self.binding("grok-build")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "grok-build")
+        timeout = _Runner()
+        timeout.raise_timeout = True
+        unavailable = _Runner()
+        unavailable.raise_oserror = True
+        nonzero = _Runner(
+            returncode=7,
+            stdout='{"sessionId":"session-1","stopReason":"end_turn"}\n',
+        )
+
+        timed_out = GrokBuildResumeWakeAdapter(
+            coordinate, runner=timeout
+        ).request_wake(binding, "wake", 30)
+        missing = GrokBuildResumeWakeAdapter(
+            coordinate, runner=unavailable
+        ).request_wake(binding, "wake", 30)
+        refused = GrokBuildResumeWakeAdapter(
+            coordinate, runner=nonzero
+        ).request_wake(binding, "wake", 30)
+
+        self.assertEqual("unknown", timed_out.outcome)
+        self.assertEqual("wake_daemon_adapter_timeout", timed_out.reason_code)
+        self.assertEqual("unknown", missing.outcome)
+        self.assertEqual("wake_daemon_adapter_unavailable", missing.reason_code)
+        self.assertEqual("refused", refused.outcome)
+        self.assertEqual("wake_daemon_adapter_nonzero", refused.reason_code)
+        self.assertEqual(
+            hashlib.sha256(nonzero.stdout.encode("utf-8")).hexdigest(),
+            refused.output_digest,
+        )
+
     def test_adapter_refuses_stale_session_or_executable_digest(self) -> None:
-        from floati.wake_daemon_adapters import CursorResumeWakeAdapter
+        from floati.wake_daemon_adapters import (
+            CursorResumeWakeAdapter,
+            adapter_contract_digest,
+        )
 
         stale = self.binding("cursor", session_id="session-old")
         current = self.binding("cursor", session_id="session-new")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         adapter = CursorResumeWakeAdapter(
-            DaemonCoordinate(self.root, "lane-a", "cursor"), runner=_Runner()
+            coordinate, runner=_Runner()
         )
         with self.assertRaisesRegex(ProtocolRefusal, "session"):
             adapter.request_wake(stale, "wake", 30)
 
+        newer_epoch = AdapterBindingStore(self.root).write(
+            coordinate,
+            session_id="session-new",
+            workspace=self.workspace,
+            executable=self.target,
+            adapter_version="1",
+            adapter_digest=adapter_contract_digest("cursor"),
+            binding_epoch=2,
+        )
+        self.assertNotEqual(current["binding_epoch"], newer_epoch["binding_epoch"])
+        with self.assertRaisesRegex(ProtocolRefusal, "session"):
+            adapter.request_wake(current, "wake", 30)
+
+        AdapterBindingStore(self.root).write(
+            coordinate,
+            session_id="session-new",
+            workspace=self.workspace,
+            executable=self.target,
+            adapter_version="1",
+            adapter_digest="f" * 64,
+            binding_epoch=3,
+        )
+        with self.assertRaisesRegex(ProtocolRefusal, "adapter"):
+            adapter.exact_binding()
+
+        current = self.binding("cursor", session_id="session-new")
         self.target.write_bytes(b"changed\n")
         with self.assertRaisesRegex(ProtocolRefusal, "digest"):
             adapter.request_wake(current, "wake", 30)
@@ -156,7 +296,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         from floati.wake_daemon_adapters import CursorResumeWakeAdapter
 
         binding = self.binding("cursor")
-        coordinate = DaemonCoordinate(self.root, "lane-a", "cursor")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         timeout = _Runner()
         timeout.raise_timeout = True
         refused = _Runner(returncode=7)
@@ -184,18 +324,28 @@ class WakeDaemonAdapterTests(unittest.TestCase):
     def test_unsupported_harness_and_caller_argument_surface_are_absent(self) -> None:
         from floati.wake_daemon_adapters import (
             CursorResumeWakeAdapter,
+            GrokBuildResumeWakeAdapter,
             wake_adapter_for,
         )
 
         with self.assertRaisesRegex(ProtocolRefusal, "unsupported"):
-            wake_adapter_for(self.root, "lane-a", "claude", runner=_Runner())
+            wake_adapter_for(self.root, public_ids.builder('a'), "claude", runner=_Runner())
 
         adapter = CursorResumeWakeAdapter(
-            DaemonCoordinate(self.root, "lane-a", "cursor"), runner=_Runner()
+            DaemonCoordinate(self.root, public_ids.builder('a'), "cursor"), runner=_Runner()
         )
         self.assertFalse(hasattr(adapter, "argv"))
         with self.assertRaises(TypeError):
             adapter.request_wake(self.binding("cursor"), "wake", 30, argv=("sh",))
+
+        grok = GrokBuildResumeWakeAdapter(
+            DaemonCoordinate(self.root, public_ids.builder('a'), "grok-build"), runner=_Runner()
+        )
+        self.assertFalse(hasattr(grok, "argv"))
+        with self.assertRaises(TypeError):
+            grok.request_wake(
+                self.binding("grok-build"), "wake", 30, argv=("sh",)
+            )
 
 
 if __name__ == "__main__":

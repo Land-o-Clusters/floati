@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 import hashlib
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
 from .ids import uuid7_hex
@@ -16,6 +16,7 @@ from .jsonl import (
     read_records_compatible_snapshot,
     read_records_snapshot,
     transact,
+    transact_records,
 )
 from .records import WAKE_HOLD_KINDS, validate_record
 from .registry import Registry, utc_now
@@ -25,7 +26,9 @@ from .snapshot import SnapshotStore, SourceSpec
 
 
 MAX_PRESENTATION_ITEMS = 1000
-EVENT_KINDS = frozenset({"message_envelope", "message_retracted"})
+EVENT_KINDS = frozenset(
+    {"message_envelope", "delivery_claim", "message_retracted"}
+)
 _ATTEMPT_BINDING_FIELDS = frozenset(
     {"attempt_id", "claim_id", "lease_id", "worker_session_id"}
 )
@@ -55,6 +58,19 @@ def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
                         "reply evidence must reverse the original message parties",
                     )
             prior_by_id[str(record["id"])] = record
+            continue
+        if record["kind"] == "delivery_claim":
+            envelope = prior_by_id.get(str(record["note_ref"]))
+            if envelope is None:
+                raise IntegrityFailure(
+                    "delivery_claim_order_invalid",
+                    "delivery claim evidence must follow its referenced message",
+                )
+            if envelope["sha"] != record["sha"]:
+                raise IntegrityFailure(
+                    "delivery_claim_sha_invalid",
+                    "delivery claim sha must equal its referenced message sha",
+                )
             continue
         original_id = str(record["retracted_message_id"])
         original = prior_by_id.get(original_id)
@@ -93,6 +109,62 @@ class EventLog:
             for record in self.event_records()
             if record["kind"] == "message_envelope"
         ]
+
+    @staticmethod
+    def _claim_semantics(record: Mapping[str, object]) -> Dict[str, object]:
+        return {
+            field: record[field]
+            for field in (
+                "kind", "schema_version", "sha", "repo_path", "bank",
+                "declared", "artifacts", "deadline_seconds",
+            )
+        }
+
+    def _delivery_claim(
+        self,
+        claim: object,
+        *,
+        envelope_id: str,
+        envelope_sha: str,
+    ) -> Dict[str, object]:
+        if not isinstance(claim, Mapping):
+            raise ProtocolRefusal(
+                "claim_not_object", "delivery claim document must be a JSON object"
+            )
+        expected = {
+            "kind", "schema_version", "sha", "repo_path", "bank",
+            "declared", "artifacts", "deadline_seconds",
+        }
+        if set(claim) != expected:
+            raise ProtocolRefusal(
+                "claim_fields_invalid",
+                "delivery claim document fields do not match the v0 intake contract",
+            )
+        if claim.get("sha") != envelope_sha:
+            raise ProtocolRefusal(
+                "claim_sha_mismatch",
+                "delivery claim sha must equal the enclosing send sha",
+            )
+        record: Dict[str, object] = {
+            "schema_version": claim.get("schema_version"),
+            "id": "delivery-claim-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": utc_now(),
+            "kind": claim.get("kind"),
+            "sha": claim.get("sha"),
+            "repo_path": claim.get("repo_path"),
+            "bank": claim.get("bank"),
+            "declared": claim.get("declared"),
+            "artifacts": claim.get("artifacts"),
+            "note_ref": envelope_id,
+            "deadline_seconds": claim.get("deadline_seconds"),
+        }
+        return validate_record(
+            record,
+            self.root.tenant_id,
+            frozenset({"delivery_claim"}),
+            integrity=False,
+        )
 
     def event_records(self) -> List[Dict[str, object]]:
         """Return the authoritative append-only message/retraction ledger in frame order."""
@@ -146,7 +218,7 @@ class EventLog:
 
     @staticmethod
     def _normalized_attempt_binding(value: object) -> object:
-        """Persist only Fable's exact full binding or literal legacy sentinel."""
+        """Persist only the reviewer's exact full binding or literal legacy sentinel."""
 
         if not isinstance(value, dict) or set(value) != _ATTEMPT_BINDING_FIELDS:
             return "absent_legacy"
@@ -185,6 +257,7 @@ class EventLog:
         idempotency_key: Optional[str] = None,
         worker_session_id: Optional[str] = None,
         attempt_binding: object = None,
+        claim: object = None,
         now: Optional[datetime] = None,
     ) -> Dict[str, object]:
         # Node spellings are lexical input, not a claim eligible for durable
@@ -203,7 +276,7 @@ class EventLog:
         session = worker_session_id
         if isinstance(binding, dict) and session is None:
             session = binding["worker_session_id"]  # validator proves this opaque value
-        prior_events = self.records()
+        prior_events = self.event_records()
         if reply_to is not None:
             original = next((record for record in prior_events if record["id"] == reply_to), None)
             if original is None:
@@ -230,6 +303,11 @@ class EventLog:
         if session is not None:
             envelope["worker_session_id"] = session
         validate_record(envelope, self.root.tenant_id, frozenset({"message_envelope"}), integrity=False)
+        delivery_claim = None
+        if claim is not None:
+            delivery_claim = self._delivery_claim(
+                claim, envelope_id=str(envelope["id"]), envelope_sha=sha
+            )
         payload_fields = (
             "sender", "recipient", "repo", "sha", "doc", "note", "reply_to",
             "worker_session_id",
@@ -237,32 +315,84 @@ class EventLog:
         for record in prior_events:
             if record.get("idempotency_key") != key:
                 continue
+            prior_claim = next(
+                (
+                    row for row in prior_events
+                    if row.get("kind") == "delivery_claim"
+                    and row.get("note_ref") == record.get("id")
+                ),
+                None,
+            )
             if (
                 all(record.get(field) == envelope.get(field) for field in payload_fields)
                 and record.get("attempt_binding", "absent_legacy")
                 == envelope["attempt_binding"]
+                and (
+                    (delivery_claim is None and prior_claim is None)
+                    or (
+                        delivery_claim is not None
+                        and prior_claim is not None
+                        and self._claim_semantics(prior_claim)
+                        == self._claim_semantics(delivery_claim)
+                    )
+                )
             ):
-                return record
+                return (
+                    record
+                    if prior_claim is None
+                    else {"message": record, "claim": prior_claim}
+                )
             break
         self.registry.require_protocol_lease(sender, now=now, act="send by sender")
         self.registry.require_protocol_lease(recipient, now=now, act="send to recipient")
 
-        def decide(records: list[Dict[str, object]]) -> tuple[Dict[str, object], Optional[Dict[str, object]]]:
+        def decide(
+            records: list[Dict[str, object]],
+        ) -> tuple[Dict[str, object], Sequence[Dict[str, object]]]:
             self._validate_event_records(records)
             for record in records:
                 if record.get("idempotency_key") != key:
                     continue
+                prior_claim = next(
+                    (
+                        row for row in records
+                        if row.get("kind") == "delivery_claim"
+                        and row.get("note_ref") == record.get("id")
+                    ),
+                    None,
+                )
                 if (
                     all(record.get(field) == envelope.get(field) for field in payload_fields)
                     and record.get("attempt_binding", "absent_legacy")
                     == envelope["attempt_binding"]
+                    and (
+                        (delivery_claim is None and prior_claim is None)
+                        or (
+                            delivery_claim is not None
+                            and prior_claim is not None
+                            and self._claim_semantics(prior_claim)
+                            == self._claim_semantics(delivery_claim)
+                        )
+                    )
                 ):
-                    return record, None
+                    return (
+                        record
+                        if prior_claim is None
+                        else {"message": record, "claim": prior_claim}
+                    ), ()
                 raise ProtocolRefusal("idempotency_conflict", "idempotency key has different content")
-            return envelope, envelope
+            if delivery_claim is None:
+                return envelope, (envelope,)
+            result = {"message": envelope, "claim": delivery_claim}
+            return result, (envelope, delivery_claim)
 
         try:
-            return transact(self.root, self.relative_path, decide, allowed_kinds=EVENT_KINDS)
+            return transact_records(
+                self.root,
+                self.relative_path,
+                decide,
+                allowed_kinds=EVENT_KINDS,
+            )
         except ProtocolRefusal as exc:
             if exc.code == "idempotency_conflict":
                 self._deny(sender, recipient, "idempotency_conflict")
@@ -295,7 +425,7 @@ class EventLog:
         reason: str,
         author: str,
     ) -> Dict[str, object]:
-        """Append Fable's exact retraction record without deleting its original frame."""
+        """Append the reviewer's exact retraction record without deleting its original frame."""
 
         retraction: Dict[str, object] = {
             "schema_version": 0,
@@ -470,7 +600,7 @@ class EventLog:
         return projections
 
     def _dead_holder_state(self, lease_id: str) -> Optional[str]:
-        """Map only durable authority/orphan evidence to Fable's closed stale states."""
+        """Map only durable authority/orphan evidence to the reviewer's closed stale states."""
 
         try:
             subject = validate_identifier(lease_id, "lease_id")

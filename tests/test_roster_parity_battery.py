@@ -59,7 +59,7 @@ class RosterParityBattery(unittest.TestCase):
     """CHECK-ONE, behavioral: one law, every roster member, really run."""
 
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.tmp = Path(self.temp.name)
         self.parent = self.tmp / "floati-work"

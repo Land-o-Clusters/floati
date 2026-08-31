@@ -41,7 +41,7 @@ its ruled size ceiling, and contains no owner path, prompt, or window chrome.
 ## Selected local master
 
 - Path:
-  `/private/tmp/floati-demo-masters/b5b8987f253b1f9245035edb8dd426c83e9d5d79/hero-three-fault-replay.mp4`
+  `/tmp/floati-demo-masters/b5b8987f253b1f9245035edb8dd426c83e9d5d79/hero-three-fault-replay.mp4`
 - Dimensions: 3840×2160
 - Duration: 10.67 seconds
 - Bytes: `580546`

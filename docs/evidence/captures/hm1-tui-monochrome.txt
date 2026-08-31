@@ -1,29 +1,30 @@
-FLOATI // HARBOR BOARD
+⊙ FLOATI // HARBOR BOARD
 OBSERVED 2026-07-31T12:00:10.000Z
-! DENIAL UNKNOWN_SENDER ghost → lane-slipway
-! STALE AUTHORITY app-build holder:lane-app
-! STALE MUTEX fable-workspace holder:fable
+! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core
+! STALE AUTHORITY app-build holder:builder-app
+! STALE MUTEX builder-review-workspace holder:builder-review
 
 NODE               LIVE       AUTH       MUTEX      INBOX  LAST
-> fable              EXPIRED    NONE       EXPIRED        0  12:00:06.000
-  lane-app           SILENT     EXPIRED    ACTIVE         0  11:59:40.000
-  lane-slipway       PRESENT    ACTIVE     NONE           1  12:00:09.000
+> builder-review     EXPIRED    NONE       EXPIRED        0  12:00:06.000
+  builder-app        SILENT     EXPIRED    ACTIVE         0  11:59:40.000
+  builder-core       PRESENT    ACTIVE     NONE           1  12:00:09.000
 
-WORK LOG  [▓▓░░░░░░░░]  20%
-  OPEN      review provisional copy  holder:-
-  CLAIMED   polish harbor board  holder:lane-slipway
-  COMPLETED verify protocol gate  holder:lane-slipway
-  CLAIMED   claim worker item  holder:lane-slipway
-  CLAIMED   drive worker item  holder:lane-slipway
+WORK DAG  [▓▓░░░░░░░░]  20%
+  READY     review provisional copy  holder:-
+  CLAIMED   polish harbor board  holder:builder-core
+  DONE      verify protocol gate  holder:builder-core
+  CLAIMED   claim worker item  holder:builder-core
+  CLAIMED   drive worker item  holder:builder-core
+
+CONSUMPTION  WORK AVAILABLE
+  coordinate: work/items.jsonl
 
 WORKERS
-  DEGRADED  lane-slipway codex PROCESS DIED
-  COMPLETE  lane-slipway acp
-  CLAIM     lane-slipway codex
-  DRIVING   lane-slipway codex
+  DEGRADED  builder-core codex demo-work-2 PROCESS DIED
+  COMPLETE  builder-core acp demo-work-3
+  CLAIM     builder-core codex demo-work-4
+  DRIVING   builder-core codex demo-work-5
 
 RECEIPTS
-  DELIVERY 1 ITEM
-  ACK      1 ITEM
   DELIVERY 1 ITEM
 ↑/k ↓/j select  enter detail  a ack  q quit

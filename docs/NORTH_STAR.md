@@ -1,10 +1,10 @@
-# FLOATI NORTH STAR — the owner's vision, made canonical (Fable, 2026-08-27)
+# FLOATI NORTH STAR — the owner's vision, made canonical (architect, 2026-08-27)
 
 **Owner mandate (2026-08-27, verbatim in intent):** Floati is not a truth ledger with a CLI.
 It is the **fleet operating system for local coding agents** — the ledger is its foundation and
 its honesty brand, not its ceiling. Every future sprint is measured against this document.
 
-**Naming ruling (Fable, 2026-08-27, owner may overrule):** the product and binary are **`floati`**.
+**Naming ruling (architect, 2026-08-27, owner may overrule):** the product and binary are **`floati`**.
 `slip` was never the CLI — Slipway was a charter name and a node id. Nautical vocabulary
 (Harbor Board, harbor chart, buoy) stays as *feature* names. All remaining Slipway residue is
 swept per WS-G of the weekend program (live surfaces rename; frozen evidence keeps its verbatim
@@ -29,7 +29,7 @@ enumerated in the weekend program. "DARK" = built and gated on a branch, not on 
 | V10 | Eye candy — fun and impressive to use | **PARTIAL** | wall, flight-recorder replay, demo GIFs are real; `codex/tui-excellence` dark; more in WS-B/WS-F |
 | V11 | Monitoring: down nodes, node problems, injection, cross-bus poisoning | **PARTIAL** | doctor + watch + three-lamps liveness on main; heartbeat liveness needs the daemon (V3); **security posture ruled below** |
 | V12 | Multi-bus management on one filesystem: what is downstream, switch architects, ASCII harbor charts | **ABSENT** | `graph` is per-root; multi-root is a dark contract. WS-B builds the declared-roots registry + chart |
-| V13 | Filesystem mechanics: a project folder per node, nested, never sprawling the user's home | **ABSENT** | today's fleet sprawls `~/Projects` + the system temporary directory (which has lost work). WS-B charters the layout |
+| V13 | Filesystem mechanics: a project folder per node, nested, never sprawling the user's home | **ABSENT** | today's fleet sprawls `~/Projects` + `/tmp` (which has lost work). WS-B charters the layout |
 | V14 | **All-knowing survey**: detect buses on this filesystem that floati did not install; alert the user | **ABSENT** | WS-B. This machine is the corpus: three non-floati agent-bus roots exist beside ours under `~` today |
 | V15 | **Agent-first-class operation**: point an agent at the repo — install, onboard, operate, uninstall, zero human relays | **PARTIAL by accident** | typed exits/refusals/idempotency/receipts already agent-gold; the gaps are chartered in `docs/design/agent-surface-spec-2026-08-28.md` (WS-I) |
 

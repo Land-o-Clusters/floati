@@ -74,7 +74,7 @@ The one turn was submitted to the authenticated local server with this exact
 dispatch command (the cookie file contained only the local T3 session):
 
 ```sh
-/usr/bin/curl -fsS -b /private/tmp/t3-luna-cookie -H 'content-type: application/json' --data-raw '{"type":"thread.turn.start","commandId":"0f3b3dd4-1e9f-42b8-a01c-df098dbb3bb0","threadId":"db0322e0-2d90-4cf1-a721-6a8f72782f6c","message":{"messageId":"352b90ea-81f1-4669-9e7d-4fa7d7c42404","role":"user","text":"Reply exactly with model=deepseek/deepseek-v4-flash-0731 and nothing else.","attachments":[]},"modelSelection":{"instanceId":"grok","model":"luna-openrouter-deepseek"},"runtimeMode":"auto","interactionMode":"default","createdAt":"2026-08-28T02:00:02.000Z"}' http://127.0.0.1:3774/api/orchestration/dispatch
+/usr/bin/curl -fsS -b /tmp/t3-luna-cookie -H 'content-type: application/json' --data-raw '{"type":"thread.turn.start","commandId":"0f3b3dd4-1e9f-42b8-a01c-df098dbb3bb0","threadId":"db0322e0-2d90-4cf1-a721-6a8f72782f6c","message":{"messageId":"352b90ea-81f1-4669-9e7d-4fa7d7c42404","role":"user","text":"Reply exactly with model=deepseek/deepseek-v4-flash-0731 and nothing else.","attachments":[]},"modelSelection":{"instanceId":"grok","model":"luna-openrouter-deepseek"},"runtimeMode":"auto","interactionMode":"default","createdAt":"2026-08-28T02:00:02.000Z"}' http://127.0.0.1:3774/api/orchestration/dispatch
 ```
 
 The server reached its ready message; the dispatch reported exit `0` and the

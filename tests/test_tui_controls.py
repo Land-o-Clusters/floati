@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import io
 import tempfile
 import unittest
@@ -32,7 +34,7 @@ class TuiControlTests(unittest.TestCase):
         self.assertTrue(controller.detail_open)
         acknowledged = controller.handle_key("a")
         self.assertEqual("ack", acknowledged.kind)
-        self.assertEqual("lane-a", acknowledged.node_id)
+        self.assertEqual(public_ids.builder('a'), acknowledged.node_id)
         self.assertEqual("msg-018f0f23abcd71238000000000000000", acknowledged.message_id)
         self.assertEqual("quit", controller.handle_key("q").kind)
         self.assertTrue(controller.quit_requested)

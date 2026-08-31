@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
 import json
 import tempfile
 import unittest
@@ -89,7 +91,7 @@ class MutableLedgerSource:
             "Codex": ManagedVerbShape(
                 harness="Codex",
                 executable="~/.codex/bin/codex-fleet-bus",
-                profile="puddle-floati-lane-puddle",
+                profile=public_ids.compose('puddle-floati-', public_ids.builder('puddle')),
             )
         }
 

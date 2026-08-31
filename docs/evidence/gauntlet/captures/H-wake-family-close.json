@@ -244,40 +244,40 @@
         "is_dir": false,
         "is_file": true,
         "is_symlink": false,
-        "path": "~/.claude/settings.json",
-        "realpath": "~/.claude/settings.json"
+        "path": "\u002fUsers/penguinspecz/.claude/settings.json",
+        "realpath": "\u002fUsers/penguinspecz/.claude/settings.json"
       },
       "codex_hooks": {
         "exists": true,
         "is_dir": false,
         "is_file": true,
         "is_symlink": false,
-        "path": "~/.codex/hooks.json",
-        "realpath": "~/.codex/hooks.json"
+        "path": "\u002fUsers/penguinspecz/.codex/hooks.json",
+        "realpath": "\u002fUsers/penguinspecz/.codex/hooks.json"
       },
       "cursor_hooks": {
         "exists": true,
         "is_dir": false,
         "is_file": true,
         "is_symlink": false,
-        "path": "~/.cursor/hooks.json",
-        "realpath": "~/.cursor/hooks.json"
+        "path": "\u002fUsers/penguinspecz/.cursor/hooks.json",
+        "realpath": "\u002fUsers/penguinspecz/.cursor/hooks.json"
       },
       "herdr_config": {
         "exists": true,
         "is_dir": true,
         "is_file": false,
         "is_symlink": false,
-        "path": "~/.config/herdr",
-        "realpath": "~/.config/herdr"
+        "path": "\u002fUsers/penguinspecz/.config/herdr",
+        "realpath": "\u002fUsers/penguinspecz/.config/herdr"
       },
       "opencode_plugins": {
         "exists": true,
         "is_dir": true,
         "is_file": false,
         "is_symlink": false,
-        "path": "~/.config/opencode/plugins",
-        "realpath": "~/.config/opencode/plugins"
+        "path": "\u002fUsers/penguinspecz/.config/opencode/plugins",
+        "realpath": "\u002fUsers/penguinspecz/.config/opencode/plugins"
       }
     },
     "gui_open_invoked": false,
@@ -382,7 +382,7 @@
         "--port",
         "63733",
         "--base-dir",
-        "~/Projects/floati-grok/.gauntlet-scratch/wake-family-t3-home"
+        "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/wake-family-t3-home"
       ],
       "cycles": [
         {
@@ -433,7 +433,7 @@
       "stderr": "",
       "stderr_bytes": 0,
       "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdout": "herdr \u2014 terminal workspace manager for AI coding agents\n\nUsage: herdr [options]\n       herdr --session <name> [options]\n       herdr --remote <ssh-target> [--session <name>]\n       herdr session attach <name>\n       herdr completion zsh\n       herdr update [--handoff]\n       herdr channel set <stable|preview>\n       herdr server stop\n       herdr server reload-config\n       herdr api <subcommand> ...\n       herdr completion <shell>\n       herdr config <subcommand> ...\n       herdr channel <subcommand> ...\n       herdr workspace <subcommand> ...\n       herdr worktree <subcommand> ...\n       herdr tab <subcommand> ...\n       herdr notification <subcommand> ...\n       herdr agent <subcommand> ...\n       herdr pane <subcommand> ...\n       herdr session <subcommand> ...\n       herdr integration <subcommand> ...\n\nCommon commands:\n  herdr                            Launch or attach to the persistent session\n  herdr status [server|client]     Show local client and running server status\n  herdr update                     Download and install the latest version\n  herdr completion zsh             Generate shell completions for zsh\n  herdr server stop                Stop the running server via the API socket\n  herdr channel set <stable|preview> Choose the stable or preview update channel\n  herdr server reload-config       Reload config.toml in the running server\n  herdr config reset-keys          Back up config.toml and remove custom keybindings\n  herdr channel <subcommand>       Manage the stable or preview update channel\n  herdr api <subcommand>           Inspect socket API metadata and live runtime state\n  herdr workspace <subcommand>     Workspace helpers over the socket API\n  herdr worktree <subcommand>      Git worktree helpers over the socket API\n  herdr tab <subcommand>           Tab helpers over the socket API\n  herdr notification <subcommand>  Notification helpers over the socket API\n  herdr agent <subcommand>         Agent/terminal helpers over the socket API\n  herdr pane <subcommand>          Pane control helpers over the socket API\n  herdr session <subcommand>       Manage named persistent sessions\n  herdr integration <subcommand>   Manage built-in agent integrations\n\nAdvanced commands:\n  herdr server                     Run as headless server\n\nOptions:\n  --no-session        Run monolithically (no server/client, escape hatch)\n  --session <name>    Use or create a named persistent session\n  --remote <target>   Attach through SSH to a remote Herdr server\n  --remote-keybindings <local|server>\n                      Keybindings for --remote app attach (default: local)\n  --handoff           Opt into live handoff for update or remote attach\n  --default-config    Print default configuration and exit\n  --skill             Print the agent skill file and exit\n  --version, -V       Print version and exit\n  --help, -h          Show this help\n\nConfig: ~/.config/herdr/config.toml\nLogs:   ~/.config/herdr/herdr.log (plus herdr-client.log, herdr-server.log)\nEnv:    HERDR_CONFIG_PATH overrides config file path\nHome:   https://herdr.dev\n\nAre you an AI? Use these resources ONLY IF your task specifically asks you to:\n  Help a human understand or set up Herdr for the first time:\n    https://herdr.dev/agent-guide.md\n  Debug or investigate a problem with Herdr:\n    https://herdr.dev/llms.txt\n  Control Herdr panes, agents, or workspaces:\n    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill\n",
+      "stdout": "herdr \u2014 terminal workspace manager for AI coding agents\n\nUsage: herdr [options]\n       herdr --session <name> [options]\n       herdr --remote <ssh-target> [--session <name>]\n       herdr session attach <name>\n       herdr completion zsh\n       herdr update [--handoff]\n       herdr channel set <stable|preview>\n       herdr server stop\n       herdr server reload-config\n       herdr api <subcommand> ...\n       herdr completion <shell>\n       herdr config <subcommand> ...\n       herdr channel <subcommand> ...\n       herdr workspace <subcommand> ...\n       herdr worktree <subcommand> ...\n       herdr tab <subcommand> ...\n       herdr notification <subcommand> ...\n       herdr agent <subcommand> ...\n       herdr pane <subcommand> ...\n       herdr session <subcommand> ...\n       herdr integration <subcommand> ...\n\nCommon commands:\n  herdr                            Launch or attach to the persistent session\n  herdr status [server|client]     Show local client and running server status\n  herdr update                     Download and install the latest version\n  herdr completion zsh             Generate shell completions for zsh\n  herdr server stop                Stop the running server via the API socket\n  herdr channel set <stable|preview> Choose the stable or preview update channel\n  herdr server reload-config       Reload config.toml in the running server\n  herdr config reset-keys          Back up config.toml and remove custom keybindings\n  herdr channel <subcommand>       Manage the stable or preview update channel\n  herdr api <subcommand>           Inspect socket API metadata and live runtime state\n  herdr workspace <subcommand>     Workspace helpers over the socket API\n  herdr worktree <subcommand>      Git worktree helpers over the socket API\n  herdr tab <subcommand>           Tab helpers over the socket API\n  herdr notification <subcommand>  Notification helpers over the socket API\n  herdr agent <subcommand>         Agent/terminal helpers over the socket API\n  herdr pane <subcommand>          Pane control helpers over the socket API\n  herdr session <subcommand>       Manage named persistent sessions\n  herdr integration <subcommand>   Manage built-in agent integrations\n\nAdvanced commands:\n  herdr server                     Run as headless server\n\nOptions:\n  --no-session        Run monolithically (no server/client, escape hatch)\n  --session <name>    Use or create a named persistent session\n  --remote <target>   Attach through SSH to a remote Herdr server\n  --remote-keybindings <local|server>\n                      Keybindings for --remote app attach (default: local)\n  --handoff           Opt into live handoff for update or remote attach\n  --default-config    Print default configuration and exit\n  --skill             Print the agent skill file and exit\n  --version, -V       Print version and exit\n  --help, -h          Show this help\n\nConfig: \u002fUsers/penguinspecz/.config/herdr/config.toml\nLogs:   \u002fUsers/penguinspecz/.config/herdr/herdr.log (plus herdr-client.log, herdr-server.log)\nEnv:    HERDR_CONFIG_PATH overrides config file path\nHome:   https://herdr.dev\n\nAre you an AI? Use these resources ONLY IF your task specifically asks you to:\n  Help a human understand or set up Herdr for the first time:\n    https://herdr.dev/agent-guide.md\n  Debug or investigate a problem with Herdr:\n    https://herdr.dev/llms.txt\n  Control Herdr panes, agents, or workspaces:\n    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill\n",
       "stdout_bytes": 3498,
       "stdout_sha256": "198d82d8e313e4a8394d2bae801eb0077584359c10bb366bd59c6eb3efe1b97a",
       "timed_out": false,
@@ -455,7 +455,7 @@
       "stderr": "",
       "stderr_bytes": 0,
       "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: ~/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
+      "stdout": "client:\n  version: 0.8.2\n  channel: stable\n  protocol: 20\n\nserver:\n  status: running\n  version: 0.8.2\n  protocol: 20\n  compatible: yes\n  socket: \u002fUsers/penguinspecz/.config/herdr/herdr.sock\n\nupdate:\n  restart_needed: no\n",
       "stdout_bytes": 221,
       "stdout_sha256": "2480e044fa8ab0d61a228dae986138a2932517bdf74d0ba9421d55eb89415f1a",
       "timed_out": false,
@@ -489,8 +489,8 @@
       "is_dir": false,
       "is_file": true,
       "is_symlink": false,
-      "path": "~/.cursor/hooks.json",
-      "realpath": "~/.cursor/hooks.json"
+      "path": "\u002fUsers/penguinspecz/.cursor/hooks.json",
+      "realpath": "\u002fUsers/penguinspecz/.cursor/hooks.json"
     },
     "note": "This grok seat is a live Cursor desktop agent session; daemon acceptance already witnessed production wakes on this coordinate. This row does not re-open ChatGPT.app / Claude.app / OpenCode.app / T3.app / Antigravity.app / Grok Bot.app.",
     "seat": "grok"

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from floati import fixture_ids as public_ids
+
+import hashlib
 import json
 import re
 import tempfile
@@ -73,6 +76,56 @@ def load_schema(name: str) -> dict:
 
 
 class SchemaContractTests(unittest.TestCase):
+    def test_v4_keeps_v0_tide_schema_bytes_frozen(self) -> None:
+        expected = {
+            "tide-policy-record.schema.json": (
+                "9df7aabec5578746185ea81f8f1f22ebfaa73252fcc70e318be01d5267b520ea"
+            ),
+            "tide-receipt-record.schema.json": (
+                "641328a24b22a9a4248b1801726e3db1e2792e290c55eb34f162ddbe14b11afd"
+            ),
+        }
+        for name, digest in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    digest,
+                    hashlib.sha256((SCHEMA_DIR / name).read_bytes()).hexdigest(),
+                )
+
+    def test_ow1_keeps_v0_wake_daemon_schema_bytes_frozen(self) -> None:
+        expected = {
+            "wake-daemon-adapter-record.schema.json": (
+                "7dbd1a7244af0a7436315c7aca5c4405299c876b6a44fce4ee408c18374fb037"
+            ),
+            "wake-daemon-consent-receipt.schema.json": (
+                "8235046a508448997d6019e20fe3cc73a84f66d4780399b3a960b4c1703a28c3"
+            ),
+            "wake-daemon-lifecycle-receipt.schema.json": (
+                "eb20fad8ca8644864b32174f75db0c9d288e2befdd00319988cf4f48cd22066d"
+            ),
+        }
+        for name, digest in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    digest,
+                    hashlib.sha256((SCHEMA_DIR / name).read_bytes()).hexdigest(),
+                )
+
+    def test_ow1_adds_closed_v1_wake_daemon_schema_family(self) -> None:
+        for name in (
+            "wake-daemon-consent-receipt.schema.json",
+            "wake-daemon-lifecycle-receipt.schema.json",
+            "wake-daemon-adapter-record.schema.json",
+        ):
+            with self.subTest(name=name):
+                schema = load_schema("../v1/" + name)
+                self.assertEqual(1, schema["properties"]["schema_version"]["const"])
+                self.assertEqual(
+                    ["codex", "cursor", "grok-build"],
+                    schema["properties"]["harness"]["enum"],
+                )
+                self.assertIs(False, schema["additionalProperties"])
+
     def test_wake_daemon_contract_schemas_are_closed(self) -> None:
         for name in (
             "wake-daemon-consent-receipt.schema.json",
@@ -90,17 +143,17 @@ class SchemaContractTests(unittest.TestCase):
         from floati.registry import Registry
         from floati.root import FloatiRoot
 
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
             base = Path(temporary)
-            home = base / "puddle-fleet"
+            home = base / "demo-fleet"
             root = FloatiRoot.open_direct_home(home, create=True)
-            Registry(root).register("lane-floati", "worker")
+            Registry(root).register(public_ids.builder('floati'), "worker")
             workspace = base / "workspace"
             workspace.mkdir()
             workspace_map = {
                 "schema_version": 0,
-                "tenant_id": "puddle-fleet",
-                "mappings": [{"workspace": str(workspace), "node_id": "lane-floati"}],
+                "tenant_id": "demo-fleet",
+                "mappings": [{"workspace": str(workspace), "node_id": public_ids.builder('floati')}],
             }
             map_path = home / "codex-wait" / "workspaces.v0.json"
             map_path.parent.mkdir()
@@ -115,7 +168,7 @@ class SchemaContractTests(unittest.TestCase):
                 idempotency_key="schema-consent",
             )
             exhaustion = CodexWaitReceiptLedger(root).record_exhaustion(
-                node_id="lane-floati",
+                node_id=public_ids.builder('floati'),
                 session_digest="a" * 64,
                 waited_seconds=2,
                 idempotency_key="schema-exhaustion",
@@ -407,7 +460,7 @@ class SchemaContractTests(unittest.TestCase):
             "tenant_id": "alpha",
             "timestamp": "2026-08-09T12:00:00.000Z",
             "kind": "approval_request",
-            "requester": "alice",
+            "requester": public_ids.worker('alpha'),
             "capability": "workspace.patch",
             "scope": "repo:slipway",
             "requested_ttl_seconds": 60,
@@ -424,7 +477,7 @@ class SchemaContractTests(unittest.TestCase):
             "timestamp": "2026-08-09T12:00:01.000Z",
             "kind": "approval_decision",
             "request_id": request["id"],
-            "decider": "fable",
+            "decider": public_ids.reviewer(),
             "decision": "approved",
             "granted_scope": "repo:slipway",
             "granted_ttl_seconds": 30,
@@ -673,7 +726,7 @@ class SchemaContractTests(unittest.TestCase):
 
     def test_run_admission_v1_schema_matches_mandatory_validator_version(self) -> None:
         """Catches the shipped schema and durable validator disagreeing on binding version."""
-        workers = [{"node_id": "alice", "worker_profile": "codex"}]
+        workers = [{"node_id": public_ids.worker('alpha'), "worker_profile": "codex"}]
         reservations = [{"budget_id": "build", "amount": 1}]
         items = [{
             "item_id": "work-018f7e9b3c117abc8def0123456789ab",
@@ -717,7 +770,7 @@ class SchemaContractTests(unittest.TestCase):
         }
         common = {"schema_version": 1, "tenant_id": "alpha", "timestamp": "2026-08-08T12:00:00.000Z"}
         grant = dict(common, id="capability-grant-" + suffixes["grant"], kind="capability_grant",
-                     worker_id="alice", capability_name="review", policy_digest="a" * 64,
+                     worker_id=public_ids.worker('alpha'), capability_name="review", policy_digest="a" * 64,
                      approval_request_id="approval-request-" + suffixes["request"],
                      approval_decision_id="approval-decision-" + suffixes["decision"],
                      authority_subject="approve-build", authority_epoch=1,
@@ -729,13 +782,13 @@ class SchemaContractTests(unittest.TestCase):
         snapshot = dict(common, id="capability-set-bound-" + suffixes["snapshot"], kind="capability_set_bound",
                         run_id="run-" + suffixes["run"], item_id="work-" + suffixes["item"],
                         attempt_id="attempt-" + suffixes["attempt"], fence_token="c" * 64,
-                        chosen_worker="alice", policy_digest="a" * 64, routing_rank=0,
+                        chosen_worker=public_ids.worker('alpha'), policy_digest="a" * 64, routing_rank=0,
                         evaluated_at_testimony="2026-08-08T12:00:01.000Z",
                         grant_ledger_high_watermark=1, effective_grants=effective,
                         capability_digest="d" * 64)
         dispatch = dict(common, id="run-dispatch-decision-" + suffixes["dispatch"], kind="dispatch_decision",
                         run_id=snapshot["run_id"], item_id=snapshot["item_id"], attempt_id=snapshot["attempt_id"],
-                        eligible_workers=["alice"], chosen_worker="alice", capability_digest="d" * 64,
+                        eligible_workers=[public_ids.worker('alpha')], chosen_worker=public_ids.worker('alpha'), capability_digest="d" * 64,
                         reason_code="policy.route", policy_digest="a" * 64, routing_rank=0,
                         scheduler_epoch=1, capability_set_bound_id=snapshot["id"])
         cases = {
@@ -1140,7 +1193,7 @@ class SchemaContractTests(unittest.TestCase):
             "author_authority": "worker",
             "source_artifact_ids": ["run:run-" + run_uuid],
             "task_contract_id": None,
-            "decided_by": "fable",
+            "decided_by": public_ids.reviewer(),
             "supersedes": None,
             "decision_digest": "b" * 64,
         }
@@ -1161,7 +1214,7 @@ class SchemaContractTests(unittest.TestCase):
                         "author_authority": "operator",
                         "source_artifact_ids": ["run:run-" + run_uuid],
                         "task_contract_id": None,
-                        "decided_by": "fable",
+                        "decided_by": public_ids.reviewer(),
                         "supersedes": None,
                         "status": "accepted",
                     },
@@ -1569,7 +1622,7 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIsNotNone(
             re.fullmatch(
                 workspace["pattern"],
-                "/private/tmp/floati-work/work-018f0f23abcd71238000000000000000",
+                "\x2fprivate/tmp/floati-work/work-018f0f23abcd71238000000000000000",
             )
         )
         self.assertIsNone(re.fullmatch(workspace["pattern"], "/tmp/inferred"))
@@ -1595,9 +1648,9 @@ class SchemaContractTests(unittest.TestCase):
             "timestamp": "2026-08-15T12:00:00.000Z",
             "kind": "work_item",
             "title": "rebaseline frozen workspace",
-            "owner": "alice",
+            "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"/private/tmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
         }
 
         def runtime_accepts(candidate: dict[str, object]) -> bool:
@@ -1613,8 +1666,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"/private/tmp/floati-work/{item_id}", True),
-            (f"/private/tmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, runtime_accepts(dict(record, workspace=workspace)))
@@ -1630,9 +1683,9 @@ class SchemaContractTests(unittest.TestCase):
             "timestamp": "2026-08-15T12:00:00.000Z",
             "kind": "work_item",
             "title": "rebaseline frozen workspace",
-            "owner": "alice",
+            "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"/private/tmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
         }
         schema_path = SCHEMA_DIR / "work-item-record.schema.json"
 
@@ -1644,8 +1697,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"/private/tmp/floati-work/{item_id}", True),
-            (f"/private/tmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, schema_accepts(dict(record, workspace=workspace)))

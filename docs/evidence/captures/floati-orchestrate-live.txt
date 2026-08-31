@@ -2,7 +2,7 @@ FLOATI live Codex orchestration capture
 Status date: 2026-07-31 (timestamps are UTC on 2026-08-01)
 
 Command:
-scripts/slip orchestrate --root /private/tmp/floati-live2.17q4ik/fleet --plan /private/tmp/floati-live.kdWvCd/plan.json --adapter codex --deadline 150 --no-animation
+scripts/slip orchestrate --root /tmp/floati-live2.17q4ik/fleet --plan /tmp/floati-live.kdWvCd/plan.json --adapter codex --deadline 150 --no-animation
 
 Installed boundary: /opt/homebrew/bin/codex app-server --stdio
 Observed version: codex-cli 0.144.4
@@ -92,8 +92,8 @@ Controllers: 18747,18748,18749. Independent `kill -0` checks returned ABSENT
 for all 13 controller, adapter, and registered app-server PIDs.
 
 Private transcript pointers, not bus content:
-/private/tmp/slipway-work/work-019fbb2ea9a0766cb2a24a7c6915b3fd/.slipway/transcript.jsonl
-/private/tmp/slipway-work/work-019fbb2ea9a17e818f265aa5dfe62c0d/.slipway/transcript.jsonl
-/private/tmp/slipway-work/work-019fbb2ea9a17f8e8c342b3efa8a5775/.slipway/transcript.jsonl
-/private/tmp/slipway-work/work-019fbb2ea9a17e4ba888d70b96ce42f0/.slipway/transcript.jsonl
-/private/tmp/slipway-work/work-019fbb2ea9a27a98b8352d96c201b2fc/.slipway/transcript.jsonl
+/tmp/slipway-work/work-019fbb2ea9a0766cb2a24a7c6915b3fd/.slipway/transcript.jsonl
+/tmp/slipway-work/work-019fbb2ea9a17e818f265aa5dfe62c0d/.slipway/transcript.jsonl
+/tmp/slipway-work/work-019fbb2ea9a17f8e8c342b3efa8a5775/.slipway/transcript.jsonl
+/tmp/slipway-work/work-019fbb2ea9a17e4ba888d70b96ce42f0/.slipway/transcript.jsonl
+/tmp/slipway-work/work-019fbb2ea9a27a98b8352d96c201b2fc/.slipway/transcript.jsonl
