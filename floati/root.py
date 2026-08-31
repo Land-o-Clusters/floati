@@ -6,13 +6,14 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import FrozenSet, Mapping, Optional, Union
+from typing import FrozenSet, Literal, Mapping, Optional, Tuple, Union
 
 from .errors import ProtocolRefusal
 
 
 IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 _AUTHORITY_TOKEN = object()
+CommandRootSource = Literal["explicit", "environment"]
 
 
 def validate_identifier(value: Optional[str], field: str = "tenant") -> str:
@@ -29,17 +30,35 @@ def resolve_command_root(
 ) -> "FloatiRoot":
     """Resolve the only v0 command-root precedence without ambient config."""
 
+    root, _source = resolve_command_root_with_source(
+        explicit_root,
+        create=create,
+        environ=environ,
+    )
+    return root
+
+
+def resolve_command_root_with_source(
+    explicit_root: Optional[Union[Path, str]],
+    *,
+    create: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Tuple["FloatiRoot", CommandRootSource]:
+    """Resolve one command root together with its selected input source."""
+
     if explicit_root is not None:
         selected: Optional[Union[Path, str]] = explicit_root
+        root_source: CommandRootSource = "explicit"
     else:
         source = os.environ if environ is None else environ
         selected = source.get("FLOATI_BUS_ROOT")
+        root_source = "environment"
     if selected is None or (isinstance(selected, str) and not selected):
         raise ProtocolRefusal(
             "cannot_speak",
             "no command root was resolved from --root or FLOATI_BUS_ROOT",
         )
-    return FloatiRoot.open_direct_home(selected, create=create)
+    return FloatiRoot.open_direct_home(selected, create=create), root_source
 
 
 @dataclass(frozen=True, init=False)

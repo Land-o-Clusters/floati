@@ -1,6 +1,6 @@
 # RULING — TUI research triage: four briefs, adopted doctrine, one pre-flip row
 
-**Fable, 2026-08-28 ~16:35Z. Inputs: the four owner-run deep-research briefs in
+**the architect, 2026-08-28 ~16:35Z. Inputs: the four owner-run deep-research briefs in
 `docs/research/regatta/` (three were already banked byte-identical; the fourth —
 `terminal-capability-matrix-2026.md` — closes the README's MISSING slot). Owner's framing stands:
 the TUI is the front door, and this research outranks the release clock where it finds defects.

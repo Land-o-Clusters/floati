@@ -2,7 +2,7 @@
 
 Date: 2026-08-28
 
-Lane: `lane-floati`
+Lane: `build lane`
 
 Branch: `repair/sd7-authority-grant-20260828`
 

@@ -29,6 +29,10 @@ from floati.root import FloatiRoot
 
 SHA = "a" * 40
 READ_TOOLS = {
+    "confluence_bundle",
+    "confluence_grant",
+    "confluence_revoke",
+    "confluence_status",
     "describe",
     "doctor",
     "effects",
@@ -65,7 +69,7 @@ def leaf_parser(
 
 class McpToolSurfaceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet",
@@ -309,7 +313,14 @@ class McpToolSurfaceTests(unittest.TestCase):
         self.assertEqual(direct_artifact, first["structuredContent"])
         self.assertEqual(first, second)
         self.assertNotIn("isError", first)
-        self.assertEqual(public_ids.builder('a'), direct_artifact["evidence"]["sender"])
+        self.assertEqual(
+            public_ids.builder('a'),
+            direct_artifact["evidence"]["message"]["sender"],
+        )
+        self.assertEqual(
+            "recipient_not_listening",
+            direct_artifact["evidence"]["recipient_readiness"]["state"],
+        )
         self.assertEqual(1, len(EventLog(self.root).records()))
 
     def test_note_cap_refuses_with_exact_cli_artifact_parity(self) -> None:

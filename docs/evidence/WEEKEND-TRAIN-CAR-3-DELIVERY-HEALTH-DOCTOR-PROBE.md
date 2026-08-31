@@ -1,12 +1,12 @@
 # Weekend train Car 3 — delivery health and doctor probe
 
-Status: **DRAFT — INTEGRATOR EVIDENCE, FABLE RESTAMP PENDING**
+Status: **DRAFT — INTEGRATOR EVIDENCE, the architect RESTAMP PENDING**
 
 Date: 2026-08-27
 
 ## Identity
 
-- Node: `lane-floati`
+- Node: `build lane`
 - Branch: `integrate/weekend-20260828`
 - Ratified branch-cut base: `932e377e9b88d801dfd545e1c238c50af5ec58ba`
 - Car source ref: `origin/relief/doctor-delivery-health`
@@ -84,7 +84,7 @@ Final committed full suite:
 
 Command:
 
-`python3 -m floati doctor --root ~/.floati-bus/puddle-fleet --source ~/Projects/floati --ref HEAD --probe --probe-budget 2`
+`python3 -m floati doctor --root ~/.floati-bus/the fleet --source ~/Projects/floati --ref HEAD --probe --probe-budget 2`
 
 The ordinary sandbox invocation was refused as `root_read_only` before probe
 append. The authorized identical retry completed with exit 35 and a degraded
@@ -92,25 +92,25 @@ artifact. That is live fleet evidence, not a source-test failure.
 
 Probe roster:
 
-- PASS in one tick: `lane-puddle`.
-- DEAF at the two-second budget: `alice`, `alice-city`, `alice-necro`,
-  `floati-observer`, `floati-witness`, `grok`, `lane-floati`,
+- PASS in one tick: `build lane`.
+- DEAF at the two-second budget: `build lane`, `build lane`, `build lane`,
+  `floati-observer`, `floati-witness`, `grok`, `build lane`,
   `lane-puddle-crossconnection`, `lane-puddle-menubar`,
-  `lane-puddle-plumbing`, and `puddle-floati-architect`.
+  `lane-puddle-plumbing`, and `the architect`.
 
-`lane-floati` was in this long-running integration turn and had not reached a
+`build lane` was in this long-running integration turn and had not reached a
 Stop boundary during its two-second probe window. Its installed P0 waiter was
 already independently live-proven by the earlier 23.541-second wake receipt;
 the probe correctly reports only what occurred inside this command's budget.
 
 Delivery scoreboard RED nodes:
 
-- `alice-necro`: 19 undelivered, oldest 5,550 minutes.
+- `build lane`: 19 undelivered, oldest 5,550 minutes.
 - `floati-witness`: 23 undelivered, oldest 5,827 minutes.
 - `lane-puddle-menubar`: 2 undelivered, oldest 11,416 minutes.
 - `lane-puddle-plumbing`: 2 undelivered, oldest 9,939 minutes, no drain on
   record.
-- `puddle-floati-architect`: 203 undelivered, oldest 5,425 minutes.
+- `the architect`: 203 undelivered, oldest 5,425 minutes.
 
 Additional live findings:
 
@@ -131,4 +131,4 @@ acknowledge another node's mail.
 - No foreign-bus artifact was touched.
 - No OpenCode restart occurred.
 - No README edit was made by the integrator.
-- This evidence copy remains DRAFT-stamped for Fable's gate.
+- This evidence copy remains DRAFT-stamped for the architect's gate.

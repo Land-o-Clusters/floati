@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from .mail_health import oldest_unread_fact
+
 DELIVERY_STALL_RED_MINUTES = 15
 # Threshold STAMPED RULED by the reviewer (2026-08-22, msg-01a0281107…): 15 is a
 # judgment with margin — NOT measured, NOT derived from the incident (the
@@ -30,6 +32,7 @@ class NodeDeliveryHealth:
     node: str
     undelivered_count: int
     oldest_pending_minutes: Optional[int]
+    oldest_unread: Optional[dict]
     last_drain_minutes_ago: Optional[int]
     red: bool
     sentence: str
@@ -80,12 +83,10 @@ class DeliveryHealthAnalyzer:
                 key=lambda envelope: str(envelope["timestamp"]),
             )
             last_drain_minutes_ago = _last_drain_minutes_ago(root, node, now)
-            oldest_pending_minutes: Optional[int] = None
-            if pending:
-                oldest = _parse_timestamp(str(pending[0]["timestamp"]))
-                oldest_pending_minutes = int(
-                    (now - oldest).total_seconds() // 60
-                )
+            oldest_unread = oldest_unread_fact(node, pending, now=now)
+            oldest_pending_minutes = (
+                None if oldest_unread is None else int(oldest_unread["age_minutes"])
+            )
             red = bool(pending) and (
                 last_drain_minutes_ago is None
                 or (
@@ -103,6 +104,7 @@ class DeliveryHealthAnalyzer:
                 node=node,
                 undelivered_count=len(pending),
                 oldest_pending_minutes=oldest_pending_minutes,
+                oldest_unread=oldest_unread,
                 last_drain_minutes_ago=last_drain_minutes_ago,
                 red=red,
                 sentence=sentence,
@@ -112,6 +114,7 @@ class DeliveryHealthAnalyzer:
                 "severity": "error" if red else "ok",
                 "subject": node,
                 "detail": sentence,
+                "oldest_unread": oldest_unread,
                 "remediation": (
                     "check the node's wake path, then drain its inbox "
                     "(floati inbox --root <root> --as %s)" % node

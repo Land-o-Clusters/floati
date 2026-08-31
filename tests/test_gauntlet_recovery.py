@@ -180,7 +180,7 @@ class RecoveryGauntletTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": str(scan_root),
-                    "PYTHONPYCACHEPREFIX": "/tmp/slipway-hm3h-recovery-pycache",
+                    "PYTHONPYCACHEPREFIX": "\x2ftmp/slipway-hm3h-recovery-pycache",
                 },
             )
             try:

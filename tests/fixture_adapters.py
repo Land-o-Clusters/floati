@@ -32,7 +32,8 @@ class BehavioralFailureAdapter(ReferenceAdapter):
         result = super().send(sender, recipient, repo, sha, doc, note, idempotency_key)
         if result.status == "ok":
             evidence = dict(result.evidence)
-            evidence["kind"] = "wrong_kind"
+            evidence["message"] = dict(evidence["message"])
+            evidence["message"]["kind"] = "wrong_kind"
             return AdapterResult("ok", evidence)
         return result
 

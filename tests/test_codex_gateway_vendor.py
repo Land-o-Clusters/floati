@@ -4,6 +4,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,7 +28,36 @@ def load_installer():
     return module
 
 
+def load_gateway():
+    if not VENDORED.is_file():
+        raise AssertionError("VD-1 gateway module is missing")
+    spec = importlib.util.spec_from_file_location("codex_fleet_bus", VENDORED)
+    if spec is None or spec.loader is None:
+        raise AssertionError("VD-1 gateway module is not importable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class CodexGatewayVendorTests(unittest.TestCase):
+    def _git(self, root: Path, *arguments: str) -> str:
+        result = subprocess.run(
+            ["/usr/bin/git", "-C", str(root), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def _repository(self, root: Path) -> str:
+        self._git(root, "init", "--quiet")
+        self._git(root, "config", "user.name", "gateway-test")
+        self._git(root, "config", "user.email", "gateway-test@example.invalid")
+        (root / "source.txt").write_text("landed\n", encoding="utf-8")
+        self._git(root, "add", "source.txt")
+        self._git(root, "commit", "--quiet", "-m", "landed source")
+        return self._git(root, "rev-parse", "HEAD")
+
     def test_vendored_gateway_matches_recorded_digest(self) -> None:
         """Changing the governed source without ratifying its digest is rejected."""
 
@@ -119,6 +149,47 @@ class CodexGatewayVendorTests(unittest.TestCase):
                         if node.func.id == "install_gateway":
                             callers.append(path.relative_to(REPOSITORY_ROOT).as_posix())
         self.assertEqual([], callers)
+
+    def test_doctor_source_mismatch_refuses_with_both_coordinates(self) -> None:
+        """A stale governed Doctor source remaining silent is rejected."""
+
+        gateway = load_gateway()
+        self.assertTrue(
+            hasattr(gateway, "_require_doctor_source_coherence"),
+            "the governed gateway does not check Doctor source coherence",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            workspace_sha = self._repository(repository)
+            transport_sha = "0" * 40
+
+            with self.assertRaises(gateway.ApprovalRequired) as caught:
+                gateway._require_doctor_source_coherence(repository, transport_sha)
+
+        detail = str(caught.exception)
+        self.assertIn(f"workspace HEAD {workspace_sha}", detail)
+        self.assertIn(f"transport source {transport_sha}", detail)
+        self.assertIn("update", detail)
+
+    def test_doctor_source_match_requires_clean_workspace(self) -> None:
+        """A matching HEAD may proceed only when it names the bytes Doctor reads."""
+
+        gateway = load_gateway()
+        self.assertTrue(
+            hasattr(gateway, "_require_doctor_source_coherence"),
+            "the governed gateway does not check Doctor source coherence",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            source_sha = self._repository(repository)
+
+            gateway._require_doctor_source_coherence(repository, source_sha)
+            (repository / "source.txt").write_text("dirty\n", encoding="utf-8")
+
+            with self.assertRaises(gateway.ApprovalRequired) as caught:
+                gateway._require_doctor_source_coherence(repository, source_sha)
+
+        self.assertIn("working tree is dirty", str(caught.exception))
 
 
 if __name__ == "__main__":

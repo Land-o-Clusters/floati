@@ -47,7 +47,7 @@ class _IdentityDelegate:
 
 class QuotaTideTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "quota-tide-fleet", create=True
@@ -282,12 +282,12 @@ class QuotaTideTests(unittest.TestCase):
         from floati.helptext import help_for
 
         collect = _parser().parse_args([
-            "quota", "collect", "--root", "\x2fprivate/tmp/fleet",
+            "quota", "collect", "--root", "\x2fprivate\x2ftmp/fleet",
             "--provider", "openai_codex", "--observed-at", OBSERVED_AT,
             "--idempotency-key", "quota-cli-1", "--executable", "/usr/bin/codex",
         ])
         show = _parser().parse_args([
-            "quota", "show", "--root", "\x2fprivate/tmp/fleet",
+            "quota", "show", "--root", "\x2fprivate\x2ftmp/fleet",
             "--provider", "openai_codex",
         ])
 

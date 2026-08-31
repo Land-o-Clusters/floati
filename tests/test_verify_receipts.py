@@ -126,7 +126,7 @@ class VerifyReceiptTests(unittest.TestCase):
         replay = self._send_claim()
 
         self.assertEqual(first, replay)
-        self.assertEqual({"message", "claim"}, set(first))
+        self.assertEqual({"message", "claim", "recipient_readiness"}, set(first))
         self.assertEqual(first["message"]["id"], first["claim"]["note_ref"])
         self.assertEqual("delivery-claim-", first["claim"]["id"][:15])
         rows = self.events.event_records()

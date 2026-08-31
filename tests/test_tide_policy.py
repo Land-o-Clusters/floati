@@ -14,7 +14,7 @@ from tests.schema_validation import validate_json_schema
 
 class TidePolicyTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet-alpha", create=True

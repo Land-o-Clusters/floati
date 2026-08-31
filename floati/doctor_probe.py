@@ -21,9 +21,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List
 
-from .events import EventLog
+from .bus_epoch import shared_epoch_operation
+from .events import EVENT_KINDS, EventLog
+from .jsonl import read_records_snapshot
 from .registry import Registry
 from .root import FloatiRoot
+from .snapshot import _owned_epoch_archives
 
 POLL_INTERVAL_SECONDS = 1.0
 PROBE_NOTE_MARKER = "doctor-probe"
@@ -103,22 +106,45 @@ class DoctorProbe:
         return ProbeReport(by_node=results, findings_by_node=findings)
 
     def _probe_node(self, node: str) -> ProbeNodeResult:
-        moment = time.time()
-        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(moment))
-        envelope = self.log.send(
-            node, node, "probe", "0" * 64, "doctor-probe",
-            f"{PROBE_NOTE_MARKER} {stamp}",
-        )
+        envelope = self._send_probe(node)
         probe_id = envelope["id"]
         ticks_allowed = max(1, int(self.budget_seconds / self.poll_interval_seconds))
         for tick in range(1, ticks_allowed + 1):
             self.sleeper(self.poll_interval_seconds)
+            if self._probe_was_archived(str(probe_id)):
+                envelope = self._send_probe(node)
+                probe_id = envelope["id"]
             if self._drained(node, probe_id):
                 return ProbeNodeResult(node=node, verdict="PASS",
                                        elapsed_ticks=tick)
         return ProbeNodeResult(node=node, verdict="DEAF",
                                elapsed_ticks=ticks_allowed)
 
+    def _send_probe(self, node: str) -> dict:
+        moment = time.time()
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(moment))
+        return self.log.send(
+            node, node, "probe", "0" * 64, "doctor-probe",
+            f"{PROBE_NOTE_MARKER} {stamp}",
+        )
+
+    @shared_epoch_operation
+    def _probe_was_archived(self, probe_id: str) -> bool:
+        """Recognize only receipt-owned archives, without locking or mutating them."""
+
+        for archive in _owned_epoch_archives(self.root):
+            relative = archive.relative_to(self.root.tenant_home) / "events.jsonl"
+            records = read_records_snapshot(
+                self.root, relative, allowed_kinds=set(EVENT_KINDS)
+            )
+            if any(
+                row.get("kind") == "message_envelope" and row.get("id") == probe_id
+                for row in records
+            ):
+                return True
+        return False
+
+    @shared_epoch_operation
     def _drained(self, node: str, probe_id: str) -> bool:
         base = Path(self.root.resolve_relative("receipts/deliveries"))
         candidates: List[Path] = []

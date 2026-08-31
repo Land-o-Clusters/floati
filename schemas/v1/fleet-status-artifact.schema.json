@@ -57,10 +57,20 @@
         "completed": {"type": "integer", "minimum": 0}
       }
     },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "tenant", "root_source"],
+      "properties": {
+        "root": {"type": "string", "pattern": "^/"},
+        "tenant": {"type": "string", "minLength": 1, "maxLength": 64},
+        "root_source": {"enum": ["explicit", "environment"]}
+      }
+    },
     "node": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node_id", "role", "liveness", "authority", "mutex", "inbox_depth", "last_activity"],
+      "required": ["node_id", "role", "liveness", "authority", "mutex", "inbox_depth", "last_activity", "oldest_unread", "wake_health"],
       "properties": {
         "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
         "role": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -69,6 +79,8 @@
         "mutex": {"enum": ["active", "expired", "none"]},
         "inbox_depth": {"type": "integer", "minimum": 0},
         "last_activity": {"type": "string", "format": "date-time"},
+        "oldest_unread": {"$ref": "#/$defs/oldest_unread"},
+        "wake_health": {"$ref": "wake-health-fact.schema.json"},
         "tide": {
           "type": "object",
           "additionalProperties": false,
@@ -79,6 +91,21 @@
           }
         }
       }
+    },
+    "oldest_unread": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["node", "age_minutes", "observed_at"],
+          "properties": {
+            "node": {"type": "string", "minLength": 1, "maxLength": 64},
+            "age_minutes": {"type": "integer", "minimum": 0},
+            "observed_at": {"type": "string", "format": "date-time"}
+          }
+        }
+      ]
     },
     "stale": {
       "type": "object",
@@ -169,12 +196,13 @@
     "status": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status_schema_version", "kind", "root", "tenant_id", "mode", "observed_at", "nodes", "stale_leases", "stale_lease_count", "work_counts", "receipt_counts", "consumption", "worker_refusals", "workers", "threads", "installer_shadow", "unrecognized_kinds"],
+      "required": ["status_schema_version", "kind", "root", "tenant_id", "scope", "mode", "observed_at", "nodes", "stale_leases", "stale_lease_count", "work_counts", "receipt_counts", "consumption", "worker_refusals", "workers", "threads", "installer_shadow", "unrecognized_kinds"],
       "properties": {
         "status_schema_version": {"const": 1},
         "kind": {"const": "fleet_status"},
         "root": {"type": "string", "pattern": "^/"},
         "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "scope": {"$ref": "#/$defs/scope"},
         "mode": {"const": "report_only"},
         "observed_at": {"type": "string", "format": "date-time"},
         "nodes": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/node"}},

@@ -1,4 +1,4 @@
-# Claude/CLI wake re-measurement 2 (Fable, 2026-08-29)
+# Claude/CLI wake re-measurement 2 (the architect, 2026-08-29)
 
 Owner-ordered completion of the re-measure RP-3 Am.1 opened; supersedes the staleness of
 `H-claude-wake-remeasure.md` (measured 2.1.231; could not run a live Claude probe).

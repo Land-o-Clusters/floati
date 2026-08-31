@@ -16,8 +16,8 @@ FAIL names (exactly three; zero ERROR):
 
 1. `test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims` (`test_hm3i_contract.HM3IContractTests`)
    - AssertionError: `'tenant-default neutralization + migration alias' not found` in `docs/PUBLICATION-CHECKLIST.md`
-2. `test_living_public_docs_are_tenant_neutral` (`test_name_sweep.NameSweepLivingDocumentationTests`) `(relative='docs/PUBLICATION-CHECKLIST.md', pattern='puddle-fleet')`
-   - AssertionError: `'puddle-fleet' unexpectedly found` in `docs/PUBLICATION-CHECKLIST.md`
+2. `test_living_public_docs_are_tenant_neutral` (`test_name_sweep.NameSweepLivingDocumentationTests`) `(relative='docs/PUBLICATION-CHECKLIST.md', pattern='the fleet')`
+   - AssertionError: `'the fleet' unexpectedly found` in `docs/PUBLICATION-CHECKLIST.md`
 3. `test_generated_repository_artifacts_are_scrubbed` (`test_source_scrub.SourceScrubTests`)
    - AssertionError: expected `[]`, got 6 paths (recounted via `floati.scrub.scan_generated_tree(Path.cwd())`, count=6):
      - `docs/NORTH_STAR.md`

@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .errors import IntegrityFailure, ProtocolRefusal
-from .git_process import fixed_git_command, fixed_git_environment
+from .git_process import fixed_git_command, fixed_git_environment, is_shallow_repository
 from .installer_shadow import enumerate_installer_shadow
 from .manifest import MANIFEST_NAME, verify_manifest
 from .storage_identity import (
@@ -59,7 +59,13 @@ def _journal_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _git(source: Path, args: Sequence[str], *, executable: str = "git") -> str:
+def _git(
+    source: Path,
+    args: Sequence[str],
+    *,
+    executable: str = "git",
+    inspected_ref: Optional[str] = None,
+) -> str:
     try:
         result = subprocess.run(
             fixed_git_command(executable, source, args),
@@ -70,12 +76,15 @@ def _git(source: Path, args: Sequence[str], *, executable: str = "git") -> str:
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
+        subject = f" ref {inspected_ref}" if inspected_ref is not None else " source"
         raise ProtocolRefusal(
             "deployment_currency_unavailable",
-            f"git could not inspect source: {exc}",
+            f"git could not inspect{subject}: {exc}",
         ) from exc
     if result.returncode != 0:
         detail = result.stderr.strip() or "git inspection failed"
+        if inspected_ref is not None:
+            detail = f"git could not inspect ref {inspected_ref}: {detail}"
         raise ProtocolRefusal("deployment_currency_unavailable", detail)
     return result.stdout.strip()
 
@@ -442,6 +451,11 @@ class DeploymentWriter:
         return validated
 
     def _check_currency(self, source: Path) -> str:
+        if is_shallow_repository(source, git_executable=self.git_executable):
+            raise ProtocolRefusal(
+                "deployment_shallow_repository",
+                "source repository is shallow; fetch complete history before deploying",
+            )
         status = _git(
             source,
             ("status", "--porcelain=v1", "--untracked-files=all"),
@@ -456,13 +470,17 @@ class DeploymentWriter:
             source,
             ("rev-parse", "--verify", "HEAD^{commit}"),
             executable=self.git_executable,
+            inspected_ref="HEAD",
         )
+        if self.committed_tree:
+            return head
         target = _git(
             source,
             ("rev-parse", "--verify", f"{self.ref}^{{commit}}"),
             executable=self.git_executable,
+            inspected_ref=self.ref,
         )
-        if not self.committed_tree and head != target:
+        if head != target:
             raise ProtocolRefusal(
                 "deployment_currency_unavailable",
                 f"HEAD {head} is not {self.ref} ({target})",

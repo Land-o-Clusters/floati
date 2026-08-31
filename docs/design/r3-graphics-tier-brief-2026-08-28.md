@@ -1,6 +1,6 @@
 # APPROVED — R3 capability and graphics sequencing brief
 
-**Seat:** `lane-sol`  
+**Seat:** `build lane`  
 **Date:** 2026-08-28  
 **Program:** `docs/design/NIGHT_HARBOR.md`, Part II R3  
 **Doctrine:** `docs/design/tui-research-triage-2026-08-28.md`, T-1 through T-5 and T-8  

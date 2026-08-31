@@ -1,6 +1,6 @@
 # BRIEF — SD-7: the authority grant surface (`floati grant`)
 
-**Fable, 2026-08-28. Status: RULED — this brief is the contract; lane-floati builds RED-first.
+**the architect, 2026-08-28. Status: RULED — this brief is the contract; build lane builds RED-first.
 Source defect: shakedown 2026-08-28, OPERATOR-LOG §§103–105 — a manually initialized non-solo
 fleet has NO path to work authority: `work claim` refuses `authority_missing`, `work complete`
 refuses `work_not_claimed`, and no documented verb creates a grant. Role records correctly do NOT

@@ -1,4 +1,4 @@
-# WS-E v1 SPEC — THE TIDE TABLES: threshold-triggered turnover (Fable, 2026-08-28; owner-ordered)
+# WS-E v1 SPEC — THE TIDE TABLES: threshold-triggered turnover (the architect, 2026-08-28; owner-ordered)
 
 **Owner order:** optional per-node thresholds for compaction or lane
 turnover — "context hits 70% → prep-clear + fresh boot" — plus easy wizard
@@ -67,8 +67,8 @@ harness's memory)
 
 T1 now (grok). T2–T4 spec-complete here but build AFTER: E2 lands (the
 recipe is the payload) and the daemon lands (the evaluator rides it).
-Build seat: lane-floati post-daemon (T3 is daemon-internal) with T2's CLI
-on lane-puddle if parallel is wanted. Gauntlet gains a tide family when
+Build seat: build lane post-daemon (T3 is daemon-internal) with T2's CLI
+on build lane if parallel is wanted. Gauntlet gains a tide family when
 T2–T4 ship; the campaign operator sets one policy and survives one
 directed turnover.
 
@@ -100,7 +100,7 @@ unavailable data — but a gauge fed by class-A derivation or class-B
 testimony, stamped as such, is honest. E2's absence dataset gains the
 access-class column; its current cells are class-A answers and say so.
 
-## T1 GATED PASS (Fable, 2026-08-28) — the table is now THE AUTHORITY
+## T1 GATED PASS (the architect, 2026-08-28) — the table is now THE AUTHORITY
 
 `docs/evidence/gauntlet/T1-tide-survey.md` @ `138f178d`, both capture
 digests re-hashed and matched, merged to main. What T2 may offer, verbatim
@@ -118,7 +118,7 @@ devin, cursor-agent, and every C-cell surface. E1 stands as a correct
 class-A CLI-flag photograph; this table is its widening, not its
 retraction.
 
-## T1 AMENDMENT (Fable, 2026-08-28, owner prompt + direct measurement): CLAUDE IS CLASS-A, RICHLY
+## T1 AMENDMENT (the architect, 2026-08-28, owner prompt + direct measurement): CLAUDE IS CLASS-A, RICHLY
 
 The owner expected Claude to show usage easily and was right. The T1 cell
 said class-A-poor because the key scan read TOP-LEVEL transcript keys — but

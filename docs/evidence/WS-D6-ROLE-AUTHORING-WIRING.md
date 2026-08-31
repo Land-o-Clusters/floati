@@ -115,7 +115,7 @@ owns manifest regeneration after the remaining purge repair. Until that row
 lands and the frozen-tree suite is green, this is a dark shipped-library
 candidate, not an activated release claim.
 
-## FABLE GATE VERDICT: PASS AND MERGED (2026-08-28)
+## the architect GATE VERDICT: PASS AND MERGED (2026-08-28)
 
 Re-derived: all three archetypes carry the copy pack's sentences VERBATIM
 and UNSTAMPED (30/30 lines checked against the pack, zero deviations, zero

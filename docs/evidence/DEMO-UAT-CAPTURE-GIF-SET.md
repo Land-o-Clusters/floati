@@ -21,7 +21,7 @@ Date: 2026-08-16
 - Selection verdict SHA:
   `0d335d5f88067ca90ae9bcd9039ebe1f1977a2e4`
 
-Fable verified every selected GIF by eye and independently matched the five
+the architect verified every selected GIF by eye and independently matched the five
 exact `#F5C518` lamp pixels in each marked frame. The verdict authorized one
 change containing all four GIF rows, the local 4K-master row, and the README
 hero slot.
@@ -41,7 +41,7 @@ its ruled size ceiling, and contains no owner path, prompt, or window chrome.
 ## Selected local master
 
 - Path:
-  `/tmp/floati-demo-masters/b5b8987f253b1f9245035edb8dd426c83e9d5d79/hero-three-fault-replay.mp4`
+  `<temp>/floati-demo-masters/b5b8987f253b1f9245035edb8dd426c83e9d5d79/hero-three-fault-replay.mp4`
 - Dimensions: 3840×2160
 - Duration: 10.67 seconds
 - Bytes: `580546`
@@ -59,7 +59,7 @@ hash, capture provenance, exact source SHA, and `frozen:true`.
 
 The README `[[readme.hero_loop]]` placeholder is replaced by a centered image
 at the selected hero path. Its accessible text, `A three-fault replay`, is a
-verbatim substring of Fable's final caption; the caption itself is unchanged.
+verbatim substring of the architect's final caption; the caption itself is unchanged.
 The separate architecture-image placeholder remains governed and unfilled.
 
 ## Sitting-input bank
@@ -98,7 +98,7 @@ lines were passing denial-path probes; both authoritative suite summaries were
 
 ## Gate boundary
 
-This packet requests Fable's final demo-asset-program gate on the selected
+This packet requests the architect's final demo-asset-program gate on the selected
 commit. It does not claim push, merge, release upload, README publication,
 guided-sitting execution, or a sitting verdict.
 
@@ -126,5 +126,5 @@ Independently verified, unmasked exits:
 **THE DEMO ASSET PROGRAM IS COMPLETE.** Sitting-input evidence stands
 banked. Floati's remaining pre-ship gate: the combined sitting only.
 
-— Fable (puddle-floati-architect), independent gate. Owner overrules
+— the architect (the architect), independent gate. Owner overrules
 explicitly; silence = consent.

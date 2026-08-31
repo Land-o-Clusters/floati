@@ -14,6 +14,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPOSITORY_ROOT / "scripts" / "public_name_fence.py"
 HOME_PREFIX = bytes.fromhex("2f55736572732f").decode("ascii")
 PRIVATE_TMP_PREFIX = bytes.fromhex("2f707269766174652f746d70").decode("ascii")
+PRIVATE_VAR_TMP_PREFIX = bytes.fromhex("2f707269766174652f7661722f746d70").decode("ascii")
+VAR_FOLDERS_PREFIX = bytes.fromhex("2f7661722f666f6c64657273").decode("ascii")
+TMP_PREFIX = bytes.fromhex("2f746d70").decode("ascii")
 OWNER_USERNAME = bytes.fromhex("63687269736d656e656e64657a").decode("ascii")
 VERIFICATION_SEAT = bytes.fromhex("67726f6b").decode("ascii")
 EXPLICIT_VERIFICATION_SEAT = bytes.fromhex(
@@ -76,6 +79,16 @@ class PublicNameFenceTests(unittest.TestCase):
 
         self.assertEqual([], findings)
 
+    def test_private_only_policy_retains_the_ruled_exact_path_count(self) -> None:
+        """A wildcard-shaped simplification cannot erase the explicit inventory."""
+
+        from scripts.export_public import ExportPolicy
+
+        policy = ExportPolicy.load(
+            REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json"
+        )
+        self.assertEqual(19, len(policy.private_only_paths))
+
     def test_home_prefix_is_detected_in_each_supported_encoding(self) -> None:
         """Dropping an encoding from the byte fence leaves that encoded path publishable."""
 
@@ -111,6 +124,38 @@ class PublicNameFenceTests(unittest.TestCase):
                 module.scan_tree(root),
             )
 
+    def test_every_governed_temp_prefix_is_detected_in_utf32_big_endian(self) -> None:
+        module = self.module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixtures = (
+                ("private-tmp.bin", "private_tmp_path", PRIVATE_TMP_PREFIX),
+                ("private-var-tmp.bin", "private_var_tmp_path", PRIVATE_VAR_TMP_PREFIX),
+                ("var-folders.bin", "var_folders_path", VAR_FOLDERS_PREFIX),
+                ("tmp.bin", "tmp_path", TMP_PREFIX),
+            )
+            for name, _code, prefix in fixtures:
+                (root / name).write_bytes(f"{prefix}/capture".encode("utf-32-be"))
+
+            self.assertEqual(
+                sorted(
+                    ({"code": code, "path": name} for name, code, _prefix in fixtures),
+                    key=lambda finding: (finding["path"], finding["code"]),
+                ),
+                module.scan_tree(root),
+            )
+
+    def test_identity_fence_source_does_not_embed_governed_temp_prefixes(self) -> None:
+        source = (REPOSITORY_ROOT / "floati" / "identity_fence.py").read_bytes()
+        for prefix in (
+            PRIVATE_TMP_PREFIX,
+            PRIVATE_VAR_TMP_PREFIX,
+            VAR_FOLDERS_PREFIX,
+            TMP_PREFIX,
+        ):
+            with self.subTest(prefix=prefix):
+                self.assertNotIn(prefix.encode("ascii"), source)
+
     def test_owner_username_is_detected_in_each_supported_encoding(self) -> None:
         """Publishing the owner username in any file or encoding is rejected."""
 
@@ -132,7 +177,7 @@ class PublicNameFenceTests(unittest.TestCase):
             )
 
     def test_seat_names_are_case_insensitive_word_bounded_and_encoding_agnostic(self) -> None:
-        """Publishing an attribution while sparing product and embedded words is rejected."""
+        """Exact ruled ids are forbidden while products and prefix fixtures remain safe."""
 
         module = self.module()
         product_hyphen = VERIFICATION_SEAT + "-build"
@@ -164,20 +209,25 @@ class PublicNameFenceTests(unittest.TestCase):
             self.assertEqual(
                 [
                     {"code": "seat_name", "line": 1, "path": name}
-                    for name in sorted(fixtures)
+                    for name in (
+                        "architect.bin",
+                        "build-prefix.bin",
+                        "verification-explicit.bin",
+                    )
                 ],
                 module.scan_tree(root),
             )
 
-    def test_seat_names_are_exempt_only_on_declared_vendor_measurement_paths(self) -> None:
-        """Guessing vendor meaning from token shape instead of the governed path is rejected."""
+    def test_record_class_paths_are_checked_for_exact_ids_while_grok_stays_product_prose(self) -> None:
+        """Historical paths cannot exempt exact ids, and ambiguous product prose stays safe."""
 
         module = self.module()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            exact_build_seat = f"{BUILD_SEAT_PREFIX}floati"
             fixtures = {
-                "docs/capability-matrix.v0.json": f'{{"harness":"{VERIFICATION_SEAT}"}}\n',
-                "docs/capability-matrix.md": f"| harness | {VERIFICATION_SEAT} |\n",
+                "docs/capability-matrix.v0.json": f'{{"seat":"{exact_build_seat}"}}\n',
+                "docs/capability-matrix.md": f"| architect | {ARCHITECT_SEAT} |\n",
                 "docs/evidence/conformance/C1.md": f"measured {VERIFICATION_SEAT}\n",
                 "docs/evidence/captures/demo.txt": f"captured {ARCHITECT_SEAT}\n",
             }
@@ -190,12 +240,116 @@ class PublicNameFenceTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                [{"code": "seat_name", "line": 1, "path": "docs/unsafe.md"}],
+                [
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/capability-matrix.md",
+                    },
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/capability-matrix.v0.json",
+                    },
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/evidence/captures/demo.txt",
+                    },
+                    {"code": "seat_name", "line": 1, "path": "docs/unsafe.md"},
+                ],
                 module.scan_tree(root),
             )
 
-    def test_vendor_product_sites_are_allowlisted_once_and_only_at_recorded_files(self) -> None:
-        """A global vendor-token exemption or an unbounded site allowance is rejected."""
+    def test_escaped_json_seat_names_are_checked_semantically(self) -> None:
+        """JSON escapes cannot hide exact ids from the public-name fence."""
+
+        module = self.module()
+        escaped = "".join(f"\\u{ord(character):04x}" for character in ARCHITECT_SEAT)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "fixture.json").write_text(
+                f'{{"{escaped}":"{escaped}"}}\n', encoding="utf-8"
+            )
+
+            self.assertEqual(
+                [{"code": "seat_name", "line": 1, "path": "fixture.json"}],
+                module.scan_tree(root),
+            )
+
+    def test_capability_matrix_grok_attribution_is_fenced_semantically(self) -> None:
+        """Bare product prose stays safe while seat-valued matrix fields are refused."""
+
+        module = self.module()
+        escaped = "".join(
+            f"\\u{ord(character):04x}" for character in VERIFICATION_SEAT
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            matrix = root / "docs" / "capability-matrix.v0.json"
+            matrix.parent.mkdir(parents=True)
+            matrix.write_text(
+                json.dumps(
+                    {
+                        "seeded_by": VERIFICATION_SEAT,
+                        "harness": VERIFICATION_SEAT,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                [
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/capability-matrix.v0.json",
+                    }
+                ],
+                module.scan_tree(root),
+            )
+
+            matrix.write_text(
+                f'{{"seeded_by":"{escaped}","harness":"{escaped}"}}',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                [
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/capability-matrix.v0.json",
+                    }
+                ],
+                module.scan_tree(root),
+            )
+
+    def test_bom_json_seat_names_are_checked_semantically(self) -> None:
+        """A BOM cannot hide an escaped exact id from the semantic fence."""
+
+        module = self.module()
+        escaped = "".join(f"\\u{ord(character):04x}" for character in ARCHITECT_SEAT)
+        source = f'{{"reviewer":"{escaped}"}}'
+        fixtures = {
+            "utf16le.json": b"\xff\xfe" + source.encode("utf-16-le"),
+            "utf16be.json": b"\xfe\xff" + source.encode("utf-16-be"),
+            "utf32le.json": b"\xff\xfe\x00\x00" + source.encode("utf-32-le"),
+            "utf32be.json": b"\x00\x00\xfe\xff" + source.encode("utf-32-be"),
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, data in fixtures.items():
+                (root / name).write_bytes(data)
+
+            self.assertEqual(
+                [
+                    {"code": "seat_name", "line": 1, "path": name}
+                    for name in sorted(fixtures)
+                ],
+                module.scan_tree(root),
+            )
+
+    def test_ambiguous_grok_product_token_is_not_fenced_by_lexical_position(self) -> None:
+        """R4 protects product prose even when the same token was once a seat name."""
 
         module = self.module()
         product = bytes.fromhex("67726f6b").decode("ascii").title()
@@ -211,22 +365,15 @@ class PublicNameFenceTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
 
-            self.assertEqual(3, len(getattr(module, "SEAT_NAME_SITE_ALLOWLIST", ())))
             self.assertEqual([], module.scan_tree(root))
 
             copy_ledger = root / "docs" / "COPY-LEDGER.md"
             copy_ledger.write_text(files["docs/COPY-LEDGER.md"] * 2, encoding="utf-8")
             (root / "docs" / "unsafe.md").write_text(product + "\n", encoding="utf-8")
-            self.assertEqual(
-                [
-                    {"code": "seat_name", "line": 2, "path": "docs/COPY-LEDGER.md"},
-                    {"code": "seat_name", "line": 1, "path": "docs/unsafe.md"},
-                ],
-                module.scan_tree(root),
-            )
+            self.assertEqual([], module.scan_tree(root))
 
-    def test_vendor_research_allowance_is_pinned_to_exactly_twenty_one_lines(self) -> None:
-        """A new bare vendor-token line cannot ride the governed research-file ticket."""
+    def test_ambiguous_grok_research_prose_is_not_count_gated(self) -> None:
+        """Product prose remains protected without a fragile line-count lexical allowance."""
 
         module = self.module()
         product = VERIFICATION_SEAT.title()
@@ -241,28 +388,23 @@ class PublicNameFenceTests(unittest.TestCase):
             self.assertEqual([], module.scan_tree(root))
 
             path.write_text(governed + f"new {product} claim\n", encoding="utf-8")
-            self.assertEqual(
-                [
-                    {"code": "seat_name", "line": line, "path": relative}
-                    for line in range(1, 23)
-                ],
-                module.scan_tree(root),
-            )
+            self.assertEqual([], module.scan_tree(root))
 
-    def test_signed_historical_records_are_exempt_by_path_rule_only(self) -> None:
-        """The historical class is derived from its directory and dated basename."""
+    def test_signed_historical_records_are_checked_by_the_postcondition(self) -> None:
+        """Record authenticity forbids rewriting harbor bytes, not checking projected bytes."""
 
         module = self.module()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            exact_build_seat = f"{BUILD_SEAT_PREFIX}floati"
             fixtures = {
                 "docs/rulings/owner-record.md": f"signed by {ARCHITECT_SEAT}\n",
-                "docs/design/brief-2026-08-30.md": f"assigned to {BUILD_SEAT}\n",
+                "docs/design/brief-2026-08-30.md": f"assigned to {exact_build_seat}\n",
                 "docs/design/nested/brief-2026-08-30-amended.md": (
-                    f"assigned to {SHORT_BUILD_SEAT}\n"
+                    f"assigned to {exact_build_seat}\n"
                 ),
-                "docs/design/brief-2026-08.md": f"assigned to {BUILD_SEAT}\n",
-                "docs/other/brief-2026-08-30.md": f"assigned to {BUILD_SEAT}\n",
+                "docs/design/brief-2026-08.md": f"assigned to {exact_build_seat}\n",
+                "docs/other/brief-2026-08-30.md": f"assigned to {exact_build_seat}\n",
             }
             for relative, content in fixtures.items():
                 path = root / relative
@@ -274,25 +416,36 @@ class PublicNameFenceTests(unittest.TestCase):
                     {
                         "code": "seat_name",
                         "line": 1,
+                        "path": "docs/design/brief-2026-08-30.md",
+                    },
+                    {
+                        "code": "seat_name",
+                        "line": 1,
                         "path": "docs/design/brief-2026-08.md",
+                    },
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/design/nested/brief-2026-08-30-amended.md",
                     },
                     {
                         "code": "seat_name",
                         "line": 1,
                         "path": "docs/other/brief-2026-08-30.md",
                     },
+                    {
+                        "code": "seat_name",
+                        "line": 1,
+                        "path": "docs/rulings/owner-record.md",
+                    },
                 ],
                 module.scan_tree(root),
             )
 
-    def test_readme_vendor_product_allowances_pin_each_generated_line_count(self) -> None:
-        """README product cells allow their measured counts, not arbitrary vendor prose."""
+    def test_readme_grok_product_lines_are_protected_without_lexical_allowances(self) -> None:
+        """Product rows stay unchanged and no longer depend on line-count exemptions."""
 
         module = self.module()
-        self.assertEqual(
-            [1, 1],
-            [row[3] for row in module.SEAT_NAME_CONTENT_LINE_COUNT_ALLOWLIST],
-        )
         product = VERIFICATION_SEAT
         relative = "README.md"
         with tempfile.TemporaryDirectory() as temporary:
@@ -306,8 +459,8 @@ class PublicNameFenceTests(unittest.TestCase):
             self.assertEqual([], module.scan_tree(root))
             self.assertEqual(
                 {
-                    "readme_desktop_product_lines": 1,
-                    "readme_harness_product_lines": 1,
+                    "readme_desktop_product_lines": 0,
+                    "readme_harness_product_lines": 0,
                     "research_product_lines": 0,
                     "vendor_product_sites": 0,
                 },
@@ -319,13 +472,7 @@ class PublicNameFenceTests(unittest.TestCase):
 
             lines[67] = lines[66]
             path.write_text("".join(lines), encoding="utf-8")
-            self.assertEqual(
-                [
-                    {"code": "seat_name", "line": 67, "path": relative},
-                    {"code": "seat_name", "line": 68, "path": relative},
-                ],
-                module.scan_tree(root),
-            )
+            self.assertEqual([], module.scan_tree(root))
 
     def test_seat_name_in_path_is_refused_without_renaming(self) -> None:
         """Letting a projection invent a role-substituted filename is rejected."""

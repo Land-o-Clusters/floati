@@ -1,0 +1,19 @@
+ROOT=/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/flight-recorder
+$ floati log --root $ROOT --replay --plain
+
+PLAIN REPLAY // v0
+◆ +0000.000s  CLAIM    WORK    builder-claude work-01a058a2a8057997b8dcde89e674278d claim
+◆ +0006.000s  COMPLETE WORK    builder-claude work-01a058a2a8057997b8dcde89e674278d complete
+◆ +0008.000s  CLAIM    WORK    builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 claim
+◆ +0010.000s  COMPLETE WORK    builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 complete
+│ +0010.000s  CLAIM    WORKER  builder-claude work-01a058a2a8057997b8dcde89e674278d claim
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8057997b8dcde89e674278d spawn
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8057997b8dcde89e674278d drive
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8057997b8dcde89e674278d bind_artifact
+│ +0010.000s  COMPLETE WORKER  builder-claude work-01a058a2a8057997b8dcde89e674278d complete
+│ +0010.000s  CLAIM    WORKER  builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 claim
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 spawn
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 drive
+│ +0010.000s  TURN     WORKER  builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 bind_artifact
+│ +0010.000s  COMPLETE WORKER  builder-claude work-01a058a2a8097421b6e31e95bf73bdf9 complete
+REPLAY COMPLETE // 14 EVENTS // 10000 MS

@@ -13,7 +13,7 @@ Named governing references:
 
 ## Serialization and scope
 
-Fable approved R3-CAP as a separately gated prerequisite. R3-GFX may not have
+the architect approved R3-CAP as a separately gated prerequisite. R3-GFX may not have
 a RED commit until this CAP candidate passes, lands to main, and a fresh GFX
 branch starts from that landed main. This candidate contains no activity
 sparkline, pixel-chart, graphics-placement, or GFX test file.

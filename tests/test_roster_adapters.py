@@ -18,12 +18,14 @@ from floati.adapters.headless_template import (
 )
 from floati.adapters.opencode import OpenCodeAdapter
 from floati.adapters.pi_observation import PiObservationAdapter
+from floati.adapters.zcode import ZcodeAdapter
 from floati.workers import WorkerAdapterFailure
 
 try:
     from floati.adapters.claude import (
         ClaudeHeadlessAdapter,
         MAX_CLAUDE_OUTPUT_BYTES,
+        _PERMISSION_MARKERS as _CLAUDE_PERMISSION_MARKERS,
     )
     _REFERENCE_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -48,6 +50,7 @@ ROSTER = [
     ("pi-observation", PiObservationAdapter),
     ("devin", DevinAdapter),
     ("antigravity", AntigravityAdapter),
+    ("zcode", ZcodeAdapter),
 ]
 
 
@@ -158,9 +161,12 @@ class RosterOracleTests(unittest.TestCase):
         self.assertEqual(profile.headless_arguments, ("--verified",))
 
     def test_permission_marker_vocabulary_shared(self):
-        markers = list(_PERMISSION_MARKERS)
-        self.assertIn("approval", markers)
-        self.assertIn("permission", markers)
+        if not _REFERENCE_AVAILABLE:
+            self.skipTest("Claude reference adapter is unavailable")
+        expected = ("approval", "permission", "requires user", "not allowed")
+        self.assertEqual(expected, _PERMISSION_MARKERS)
+        self.assertEqual(expected, _CLAUDE_PERMISSION_MARKERS)
+        self.assertIs(_PERMISSION_MARKERS, _CLAUDE_PERMISSION_MARKERS)
 
 
 class ContainmentAndProbeTests(unittest.TestCase):

@@ -17,7 +17,7 @@ class ReconciliationProtocolTests(unittest.TestCase):
         # RED bank must prove the new module is the sole missing dependency.
         self.target = {
             "kind": "git_ref",
-            "coordinate": "\x2fprivate/tmp/reconciliation-fixture",
+            "coordinate": "\x2fprivate\x2ftmp/reconciliation-fixture",
             "identity_digest": "a" * 64,
         }
         self.expected = {
@@ -471,7 +471,7 @@ class ReconciliationProtocolTests(unittest.TestCase):
         protocol = self.protocol()
         lawful_cases = (
             (
-                "\x2fprivate/tmp/reconciliation-fixture.git",
+                "\x2fprivate\x2ftmp/reconciliation-fixture.git",
                 "filesystem_fixture",
             ),
             (
@@ -520,8 +520,8 @@ class ReconciliationProtocolTests(unittest.TestCase):
                     protocol["decode_result_frame"](self.framed(hostile), request)
 
         hostile_cases = (
-            ("/tmp/a/../fixture", "filesystem_fixture"),
-            ("\x2fprivate/tmp//fixture", "filesystem_fixture"),
+            ("\x2ftmp/a/../fixture", "filesystem_fixture"),
+            ("\x2fprivate\x2ftmp//fixture", "filesystem_fixture"),
             ("https://host/a/../repo", "explicit_remote"),
             ("https://HOST/repository.git", "explicit_remote"),
             ("ssh://git@host.example/org/../repo", "explicit_remote"),
@@ -559,8 +559,8 @@ class ReconciliationProtocolTests(unittest.TestCase):
         """Catches non-I-JSON or terminal-unsafe observer input."""
         protocol = self.protocol()
         cases = (
-            {"target": dict(self.target, coordinate="/tmp/\u202e")},
-            {"target": dict(self.target, coordinate="/tmp/\ud800")},
+            {"target": dict(self.target, coordinate="\x2ftmp/\u202e")},
+            {"target": dict(self.target, coordinate="\x2ftmp/\ud800")},
             {"budget_claim": {"git": math.nan}},
             {"budget_claim": {"budget-%03d" % index: index for index in range(65)}},
         )

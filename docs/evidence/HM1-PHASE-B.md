@@ -66,9 +66,9 @@ exit 0 with no output.
 ## Boundaries
 
 - Operator workflows and static help: locally executed.
-- Copy ledger: generated and equality-tested; Fable voice approval pending.
+- Copy ledger: generated and equality-tested; the architect voice approval pending.
 - Legacy on-disk message compatibility: covered by mixed legacy/reply rows.
 - Phase A notification: `msg-019fb9bea8187bb3a977b6346aeca474` sent;
-  Fable response remains unobserved at this checkpoint.
+  the architect response remains unobserved at this checkpoint.
 - Hosted CI, deployment, activation, and TUI live polish: unobserved.
-- Fable Phase B verdict, push, and local/origin parity: pending.
+- the architect Phase B verdict, push, and local/origin parity: pending.

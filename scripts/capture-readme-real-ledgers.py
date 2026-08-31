@@ -27,6 +27,11 @@ from floati.doctor import Doctor  # noqa: E402
 from floati.events import EventLog  # noqa: E402
 from floati import fixture_ids  # noqa: E402
 from floati.ids import uuid7_hex  # noqa: E402
+from floati.identity_fence import (  # noqa: E402
+    GOVERNED_TEMP_FENCES,
+    HOME_PREFIX,
+    OWNER_USERNAME,
+)
 from floati.multi_bus_chart import MultiBusHarborChart, render_multi_bus_chart  # noqa: E402
 from floati.node_wizard import NodeWizard  # noqa: E402
 from floati.planes import (  # noqa: E402
@@ -63,6 +68,32 @@ PALETTES = {
         "accent": "#853d07",
     },
 }
+
+
+class RenderedIdentityRefusal(RuntimeError):
+    def __init__(self, code: str, detail: str, **evidence: object) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+        self.evidence = evidence
+
+
+def _assert_rendered_identity_safe(name: str, frames: list[str]) -> None:
+    governed = (
+        ("operator_home_path", HOME_PREFIX),
+        *GOVERNED_TEMP_FENCES,
+        ("owner_username", OWNER_USERNAME),
+    )
+    for frame_index, frame in enumerate(frames):
+        for reason_code, token in governed:
+            if token in frame:
+                raise RenderedIdentityRefusal(
+                    "capture_rendered_identity_forbidden",
+                    "animation frame contains governed identity before rasterization",
+                    capture=name,
+                    frame_index=frame_index,
+                    reason_code=reason_code,
+                )
 
 
 def _digest(path: Path) -> str:
@@ -120,6 +151,7 @@ def _write_capture(
     *,
     plain: str | None = None,
 ) -> dict[str, object]:
+    _assert_rendered_identity_safe(name, [standard])
     standard_path = output / f"{name}-standard.txt"
     standard_path.write_text(standard.rstrip() + "\n", encoding="utf-8")
     files = [standard_path]
@@ -206,6 +238,7 @@ def _write_animated_capture(
     plain: str | None = None,
     duration_ms: int,
 ) -> dict[str, object]:
+    _assert_rendered_identity_safe(name, animation_frames)
     standard_path = output / f"{name}-standard.txt"
     standard_path.write_text(standard.rstrip() + "\n", encoding="utf-8")
     files = [standard_path]
@@ -523,6 +556,18 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--doctor-root", type=Path, required=True)
     parser.add_argument("--doctor-source", type=Path, required=True)
+    parser.add_argument(
+        "--capture",
+        action="append",
+        choices=(
+            "harbor-board",
+            "flight-recorder-replay",
+            "onboard-wizard",
+            "harbor-chart-multibus",
+            "doctor-delivery-health",
+        ),
+        help="capture only this named frame; repeat to select multiple frames",
+    )
     args = parser.parse_args()
     scratch = args.scratch.expanduser().resolve()
     output = args.output.expanduser().resolve()
@@ -530,17 +575,31 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise SystemExit(f"output is not empty: {output}")
-    captures = [
-        _board_capture(scratch, output),
-        _replay_capture(scratch, output),
-        _onboard_capture(scratch, output),
-        _chart_capture(scratch, output),
-        _doctor_capture(
-            args.doctor_root.expanduser().resolve(),
-            args.doctor_source.expanduser().resolve(),
-            output,
-        ),
+    requested = args.capture or [
+        "harbor-board",
+        "flight-recorder-replay",
+        "onboard-wizard",
+        "harbor-chart-multibus",
+        "doctor-delivery-health",
     ]
+    captures = []
+    for name in requested:
+        if name == "harbor-board":
+            captures.append(_board_capture(scratch, output))
+        elif name == "flight-recorder-replay":
+            captures.append(_replay_capture(scratch, output))
+        elif name == "onboard-wizard":
+            captures.append(_onboard_capture(scratch, output))
+        elif name == "harbor-chart-multibus":
+            captures.append(_chart_capture(scratch, output))
+        else:
+            captures.append(
+                _doctor_capture(
+                    args.doctor_root.expanduser().resolve(),
+                    args.doctor_source.expanduser().resolve(),
+                    output,
+                )
+            )
     manifest = {
         "schema_version": 0,
         "generator": "scripts/capture-readme-real-ledgers.py",

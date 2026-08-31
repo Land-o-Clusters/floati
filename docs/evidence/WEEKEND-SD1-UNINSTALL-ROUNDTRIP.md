@@ -1,7 +1,7 @@
 # DRAFT — Weekend SD-1 uninstall round-trip evidence
 
 Date: 2026-08-28  
-Lane: `lane-floati`  
+Lane: `build lane`  
 Branch: `repair/sd1-uninstall-20260828`
 
 ## Scope and fences

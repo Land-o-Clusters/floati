@@ -83,7 +83,7 @@
     "stderr": "",
     "stderr_bytes": 0,
     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "stdout": "{\"artifact_version\":0,\"command\":\"sequencer\",\"evidence\":{\"epoch\":null,\"local_service_live\":false,\"managed_epoch_open\":false,\"mode\":\"direct\",\"sequencer_id\":null,\"socket_path\":\"/tmp/slipway-sequencer-17af9912de43e027bb49a22d8a3980b9/sequencer.sock\"},\"status\":\"ok\"}\n",
+    "stdout": "{\"artifact_version\":0,\"command\":\"sequencer\",\"evidence\":{\"epoch\":null,\"local_service_live\":false,\"managed_epoch_open\":false,\"mode\":\"direct\",\"sequencer_id\":null,\"socket_path\":\"\u002ftmp/slipway-sequencer-17af9912de43e027bb49a22d8a3980b9/sequencer.sock\"},\"status\":\"ok\"}\n",
     "stdout_bytes": 262,
     "stdout_sha256": "7e1650f9d441097bb5c65352cc454076324f52281622ab952b2a5bbfb819fcc2",
     "timed_out": false,

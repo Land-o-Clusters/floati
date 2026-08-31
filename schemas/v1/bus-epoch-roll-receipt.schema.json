@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/bus-epoch-roll-receipt.schema.json",
+  "title": "Floati Bus Epoch Roll Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "archive_path", "actor", "idempotency_key", "invalidated_followers", "epoch_id", "span", "archive_sha256", "archive_file_count", "plane_counts"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^bus-epoch-roll-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "bus_epoch_roll_receipt"},
+    "archive_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
+    "actor": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true},
+    "invalidated_followers": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "tail_followers"},
+        {"const": "waiters"},
+        {"const": "monitors"}
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "epoch_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byte_start", "byte_end"],
+      "properties": {
+        "byte_start": {"type": "integer", "const": 0},
+        "byte_end": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+      }
+    },
+    "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "archive_file_count": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "plane_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events", "deliveries", "acks"],
+      "properties": {
+        "events": {"type": "integer", "const": 1},
+        "deliveries": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "acks": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+      }
+    }
+  }
+}

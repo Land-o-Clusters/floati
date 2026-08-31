@@ -1,0 +1,15 @@
+ROOT=/opt/homebrew/var/floati-rp1-r2-aa305ce/doctor
+SOURCE=/opt/homebrew/var/floati-rp1-r2-source-aa305ce
+$ floati doctor --root $ROOT --source $SOURCE --probe --probe-budget 1
+
+DELIVERY HEALTH
++ OK   architect-codex: 0 undelivered, no drain on record, RED threshold 15m RULED
+! RED  builder-floati: 1 undelivered, oldest 17m, no drain on record, RED threshold 15m RULED
++ OK   reviewer-opencode: 0 undelivered, no drain on record, RED threshold 15m RULED
+
+LOOPBACK PROBE
++ PASS  architect-codex: PASS: loopback probe drained in 1 tick(s)
+! DEAF  builder-floati: DEAF: loopback probe not drained within 1s budget
+! DEAF  reviewer-opencode: DEAF: loopback probe not drained within 1s budget
+
+STATE DEGRADED — one or more delivery paths require attention

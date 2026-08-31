@@ -10,7 +10,7 @@ Status date: 2026-08-01.
   `b08ccf20ced67fccdc783df3057c298c6eb8dbef`.
 - Boot inbox poll: exit 31, `intentional_silence`, zero messages, and no
   receipt.
-- The dispatch authorizes the HM-2S implementation. Fable still gates every
+- The dispatch authorizes the HM-2S implementation. the architect still gates every
   push and must name the exact committed tip.
 
 ## Phase results
@@ -66,7 +66,7 @@ Regenerated the complete wall after closing the demonstrated structure and
 semantics items: calm idle collapse, title-before-shortened-ID worker rows,
 alert-ladder ordering, duplicate outcome suppression, plain-dump header
 separation, and typed replay rail glyphs. `docs/evidence/wall/PUNCH-LIST.md`
-keeps the orange-on-cream light-palette judgment open for the Fable polish
+keeps the orange-on-cream light-palette judgment open for the the architect polish
 drive. It is not claimed as closed.
 
 ## Test-first and correction record
@@ -85,14 +85,14 @@ existing test and the new duplicate-suppression test passed. That initial
 All commands ran from the named checkout on `lane/hm0`:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm2s-pycache python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m slip.selftest
   Ran 305 tests in 21.767s — OK
   {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm2s-pycache python3 -m slip.conformance --live-root-smoke
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m slip.conformance --live-root-smoke
   {"cases":5,"status":"conformant"}
 
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm2s-pycache python3 -m unittest tests.test_copy_ledger tests.test_manifest
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m unittest tests.test_copy_ledger tests.test_manifest
   Ran 10 tests in 0.090s — OK
 
 generated-tree scrub
@@ -104,11 +104,11 @@ git diff --check
 
 These are local, fixture, and live-root-smoke results. They do not establish a
 live ACP worker turn, hosted CI, Puddle activation, deployment, release, or a
-Fable verdict.
+the architect verdict.
 
 ## Push boundary
 
 This evidence is prepared for the committed checkpoint. The checkpoint must
-not be pushed until Fable issues `PUSH GO lane/hm0 <exact-tip>` for that exact
+not be pushed until the architect issues `PUSH GO lane/hm0 <exact-tip>` for that exact
 commit. After any verdict-bearing change, the complete gate must be rerun and
 local/origin equality verified.

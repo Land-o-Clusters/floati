@@ -654,7 +654,7 @@ class ContextCliRegistrationTests(unittest.TestCase):
                         "context",
                         subcommand,
                         "--root",
-                        "/tmp/fleet",
+                        "\x2ftmp/fleet",
                         "--as",
                         "builder-a",
                         "--json",
@@ -662,7 +662,7 @@ class ContextCliRegistrationTests(unittest.TestCase):
                 )
                 self.assertEqual("context", parsed.command)
                 self.assertEqual(subcommand, parsed.context_command)
-                self.assertEqual("/tmp/fleet", parsed.root)
+                self.assertEqual("\x2ftmp/fleet", parsed.root)
                 self.assertEqual("builder-a", parsed.actor)
                 self.assertTrue(parsed.json)
                 self.assertTrue(callable(parsed.handler))
@@ -673,7 +673,7 @@ class ContextCliRegistrationTests(unittest.TestCase):
                     "context",
                     "turnover",
                     "--root",
-                    "/tmp/fleet",
+                    "\x2ftmp/fleet",
                     "--as",
                     "builder-a",
                     "--profile",

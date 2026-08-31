@@ -39,7 +39,7 @@ stdout_bytes: 2635
 
 ## Wake path observed
 
-Bounded `t3 serve` (scratch data dir; not puddle-fleet):
+Bounded `t3 serve` (scratch data dir; not the fleet):
 
 ```text
 argv: ["/opt/homebrew/bin/t3", "serve", "--no-browser", "--base-dir", "~/Projects/floati-grok/.conformance-scratch/c9-t3-home"]

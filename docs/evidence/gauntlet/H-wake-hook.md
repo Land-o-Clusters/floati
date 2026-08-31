@@ -61,7 +61,7 @@ Each cycle emitted `(floati: wait deadline exhausted; end this turn to re-arm)`.
 ## Not claimed
 
 - Live pause/resume of this Cursor chat
-- Manual waiter against `~/.floati-bus/puddle-fleet`
+- Manual waiter against `~/.floati-bus/the fleet`
 - Wake-family GREEN
 - Daemon presence (not built)
 

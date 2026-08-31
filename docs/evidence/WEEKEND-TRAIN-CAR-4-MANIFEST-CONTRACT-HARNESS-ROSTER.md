@@ -1,12 +1,12 @@
 # Weekend train Car 4 — manifest contract and harness roster
 
-Status: **DRAFT — INTEGRATOR EVIDENCE, FABLE RESTAMP PENDING**
+Status: **DRAFT — INTEGRATOR EVIDENCE, the architect RESTAMP PENDING**
 
 Date: 2026-08-27
 
 ## Identity
 
-- Node: `lane-floati`
+- Node: `build lane`
 - Branch: `integrate/weekend-20260828`
 - Ratified branch-cut base: `932e377e9b88d801dfd545e1c238c50af5ec58ba`
 - Car source ref: `origin/u2/manifest-contract`
@@ -91,4 +91,4 @@ clean-resource claim.
 - No foreign-bus artifact was touched.
 - No README edit was made by the integrator.
 - The roster surfaces remain honestly unverified pending live vendor intake.
-- This evidence copy remains DRAFT-stamped for Fable's gate.
+- This evidence copy remains DRAFT-stamped for the architect's gate.

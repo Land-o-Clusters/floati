@@ -6,7 +6,7 @@ Date: 2026-08-18
 
 ## Identity and authority
 
-- Node: `lane-floati` (builder seat, ad-hoc fleet-ops window)
+- Node: `build lane` (builder seat, ad-hoc fleet-ops window)
 - Worktree: `~/Projects/floati`
 - Branch: `lane/fleet-ops-window`
 - Predecessor commit (live exercise, gated DONE):
@@ -84,8 +84,8 @@ forever*, so every retired node still counted as registered. Observed on the
 live bus root immediately after the chartered retirement:
 
 ```
-registered=['fable', 'lane-app', 'lane-floati', 'lane-puddle-relief',
-            'lane-slipway', 'puddle-floati-architect']
+registered=['the architect', 'build lane', 'build lane', 'lane-puddle-relief',
+            'build lane', 'the architect']
 ```
 
 — six nodes, against a true roster of two active and four retired. The
@@ -95,7 +95,7 @@ Doctor now folds latest-row-wins before selecting active nodes. After the fix,
 the same live command reports:
 
 ```
-registered=['lane-floati', 'puddle-floati-architect'] live_dirs=[]
+registered=['build lane', 'the architect'] live_dirs=[]
 ```
 
 RED first for this fix too: a new test asserting that a retired node with no
@@ -152,7 +152,7 @@ either time, and no digest was typed by hand.
 
 ## Live-root observation, stated exactly
 
-`doctor` is physically read-only and was run against `~/.floati-bus/puddle-fleet`.
+`doctor` is physically read-only and was run against `~/.floati-bus/the fleet`.
 The live registry digest is `adebcaf3…` before and after every run —
 unchanged.
 

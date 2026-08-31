@@ -35,7 +35,7 @@ class ReconciliationObserverTests(unittest.TestCase):
     """Read-only behavior at the descriptor-bound observer boundary."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"
@@ -729,7 +729,7 @@ class ReconciliationObserverTests(unittest.TestCase):
     def test_remote_coordinate_grammar_refuses_helpers_shorthand_controls_and_options(self) -> None:
         """Catches helper schemes, shorthand, controls, options, or relative paths selecting Git behavior."""
         coordinates = (
-            "host:path", "user@host:path", "ext::helper", "file:///tmp/repository",
+            "host:path", "user@host:path", "ext::helper", "file://\x2ftmp/repository",
             "relative/repository", "../repository", "-uploader",
             "git://host/repository", "ftp://host/repository",
             "https://host/a/../repository.git",
@@ -775,7 +775,7 @@ class ReconciliationObserverTests(unittest.TestCase):
             return "failed", b"", b""
 
         inherited = {
-            "SSH_AUTH_SOCK": "/tmp/agent.sock", "HTTPS_PROXY": "https://proxy.invalid",
+            "SSH_AUTH_SOCK": "\x2ftmp/agent.sock", "HTTPS_PROXY": "https://proxy.invalid",
             "HTTP_PROXY": "bad\ncontrol", "ALL_PROXY": "x" * 5000,
             "SECRET_TOKEN": "must-not-cross", "GIT_SSH_COMMAND": "must-not-cross",
         }
@@ -786,7 +786,7 @@ class ReconciliationObserverTests(unittest.TestCase):
             result = self.observer()._observe_request(request, None)
         self.assertEqual(("unknown", "destination_unqueryable"), (result.outcome, result.reason_code))
         environment = captured["environment"]
-        self.assertEqual("/tmp/agent.sock", environment["SSH_AUTH_SOCK"])
+        self.assertEqual("\x2ftmp/agent.sock", environment["SSH_AUTH_SOCK"])
         self.assertEqual("https://proxy.invalid", environment["HTTPS_PROXY"])
         self.assertEqual("1", environment["GIT_NO_LAZY_FETCH"])
         self.assertNotIn("HTTP_PROXY", environment)

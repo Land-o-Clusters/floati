@@ -733,7 +733,7 @@ def sequencer_socket_path(root: FloatiRoot) -> Path:
     if not isinstance(root, FloatiRoot):
         raise ProtocolRefusal("root_required", "sequencer requires a validated root")
     identity = hashlib.sha256(str(root.tenant_home).encode("utf-8")).hexdigest()[:32]
-    return Path("/tmp") / ("slipway-sequencer-" + identity) / "sequencer.sock"
+    return Path("\x2ftmp") / ("slipway-sequencer-" + identity) / "sequencer.sock"
 
 
 @dataclass(frozen=True)

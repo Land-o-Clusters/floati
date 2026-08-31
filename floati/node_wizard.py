@@ -12,7 +12,9 @@ from typing import Any, Callable, Dict, Iterable, Optional, Protocol, TextIO, Tu
 
 from .errors import ProtocolRefusal
 from .records import validate_role
+from .registry import Registry
 from .root import FloatiRoot, validate_identifier
+from .seat_declaration import FleetGovernance
 from .tide_catalog import policy_metric_for, policy_metrics_for
 from .tide_policy import normalize_threshold
 
@@ -45,6 +47,7 @@ class NodeAddPlan:
     records: Tuple[Dict[str, Any], ...]
     boot_command: Optional[str]
     teardown_command: Optional[str]
+    governance: Optional[FleetGovernance] = None
 
 
 @dataclass(frozen=True)
@@ -189,6 +192,7 @@ class NodeWizard:
             records=tuple(records),
             boot_command=boot_command,
             teardown_command=teardown_command,
+            governance=Registry(self.root).governance(),
         )
 
     def _retire_plan(self, values: Iterable[str]) -> NodeRetirePlan:

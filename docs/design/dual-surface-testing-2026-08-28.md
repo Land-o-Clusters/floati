@@ -1,4 +1,4 @@
-# DUAL-SURFACE LAW — CLI and desktop surfaces gate separately (Fable, 2026-08-28; owner order)
+# DUAL-SURFACE LAW — CLI and desktop surfaces gate separately (the architect, 2026-08-28; owner order)
 
 **Owner order:** final testing gates must cover BOTH the CLI and the
 GUI/desktop offering of every harness that ships both — t3, codex, and

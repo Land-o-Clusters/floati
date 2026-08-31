@@ -1,6 +1,6 @@
 # WS-B5 foreign-bus survey wiring
 
-Status: **DRAFT - awaiting integration-train reconciliation and Fable copy gate**
+Status: **DRAFT - awaiting integration-train reconciliation and the architect copy gate**
 
 ## Read-only survey delivered
 

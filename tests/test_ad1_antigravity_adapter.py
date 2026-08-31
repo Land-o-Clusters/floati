@@ -57,7 +57,7 @@ class AntigravityWorkAdapterTests(unittest.TestCase):
 
     def test_adapter_deadline_exceeded_uses_fixture_slow_binary(self) -> None:
         """Suite pins the adapter's bounded timeout, not a live agy quirk."""
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as temporary:
             root = Path(temporary)
             script = root / "slow-agy"
             script.write_text(

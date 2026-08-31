@@ -6,7 +6,7 @@ Date: 2026-08-18
 
 ## Identity and authority
 
-- Node: `lane-floati` (builder seat, ad-hoc fleet-ops window)
+- Node: `build lane` (builder seat, ad-hoc fleet-ops window)
 - Worktree: `~/Projects/floati`
 - Branch: `lane/fleet-ops-window`
 - Predecessor commit (issue #2, gated DONE):

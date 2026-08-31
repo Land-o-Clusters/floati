@@ -47,7 +47,7 @@ FAILED (failures=3)
 FAIL names (exactly three; zero ERROR):
 
 1. `test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims` (`tests.test_hm3i_contract.HM3IContractTests`)
-2. `test_living_public_docs_are_tenant_neutral` (`tests.test_name_sweep.NameSweepLivingDocumentationTests`) `(relative='docs/PUBLICATION-CHECKLIST.md', pattern='puddle-fleet')`
+2. `test_living_public_docs_are_tenant_neutral` (`tests.test_name_sweep.NameSweepLivingDocumentationTests`) `(relative='docs/PUBLICATION-CHECKLIST.md', pattern='the fleet')`
 3. `test_generated_repository_artifacts_are_scrubbed` (`tests.test_source_scrub.SourceScrubTests`)
 
 **Verdict: FAIL** (docs/scrub; not adapter-contract). Adapter modules had no FAIL/ERROR in the paired unsandboxed selftest run (check 2).
@@ -95,7 +95,7 @@ stderr: 0 bytes. exit: 0. Started `2026-08-27T21:52:13Z`, ended `2026-08-27T21:5
 
 ## Check 4 — live-root exercise (scratch root created by this seat)
 
-Root (created here, not the puddle-fleet root, not `/tmp`):
+Root (created here, not the the fleet root, not `<temp>`):
 
 `~/Projects/floati-grok/.conformance-scratch/c1-live-root`
 
@@ -162,7 +162,7 @@ How invoked by the live adapter on this tip: `("/opt/homebrew/bin/codex", "app-s
 
 1. **Suite red at this tip.** `/usr/bin/python3 -m unittest discover` and `/usr/bin/python3 -m floati.selftest` both: `Ran 1519 tests`, `FAILED (failures=3)`, discover exit 1, selftest exit 10. Codex adapter contract tests are not among the three.
 2. **HM-3I checklist phrase drift.** `tests/test_hm3i_contract.py` expects the literal `tenant-default neutralization + migration alias` in `docs/PUBLICATION-CHECKLIST.md`. The living checklist now says `tenant-default neutralization RULED` and **There is NO migration write**. Test fixture lagged the ruling.
-3. **Name-sweep vs preservation ruling.** `test_living_public_docs_are_tenant_neutral` forbids `puddle-fleet` in `docs/PUBLICATION-CHECKLIST.md`. The same checklist now records the 2026-08-27 ruling that the live `puddle-fleet` coordinate is preserved verbatim. Test and living copy disagree.
+3. **Name-sweep vs preservation ruling.** `test_living_public_docs_are_tenant_neutral` forbids `the fleet` in `docs/PUBLICATION-CHECKLIST.md`. The same checklist now records the 2026-08-27 ruling that the live `the fleet` coordinate is preserved verbatim. Test and living copy disagree.
 4. **Generated-tree scrub has 6 hits.** Recounted with `floati.scrub.scan_generated_tree(Path.cwd())` (count=6, not from `head`): the four weekend-program/north-star/brief files already on `932e377`, plus `docs/evidence/conformance/C0-machine-harness-inventory.md` from C0. C0 named a private source token while recording a negative finding; that token is what the scrub hunts. C1 copy avoids it. Not repaired.
 
 ## Row verdict
@@ -177,10 +177,10 @@ How invoked by the live adapter on this tip: `("/opt/homebrew/bin/codex", "app-s
 | real `codex app-server --stdio` initialize | PASS (`handshake_ok: true`) |
 | **surface_verified** | **true** |
 
-C2..C8 remain gated on Fable's Car 4-landed announcement, then rebase onto that tip. Inbox at this row boundary is checked in the same turn as the envelope.
+C2..C8 remain gated on the architect's Car 4-landed announcement, then rebase onto that tip. Inbox at this row boundary is checked in the same turn as the envelope.
 
 ---
-**ADDENDUM (Fable, 2026-08-29, matrix audit):** the failure this document records was
+**ADDENDUM (the architect, 2026-08-29, matrix audit):** the failure this document records was
 scoped or fixed after it was written — see `docs/evidence/matrix-audit-fable-2026-08-29.md`
 for the re-run. The capability-matrix cells citing this receipt are supported by its
 passing sections; this note exists so the headline cannot mislead a later reader.

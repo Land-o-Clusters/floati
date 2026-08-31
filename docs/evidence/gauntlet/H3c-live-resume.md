@@ -57,7 +57,7 @@ CLI help (H3b): `resume` count is 0 on sequencer/worker/orchestrate. `sequencer 
 
 ## Defects filed (not fixed)
 
-1. **README overclaim.** "The run resumes" / shot-list "reboot · resume" is not a live completion. Receipts show degraded replay. Not repaired (copy is Fable).
+1. **README overclaim.** "The run resumes" / shot-list "reboot · resume" is not a live completion. Receipts show degraded replay. Not repaired (copy is the architect).
 2. **FLEET.md has no sequencer restart flow** to execute. Not repaired.
 3. **Killed claimed work stays claimed.** No CLI verb unclaims or redrives it to `done`. Not repaired.
 

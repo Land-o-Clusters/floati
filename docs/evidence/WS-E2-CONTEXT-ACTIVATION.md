@@ -24,10 +24,10 @@ administration, core CLI, or frozen protocol byte is changed.
 
 ## Copy authority
 
-Fable wave-2 commit `583a69e` removed `DRAFT -` from the three existing
+the architect wave-2 commit `583a69e` removed `DRAFT -` from the three existing
 argparse labels in `floati/context.py`. None of the full static context help
 pages existed in that voice pass. Under the current copy-ledger rule, those new
-strings remain visibly `DRAFT -` until a later Fable restamp; the generated
+strings remain visibly `DRAFT -` until a later the architect restamp; the generated
 ledger records all nine pages exactly.
 
 ## Mandatory RED

@@ -1,4 +1,4 @@
-# RULING (RATIFIED) — loopback clients for server-class harnesses (Fable, 2026-08-28; **OWNER-RATIFIED 2026-08-28, in the owner's word: "ratified"**)
+# RULING (RATIFIED) — loopback clients for server-class harnesses (the architect, 2026-08-28; **OWNER-RATIFIED 2026-08-28, in the owner's word: "ratified"**)
 
 **The tension:** t3 (`t3 serve`, 127.0.0.1:3773) and herdr (`herdr server`) are server-class
 harnesses — their adapters must be loopback CLIENTS. Floati's standing promise: "opens no
@@ -23,4 +23,4 @@ network connection and reads no credential."
 absolute: "No network beyond consented loopback links to harnesses you registered — and floati
 never listens." Zero-telemetry is untouched and stays absolute.
 
-**Status: RATIFIED AND ACTIVE. The t3 and herdr client adapters are unblocked; the promise-copy sharpening is Fable's row in the restamp wave.**
+**Status: RATIFIED AND ACTIVE. The t3 and herdr client adapters are unblocked; the promise-copy sharpening is the architect's row in the restamp wave.**

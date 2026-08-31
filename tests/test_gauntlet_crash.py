@@ -1162,7 +1162,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
 
         for mode in ("timeout", "crash"):
             with self.subTest(mode=mode):
-                directory = Path(tempfile.mkdtemp(dir="\x2fprivate/tmp"))
+                directory = Path(tempfile.mkdtemp(dir="\x2fprivate\x2ftmp"))
                 self.addCleanup(shutil.rmtree, directory, True)
                 pid_path = directory / "provider.pid"
 

@@ -1,6 +1,6 @@
 # H — capability-matrix receipt-class re-round
 
-**Seat:** grok · **Root:** puddle-fleet · **Date:** 2026-08-28
+**Seat:** grok · **Root:** the fleet · **Date:** 2026-08-28
 **Dispatch:** `msg-01a046b7cc3a7b529478ad2fa7d06606`
 **Base:** `origin/main` `0911b3adf03bd96cd0e8b4b444cc12f5ad10bc47` (matrix already merged).
 

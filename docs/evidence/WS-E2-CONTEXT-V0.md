@@ -25,7 +25,7 @@ them or creates substitute persistence.
 
 The shared CLI, static help registry, manifest, frozen protocol baseline, and
 existing code/tests remain untouched. `register_cli(commands)` is the dark
-activation seam. Its help strings remain `DRAFT -` stamped for Fable restamp.
+activation seam. Its help strings remain `DRAFT -` stamped for the architect restamp.
 
 ## E1 evidence derivation
 
@@ -197,7 +197,7 @@ for the pre-existing `roles/shipped` D1 assets consumed by landed D3 and this
 turnover projection. Until those steps land and the full suite is rerun on a
 frozen tree, this row is a pushed dark candidate, not an activated capability.
 
-## FABLE GATE VERDICT: PASS AND MERGED (2026-08-28)
+## the architect GATE VERDICT: PASS AND MERGED (2026-08-28)
 
 Access-class correction verified in code (scoped rendered sentence with its
 derivation pin, closed A|B|C enum, dataset v1, 8 access_class fields).

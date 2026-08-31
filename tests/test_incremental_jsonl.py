@@ -21,7 +21,7 @@ DOMAIN = "slipway-wake-hold-events-v1"
 
 class VerifiedLedgerCursorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         registry = Registry(self.root)
@@ -96,6 +96,38 @@ class VerifiedLedgerCursorTests(unittest.TestCase):
         with mock.patch.object(Path, "read_bytes", recording_read_bytes):
             replaced, _prefixes = self.read(cursor)
         self.assertEqual(truncated, replaced)
+        self.assertEqual(1, reads[0])
+
+    def test_same_inode_truncate_and_regrow_forces_one_full_replay(self) -> None:
+        """A rolled epoch cannot masquerade as an append after regrowing."""
+
+        from floati.jsonl import VerifiedLedgerCursor
+
+        first = self.send("cursor-regrow-first")
+        second = self.send("cursor-regrow-second")
+        cursor = VerifiedLedgerCursor()
+        self.assertEqual([first, second], self.read(cursor)[0])
+        third = self.send("cursor-regrow-third")
+        fourth = self.send("cursor-regrow-fourth")
+        frames = self.path.read_bytes().splitlines(keepends=True)
+        original_identity = (self.path.stat().st_dev, self.path.stat().st_ino)
+        self.path.write_bytes(b"".join(frames[2:]))
+        self.assertEqual(
+            original_identity,
+            (self.path.stat().st_dev, self.path.stat().st_ino),
+        )
+
+        real_read_bytes = Path.read_bytes
+        reads = [0]
+
+        def recording_read_bytes(path: Path) -> bytes:
+            if path.resolve(strict=False) == self.path.resolve(strict=False):
+                reads[0] += 1
+            return real_read_bytes(path)
+
+        with mock.patch.object(Path, "read_bytes", recording_read_bytes):
+            regrown, _prefixes = self.read(cursor)
+        self.assertEqual([third, fourth], regrown)
         self.assertEqual(1, reads[0])
 
     def test_incremental_malformed_frame_refuses_without_advancing_cursor(self) -> None:

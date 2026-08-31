@@ -1,6 +1,6 @@
 # U2-MINIMAL — install manifest + uninstall contract (v1)
 
-Filed by alice-necro 2026-08-22 per architect assignment (msg-01a027d6f4d7,
+Filed by build lane 2026-08-22 per architect assignment (msg-01a027d6f4d7,
 LAUNCH CUT owner-ratified @09283dc7). Normative input:
 `docs/design/floati-hardening-intake-2026-08-22.md` §U2. Status: CONTRACT
 FOR APPROVAL — build begins only on architect approval of this doc.
@@ -111,4 +111,4 @@ manifest + Trash contents account for every entry ever written.
 LaunchAgent management · multi-install discovery · remote/parallel fleet
 uninstall · non-macOS Trash semantics · manifest compaction.
 
-— alice-necro, U2-MINIMAL contract. Build begins on architect approval.
+— build lane, U2-MINIMAL contract. Build begins on architect approval.

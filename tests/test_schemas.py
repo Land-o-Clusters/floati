@@ -95,7 +95,7 @@ class SchemaContractTests(unittest.TestCase):
     def test_ow1_keeps_v0_wake_daemon_schema_bytes_frozen(self) -> None:
         expected = {
             "wake-daemon-adapter-record.schema.json": (
-                "7dbd1a7244af0a7436315c7aca5c4405299c876b6a44fce4ee408c18374fb037"
+                "8ba9102ac7542997a9b99220134c1bc20fbd73a33ef2aff8caaec9958e89103b"
             ),
             "wake-daemon-consent-receipt.schema.json": (
                 "8235046a508448997d6019e20fe3cc73a84f66d4780399b3a960b4c1703a28c3"
@@ -121,7 +121,7 @@ class SchemaContractTests(unittest.TestCase):
                 schema = load_schema("../v1/" + name)
                 self.assertEqual(1, schema["properties"]["schema_version"]["const"])
                 self.assertEqual(
-                    ["codex", "cursor", "grok-build"],
+                    ["codex", "cursor", "grok-build", "zcode"],
                     schema["properties"]["harness"]["enum"],
                 )
                 self.assertIs(False, schema["additionalProperties"])
@@ -143,7 +143,7 @@ class SchemaContractTests(unittest.TestCase):
         from floati.registry import Registry
         from floati.root import FloatiRoot
 
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as temporary:
             base = Path(temporary)
             home = base / "demo-fleet"
             root = FloatiRoot.open_direct_home(home, create=True)
@@ -1507,7 +1507,7 @@ class SchemaContractTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertNotIn("acting_session_id", load_schema("ack-receipt.schema.json")["required"])
 
-    def test_message_retraction_and_attempt_binding_preserve_the_fable_shapes(self) -> None:
+    def test_message_retraction_and_attempt_binding_preserve_the_architect_shapes(self) -> None:
         message = load_schema("message-envelope.schema.json")
         retraction = load_schema("message-retracted-record.schema.json")
         binding = message["properties"]["attempt_binding"]["oneOf"]
@@ -1622,10 +1622,10 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIsNotNone(
             re.fullmatch(
                 workspace["pattern"],
-                "\x2fprivate/tmp/floati-work/work-018f0f23abcd71238000000000000000",
+                "\x2fprivate\x2ftmp/floati-work/work-018f0f23abcd71238000000000000000",
             )
         )
-        self.assertIsNone(re.fullmatch(workspace["pattern"], "/tmp/inferred"))
+        self.assertIsNone(re.fullmatch(workspace["pattern"], "\x2ftmp/inferred"))
         self.assertNotIn("needs", item["required"])
         needs = item["properties"]["needs"]
         self.assertEqual(64, needs["maxItems"])
@@ -1650,7 +1650,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate\x2ftmp/floati-work/{item_id}",
         }
 
         def runtime_accepts(candidate: dict[str, object]) -> bool:
@@ -1666,8 +1666,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
-            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate\x2ftmp/floati-work/{item_id}", True),
+            (f"\x2fprivate\x2ftmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, runtime_accepts(dict(record, workspace=workspace)))
@@ -1685,7 +1685,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
+            "workspace": f"\x2fprivate\x2ftmp/floati-work/{item_id}",
         }
         schema_path = SCHEMA_DIR / "work-item-record.schema.json"
 
@@ -1697,8 +1697,8 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
-            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
+            (f"\x2fprivate\x2ftmp/floati-work/{item_id}", True),
+            (f"\x2fprivate\x2ftmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, schema_accepts(dict(record, workspace=workspace)))

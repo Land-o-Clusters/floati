@@ -1,4 +1,4 @@
-# C0 — managed-send surface, measured (Fable, 2026-08-29)
+# C0 — managed-send surface, measured (the architect, 2026-08-29)
 
 **Claim this receipt states:** the managed-send gateway (the harness-side wrapper that lets a
 seat send governed bus envelopes without holding raw bus credentials) exists for **codex/cli

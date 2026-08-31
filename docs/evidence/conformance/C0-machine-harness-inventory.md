@@ -241,4 +241,4 @@ These are machine/install facts that bind later `surface_verified` claims. None 
 3. **cursor-agent Homebrew `--version` fails.** The Car 4 default path exists as a wrapper, but `/opt/homebrew/bin/cursor-agent --version` exits 1 with a 65536-byte stderr blob starting at `.../dist-package/index.js:414`. The `~/.local/bin/cursor-agent` copy of the same wrapper SHA-256 exits 0 with `2026.07.09-a3815c0`. C4 live invocation against the adapter default may fail; that failure would be a receipt, not a patch.
 4. **Four named harnesses are absent** (cline, grok-build, pi, herdr). Their later rows are BATTERY-ONLY unless a binary is installed after this inventory.
 
-No product source was edited. C1 (codex conformance, live) is next; C2..C8 wait for Fable's Car 4-landed announcement and a rebase onto that tip.
+No product source was edited. C1 (codex conformance, live) is next; C2..C8 wait for the architect's Car 4-landed announcement and a rebase onto that tip.

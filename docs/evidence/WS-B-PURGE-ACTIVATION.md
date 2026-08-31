@@ -11,7 +11,7 @@ Dark writer evidence: `docs/evidence/WS-B-PURGE-TRASH-ONLY.md`
 ## Scope
 
 The dark Trash-only writer and its seven-finding repair were already on the
-activation base. Fable's copy restamp was also already banked in `097c32d`:
+activation base. the architect's copy restamp was also already banked in `097c32d`:
 the preview and three argparse strings no longer carry DRAFT copy, and the
 preview states the Trash-only, no-delete bound truthfully for both dry-run and
 post-move evidence.
@@ -93,7 +93,7 @@ mechanically and the bundle manifest was regenerated last from
 - `git diff --check`: no output, exit 0.
 
 The activation test patches only the account Trash resolver inside its
-isolated `/tmp` fixture. It executes `main` with `--dry-run`, proves
+isolated `<temp>` fixture. It executes `main` with `--dry-run`, proves
 the source bytes and root remain in place, proves Trash remains empty, and
 requires the real writer's `trash_only: true` evidence. It also proves the
 purge seam is registered exactly once and that static help carries the

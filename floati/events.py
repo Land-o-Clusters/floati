@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
+from .bus_epoch import shared_epoch_operation
 from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
 from .ids import uuid7_hex
 from .jsonl import (
@@ -14,24 +15,76 @@ from .jsonl import (
     read_records,
     read_records_compatible,
     read_records_compatible_snapshot,
+    read_records_compatible_with_versions,
     read_records_snapshot,
     transact,
     transact_records,
 )
+from .mail_health import RecipientReadiness
 from .records import WAKE_HOLD_KINDS, validate_record
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
 from .runtruth import RUN_KINDS
 from .snapshot import SnapshotStore, SourceSpec
+from .version_skew import VocabularySkewFact, vocabulary_skew_fact
 
 
 MAX_PRESENTATION_ITEMS = 1000
 EVENT_KINDS = frozenset(
-    {"message_envelope", "delivery_claim", "message_retracted"}
+    {
+        "message_envelope", "delivery_claim", "message_retracted",
+        "bus_epoch_roll_receipt",
+        "ledger_repair_receipt",
+    }
 )
 _ATTEMPT_BINDING_FIELDS = frozenset(
     {"attempt_id", "claim_id", "lease_id", "worker_session_id"}
 )
+
+
+class SendReceipt(dict):
+    """G2 send testimony with temporary direct envelope lookup compatibility."""
+
+    def __getitem__(self, key: str) -> object:
+        try:
+            return super().__getitem__(key)
+        except KeyError:
+            message = super().__getitem__("message")
+            if isinstance(message, Mapping):
+                return message[key]
+            raise
+
+    def get(self, key: str, default: object = None) -> object:
+        if key in self:
+            return super().get(key, default)
+        message = super().get("message")
+        if isinstance(message, Mapping):
+            return message.get(key, default)
+        return default
+
+    def __eq__(self, other: object) -> bool:
+        if super().__eq__(other):
+            return True
+        message = super().__getitem__("message")
+        return isinstance(message, Mapping) and message == other
+
+
+def _send_observed_at(now: Optional[datetime]) -> str:
+    """Use one valid operation instant for leased sends and their envelope."""
+
+    if now is None:
+        return utc_now()
+    if (
+        not isinstance(now, datetime)
+        or now.tzinfo is None
+        or now.utcoffset() is None
+    ):
+        raise ProtocolRefusal(
+            "time_invalid", "lease evaluation requires an aware datetime"
+        )
+    return now.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
 
 
 def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
@@ -39,7 +92,14 @@ def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
 
     prior_by_id: Dict[str, Dict[str, object]] = {}
     retracted = set()
-    for record in records:
+    for index, record in enumerate(records):
+        if record["kind"] == "bus_epoch_roll_receipt":
+            if index != 0:
+                raise IntegrityFailure(
+                    "bus_epoch_roll_receipt_position_invalid",
+                    "one bus epoch roll receipt is permitted only as physical record one",
+                )
+            continue
         if record["kind"] == "message_envelope":
             reply_to = record.get("reply_to")
             if reply_to is not None:
@@ -71,6 +131,8 @@ def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
                     "delivery_claim_sha_invalid",
                     "delivery claim sha must equal its referenced message sha",
                 )
+            continue
+        if record["kind"] == "ledger_repair_receipt":
             continue
         original_id = str(record["retracted_message_id"])
         original = prior_by_id.get(original_id)
@@ -185,6 +247,22 @@ class EventLog:
         self._validate_event_records(records)
         return records, unrecognized
 
+    def _compatible_event_records_with_skew(
+        self, *, snapshot: bool = False
+    ) -> Tuple[
+        List[Dict[str, object]],
+        List[Dict[str, object]],
+        Optional[VocabularySkewFact],
+    ]:
+        records, unrecognized, versions = read_records_compatible_with_versions(
+            self.root,
+            self.relative_path,
+            allowed_kinds=set(EVENT_KINDS),
+            snapshot=snapshot,
+        )
+        self._validate_event_records(records)
+        return records, unrecognized, vocabulary_skew_fact(versions)
+
     @staticmethod
     def _validate_event_records(records: Sequence[Dict[str, object]]) -> None:
         """Reject a schema-valid event prefix that cannot be semantically replayed."""
@@ -244,6 +322,7 @@ class EventLog:
         append_record(self.root, self.denial_relative_path, denial, allowed_kinds={"denial_receipt"})
         raise ProtocolRefusal(reason_code, f"message refused: {reason_code}")
 
+    @shared_epoch_operation
     def send(
         self,
         sender: str,
@@ -266,9 +345,20 @@ class EventLog:
         sender = self.registry.resolve_node_id(
             sender, field="sender", unknown_code="unknown_sender",
         )
-        recipient = self.registry.resolve_node_id(
-            recipient, field="recipient", unknown_code="unknown_recipient",
-        )
+        try:
+            recipient = self.registry.resolve_node_id(
+                recipient, field="recipient", unknown_code="unknown_recipient",
+            )
+        except ProtocolRefusal as exc:
+            if exc.code != "unknown_recipient":
+                raise
+            roster = ", ".join(self.registry.active_node_ids()) or "(none)"
+            raise ProtocolRefusal(
+                "recipient_unregistered",
+                f"message refused: recipient {recipient!r} is not registered; "
+                f"registered nodes: {roster}",
+            ) from exc
+        observed_at = _send_observed_at(now)
         key = ("idempotency-" + uuid7_hex()) if idempotency_key is None else idempotency_key
         if not isinstance(key, str) or not key or len(key) > 128:
             raise ProtocolRefusal("idempotency_key_invalid", "idempotency key must contain 1 to 128 characters")
@@ -287,7 +377,7 @@ class EventLog:
             "schema_version": 0,
             "id": "msg-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
-            "timestamp": utc_now(),
+            "timestamp": observed_at,
             "kind": "message_envelope",
             "sender": sender,
             "recipient": recipient,
@@ -313,6 +403,8 @@ class EventLog:
             "worker_session_id",
         )
         for record in prior_events:
+            if record.get("kind") != "message_envelope":
+                continue
             if record.get("idempotency_key") != key:
                 continue
             prior_claim = next(
@@ -337,20 +429,29 @@ class EventLog:
                     )
                 )
             ):
-                return (
-                    record
-                    if prior_claim is None
-                    else {"message": record, "claim": prior_claim}
+                return self._send_receipt(
+                    record if prior_claim is None else {"message": record, "claim": prior_claim},
+                    self.registry.node_lease_state(
+                        recipient,
+                        now=datetime.fromisoformat(
+                            str(record["timestamp"]).replace("Z", "+00:00")
+                        ),
+                    ),
+                    observed_at=str(record["timestamp"]),
                 )
             break
         self.registry.require_protocol_lease(sender, now=now, act="send by sender")
-        self.registry.require_protocol_lease(recipient, now=now, act="send to recipient")
+        recipient_lease = self.registry.require_protocol_lease(
+            recipient, now=now, act="send to recipient"
+        )
 
         def decide(
             records: list[Dict[str, object]],
         ) -> tuple[Dict[str, object], Sequence[Dict[str, object]]]:
             self._validate_event_records(records)
             for record in records:
+                if record.get("kind") != "message_envelope":
+                    continue
                 if record.get("idempotency_key") != key:
                     continue
                 prior_claim = next(
@@ -376,10 +477,9 @@ class EventLog:
                     )
                 ):
                     return (
-                        record
-                        if prior_claim is None
-                        else {"message": record, "claim": prior_claim}
-                    ), ()
+                        record if prior_claim is None else {"message": record, "claim": prior_claim},
+                        (),
+                    )
                 raise ProtocolRefusal("idempotency_conflict", "idempotency key has different content")
             if delivery_claim is None:
                 return envelope, (envelope,)
@@ -387,17 +487,36 @@ class EventLog:
             return result, (envelope, delivery_claim)
 
         try:
-            return transact_records(
+            durable = transact_records(
                 self.root,
                 self.relative_path,
                 decide,
                 allowed_kinds=EVENT_KINDS,
+            )
+            return self._send_receipt(
+                durable,
+                recipient_lease,
+                observed_at=observed_at,
             )
         except ProtocolRefusal as exc:
             if exc.code == "idempotency_conflict":
                 self._deny(sender, recipient, "idempotency_conflict")
             raise
 
+    @staticmethod
+    def _send_receipt(
+        durable: Dict[str, object],
+        recipient_lease: Mapping[str, object],
+        *,
+        observed_at: str,
+    ) -> SendReceipt:
+        result = dict(durable) if "message" in durable else {"message": durable}
+        result["recipient_readiness"] = RecipientReadiness.from_lease(
+            recipient_lease, observed_at=observed_at
+        ).artifact()
+        return SendReceipt(result)
+
+    @shared_epoch_operation
     def retract(
         self,
         retracted_message_id: str,
@@ -454,6 +573,8 @@ class EventLog:
                 if record["kind"] == "message_envelope":
                     prior_by_id[str(record["id"])] = record
                     continue
+                if record["kind"] != "message_retracted":
+                    continue
                 if record["retracted_message_id"] == retracted_message_id:
                     if (
                         record["worker_session_id"] == worker_session_id
@@ -485,6 +606,7 @@ class EventLog:
 
         return transact(self.root, self.relative_path, decide, allowed_kinds=EVENT_KINDS)
 
+    @shared_epoch_operation
     def present(
         self,
         recipient: str,
@@ -503,6 +625,72 @@ class EventLog:
                 worker_session_id=worker_session_id,
                 now=now,
             )
+
+    @shared_epoch_operation
+    def present_compatible(
+        self,
+        recipient: str,
+        limit: int = MAX_PRESENTATION_ITEMS,
+        *,
+        worker_session_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> Tuple[
+        List[Dict[str, object]],
+        Optional[Dict[str, object]],
+        Optional[Dict[str, object]],
+    ]:
+        """Present known mail while preserving a stamped newer-vocabulary fact."""
+
+        recipient = self.registry.resolve_node_id(recipient, field="recipient")
+        from .wake_hold import wake_coordination_guard
+
+        with wake_coordination_guard(
+            self.root, recipient, worker_session_id=worker_session_id
+        ):
+            return self._present_compatible_already_guarded(
+                recipient,
+                limit,
+                worker_session_id=worker_session_id,
+                now=now,
+            )
+
+    def _present_compatible_already_guarded(
+        self,
+        recipient: str,
+        limit: int = MAX_PRESENTATION_ITEMS,
+        *,
+        worker_session_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> Tuple[
+        List[Dict[str, object]],
+        Optional[Dict[str, object]],
+        Optional[Dict[str, object]],
+    ]:
+        recipient = validate_identifier(recipient, "recipient")
+        self.registry.require_active(recipient)
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not 1 <= limit <= MAX_PRESENTATION_ITEMS
+        ):
+            raise ProtocolRefusal(
+                "presentation_limit_invalid", "presentation limit must be 1 through 1000"
+            )
+        if worker_session_id is not None:
+            self._session_component(worker_session_id)
+        frames, _unrecognized, skew = self._compatible_event_records_with_skew()
+        messages, _payload = self._present_from_frames(
+            frames, recipient, limit, worker_session_id=worker_session_id
+        )
+        if not messages:
+            return [], None, None if skew is None else skew.artifact()
+        self.registry.require_protocol_lease(
+            recipient, now=now, act="fresh delivery to recipient"
+        )
+        receipt = self._write_delivery_receipt(
+            recipient, messages, worker_session_id=worker_session_id
+        )
+        return messages, receipt, None if skew is None else skew.artifact()
 
     def _present_already_guarded(
         self,
@@ -553,9 +741,20 @@ class EventLog:
         self.registry.require_protocol_lease(
             recipient, now=now, act="fresh delivery to recipient"
         )
-        relative = self._delivery_relative_path(
-            recipient, worker_session_id=worker_session_id
+        receipt = self._write_delivery_receipt(
+            recipient, messages, worker_session_id=worker_session_id
         )
+        return messages, receipt
+
+    def _write_delivery_receipt(
+        self,
+        recipient: str,
+        messages: Sequence[Dict[str, object]],
+        *,
+        worker_session_id: Optional[str] = None,
+    ) -> Dict[str, object]:
+        relative = self._delivery_relative_path(recipient, worker_session_id=worker_session_id)
+
         def decide(prior: list[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
             receipt: Dict[str, object] = {
                 "schema_version": 0,
@@ -568,8 +767,10 @@ class EventLog:
                 "presentation_count": len(prior) + 1,
             }
             return receipt, receipt
-        receipt = transact(self.root, relative, decide, allowed_kinds=set(WAKE_HOLD_KINDS))
-        return messages, receipt
+
+        return transact(
+            self.root, relative, decide, allowed_kinds=set(WAKE_HOLD_KINDS)
+        )
 
     def stale_send_projection(self) -> List[Dict[str, object]]:
         """Project dead-holder sends from evidence only; this method never renews a lease."""
@@ -643,16 +844,28 @@ class EventLog:
             reader="inbox",
             key=f"{recipient}:{limit}",
             discover_sources=lambda: (
-                SourceSpec(self.relative_path, frozenset({"message_envelope"})),
+                SourceSpec(self.relative_path, EVENT_KINDS),
             ),
         )
 
     def _present_full_scan(
         self, recipient: str, limit: int, *, worker_session_id: Optional[str] = None
     ) -> tuple[List[Dict[str, object]], Dict[str, object]]:
+        frames = self.event_records()
+        return self._present_from_frames(
+            frames, recipient, limit, worker_session_id=worker_session_id
+        )
+
+    def _present_from_frames(
+        self,
+        frames: Sequence[Dict[str, object]],
+        recipient: str,
+        limit: int,
+        *,
+        worker_session_id: Optional[str] = None,
+    ) -> tuple[List[Dict[str, object]], Dict[str, object]]:
         from .cursor import SparseCursor
 
-        frames = self.event_records()
         events = [record for record in frames if record["kind"] == "message_envelope"]
         retracted_ids = {
             str(record["retracted_message_id"])
@@ -775,6 +988,15 @@ class EventLog:
             )
 
         for record in event_tail:
+            if record.get("kind") in {
+                "bus_epoch_roll_receipt", "delivery_claim", "ledger_repair_receipt",
+            }:
+                continue
+            if record.get("kind") != "message_envelope":
+                raise SnapshotRefusal(
+                    "snapshot_tail_history_required",
+                    "event tail needs full ledger history",
+                )
             if record.get("reply_to") is not None:
                 raise SnapshotRefusal(
                     "snapshot_tail_history_required",

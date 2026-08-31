@@ -436,7 +436,7 @@ terminal sessions, receipt chains, drill outcomes, and process cleanup audits.
 The architect ruling at `aedf92b` clarifies that Floati code makes no network
 call, while the installed child harness owns its normal provider traffic and
 credential state. Work items can now record only the derived absolute
-`/tmp/floati-work/<work-id>` mapping; legacy rows without the optional
+`<temp>/floati-work/<work-id>` mapping; legacy rows without the optional
 field remain readable. A missing mapping records `worker_workspace_missing`
 and terminal `workspace_mapping_missing` evidence before launch.
 
@@ -640,7 +640,7 @@ output, `dontAsk` permissions, no session persistence, and only the built-in
 `Read,Write,Edit` file tools. Bash, network-capable tools, `--allowedTools`
 preapproval, and bypass modes are absent. A `--` separator terminates Claude's
 variadic tool list before the positional work prompt.
-The child cwd is the ruled `/tmp/floati-work/<work-id>` mapping. The
+The child cwd is the ruled `<temp>/floati-work/<work-id>` mapping. The
 adapter never reads, copies, or injects credentials, never uses a shell, and
 never enables bypass permissions. Permission-shaped headless failure becomes
 `approval_required_unattended`; malformed, oversized, provider-failed, timeout,

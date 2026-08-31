@@ -54,7 +54,7 @@ The compatibility proof is: from a t3-code-driven session, init a scratch root, 
 
 ## Plan when a t3-driven session exists
 
-Scratch root under this seat's path only (`…/floati-grok/.conformance-scratch/…`), never the puddle-fleet root.
+Scratch root under this seat's path only (`…/floati-grok/.conformance-scratch/…`), never the the fleet root.
 
 1. From that session, name the executable actually launched.
 2. `floati init --root <scratch> --solo <node> --harness <exact harness string t3 reports>`

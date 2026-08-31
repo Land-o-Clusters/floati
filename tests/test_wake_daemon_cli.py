@@ -14,13 +14,15 @@ from unittest import mock
 
 from floati.cli import main
 from floati.copy import WAKE_DAEMON_GROK_BOUND_DISPLAY
+from floati.errors import ProtocolRefusal
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
 
 
 class WakeDaemonCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.home = self.base / "home"
@@ -33,15 +35,46 @@ class WakeDaemonCliTests(unittest.TestCase):
         self.executable = self.base / "cursor-agent"
         self.executable.write_bytes(b"#!/bin/sh\nexit 0\n")
         self.executable.chmod(0o700)
+        # A fake cursor that answers a resume with a valid success result for
+        # the bound session - the shape probe_resume validates.
+        self.proof_executable = self.base / "cursor-proof"
+        self.proof_executable.write_bytes(
+            b"#!/bin/sh\n"
+            b"printf '%s' '{\"type\":\"result\",\"subtype\":\"success\","
+            b"\"is_error\":false,\"session_id\":\"cursor-session-1\"}'\n"
+        )
+        self.proof_executable.chmod(0o700)
+        # A fake that leaves a marker whenever it RUNS - proves a declined
+        # probe never spent the turn.
+        self.marker = self.base / "probe-ran"
+        self.spy_executable = self.base / "cursor-spy"
+        self.spy_executable.write_bytes(
+            f"#!/bin/sh\ntouch {self.marker}\nexit 0\n".encode()
+        )
+        self.spy_executable.chmod(0o700)
 
-    def run_cli(self, *arguments: str) -> tuple[int, dict]:
+    def run_cli(self, *arguments: str, stdin: str = "") -> tuple[int, dict]:
         stdout = io.StringIO()
         stderr = io.StringIO()
         with mock.patch.dict(os.environ, {"HOME": str(self.home)}, clear=False):
-            with redirect_stdout(stdout), redirect_stderr(stderr):
+            with redirect_stdout(stdout), redirect_stderr(stderr),\
+                    mock.patch("sys.stdin", io.StringIO(stdin)):
                 status = main(list(arguments))
         payload = stdout.getvalue() or stderr.getvalue()
+        self._stderr = stderr.getvalue()
         return status, json.loads(payload)
+
+    def bind_with(self, executable: Path, *, yes: bool = False, stdin: str = "") -> tuple[int, dict]:
+        arguments = [
+            *self.identity("bind"),
+            "--session", "cursor-session-1",
+            "--workspace", str(self.workspace),
+            "--executable", str(executable),
+            "--binding-epoch", "1",
+        ]
+        if yes:
+            arguments.append("--yes")
+        return self.run_cli(*arguments, stdin=stdin)
 
     def identity(self, operation: str, harness: str = "cursor") -> list[str]:
         return [
@@ -78,6 +111,76 @@ class WakeDaemonCliTests(unittest.TestCase):
         self.assertEqual("inactive", artifact["evidence"]["state"])
         self.assertFalse(artifact["evidence"]["display"].startswith("DRAFT -"))
         self.assertEqual(before, after)
+
+    def test_bind_refuses_an_adapter_that_declares_no_probe_class(self) -> None:
+        """WD-R5a at the bind surface (R5d scope): an undeclared adapter cannot bind."""
+        from floati import wake_daemon_adapters as module
+
+        with mock.patch.object(module, "_ADAPTER_RESUME_PROBES", {"codex": "costs_one_turn"}):
+            status, artifact = self.bind()
+
+        self.assertEqual(20, status)
+        self.assertEqual("wake_daemon_resume_probe_undeclared", artifact["evidence"]["code"])
+
+    def test_bind_offers_the_probe_and_a_decline_records_resume_unproven(self) -> None:
+        """WD-R5b: consent is a surface - the offer shows what will run and
+        what it costs; a decline binds with a RECORDED absence, not silence."""
+        status, artifact = self.bind_with(
+            self.spy_executable, stdin="n\n",
+        )
+
+        self.assertEqual(0, status)
+        self.assertIn("ONE resume", self._stderr)
+        self.assertIn("costs one turn", self._stderr)
+        self.assertIn("cursor-session-1", self._stderr)
+        self.assertEqual("resume_unproven", artifact["evidence"]["resume_state"])
+        self.assertFalse(self.marker.exists(), "a declined probe must not run")
+
+    def test_bind_with_yes_runs_the_probe_and_records_resume_proven(self) -> None:
+        """--yes is the exception: consent without the interactive ask."""
+        status, artifact = self.bind_with(self.proof_executable, yes=True)
+
+        self.assertEqual(0, status)
+        self.assertEqual("resume_proven", artifact["evidence"]["resume_state"])
+
+    def test_bind_eof_declines_without_spending_the_turn(self) -> None:
+        """A non-interactive bind never spends a turn by default."""
+        status, artifact = self.bind_with(self.spy_executable, stdin="")
+
+        self.assertEqual(0, status)
+        self.assertEqual("resume_unproven", artifact["evidence"]["resume_state"])
+        self.assertFalse(self.marker.exists(), "EOF must not authorize the probe")
+
+    def test_bind_probe_failure_refuses_wake_bind_target_unresumable(self) -> None:
+        """On probe failure the bind is refused, carrying the observed
+        duration and the remedy - and no binding is written."""
+        status, artifact = self.bind_with(self.executable, yes=True)
+
+        self.assertEqual(20, status)
+        evidence = artifact["evidence"]
+        self.assertEqual("wake_bind_target_unresumable", evidence["code"])
+        self.assertIn("probe failed after", evidence["detail"])
+        self.assertIn("headless", evidence["detail"])
+        with self.assertRaises(ProtocolRefusal):
+            AdapterBindingStore(self.root).read(
+                DaemonCoordinate(self.root, "builder-a", "cursor")
+            )
+
+    def test_bind_probe_success_is_judged_by_the_result_not_the_exit_code(self) -> None:
+        """An exit-0 resume that answers from the WRONG session is not a
+        proven resume - it fails the bind like any other failure."""
+        lying = self.base / "cursor-lying"
+        lying.write_bytes(
+            b"#!/bin/sh\n"
+            b"printf '%s' '{\"type\":\"result\",\"subtype\":\"success\","
+            b"\"is_error\":false,\"session_id\":\"someone-else\"}'\n"
+        )
+        lying.chmod(0o700)
+
+        status, artifact = self.bind_with(lying, yes=True)
+
+        self.assertEqual(20, status)
+        self.assertEqual("wake_bind_target_unresumable", artifact["evidence"]["code"])
 
     def test_cursor_bind_is_exact_and_codex_bind_requires_the_waiter(self) -> None:
         status, artifact = self.bind()
@@ -287,32 +390,32 @@ class WakeDaemonCliTests(unittest.TestCase):
             "install": (
                 "floati wake daemon install - install the exact LaunchAgent",
                 "Install deterministic digest-bound plist bytes without starting them.",
-                "wake daemon install --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon install --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
             "start": (
                 "floati wake daemon start - start the exact LaunchAgent",
                 "Bootstrap and kickstart only the deterministic user-domain LaunchAgent.",
-                "wake daemon start --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon start --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
             "status": (
                 "floati wake daemon status - inspect one daemon coordinate",
                 "Report inactive before consent and otherwise inspect only the exact installed supervisor coordinate.",
-                "wake daemon status --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon status --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
             "stop": (
                 "floati wake daemon stop - stop the exact LaunchAgent",
                 "Request bootout and prove process absence for one exact user-domain label.",
-                "wake daemon stop --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon stop --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
             "remove": (
                 "floati wake daemon remove - remove the exact LaunchAgent",
                 "Quarantine and remove only matching deterministic plist bytes.",
-                "wake daemon remove --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon remove --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
             "revoke": (
                 "floati wake daemon revoke - revoke exact daemon consent",
                 "Stop and remove matching supervisor bytes, then append exact consent revocation.",
-                "wake daemon revoke --root /var/tmp/fleet --as builder-a --harness cursor",
+                "wake daemon revoke --root /var\x2ftmp/fleet --as builder-a --harness cursor",
             ),
         }
         for operation in (

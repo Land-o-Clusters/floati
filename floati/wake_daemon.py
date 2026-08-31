@@ -8,16 +8,21 @@ import json
 import math
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Mapping, Optional
 
+from .bus_epoch import shared_epoch_operation
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot
+from .records import WAKE_ATTEMPT_REFUSED_REASONS
 from .registry import Registry
+from .snapshot import _owned_epoch_archives
 from .wake_control import WakeController, is_session_paused
 from .wake_daemon_adapters import AdapterBinding, WakeAdapterResult
 from .wake_daemon_contract import (
+    AdapterBindingStore,
     DaemonConsentLedger,
     DaemonCoordinate,
     DaemonLifecycleLedger,
@@ -44,10 +49,16 @@ _RUNTIME_FIELDS = frozenset({
     "last_state",
     "last_reason_code",
     "last_lifecycle_receipt_id",
+    "bus_epoch_archive",
 })
+_LEGACY_RUNTIME_FIELDS = _RUNTIME_FIELDS - {"bus_epoch_archive"}
 _BREAKER_THRESHOLD = 3
 _WAKE_BUDGET = 3
 _WAKE_BUDGET_WINDOW_SECONDS = 300.0
+WAKE_BREAKER_REMEDY = (
+    "rebind the wake daemon to a dedicated headless session - an interactive "
+    "session with a large rollout may be unresumable - then rerun doctor"
+)
 
 
 class DaemonOwner:
@@ -141,6 +152,12 @@ class WakeDaemon:
             Path("state/wake-daemon/runtime") / f"{coordinate.digest}.json"
         )
         self.owner = DaemonOwner(coordinate)
+
+    def wake_health(self, now: datetime) -> Dict[str, object]:
+        """Project the same node-bound wake fact exposed by status and Doctor."""
+        from .wake_health import WakeHealthProjection
+
+        return WakeHealthProjection(self.root).fact(self.coordinate.node_id, now)
 
     def run_cycle(self, now: float) -> Dict[str, object]:
         current_time = self._time(now)
@@ -348,7 +365,7 @@ class WakeDaemon:
                 lifecycle_state="unknown" if unknown else "refused",
                 reason_code=reason_code,
             )
-        if runtime["last_state"] == "wake_requested":
+        if runtime["last_state"] in {"wake_requested", "wake_evidence_unknown"}:
             self._schedule_failure(runtime, consent, current_time)
             return self._transition(
                 runtime,
@@ -366,6 +383,9 @@ class WakeDaemon:
         runtime["last_state"] = "wake_requested"
         runtime["last_reason_code"] = "wake_evidence_pending"
         self._write_runtime(runtime)
+        arm = getattr(self.adapter, "arm_timeout_forensics", None)
+        if callable(arm):
+            arm(self._attempt_key(runtime))
         result = self._request_wake(
             binding, reason, min(300, int(consent["max_poll_seconds"]))
         )
@@ -399,6 +419,7 @@ class WakeDaemon:
             runtime["wake_timestamps"] = timestamps + [current_time]
             runtime["current_wake_key"] = None
             self._schedule_success(runtime, consent, current_time)
+            self._first_wake_verdict(binding, result)
             return self._transition(
                 runtime,
                 consent,
@@ -422,6 +443,7 @@ class WakeDaemon:
         )
         self._schedule_failure(runtime, consent, current_time)
         unknown = result.outcome == "unknown"
+        self._first_wake_verdict(binding, result)
         return self._transition(
             runtime,
             consent,
@@ -464,24 +486,32 @@ class WakeDaemon:
             ) from exc
         return self._validate_runtime(value)
 
+    @shared_epoch_operation
     def _read_or_initialize(
         self, consent: Mapping[str, object], binding: AdapterBinding
     ) -> Dict[str, object]:
+        current_epoch = self._epoch_archive_token()
         try:
             current = self.read_runtime()
         except ProtocolRefusal as exc:
             if exc.code != "wake_daemon_runtime_absent":
                 raise
-            current = self._initial_runtime(consent, binding)
+            current = self._initial_runtime(consent, binding, current_epoch)
+        if current["bus_epoch_archive"] != current_epoch:
+            current["bus_epoch_archive"] = current_epoch
+            current["next_poll_at"] = 0.0
         if current["activation_epoch"] != consent["activation_epoch"]:
-            current = self._initial_runtime(consent, binding)
+            current = self._initial_runtime(consent, binding, current_epoch)
         if current["session_digest"] not in {None, binding.session_digest}:
-            current = self._initial_runtime(consent, binding)
+            current = self._initial_runtime(consent, binding, current_epoch)
         current["session_digest"] = binding.session_digest
         return current
 
     def _initial_runtime(
-        self, consent: Mapping[str, object], binding: AdapterBinding
+        self,
+        consent: Mapping[str, object],
+        binding: AdapterBinding,
+        current_epoch: Optional[str],
     ) -> Dict[str, object]:
         return {
             "schema_version": 0,
@@ -502,13 +532,18 @@ class WakeDaemon:
             "last_state": "inactive",
             "last_reason_code": None,
             "last_lifecycle_receipt_id": None,
+            "bus_epoch_archive": current_epoch,
         }
 
     def _validate_runtime(self, value: object) -> Dict[str, object]:
-        if not isinstance(value, dict) or set(value) != _RUNTIME_FIELDS:
+        if not isinstance(value, dict) or set(value) not in {
+            _RUNTIME_FIELDS, _LEGACY_RUNTIME_FIELDS
+        }:
             raise IntegrityFailure(
                 "wake_daemon_runtime_invalid", "daemon runtime state has an open shape"
             )
+        value = dict(value)
+        value.setdefault("bus_epoch_archive", None)
         if (
             value.get("schema_version") != 0
             or value.get("tenant_id") != self.root.tenant_id
@@ -517,6 +552,15 @@ class WakeDaemon:
             or value.get("coordinate_digest") != self.coordinate.digest
             or value.get("circuit_state") not in {"closed", "open"}
             or not isinstance(value.get("wake_timestamps"), list)
+            or (
+                value.get("bus_epoch_archive") is not None
+                and (
+                    not isinstance(value.get("bus_epoch_archive"), str)
+                    or Path(str(value["bus_epoch_archive"])).name
+                    != value["bus_epoch_archive"]
+                    or not str(value["bus_epoch_archive"]).startswith("archive-")
+                )
+            )
         ):
             raise IntegrityFailure(
                 "wake_daemon_runtime_invalid", "daemon runtime identity is invalid"
@@ -530,7 +574,15 @@ class WakeDaemon:
         for item in value["wake_timestamps"]:
             self._time(item)
         self._time(value.get("next_poll_at"))
-        return dict(value)
+        return value
+
+    def _epoch_archive_token(self) -> Optional[str]:
+        """Name the live receipt's owned predecessor without touching its members."""
+
+        if not self.root.resolve_relative("events.jsonl").exists():
+            return None
+        archives = _owned_epoch_archives(self.root)
+        return archives[0].name if archives else None
 
     def _write_runtime(self, runtime: Mapping[str, object]) -> None:
         checked = self._validate_runtime(dict(runtime))
@@ -592,7 +644,88 @@ class WakeDaemon:
         )
         runtime["last_lifecycle_receipt_id"] = lifecycle["id"]
         self._write_runtime(runtime)
+        self._maintain_breaker_notice(runtime, binding)
         return self._artifact(runtime)
+
+    def _first_wake_verdict(self, binding: AdapterBinding, result: WakeAdapterResult) -> None:
+        """WD-R5c-F1: flip unproven→suspect only on typed bound exhaustion
+        (`wake_daemon_adapter_timeout`), never on the unknown outcome class.
+        A subsequent woke clears resume_suspect to resume_proven. A verdict
+        that cannot be recorded must not kill the cycle."""
+        state = binding.resume_state
+        if result.outcome == "woke" and state in {"resume_unproven", "resume_suspect"}:
+            flipped = "resume_proven"
+        elif (
+            result.reason_code == "wake_daemon_adapter_timeout"
+            and state == "resume_unproven"
+        ):
+            flipped = "resume_suspect"
+        else:
+            return
+        try:
+            AdapterBindingStore(self.root).write(
+                self.coordinate,
+                session_id=binding.session_id,
+                workspace=binding.workspace,
+                executable=binding.executable,
+                adapter_version=binding.adapter_version,
+                adapter_digest=binding.adapter_digest,
+                binding_epoch=binding.binding_epoch,
+                resume_state=flipped,
+            )
+        except (ProtocolRefusal, IntegrityFailure, OSError):
+            return
+
+    def _maintain_breaker_notice(
+        self, runtime: Mapping[str, object], binding: AdapterBinding
+    ) -> None:
+        """WD-R7: the breaker says so ONCE, locally. One notice file per
+        coordinate, present for exactly as long as the circuit stays open:
+        written when open and absent - presence, never a count standing in
+        for presence - so a lost notice re-derives from the durable runtime
+        and a restart cannot leave it gone. Cleared when the circuit closes
+        again. Local only - no network, no telemetry, ever."""
+
+        notice_path = self.root.resolve_relative(
+            Path("state/wake-daemon/notices") / f"{self.coordinate.digest}.json"
+        )
+        if runtime["circuit_state"] == "closed":
+            notice_path.unlink(missing_ok=True)
+            return
+        if runtime["circuit_state"] != "open" or notice_path.exists():
+            return
+        notice = {
+            "schema_version": 0,
+            "tenant_id": self.root.tenant_id,
+            "node_id": self.coordinate.node_id,
+            "harness": self.coordinate.harness,
+            "coordinate_digest": self.coordinate.digest,
+            "session_id": binding.session_id,
+            "session_digest": binding.session_digest,
+            "consecutive_refusals": int(runtime["consecutive_refusals"]),
+            "current_backoff": int(runtime["current_backoff"]),
+            "last_reason_code": runtime["last_reason_code"],
+            "cycle_index": int(runtime["cycle_index"]),
+            "remedy": WAKE_BREAKER_REMEDY,
+        }
+        encoded = (
+            json.dumps(notice, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
+        notice_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = notice_path.with_name(
+            f".{notice_path.name}.{os.getpid()}.{uuid7_hex()}.tmp"
+        )
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            if os.write(descriptor, encoded) != len(encoded):
+                raise OSError("short breaker notice write")
+            os.fsync(descriptor)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, notice_path)
 
     @staticmethod
     def _artifact(runtime: Mapping[str, object]) -> Dict[str, object]:
@@ -610,6 +743,7 @@ class WakeDaemon:
         message_worker_session_id: Optional[str],
         reason_code: str,
     ) -> None:
+        recorded = reason_code if reason_code in WAKE_ATTEMPT_REFUSED_REASONS else "wake_prompt_failed"
         try:
             WakeAttemptLedger(self.root).record(
                 recipient=self.coordinate.node_id,
@@ -619,10 +753,10 @@ class WakeDaemon:
                 message_worker_session_id=message_worker_session_id,
                 idempotency_key=self._attempt_key(runtime),
                 outcome="refused",
-                reason_code="wake_prompt_failed",
+                reason_code=recorded,
             )
         except ProtocolRefusal as exc:
-            if exc.code != "wake_prompt_failed":
+            if exc.code not in WAKE_ATTEMPT_REFUSED_REASONS:
                 raise
 
     def _existing_attempt(

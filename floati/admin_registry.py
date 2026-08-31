@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
+from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
 from .jsonl import read_records_snapshot, transact_records
 from .node_wizard import NodeAddPlan, NodeRetirePlan
@@ -12,6 +13,7 @@ from .provider_switch import ProviderSwitchPlan
 from .registry import REGISTRY_KINDS, Registry
 from .role_assignment import RoleAssignmentPlan
 from .root import FloatiRoot, validate_identifier
+from .seat_declaration import SeatDeclaration, WorkspaceBinding
 
 
 class RegistryAdminBackend:
@@ -42,6 +44,7 @@ class RegistryAdminBackend:
         latest = self._latest("node_lease", node_id)
         return latest if latest is not None and latest.get("state") == "active" else None
 
+    @shared_epoch_operation
     def _commit(
         self,
         records: Sequence[Dict[str, Any]],
@@ -70,22 +73,30 @@ class RegistryAdminBackend:
                 latest = record
         return latest
 
-    def _prepare_workspace(self, node_id: str) -> tuple[Path, bool, bool]:
-        node = validate_identifier(node_id, "node")
-        nodes = self.root.path / "nodes"
-        workspace = nodes / node
-        if nodes.is_symlink() or (nodes.exists() and not nodes.is_dir()):
-            raise ProtocolRefusal("node_workspace_invalid", "nodes coordinate is not a directory")
-        if workspace.is_symlink() or (workspace.exists() and not workspace.is_dir()):
-            raise ProtocolRefusal("node_workspace_invalid", "node workspace is not a directory")
-        created_nodes = not nodes.exists()
-        created_workspace = not workspace.exists()
-        nodes.mkdir(mode=0o700, exist_ok=True)
-        workspace.mkdir(mode=0o700, exist_ok=True)
-        return workspace, created_nodes, created_workspace
+    def _prepare_workspace(self, node_id: str) -> WorkspaceBinding:
+        return WorkspaceBinding.prepare(self.root, node_id)
+
+    def _add_commit_state(
+        self, records: Sequence[Dict[str, Any]]
+    ) -> Optional[bool]:
+        """Return true/false only when exact append presence can be reconciled."""
+
+        try:
+            existing = self._records()
+        except Exception:
+            return None
+        by_id = {record.get("id"): record for record in existing}
+        matches = [by_id.get(record.get("id")) == record for record in records]
+        if matches and all(matches):
+            return True
+        if any(record.get("id") in by_id for record in records):
+            return None
+        return False
 
     def commit_add(self, plan: NodeAddPlan) -> Dict[str, Any]:
-        workspace, created_nodes, created_workspace = self._prepare_workspace(plan.node_id)
+        binding = self._prepare_workspace(plan.node_id)
+        publication = None
+        commit_started = False
 
         def decide(existing: list[Dict[str, Any]], records: Sequence[Dict[str, Any]]) -> None:
             if self._latest_registry(existing, plan.node_id) is not None:
@@ -99,20 +110,25 @@ class RegistryAdminBackend:
                 raise ProtocolRefusal("node_lease_invalid", "temporary lifetime and lease preview disagree")
 
         try:
+            if plan.governance is not None:
+                publication = SeatDeclaration.create(
+                    binding,
+                    plan.node_id,
+                    self.root,
+                    plan.governance,
+                )
+            commit_started = True
             result = self._commit(plan.records, decide)
         except Exception:
-            if created_workspace:
-                try:
-                    workspace.rmdir()
-                except OSError:
-                    pass
-            if created_nodes:
-                try:
-                    workspace.parent.rmdir()
-                except OSError:
-                    pass
+            commit_state = self._add_commit_state(plan.records) if commit_started else False
+            if commit_state is False:
+                if publication is not None:
+                    binding.remove_owned_marker(publication.ownership)
+                binding.rollback_created_directories()
             raise
-        result["workspace"] = str(workspace)
+        finally:
+            binding.close()
+        result["workspace"] = str(binding.path)
         return result
 
     def commit_retire(self, plan: NodeRetirePlan) -> Dict[str, Any]:

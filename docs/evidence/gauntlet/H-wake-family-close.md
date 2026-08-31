@@ -108,7 +108,7 @@ extension-host session is driven and receipted — never by inheritance.
 - Extension-host Stop cycles for Claude Code inside Cursor
 - New floati daemon adapters for event_driven harnesses
 - README matrix swap
-- Live-root waiter against puddle-fleet
+- Live-root waiter against the fleet
 
 Quirk note: Codex desktop bundle version moved to `26.820.80927` on this
 machine; prior inventory cited `26.820.60940`. Method stands; that cell's

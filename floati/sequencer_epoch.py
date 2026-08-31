@@ -575,7 +575,9 @@ class ManagedWriterLease:
         _check_creator_process(self)
         if self._owner_context is not None:
             raise ProtocolRefusal("sequencer_lease_reused", "a managed lease may be entered once")
-        self._owner_context = jsonl._locked_path(self._owner_path, exclusive=True)
+        self._owner_context = jsonl._locked_path(
+            self._owner_path, exclusive=True, order_tracked=False
+        )
         self._owner_context.__enter__()
         self._owner_held = True
         try:
@@ -670,7 +672,9 @@ class DirectWriterLease:
         _check_creator_process(self)
         if self._owner_context is not None:
             raise ProtocolRefusal("sequencer_lease_reused", "a direct lease may be entered once")
-        self._owner_context = jsonl._locked_path(self._owner_path, exclusive=False)
+        self._owner_context = jsonl._locked_path(
+            self._owner_path, exclusive=False, order_tracked=False
+        )
         self._owner_context.__enter__()
         try:
             current = self.epoch_ledger._current_snapshot()
@@ -700,7 +704,9 @@ class DirectWriterLease:
             raise ProtocolRefusal("root_required", "offline takeover requires a validated FloatiRoot")
         owner_path = root.resolve_relative("sequencer/owner.lock")
         proof = _OfflineExclusiveOwner(root)
-        with jsonl._locked_path(owner_path, exclusive=True):
+        with jsonl._locked_path(
+            owner_path, exclusive=True, order_tracked=False
+        ):
             proof._owner_held = True
             _register_exclusive_owner(proof)
             try:

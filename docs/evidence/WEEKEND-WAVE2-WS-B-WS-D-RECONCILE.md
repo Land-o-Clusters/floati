@@ -62,7 +62,7 @@ The combined discoverable slice is **33/33 green**.
 ## DRAFT - Current-seat fence repair
 
 Architect dispatch `msg-01a045ca3c75782b83a0b7f8ebb34da0` reported that the
-common hook still hardcoded the retired `alice-necro` seat. The repair is:
+common hook still hardcoded the retired `build lane` seat. The repair is:
 
 - opt-in per worktree through `floati.seatFenceRoot` and
   `floati.seatFenceNode` worktree-local Git coordinates;
@@ -73,8 +73,8 @@ common hook still hardcoded the retired `alice-necro` seat. The repair is:
   physically read-only snapshot; and
 - committer name/email must match the current active node exactly.
 
-The active lane is configured as `lane-floati` against the declared
-`~/.floati-bus/puddle-fleet` root. A no-identity commit refused, the exact
+The active lane is configured as `build lane` against the declared
+`~/.floati-bus/the fleet` root. A no-identity commit refused, the exact
 registry-backed lane identity passed, and the 4/4 perturbation bank includes a
 read-only-root proof that no lock file is created.
 
@@ -91,4 +91,4 @@ Required source-tree scrub: `[]`, exit 0.
 Required Git-history-note scrub: `[]`, exit 0.
 
 Publication, activation, tenant migration, flip, and release remain outside
-this evidence. Fable gates behind the train and was not awaited.
+this evidence. the architect gates behind the train and was not awaited.

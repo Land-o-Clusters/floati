@@ -1,6 +1,6 @@
 # WS-B4 declared roots and Harbor Chart wiring
 
-Status: **DRAFT - awaiting integration-train reconciliation and Fable copy gate**
+Status: **DRAFT - awaiting integration-train reconciliation and the architect copy gate**
 
 ## Contract delivered
 
@@ -26,7 +26,7 @@ After the train lands, shared CLI reconciliation adds `floati chart` with:
 - a required absolute declared-roots file option;
 - `--json` for the compact artifact twin;
 - ASCII rendering otherwise;
-- DRAFT-stamped static help and copy pending Fable's gate;
+- DRAFT-stamped static help and copy pending the architect's gate;
 - final bundle-manifest regeneration after the module and schema land.
 
 The wizard may offer to select or create a declared-roots file, but it must not

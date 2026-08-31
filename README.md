@@ -145,7 +145,7 @@ exits, and descendant cleanup audits all agree.
 ### See the whole harbor
 
 <p align="center">
-  <img src="docs/evidence/captures/post-campaign-20260828/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
+  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
 </p>
 
 The Harbor Board: liveness, authority, and lock state as three
@@ -153,7 +153,7 @@ separate lamps — three different questions, never blended into one
 green dot. Keyboard-first, redraws only on state change.
 
 <p align="center">
-  <img src="docs/evidence/captures/post-campaign-20260828/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
+  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
 </p>
 
 Running more than one fleet on this machine? Declare your roots
@@ -167,7 +167,7 @@ your request.
 ### Know which lane went deaf — and which step died
 
 <p align="center">
-  <img src="docs/evidence/captures/post-campaign-20260828/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 16-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
+  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 16-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
 </p>
 
 "The lane went quiet" is not a diagnosis. The doctor states per-node
@@ -179,7 +179,7 @@ hear — without touching anyone else's mail.
 ### Onboard and tear down nodes like it's nothing
 
 <p align="center">
-  <img src="docs/evidence/captures/post-campaign-20260828/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
+  <img src="docs/evidence/captures/rp1-r4-onboard-20260831/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
 </p>
 
 `floati node add` walks you through a new node: identity, harness,
@@ -213,7 +213,7 @@ invents a pressure number it can't measure.
 ### Replay any run
 
 <p align="center">
-  <img src="docs/evidence/captures/post-campaign-20260828/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
+  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
 </p>
 
 The flight recorder replays a finished run as an ordered timeline:

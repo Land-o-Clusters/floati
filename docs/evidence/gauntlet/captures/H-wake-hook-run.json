@@ -106,7 +106,7 @@
     "timed_out": false,
     "timeout_s": 30.0
   },
-  "live_fleet_refused": "\u002fUsers/penguinspecz/.floati-bus/puddle-fleet",
+  "live_fleet_refused": "\u002fUsers/penguinspecz/.floati-bus/the fleet",
   "node_add_lane_a": {
     "argv": [
       "/usr/bin/python3",

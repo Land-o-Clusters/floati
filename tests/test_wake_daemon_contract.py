@@ -19,7 +19,7 @@ SCHEMA_V1_ROOT = Path("schemas/v1")
 
 class WakeDaemonContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
@@ -186,6 +186,81 @@ class WakeDaemonContractTests(unittest.TestCase):
         tampered = dict(binding, tenant_id="foreign")
         store.path(coordinate).write_text(json.dumps(tampered) + "\n", encoding="utf-8")
         with self.assertRaisesRegex(IntegrityFailure, "binding identity"):
+            store.read(coordinate)
+
+    def test_binding_record_with_an_unknown_key_is_invalid(self) -> None:
+        """WD-R5b-F1 keeps the binding store closed to unknown fields."""
+        from floati.wake_daemon_contract import AdapterBindingStore
+
+        coordinate = self.coordinate()
+        store = AdapterBindingStore(self.root)
+        binding = store.write(
+            coordinate,
+            session_id="cursor-session-1",
+            workspace=self.workspace,
+            executable=self.executable,
+            adapter_version="1",
+            adapter_digest="b" * 64,
+            binding_epoch=1,
+        )
+        widened = dict(binding, resume_note="accidental widening")
+        store.path(coordinate).write_text(
+            json.dumps(widened) + "\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(IntegrityFailure, "binding shape is invalid"):
+            store.read(coordinate)
+
+    def test_binding_resume_state_is_optional_and_closed(self) -> None:
+        from floati.wake_daemon_contract import AdapterBindingStore
+
+        coordinate = self.coordinate()
+        store = AdapterBindingStore(self.root)
+        legacy = store.write(
+            coordinate,
+            session_id="cursor-session-1",
+            workspace=self.workspace,
+            executable=self.executable,
+            adapter_version="1",
+            adapter_digest="b" * 64,
+            binding_epoch=1,
+        )
+        self.assertNotIn("resume_state", legacy)
+        validate_json_schema(
+            legacy,
+            SCHEMA_ROOT / "wake-daemon-adapter-record.schema.json",
+        )
+
+        recorded = store.write(
+            coordinate,
+            session_id="cursor-session-1",
+            workspace=self.workspace,
+            executable=self.executable,
+            adapter_version="1",
+            adapter_digest="b" * 64,
+            binding_epoch=1,
+            resume_state="resume_unproven",
+        )
+        self.assertEqual("resume_unproven", recorded["resume_state"])
+        validate_json_schema(
+            recorded,
+            SCHEMA_ROOT / "wake-daemon-adapter-record.schema.json",
+        )
+
+        with self.assertRaisesRegex(ProtocolRefusal, "resume_state"):
+            store.write(
+                coordinate,
+                session_id="cursor-session-1",
+                workspace=self.workspace,
+                executable=self.executable,
+                adapter_version="1",
+                adapter_digest="b" * 64,
+                binding_epoch=1,
+                resume_state="resume_imagined",
+            )
+
+        tampered = dict(recorded, extra="nope")
+        store.path(coordinate).write_text(json.dumps(tampered) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(IntegrityFailure, "binding shape"):
             store.read(coordinate)
 
     def test_binding_refuses_digest_drift_and_symlinked_executable(self) -> None:

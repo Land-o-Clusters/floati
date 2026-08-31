@@ -311,11 +311,11 @@ class RegistryEventTests(unittest.TestCase):
                 "alpha", "stranger", "slipway", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
-        self.assertEqual("unknown_recipient", caught.exception.code)
+        self.assertEqual("recipient_unregistered", caught.exception.code)
         self.assertEqual(before, root_entries(self.root))
         detail = caught.exception.detail
-        self.assertIn("registered active nodes: ", detail)
-        self.assertEqual("alpha, recipient, zulu", detail.rsplit("registered active nodes: ", 1)[1])
+        self.assertIn("registered nodes: ", detail)
+        self.assertEqual("alpha, recipient, zulu", detail.rsplit("registered nodes: ", 1)[1])
 
     def test_retired_sender_refuses_without_root_mutation_and_lists_active_roster(self) -> None:
         for node in ("zulu", "recipient", "retired", "alpha"):

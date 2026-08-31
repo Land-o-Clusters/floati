@@ -79,7 +79,7 @@ class StorageIdentityTests(unittest.TestCase):
         self.assertEqual(identity, self._identity(path))
         self.assertEqual(contents, path.read_bytes())
 
-    def test_one_legacy_artifact_refuses_with_fable_copy_without_mutation(self) -> None:
+    def test_one_legacy_artifact_refuses_with_architect_copy_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             legacy = workspace / ".slipway"
@@ -100,7 +100,7 @@ class StorageIdentityTests(unittest.TestCase):
             self.assertFalse(os.path.lexists(workspace / ".floati"))
             self.assertEqual([".slipway"], sorted(entry.name for entry in workspace.iterdir()))
 
-    def test_multiple_legacy_artifacts_sort_count_and_preserve_fable_copy(self) -> None:
+    def test_multiple_legacy_artifacts_sort_count_and_preserve_architect_copy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             first = workspace / ".slipway"

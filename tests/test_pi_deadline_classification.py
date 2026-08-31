@@ -15,7 +15,7 @@ HARNESS = Path(__file__).parent / "fixtures" / "pi-rpc" / "deadline_race_harness
 
 class PiDeadlineClassificationTests(unittest.TestCase):
     def test_queued_malformed_frame_wins_over_an_expired_read_deadline(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as temporary:
             root = Path(temporary)
             workspace = root / "workspace"
             workspace.mkdir()

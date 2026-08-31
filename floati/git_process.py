@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Sequence
+
+from .errors import ProtocolRefusal
 
 
 _FIXED_GIT_ENVIRONMENT = {
@@ -55,3 +58,31 @@ def fixed_git_command(
         os.fspath(repository),
         *arguments,
     ]
+
+
+def is_shallow_repository(
+    repository: Path, *, git_executable: str = "/usr/bin/git"
+) -> bool:
+    """Return whether one explicit repository has truncated commit history."""
+
+    repo = Path(repository).expanduser().resolve()
+    try:
+        result = subprocess.run(
+            fixed_git_command(git_executable, repo, ("rev-parse", "--is-shallow-repository")),
+            env=fixed_git_environment(git_executable),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ProtocolRefusal("git_shallow_state_unavailable", f"git could not inspect shallow state: {exc}") from exc
+    if result.returncode != 0:
+        raise ProtocolRefusal(
+            "git_shallow_state_unavailable",
+            result.stderr.strip() or "git shallow-state inspection failed",
+        )
+    value = result.stdout.strip().lower()
+    if value not in {"true", "false"}:
+        raise ProtocolRefusal("git_shallow_state_unavailable", "git returned an invalid shallow-state value")
+    return value == "true"

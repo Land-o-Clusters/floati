@@ -1,6 +1,6 @@
-# WS-E SPEC — context management v0, the honesty boundary (Fable, 2026-08-28)
+# WS-E SPEC — context management v0, the honesty boundary (the architect, 2026-08-28)
 
-Build seat: **lane-puddle** (this spec outranks the purge-verb row on their
+Build seat: **build lane** (this spec outranks the purge-verb row on their
 queue — E2 gates the gauntlet context family, which gates the flip; purge does
 not). Owner frame: WS-E in `WEEKEND_PROGRAM_2026-08-28.md`; E1's measured
 result (`lane/grok-context-e1`): **remaining-context is NOT EXPOSED by any of

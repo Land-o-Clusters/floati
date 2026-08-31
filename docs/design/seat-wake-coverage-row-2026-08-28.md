@@ -1,11 +1,11 @@
 # ROW — OW-1: every seat gets a wake path, or its registry row names its courier
 
-**Fable, 2026-08-28 ~18:20Z. Owner-surfaced, three asks deep before I heard it — recorded so the
+**the architect, 2026-08-28 ~18:20Z. Owner-surfaced, three asks deep before I heard it — recorded so the
 lesson outlives the evening.** Post-release wake-family residue; not launch-blocking.
 
 ## The gap, measured today
 
-`lane-sol` registered on the bus and received direct mail — and the mail sat unread, because the
+`build lane` registered on the bus and received direct mail — and the mail sat unread, because the
 seat has NO wake path: it is not a Codex Stop-hook seat (no waiter arms on its stops), it has no
 daemon binding, and nothing boot-drains its inbox. Every dispatch to it since registration has
 actually been delivered by the OWNER pasting text into the seat. **A REGISTERED SEAT WITHOUT A
@@ -24,11 +24,11 @@ evening telling an unwakeable seat to read its inbox.
    `wake: none (courier: owner)` or equivalent — so a dispatcher reads the truth at dispatch time
    instead of assuming the bus delivers. **A DISPATCHER MAY NOT LEARN A SEAT IS DEAF BY WAITING.**
 3. **Acceptance:** dispatch to a freshly registered non-Codex seat with no human relay; the seat
-   acts on it; the wake receipt names the mechanism. lane-sol is the live fixture.
+   acts on it; the wake receipt names the mechanism. build lane is the live fixture.
 
-## Am.1 — the watch-interim (Fable, ~19:55Z, same day; witnessed twice within the hour)
+## Am.1 — the watch-interim (the architect, ~19:55Z, same day; witnessed twice within the hour)
 
-The gap fired again immediately: the R4 brief envelope landed two minutes after lane-sol's turn
+The gap fired again immediately: the R4 brief envelope landed two minutes after build lane's turn
 ended — delivered, receipted, unread. Interim upgraded from bare owner-courier to a protocol using
 a shipped surface: **an unwakeable seat ends every turn with a bounded
 `floati watch --interval 15 --iterations 120`** (a 30-minute reachability window; wakes on fleet
@@ -37,15 +37,15 @@ Unbounded watch loops are refused by this amendment: a seat that polls forever i
 wearing a wake path's clothes, and the whole point of OW-1 is a real one. The registry's typed
 absence becomes `wake: bounded-watch (courier after exhaustion)`.
 
-## Am.2 — CORRECTION: lane-sol was never this row's fixture (Fable, ~20:15Z, same day)
+## Am.2 — CORRECTION: build lane was never this row's fixture (the architect, ~20:15Z, same day)
 
 **Sol is a CODEX seat** — the owner's name for GPT-5.6 in a Codex harness — and the owner had said
 so repeatedly; I derived "OpenCode" from a stale memory and the workspace directory name, then
 built a wake-path ruling on it. **A SEAT'S HARNESS IS A MEASURABLE FACT; DERIVING IT FROM A
 DIRECTORY NAME OR AN OLD NOTE IS THE SAME ERROR AS GUESSING A SHA.** Corrected the same hour:
-lane-sol's workspace is now mapped in the codex-wait binding (repaired bundle `6234fa60…`),
+build lane's workspace is now mapped in the codex-wait binding (repaired bundle `6234fa60…`),
 consent armed (deadline 1700 s) — on the stop hook like every Codex lane, via shipped mechanism,
-zero new surface. The Am.1 bounded-watch protocol is WITHDRAWN for lane-sol (superseded by its
+zero new surface. The Am.1 bounded-watch protocol is WITHDRAWN for build lane (superseded by its
 real hook) and stands only for genuinely hook-less harnesses. OW-1 itself remains open for those:
 the row's charter is unchanged, only its fixture was wrong. The Claude boot-drain posture remains
 the nearest prior art.

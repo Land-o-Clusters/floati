@@ -1,6 +1,6 @@
 # Demo/UAT capture GIF candidates — selection evidence
 
-Status: **FABLE EYE SELECTION REQUESTED — NO SELECTION, CORPUS, OR README CLAIM**
+Status: **the architect EYE SELECTION REQUESTED — NO SELECTION, CORPUS, OR README CLAIM**
 
 Date: 2026-08-16
 
@@ -31,7 +31,7 @@ Date: 2026-08-16
 
 Every GIF was rendered at retina 2x and downsampled to 1400×840. Every GIF
 has `loop=0`. The paths below are working candidates only; they remain outside
-the corpus until Fable selects them.
+the corpus until the architect selects them.
 
 | Candidate | Frames | Bytes | SHA-256 | Captured from |
 | --- | ---: | ---: | --- | --- |
@@ -46,7 +46,7 @@ All four candidates are below their ruled size ceilings: the hero is below
 ## Local 4K master
 
 - Path:
-  `/tmp/floati-demo-masters/1788ed4d3034cc1caa54316984b060a550e3db98/hero-three-fault-replay.mp4`
+  `<temp>/floati-demo-masters/1788ed4d3034cc1caa54316984b060a550e3db98/hero-three-fault-replay.mp4`
 - Bytes: `580007`
 - SHA-256:
   `5cf2d8d5be4402da646bd3187a9081de5fb4b3748ec3333966a7808ba685715f`
@@ -115,7 +115,7 @@ Toolchain:
 
 ## Gate boundary
 
-This packet requests Fable's eye selection of the four GIF candidates and the
+This packet requests the architect's eye selection of the four GIF candidates and the
 local 4K master. The candidate files are deliberately not staged. No
 `capture-gif` or `capture-master` row has been appended, and the README
 `hero_loop` slot is unchanged. Only the selected set may receive corpus rows

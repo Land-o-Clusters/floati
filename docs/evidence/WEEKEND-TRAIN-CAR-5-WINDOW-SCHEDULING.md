@@ -1,12 +1,12 @@
 # Weekend train Car 5 — window scheduling
 
-Status: **DRAFT — INTEGRATOR EVIDENCE, FABLE RESTAMP PENDING**
+Status: **DRAFT — INTEGRATOR EVIDENCE, the architect RESTAMP PENDING**
 
 Date: 2026-08-27
 
 ## Identity
 
-- Node: `lane-floati`
+- Node: `build lane`
 - Branch: `integrate/weekend-20260828`
 - Ratified branch-cut base: `932e377e9b88d801dfd545e1c238c50af5ec58ba`
 - Car source ref: `origin/draft/window-scheduling`
@@ -86,4 +86,4 @@ byte-identical and no manifest commit was invented.
 - No foreign-bus artifact was touched.
 - The integrator made no README edit.
 - No visible product copy was restamped.
-- This evidence copy remains DRAFT-stamped for Fable's gate.
+- This evidence copy remains DRAFT-stamped for the architect's gate.

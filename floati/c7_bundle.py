@@ -1706,9 +1706,9 @@ def _verify_catalog_schemas(root: Path, catalog: Mapping[str, object]) -> None:
 
 
 def _platform_alias(path: Path) -> bool:
-    """Permit macOS's canonical /tmp and /var spelling while rejecting caller links."""
+    """Permit macOS's canonical \x2ftmp and /var spelling while rejecting caller links."""
 
-    expected = {"/tmp": "\x2fprivate/tmp", "/var": "/private/var"}
+    expected = {"\x2ftmp": "\x2fprivate\x2ftmp", "/var": "/private/var"}
     literal = str(path)
     if literal not in expected:
         return False

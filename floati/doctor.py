@@ -24,6 +24,7 @@ from .installer_shadow import observe_installer_shadow, observation_exit_code
 from .manifest import verify_manifest
 from .registry import REGISTRY_KINDS
 from .root import FloatiRoot
+from .git_process import is_shallow_repository
 from .storage_identity import INSTALL_METADATA_DIRECTORY
 from .update_status import project_update_findings
 
@@ -32,6 +33,7 @@ RULED_PROFILES = ("bus-only", "orchestration")
 CODEX_GATEWAY_SOURCE = Path("tools/codex/codex-fleet-bus.py")
 CODEX_GATEWAY_DIGEST = Path("tools/codex/codex-fleet-bus.sha256.json")
 CODEX_GATEWAY_HOST = Path.home() / ".codex/bin/codex-fleet-bus"
+BUS_WATCH_SOURCE = Path("scripts/bus-watch/floati-bus-watch.ts")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -104,6 +106,331 @@ def _fold_shadow_exit(current: int, shadow: int) -> int:
     if current in {20, 33, 35}:
         return current
     return shadow
+
+
+def installed_bridge_paths() -> Optional[tuple[Path, Path]]:
+    """HT-R6: the Am.2-ruled installed bridge path and its source-SHA sidecar.
+    A deployed copy must carry the coordinate it was deployed from, or its
+    staleness is unobservable."""
+
+    root = Path.home() / ".local" / "share" / "floati" / "hooks"
+    bridge = root / "stop-hook-bridge.py"
+    sidecar = root / "stop-hook-bridge.sha256"
+    if not bridge.is_file():
+        return None
+    return bridge, sidecar
+
+
+def project_installed_bridge_currency(
+    source_root: Path, *, currency_current: bool
+) -> Dict[str, object]:
+    """Report installed-wake-bridge drift: installed bridge from <sha>,
+    repository at <sha>. Informational, never a refusal - a stale bridge
+    still runs; the user is simply told."""
+
+    paths = installed_bridge_paths()
+    if paths is None:
+        return _finding(
+            "wake_bridge_uninstalled",
+            "ok",
+            "no installed wake bridge found",
+            "no stop-hook bridge at the ruled install path; the seat wakes by its registration alone",
+        )
+    bridge, sidecar = paths
+    installed_sha = hashlib.sha256(bridge.read_bytes()).hexdigest()
+    try:
+        recorded_sha = sidecar.read_text(encoding="utf-8").strip() if sidecar.is_file() else None
+    except OSError:
+        recorded_sha = None
+    repository_bridge = source_root / "hooks" / "stop-hook-bridge.py"
+    repository_sha = (
+        hashlib.sha256(repository_bridge.read_bytes()).hexdigest()
+        if repository_bridge.is_file() else None
+    )
+    if repository_sha is None:
+        return _finding(
+            "wake_bridge_uninstalled",
+            "ok",
+            str(bridge),
+            "installed wake bridge present but the repository names no hooks/stop-hook-bridge.py to compare against",
+        )
+    if installed_sha == repository_sha:
+        return _finding(
+            "wake_bridge_current",
+            "ok",
+            str(bridge),
+            f"installed wake bridge matches the repository (from {installed_sha[:12]})",
+        )
+    drift_note = (
+        f"installed wake bridge from {installed_sha[:12]}"
+        + (f" (sidecar {recorded_sha[:12]})" if recorded_sha else " (no source-SHA sidecar)")
+        + f", repository at {repository_sha[:12]}"
+    )
+    return _finding(
+        "wake_bridge_drift",
+        "warning",
+        str(bridge),
+        drift_note,
+        "reinstall the installed bridge from the repository copy so the hook runs current code"
+        if currency_current else None,
+    )
+
+
+def project_wake_daemon_health(
+    root: FloatiRoot, *, currency_current: bool
+) -> list[Dict[str, object]]:
+    """Derive one wake_daemon_health finding per bound wake daemon coordinate.
+
+    WD-2 GAP 2: a breaker-open daemon was reported nowhere. The runtime the
+    daemon already writes carries the whole story; absence of any binding is
+    stated as a typed absence, never as silence.
+    """
+
+    from .wake_daemon import _BREAKER_THRESHOLD, WAKE_BREAKER_REMEDY
+
+    _WAKE_UNRESUMABLE_REMEDY_W = WAKE_BREAKER_REMEDY
+
+    adapters_root = root.resolve_relative("state/wake-daemon/adapters")
+    bindings: list[tuple[str, str, Path]] = []
+    if adapters_root.is_dir() and not adapters_root.is_symlink():
+        for node_dir in sorted(adapters_root.iterdir()):
+            if node_dir.is_symlink() or not node_dir.is_dir():
+                continue
+            for binding_path in sorted(node_dir.glob("*.json")):
+                if binding_path.is_symlink() or not binding_path.is_file():
+                    continue
+                bindings.append((node_dir.name, binding_path.stem, binding_path))
+    if not bindings:
+        return [_finding(
+            "wake_daemon_health",
+            "ok",
+            str(root.path),
+            "no wake daemon is bound for any node/harness (typed absence, not a silent pass)",
+        )]
+
+    runtime_dir = root.resolve_relative("state/wake-daemon/runtime")
+    findings: list[Dict[str, object]] = []
+    for node_name, harness, binding_path in bindings:
+        subject = f"{node_name}/{harness}"
+        try:
+            binding_record = json.loads(binding_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            binding_record = {}
+        resume_state = binding_record.get("resume_state")
+        bound_session = binding_record.get("session_id")
+        coordinate: Optional[object] = None
+        try:
+            from .wake_daemon_contract import DaemonCoordinate
+
+            coordinate = DaemonCoordinate(root, node_name, harness)
+        except ProtocolRefusal:
+            findings.append(_finding(
+                "wake_daemon_health",
+                "warning",
+                subject,
+                "binding present but its coordinate no longer resolves (retired node or unsupported harness)",
+                WAKE_BREAKER_REMEDY if currency_current else None,
+            ))
+            continue
+        runtime_path = runtime_dir / f"{coordinate.digest}.json"  # type: ignore[union-attr]
+        if not runtime_path.is_file() or runtime_path.is_symlink():
+            findings.append(_finding(
+                "wake_daemon_health",
+                "warning" if resume_state == "resume_suspect" else "ok",
+                subject,
+                "binding present but the daemon runtime is absent (no cycle has completed); breaker state is not yet derivable"
+                + (f"; resume_state={resume_state} session_id={bound_session}" if resume_state else ""),
+                _WAKE_UNRESUMABLE_REMEDY_W if resume_state == "resume_suspect" and currency_current else None,
+            ))
+            continue
+        try:
+            runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            findings.append(_finding(
+                "wake_daemon_health",
+                "error",
+                subject,
+                f"daemon runtime {runtime_path.name} is present but unreadable; durable breaker testimony is malformed",
+            ))
+            continue
+        circuit_state = runtime.get("circuit_state")
+        refusals = runtime.get("consecutive_refusals")
+        backoff = runtime.get("current_backoff")
+        last_state = runtime.get("last_state")
+        last_reason = runtime.get("last_reason_code")
+        session_digest = str(runtime.get("session_digest", ""))[:12]
+        if (
+            not isinstance(runtime, dict)
+            or not isinstance(circuit_state, str)
+            or not isinstance(refusals, int)
+            or isinstance(refusals, bool)
+            or not isinstance(backoff, int)
+            or isinstance(backoff, bool)
+        ):
+            findings.append(_finding(
+                "wake_daemon_health",
+                "error",
+                subject,
+                f"daemon runtime {runtime_path.name} lacks its breaker testimony; durable breaker evidence is malformed",
+            ))
+            continue
+        detail = (
+            f"circuit_state={circuit_state} consecutive_refusals={refusals} "
+            f"current_backoff={backoff} last_state={last_state} "
+            f"last_reason_code={last_reason} session_digest={session_digest}"
+            f" resume_state={resume_state if resume_state else 'unrecorded'}"
+            + (f" session_id={bound_session}" if resume_state else "")
+        )
+        if resume_state == "resume_suspect" or circuit_state == "open" or refusals >= _BREAKER_THRESHOLD:
+            findings.append(_finding(
+                "wake_daemon_health",
+                "warning",
+                subject,
+                detail,
+                WAKE_BREAKER_REMEDY if currency_current else None,
+            ))
+        else:
+            findings.append(_finding(
+                "wake_daemon_health",
+                "ok",
+                subject,
+                detail,
+            ))
+
+    # WD-R8: the hook half of the surface - a bound zcode seat proves its
+    # registration by observed dispatches, never by read-back. Reported
+    # beside trust and breaker state: trust, shadowing, wakeability.
+    # ZC1-C-R1: an uninstalled bridge has no writer that can produce firing
+    # evidence. Its typed absence is projected separately and must not become
+    # a permanent hook_unproven warning for every bound zcode coordinate.
+    if installed_bridge_paths() is None:
+        return findings
+    for node_name, harness, _binding_path in bindings:
+        if harness != "zcode":
+            continue
+        firings_path = root.resolve_relative(
+            Path("state/zcode-hook/firings") / f"{node_name}.jsonl"
+        )
+        last = None
+        if firings_path.is_file() and not firings_path.is_symlink():
+            try:
+                rows = [
+                    json.loads(line)
+                    for line in firings_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                last = rows[-1] if rows else None
+            except (OSError, json.JSONDecodeError, ValueError):
+                last = None
+        if last is None:
+            findings.append(_finding(
+                "hook_unproven",
+                "warning",
+                f"{node_name}/{harness}",
+                "zcode hook registration is bound but no dispatch has ever been observed; "
+                "read-back proves what was written, only a firing proves what will run",
+                "end a turn with the hook enabled; relaunch the harness session if it "
+                "trust-gates the hook" if currency_current else None,
+            ))
+        else:
+            findings.append(_finding(
+                "hook_firing_observed",
+                "ok",
+                f"{node_name}/{harness}",
+                f"zcode hook observed firing (last dispatch {last.get('timestamp')}, "
+                f"injected={last.get('injected')})",
+            ))
+    return findings
+
+
+def installed_bus_watch_paths() -> Optional[tuple[Path, Path]]:
+    """Return the ruled OpenCode plugin path and its install-time source SHA."""
+
+    plugin = Path.home() / ".config" / "opencode" / "plugins" / "floati-bus-watch.ts"
+    if not plugin.is_file() or plugin.is_symlink():
+        return None
+    return plugin, plugin.with_suffix(".sha256")
+
+
+def _read_sha256_sidecar(path: Path) -> Optional[str]:
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        value = path.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return value if _SHA256.fullmatch(value) is not None else None
+
+
+def project_installed_bus_watch_currency(
+    source_root: Path, *, currency_current: bool
+) -> Dict[str, object]:
+    """Project deployed bus-watch drift without refusing an unnameable copy."""
+
+    paths = installed_bus_watch_paths()
+    if paths is None:
+        return _finding(
+            "bus_watch_uninstalled",
+            "ok",
+            str(Path.home() / ".config/opencode/plugins/floati-bus-watch.ts"),
+            "no installed OpenCode bus watcher found; deployed-source currency is absent",
+        )
+    installed, sidecar = paths
+    recorded_sha = _read_sha256_sidecar(sidecar)
+    try:
+        installed_sha = hashlib.sha256(installed.read_bytes()).hexdigest()
+    except OSError:
+        installed_sha = None
+    if recorded_sha is None or installed_sha is None or recorded_sha != installed_sha:
+        return _finding(
+            "bus_watch_installed_source_unnameable",
+            "warning",
+            str(installed),
+            "installed OpenCode bus watcher is present but its install-time source SHA cannot name these bytes",
+            (
+                "reinstall with scripts/bus-watch/install-floati-bus-watch.py so the owner can activate current watcher code"
+            ),
+        )
+    repository_watch = Path(source_root) / BUS_WATCH_SOURCE
+    try:
+        repository_sha = (
+            hashlib.sha256(repository_watch.read_bytes()).hexdigest()
+            if repository_watch.is_file() and not repository_watch.is_symlink()
+            else None
+        )
+    except OSError:
+        repository_sha = None
+    if repository_sha is None:
+        return _finding(
+            "bus_watch_repository_source_unnameable",
+            "warning",
+            str(repository_watch),
+            "repository OpenCode bus-watch source cannot be named for comparison",
+            (
+                "rerun Doctor with a complete Floati source containing scripts/bus-watch/floati-bus-watch.ts before claiming deployed-source currency"
+            ),
+        )
+    if recorded_sha == repository_sha:
+        return _finding(
+            "bus_watch_current",
+            "ok",
+            str(installed),
+            f"installed watcher matches the repository (from {recorded_sha[:12]})",
+        )
+    return _finding(
+        "bus_watch_drift",
+        "warning",
+        str(installed),
+        (
+            f"installed watcher from {recorded_sha[:12]}, "
+            f"repository at {repository_sha[:12]}"
+        ),
+        (
+            "reinstall with scripts/bus-watch/install-floati-bus-watch.py so the owner can activate current watcher code"
+            if currency_current
+            else None
+        ),
+    )
 
 
 def project_fleet_update(root: FloatiRoot) -> Dict[str, object]:
@@ -354,6 +681,20 @@ class Doctor:
                 False,
             )
         try:
+            if is_shallow_repository(source):
+                return (
+                    _finding(
+                        "shallow_repository",
+                        "warning",
+                        str(source),
+                        "source repository is shallow; deployment currency cannot be trusted",
+                        "fetch complete history, then rerun doctor",
+                    ),
+                    False,
+                )
+        except ProtocolRefusal as exc:
+            return _finding(exc.code, "warning", str(source), exc.detail), False
+        try:
             status = _git(source, "status", "--porcelain=v1", "--untracked-files=all")
             head = _git(source, "rev-parse", "--verify", "HEAD^{commit}")
             target = _git(source, "rev-parse", "--verify", f"{self.ref}^{{commit}}")
@@ -409,6 +750,30 @@ class Doctor:
                 rc = 20
             else:
                 findings.append(_finding("root_valid", "ok", str(self.root_arg), "direct-home root is valid"))
+
+        if root is not None:
+            try:
+                from .bus_epoch import reconcile_epoch_roll
+
+                epoch_roll = reconcile_epoch_roll(root)
+            except (IntegrityFailure, ProtocolRefusal) as exc:
+                findings.append(_finding(exc.code, "error", str(root.path), exc.detail))
+                rc = 33
+                # A surviving epoch marker owns the selected-plane truth until
+                # reconciliation succeeds.  Do not let later health readers
+                # interpret a deliberately partial COMMITTED transition as an
+                # ordinary live ledger after recovery has failed closed.
+                root = None
+            else:
+                if epoch_roll is not None:
+                    finding = _finding(
+                        "bus_epoch_roll_reconciled",
+                        "ok",
+                        str(root.path.resolve()),
+                        "incomplete bus epoch roll was reconciled from durable disk state",
+                    )
+                    finding["epoch_roll"] = epoch_roll
+                    findings.append(finding)
 
         currency_finding, currency_current = self._currency()
 
@@ -513,15 +878,31 @@ class Doctor:
                 findings.append(_finding(exc.code, "error", str(root.path), exc.detail))
                 rc = 33 if rc != 20 else rc
 
-        if root is not None:
-            # H2 delivery-health scoreboard (hardening intake @09283dc7):
-            # silence is not health — every active node's pending/drain
-            # counters are stated; aged pending is RED.
-            try:
-                from .events import EVENT_KINDS
+            # WD-2 wake-doctor health: the daemon's own runtime already knows
+            # it has been failing (consecutive_refusals, current_backoff,
+            # breaker state, last typed outcome) — surface it here, and keep
+            # "nothing bound" a typed absence rather than a silent pass.
+            wake_findings = project_wake_daemon_health(root, currency_current=currency_current)
+            wake_findings.append(project_installed_bridge_currency(
+                self.source_arg, currency_current=currency_current
+            ))
+            findings.extend(wake_findings)
+            if any(row["severity"] == "warning" for row in wake_findings) and rc == 0:
+                rc = 35
+            if any(row["severity"] == "error" for row in wake_findings) and rc not in (20, 33):
+                rc = 33
 
-                events_snapshot, unrecognized_kinds = read_records_compatible_snapshot(
-                    root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
+        if root is not None:
+            # H2/G2 delivery-health scoreboard: silence is not health — every
+            # active node's pending/drain counters and stamped oldest-unread
+            # fact are stated; aged pending is RED.
+            try:
+                from .events import EventLog
+
+                events_snapshot, unrecognized_kinds, skew = EventLog(
+                    root
+                )._compatible_event_records_with_skew(
+                    snapshot=True
                 )
                 registry_rows = read_records_snapshot(
                     root, "registry/entries.jsonl",
@@ -542,6 +923,38 @@ class Doctor:
                     now=_utc_now(),
                 )
                 findings.extend(report.findings)
+                from .wake_health import WakeHealthProjection
+
+                wake_health = WakeHealthProjection(root)
+                for node in active_nodes:
+                    fact = wake_health.fact(node, _utc_now())
+                    state = str(fact["state"])
+                    severity = (
+                        "error"
+                        if state in {"stale_claim_with_unread_mail", "breaker_open"}
+                        else "warning" if state == "paused" else "ok"
+                    )
+                    finding = _finding(
+                        "wake_health",
+                        severity,
+                        node,
+                        f"wake path projects {state}",
+                        str(fact["remedy"]) if severity != "ok" else None,
+                    )
+                    finding["wake_health"] = fact
+                    findings.append(finding)
+                    if severity == "error" and rc == 0:
+                        rc = 35
+                if skew is not None:
+                    finding = _finding(
+                        "version_skew",
+                        "warning",
+                        str(root.path),
+                        "installation predates records in this ledger",
+                        skew.remedy,
+                    )
+                    finding["vocabulary_skew"] = skew.artifact()
+                    findings.append(finding)
                 if report.any_red and rc == 0:
                     rc = 35
             except IntegrityFailure as exc:
@@ -564,6 +977,13 @@ class Doctor:
         if currency_finding["severity"] != "ok":
             if rc == 0:
                 rc = 35
+
+        bus_watch_finding = project_installed_bus_watch_currency(
+            self.source_arg, currency_current=currency_current
+        )
+        findings.append(bus_watch_finding)
+        if bus_watch_finding["severity"] == "warning" and rc == 0:
+            rc = 35
 
         gateway_finding = _codex_gateway_finding(
             self.source_arg, self.codex_gateway_host_arg

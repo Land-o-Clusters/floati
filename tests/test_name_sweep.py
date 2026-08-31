@@ -122,7 +122,7 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(RETIRED_PRODUCT_NAME.search(text))
 
-    def test_readme_begins_with_exact_fable_copy(self) -> None:
+    def test_readme_begins_with_exact_architect_copy(self) -> None:
         'Catches invented README voice on the ruled reviewer-owned surface.'
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
 

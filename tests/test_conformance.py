@@ -223,8 +223,8 @@ class LiveRootSmokeTests(unittest.TestCase):
                     "message refused: unknown sender 'stranger'; registered active nodes: smoke-extra, smoke-recipient, smoke-sender",
                 ),
                 (
-                    "unknown_recipient",
-                    "message refused: unknown recipient 'stranger'; registered active nodes: smoke-extra, smoke-recipient, smoke-sender",
+                    "recipient_unregistered",
+                    "message refused: recipient 'stranger' is not registered; registered nodes: smoke-extra, smoke-recipient, smoke-sender",
                 ),
                 (
                     "unknown_sender",

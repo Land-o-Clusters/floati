@@ -1,12 +1,12 @@
 # Weekend train Car 2 — wake identity reconciliation
 
-Status: **DRAFT — INTEGRATOR EVIDENCE, FABLE RESTAMP PENDING**
+Status: **DRAFT — INTEGRATOR EVIDENCE, the architect RESTAMP PENDING**
 
 Date: 2026-08-27
 
 ## Identity
 
-- Node: `lane-floati`
+- Node: `build lane`
 - Branch: `integrate/weekend-20260828`
 - Ratified branch-cut base: `932e377e9b88d801dfd545e1c238c50af5ec58ba`
 - Fleet operations source ref: `origin/lane/fleet-ops-window`
@@ -37,7 +37,7 @@ acknowledgment paths continue to use `Registry.resolve_node_id`.
 
 The first default compile attempt was denied only because the process tried to
 write Python bytecode beneath the user cache directory. Repeating the same
-compile with `PYTHONPYCACHEPREFIX` confined to `/tmp` passed. This was a
+compile with `PYTHONPYCACHEPREFIX` confined to `<temp>` passed. This was a
 cache-location denial, not a source defect.
 
 ## Executed verification
@@ -55,7 +55,7 @@ Repository watcher receipt:
 - Delivery scenario: 2 prompts, with `failure_unwound=true` and
   `retry_delivered=true`.
 - Exhaustion scenario: 11 attempts, `retained_and_rearmed=true`.
-- Single-consumer scenario: 1 prompt, 1 wake receipt, coordinator `alice-city`.
+- Single-consumer scenario: 1 prompt, 1 wake receipt, coordinator `build lane`.
 - Result: exit 0.
 
 First full merged-tip suite before the repair:
@@ -92,4 +92,4 @@ Manifest-last gate:
 - No foreign-bus artifact was touched.
 - No OpenCode restart occurred.
 - No README edit was made by the integrator.
-- This evidence copy remains DRAFT-stamped for Fable's gate.
+- This evidence copy remains DRAFT-stamped for the architect's gate.

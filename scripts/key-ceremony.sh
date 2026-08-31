@@ -51,8 +51,8 @@ say "BACKUP — do this now, before anything is published:"
 echo "   1. Copy $SEC to TWO offline media (it is already passphrase-encrypted)."
 echo "   2. Store the passphrase separately from both (password manager + one other place)."
 echo "   3. Restore-verify ONE copy: from the backup, run:"
-echo "        minisign -S -s <backup-copy> -x /tmp/t.minisig -t restore-test -m /tmp/t"
-echo "      (create /tmp/t with any content first; a backup that never restored is not a backup)"
+echo "        minisign -S -s <backup-copy> -x <temp>/t.minisig -t restore-test -m <temp>/t"
+echo "      (create <temp>/t with any content first; a backup that never restored is not a backup)"
 
 # 4 — the handoff
 say "DONE ON YOUR SIDE. Send the architect this public key (safe to paste anywhere):"

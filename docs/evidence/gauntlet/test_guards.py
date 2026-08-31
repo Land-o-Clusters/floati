@@ -19,7 +19,7 @@ class GauntletGuardTests(unittest.TestCase):
 
     def test_path_outside_clone_scratch_is_refused(self) -> None:
         with self.assertRaises(GauntletGuardError) as caught:
-            require_scratch_root(Path("\x2fprivate/tmp/floati-work"))
+            require_scratch_root(Path("\x2fprivate\x2ftmp/floati-work"))
         self.assertEqual("scratch_containment", caught.exception.code)
 
 

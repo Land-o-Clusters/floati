@@ -1,7 +1,7 @@
 # DRAFT — Weekend SD-2 cross-version reader evidence
 
 Date: 2026-08-28  
-Lane: `lane-floati`  
+Lane: `build lane`  
 Branch: `repair/sd2-reader-law-20260828`
 
 ## Ruled contract

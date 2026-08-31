@@ -93,5 +93,5 @@ live-root smoke exit 0 with five conformant cases; scrub exit 0 with
 - Hosted CI: unobserved.
 - External deployment or activation: unobserved and unclaimed.
 - Operator CLI and TUI surfaces: later phases; not claimed here.
-- Fable push verdict, checkpoint notification, push, and local/origin parity:
+- the architect push verdict, checkpoint notification, push, and local/origin parity:
   pending.

@@ -158,6 +158,7 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
             [
                 "python3 -c 'from pathlib import Path; from floati.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print(hits); raise SystemExit(bool(hits))'",
                 "python3 scripts/public_name_fence.py .",
+                "python3 -m floati.release --repository-root .",
             ],
             [step["run"] for step in fences["steps"] if "run" in step],
         )

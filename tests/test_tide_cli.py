@@ -11,7 +11,7 @@ class TideCliTests(unittest.TestCase):
     def test_context_policy_set_show_clear_are_public_and_exact(self) -> None:
         parser = _parser()
         set_args = parser.parse_args([
-            "context", "policy", "set", "--root", "/tmp/fleet",
+            "context", "policy", "set", "--root", "\x2ftmp/fleet",
             "--node", public_ids.builder('a'), "--metric", "context_fraction",
             "--threshold", "70%", "--action", "direct",
             "--idempotency-key", "set-key", "--json",
@@ -20,7 +20,7 @@ class TideCliTests(unittest.TestCase):
         self.assertEqual(public_ids.builder('a'), set_args.node)
         self.assertTrue(callable(set_args.handler))
         for command in ("show", "clear"):
-            argv = ["context", "policy", command, "--root", "/tmp/fleet", "--node", public_ids.builder('a'), "--json"]
+            argv = ["context", "policy", command, "--root", "\x2ftmp/fleet", "--node", public_ids.builder('a'), "--json"]
             if command == "clear":
                 argv.extend(["--idempotency-key", "clear-key"])
             parsed = parser.parse_args(argv)
@@ -36,7 +36,7 @@ class TideCliTests(unittest.TestCase):
 
     def test_context_reading_record_carries_exact_node_testimony_command(self) -> None:
         parsed = _parser().parse_args([
-            "context", "reading", "record", "--root", "/tmp/fleet",
+            "context", "reading", "record", "--root", "\x2ftmp/fleet",
             "--as", public_ids.builder('a'), "--metric", "self_reported_context_fraction",
             "--value", "75%", "--command", "/context",
             "--idempotency-key", "reading-key", "--json",

@@ -204,7 +204,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create A.txt",
-          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
         },
         {
           "artifact_bindings": [],
@@ -218,7 +218,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create B.txt",
-          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
         },
         {
           "artifact_bindings": [],
@@ -232,7 +232,7 @@
           "readiness": "claimed",
           "state": "claimed",
           "title": "Create C.txt",
-          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
         },
         {
           "artifact_bindings": [],
@@ -250,7 +250,7 @@
           "readiness": "blocked",
           "state": "open",
           "title": "Create D.txt",
-          "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+          "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
         }
       ],
       "item_count": 4,
@@ -412,7 +412,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create A.txt",
-        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
+        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9acf720390004ead3ffde56b"
       },
       {
         "artifact_bindings": [],
@@ -426,7 +426,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create B.txt",
-        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
+        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad072e8a4f16a47476b858d"
       },
       {
         "artifact_bindings": [],
@@ -440,7 +440,7 @@
         "readiness": "claimed",
         "state": "claimed",
         "title": "Create C.txt",
-        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
+        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad07c8e96d7fa674c621dd5"
       },
       {
         "artifact_bindings": [],
@@ -458,7 +458,7 @@
         "readiness": "blocked",
         "state": "open",
         "title": "Create D.txt",
-        "workspace": "\u002fprivate/tmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
+        "workspace": "\u002fprivate\u002ftmp/floati-work/work-01a045cf9ad170d1a6e65930029ef690"
       }
     ]
   },
@@ -507,7 +507,7 @@
       "stderr": "",
       "stderr_bytes": 0,
       "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install\\njournal entries: 0\\n\\nWILL REMOVE:\\n  (nothing)\\nPRESERVED (user records \u2014 uninstall never touches):\\n  (no bus roots / state dirs recorded)\\nUNRESOLVED (journal corrupt at offset \u2014 fail-closed):\\n  - no wiring journal at \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\",\"unresolved\":[\"no wiring journal at \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\"]},\"status\":\"ok\"}\n",
+      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install\\njournal entries: 0\\n\\nWILL REMOVE:\\n  (nothing)\\nPRESERVED (user records — uninstall never touches):\\n  (no bus roots / state dirs recorded)\\nUNRESOLVED (journal corrupt at offset — fail-closed):\\n  - no wiring journal at \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\",\"unresolved\":[\"no wiring journal at \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/empty-install/.floati-install/wiring-journal.v1.jsonl; nothing attributable (uninstall never globs)\"]},\"status\":\"ok\"}\n",
       "stdout_bytes": 866,
       "stdout_sha256": "dd79228faa3b9311c60567f906429dca68c74ddc2118667916eb22c4a4415107",
       "timed_out": false,
@@ -533,7 +533,7 @@
       "stderr": "",
       "stderr_bytes": 0,
       "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest\\njournal entries: 2\\n\\nWILL REMOVE:\\n  - [file] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest/shipped.txt (create)\\nPRESERVED (user records \u2014 uninstall never touches):\\n  - [bus_root] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028\\n  - [bus_root] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028\",\"unresolved\":[]},\"status\":\"ok\"}\n",
+      "stdout": "{\"artifact_version\":0,\"command\":\"uninstall\",\"evidence\":{\"dry_run\":true,\"plan\":\"U2 UNINSTALL PLAN (reverse replay, newest first)\\ndestination: \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest\\njournal entries: 2\\n\\nWILL REMOVE:\\n  - [file] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028/install-dest/shipped.txt (create)\\nPRESERVED (user records — uninstall never touches):\\n  - [bus_root] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028\\n  - [bus_root] \u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028\",\"unresolved\":[]},\"status\":\"ok\"}\n",
       "stdout_bytes": 661,
       "stdout_sha256": "84e13d57e7a9ee822ff91e7e9f77c24b02ece40fd9892b8527402e5cd9cf90d9",
       "timed_out": false,
@@ -564,7 +564,7 @@
     "timeout_s": 30.0
   },
   "ended_utc": "2026-08-28T00:40:29Z",
-  "live_fleet_refused": "\u002fUsers/penguinspecz/.floati-bus/puddle-fleet",
+  "live_fleet_refused": "\u002fUsers/penguinspecz/.floati-bus/the fleet",
   "scratch": "\u002fUsers/penguinspecz/Projects/floati-grok/.gauntlet-scratch/h20260828004028",
   "started_utc": "2026-08-28T00:40:28Z",
   "trunk_sha": "c4dd4a164328f91407e4103562a0e6308d573f73",

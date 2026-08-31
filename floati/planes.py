@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterator, Optional
 
+from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS, append_record, read_records, read_records_snapshot, transact
@@ -374,6 +375,7 @@ class AuthorityGrantStore:
     """Expiring acting authority with exact-holder and exact-epoch CAS."""
 
     def __init__(self, root: FloatiRoot) -> None:
+        self.root = root
         self._store = _CasIntervalStore(
             root,
             "authority-grants",
@@ -409,9 +411,11 @@ class AuthorityGrantStore:
             )
         return dict(records[-1])
 
+    @shared_epoch_operation
     def claim(self, subject_id: str, holder: str, ttl_seconds: int, deadline_seconds: int, now: datetime) -> Dict[str, object]:
         return self._store.claim(subject_id, holder, ttl_seconds, deadline_seconds, now)
 
+    @shared_epoch_operation
     def grant_exact(
         self,
         subject_id: str,
@@ -471,6 +475,7 @@ class AuthorityGrantStore:
             )
             return record
 
+    @shared_epoch_operation
     def revoke_exact(
         self,
         subject_id: str,
@@ -494,12 +499,15 @@ class AuthorityGrantStore:
                 return prior
             raise
 
+    @shared_epoch_operation
     def renew(self, subject_id: str, holder: str, epoch: int, ttl_seconds: int, deadline_seconds: int, now: datetime) -> Dict[str, object]:
         return self._store.renew(subject_id, holder, epoch, ttl_seconds, deadline_seconds, now)
 
+    @shared_epoch_operation
     def release(self, subject_id: str, holder: str, epoch: int, now: datetime) -> Dict[str, object]:
         return self._store.release(subject_id, holder, epoch, now)
 
+    @shared_epoch_operation
     def expire(self, subject_id: str, holder: str, epoch: int, now: datetime) -> Dict[str, object]:
         return self._store.expire(subject_id, holder, epoch, now)
 
