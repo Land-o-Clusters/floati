@@ -32,6 +32,11 @@
           }
         },
         {
+          "name": "Install the real tools the selftest asserts against",
+          "shell": "bash",
+          "run": "set -euo pipefail\npython3 -m pip install --disable-pip-version-check --quiet pillow jsonschema\nif [ \"${RUNNER_OS}\" = \"Linux\" ]; then\n  sudo apt-get update -qq\n  sudo apt-get install -y -qq minisign\nelse\n  brew install minisign\nfi\nminisign -v"
+        },
+        {
           "name": "Run complete artifact selftest",
           "run": "python3 -m floati.selftest"
         }
