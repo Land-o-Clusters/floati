@@ -1340,7 +1340,7 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
             attempt_id=case.run.opened["attempt_id"],
         )
 
-        evidence_path = Path("\x2fprivate\x2ftmp/floati-work") / case.run.parent / "isolation-evidence.json"
+        evidence_path = Path("\x2fprivate/tmp/floati-work") / case.run.parent / "isolation-evidence.json"
         if result.get("outcome_code") == "effect_worker_isolation_unavailable":
             self.assertFalse(evidence_path.exists(), result)
             self.assertEqual([], case.effect_ledger.records())

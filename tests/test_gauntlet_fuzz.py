@@ -2546,7 +2546,7 @@ class WakeHoldFuzzTests(unittest.TestCase):
         from floati.wake import OneShotWakeRegistrar, OneShotWakeRequest
 
         for mutation in ("same_inode_bytes", "replacement", "disappearance"):
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as directory:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as directory:
                 root = FloatiRoot.open(Path(directory) / "root", "alpha")
                 callback = Path(directory) / "callback"
                 callback.write_bytes(b"#!/bin/sh\nexit 0\n")

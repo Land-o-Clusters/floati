@@ -28,7 +28,7 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 
 class ContextActivationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.root_path = Path(self.temporary.name) / "fleet"
         self.root = FloatiRoot.open_direct_home(self.root_path, create=True)
@@ -157,7 +157,7 @@ class ContextActivationTests(unittest.TestCase):
                 )
                 arguments = shlex.split(example)[1:]
                 arguments = [
-                    str(self.root_path) if value == "/var\x2ftmp/fleet"
+                    str(self.root_path) if value == "~/fleet"
                     else "builder-a" if value == public_ids.builder('a')
                     else value
                     for value in arguments

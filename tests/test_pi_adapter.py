@@ -29,7 +29,7 @@ except (ImportError, ModuleNotFoundError):
 
 class PiRpcSessionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.workspace = Path(self.temp.name) / "workspace"
         self.workspace.mkdir()
@@ -83,7 +83,7 @@ class PiRpcSessionTests(unittest.TestCase):
 class PiRpcAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.work_id = "work-" + uuid7_hex()
-        self.workspace = Path("\x2fprivate\x2ftmp/floati-work") / self.work_id
+        self.workspace = Path("\x2fprivate/tmp/floati-work") / self.work_id
         self.addCleanup(shutil.rmtree, self.workspace, True)
 
     def command(self, mode: str) -> tuple[str, ...]:

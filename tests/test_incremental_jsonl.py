@@ -21,7 +21,7 @@ DOMAIN = "slipway-wake-hold-events-v1"
 
 class VerifiedLedgerCursorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name), "alpha")
         registry = Registry(self.root)

@@ -110,9 +110,9 @@ def _example_value(action: argparse.Action) -> str:
     if action.type is float:
         return "1.0"
     if action.dest in {"root", "source", "destination", "workspace"}:
-        return "\x2fprivate\x2ftmp/floati-contract"
+        return "\x2fprivate/tmp/floati-contract"
     if action.dest in {"roots", "declared_roots", "plan", "policy"}:
-        return "\x2fprivate\x2ftmp/floati-contract.json"
+        return "\x2fprivate/tmp/floati-contract.json"
     return "value"
 
 

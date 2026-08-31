@@ -22,7 +22,7 @@ from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
 
 class WakeDaemonCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.home = self.base / "home"
@@ -390,32 +390,32 @@ class WakeDaemonCliTests(unittest.TestCase):
             "install": (
                 "floati wake daemon install - install the exact LaunchAgent",
                 "Install deterministic digest-bound plist bytes without starting them.",
-                "wake daemon install --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon install --root ~/fleet --as builder-a --harness cursor",
             ),
             "start": (
                 "floati wake daemon start - start the exact LaunchAgent",
                 "Bootstrap and kickstart only the deterministic user-domain LaunchAgent.",
-                "wake daemon start --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon start --root ~/fleet --as builder-a --harness cursor",
             ),
             "status": (
                 "floati wake daemon status - inspect one daemon coordinate",
                 "Report inactive before consent and otherwise inspect only the exact installed supervisor coordinate.",
-                "wake daemon status --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon status --root ~/fleet --as builder-a --harness cursor",
             ),
             "stop": (
                 "floati wake daemon stop - stop the exact LaunchAgent",
                 "Request bootout and prove process absence for one exact user-domain label.",
-                "wake daemon stop --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon stop --root ~/fleet --as builder-a --harness cursor",
             ),
             "remove": (
                 "floati wake daemon remove - remove the exact LaunchAgent",
                 "Quarantine and remove only matching deterministic plist bytes.",
-                "wake daemon remove --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon remove --root ~/fleet --as builder-a --harness cursor",
             ),
             "revoke": (
                 "floati wake daemon revoke - revoke exact daemon consent",
                 "Stop and remove matching supervisor bytes, then append exact consent revocation.",
-                "wake daemon revoke --root /var\x2ftmp/fleet --as builder-a --harness cursor",
+                "wake daemon revoke --root ~/fleet --as builder-a --harness cursor",
             ),
         }
         for operation in (

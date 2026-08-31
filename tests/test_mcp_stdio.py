@@ -25,7 +25,7 @@ def compact(value: object) -> str:
 
 class McpStdioTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet",
@@ -97,7 +97,7 @@ class McpStdioTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "status",
-                    "arguments": {"root": "\x2fprivate\x2ftmp/actor-switch"},
+                    "arguments": {"root": "\x2fprivate/tmp/actor-switch"},
                 },
             },
         ])

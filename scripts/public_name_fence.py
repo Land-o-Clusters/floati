@@ -137,6 +137,32 @@ def encoded_variants(token: str) -> tuple[bytes, ...]:
     return tuple(sorted(variants))
 
 
+_PATH_COMPONENT_BYTES = frozenset(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.~-"
+)
+
+
+def _begins_a_path(scannable: bytes, variants: tuple[bytes, ...]) -> bool:
+    """Whether any variant occurs where a PATH can begin, not merely anywhere.
+
+    The shortest governed prefix also occurs inside a longer, ungoverned
+    system path, so a plain containment test called a documented CLI example a
+    leak. The redactor used to hide that by rewriting the middle of that path —
+    so the fence and the redactor agreed only because one was destroying what
+    the other looked for. They now share one rule. ⇒ A FENCE AND ITS REDACTOR
+    MUST AGREE ABOUT WHAT A PREFIX IS, OR THE CORRUPTION IS WHAT KEEPS THE
+    FENCE QUIET.
+    """
+
+    for variant in variants:
+        index = scannable.find(variant)
+        while index >= 0:
+            if index == 0 or scannable[index - 1] not in _PATH_COMPONENT_BYTES:
+                return True
+            index = scannable.find(variant, index + 1)
+    return False
+
+
 def is_record_class_path(relative: str) -> bool:
     """Return whether a path is a derived historical/evidence record."""
 
@@ -491,7 +517,12 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
                 continue
             if code in TEMP_FENCE_CODES and temp_found:
                 continue
-            if any(variant in scannable for variant in variants):
+            hit = (
+                _begins_a_path(scannable, variants)
+                if code in TEMP_FENCE_CODES
+                else any(variant in scannable for variant in variants)
+            )
+            if hit:
                 findings.append({"code": code, "path": relative})
                 if code in TEMP_FENCE_CODES:
                     temp_found = True

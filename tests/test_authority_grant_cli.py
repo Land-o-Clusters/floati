@@ -24,7 +24,7 @@ NOW = datetime(2026, 8, 28, 12, 0, tzinfo=timezone.utc)
 
 class AuthorityGrantCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet", create=True

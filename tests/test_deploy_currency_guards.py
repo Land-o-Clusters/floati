@@ -18,7 +18,7 @@ class DeploymentCurrencyGuardTests(unittest.TestCase):
     """Deployment currency refusals must identify the exact inspected ref."""
 
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.source = self.base / "source"

@@ -1893,7 +1893,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             seen_needs.add(dependency)
         if "workspace" in record:
             workspace = record["workspace"]
-            expected = f"\x2fprivate\x2ftmp/floati-work/{record['id']}"
+            expected = f"\x2fprivate/tmp/floati-work/{record['id']}"
             if workspace is not None and workspace != expected:
                 refuse(
                     "workspace_invalid",
@@ -2212,7 +2212,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _capability_set(record["capability_ceiling"], "capability_ceiling", refuse)
         _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
         _enum(record["workspace_policy"], {"patch_only", "isolated_worktree"}, "workspace_policy", refuse)
-        if not isinstance(record["workspace"], str) or re.fullmatch(r"\x2fprivate\x2ftmp/floati-work/work-" + _UUID7, record["workspace"]) is None:
+        if not isinstance(record["workspace"], str) or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, record["workspace"]) is None:
             refuse("workspace_invalid", "child workspace must use the closed reservation path")
         _timestamp_value(record["admitted_at_testimony"], "admitted_at_testimony", refuse)
     elif kind == "child_rejected":
@@ -3529,7 +3529,7 @@ def _resume_binding(
 def _suspension_workspace(value: object, refuse: Any) -> None:
     if (
         not isinstance(value, str)
-        or re.fullmatch(r"\x2fprivate\x2ftmp/floati-work/work-" + _UUID7, value) is None
+        or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, value) is None
     ):
         refuse(
             "workspace_invalid",

@@ -77,7 +77,7 @@ class _TideEvaluator:
 
 class _WakeDaemonFixture(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)

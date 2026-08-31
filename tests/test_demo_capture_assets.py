@@ -147,13 +147,13 @@ class DemoCaptureAssetTests(unittest.TestCase):
 
         capture.validate_output_paths(
             ROOT / "docs" / "demo" / "candidates",
-            Path("\x2fprivate\x2ftmp/floati-demo-masters/a"),
+            Path("\x2fprivate/tmp/floati-demo-masters/a"),
         )
         invalid = [
-            (ROOT / "docs" / "evidence", Path("\x2fprivate\x2ftmp/master")),
+            (ROOT / "docs" / "evidence", Path("\x2fprivate/tmp/master")),
             (ROOT / "docs" / "demo", Path("relative/master")),
             (ROOT / "docs" / "demo", ROOT / "docs" / "demo" / "masters"),
-            (ROOT / "docs" / "demo" / "candidates", Path("../..\x2fprivate\x2ftmp/master")),
+            (ROOT / "docs" / "demo" / "candidates", Path("../../private/tmp/master")),
         ]
         for output, master in invalid:
             with self.subTest(output=output, master=master):
@@ -218,7 +218,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=demo_root) as output_text:
             with tempfile.TemporaryDirectory(
                 prefix="floati-demo-master-test-",
-                dir="\x2fprivate\x2ftmp",
+                dir="\x2fprivate/tmp",
             ) as master_text:
                 artifacts = capture.build_candidates(
                     Path(output_text),

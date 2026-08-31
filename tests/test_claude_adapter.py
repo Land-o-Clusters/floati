@@ -31,7 +31,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.assertIsNotNone(claude, "Claude headless adapter module must exist")
         self.assertIsNotNone(ClaudeHeadlessAdapter, "Claude headless adapter must exist")
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
         self.addCleanup(self.temp.cleanup)
         self.parent = Path(self.temp.name) / "slipway-work"
         codex_patcher = mock.patch("floati.adapters.codex_live._WORKSPACE_PARENT", self.parent)
@@ -260,12 +260,12 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
         from floati.cli import _parser
 
         worker = _parser().parse_args(
-            ["worker", "run", "--root", "\x2fprivate\x2ftmp/fleet", "--as", public_ids.builder('a'), "--adapter", "claude"]
+            ["worker", "run", "--root", "\x2fprivate/tmp/fleet", "--as", public_ids.builder('a'), "--adapter", "claude"]
         )
         self.assertEqual("claude", worker.adapter)
         with self.assertRaisesRegex(ProtocolRefusal, "invalid choice: 'claude'"):
             _parser().parse_args(
-                ["orchestrate", "--root", "\x2fprivate\x2ftmp/fleet", "--plan", "\x2fprivate\x2ftmp/plan.json", "--adapter", "claude", "--deadline", "5"]
+                ["orchestrate", "--root", "\x2fprivate/tmp/fleet", "--plan", "\x2fprivate/tmp/plan.json", "--adapter", "claude", "--deadline", "5"]
             )
 
 
