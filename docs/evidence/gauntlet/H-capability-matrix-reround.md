@@ -1,6 +1,6 @@
 # H — capability-matrix re-round (derivability ≠ capability)
 
-**Seat:** grok · **Root:** puddle-fleet · **Date:** 2026-08-28
+**Seat:** grok · **Root:** the fleet · **Date:** 2026-08-28
 **Spec correction:** `docs/design/capability-matrix-spec-2026-08-28.md` @
 `b9e5d2ec857e77498d9d047b672a8373b137cf1e` (cherry-picked onto this lane;
 conflict resolved by keeping the Claude re-measure refusal section already

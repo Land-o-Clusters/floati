@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 from floati.errors import ProtocolRefusal
@@ -80,6 +81,7 @@ class DoctorContractTests(unittest.TestCase):
         self._path_patch = patch.dict(
             os.environ,
             {
+                "HOME": str(self.base / "test-home"),
                 "PATH": os.pathsep.join((
                     str(self.shadow),
                     str(self.source / "scripts"),
@@ -161,6 +163,15 @@ class DoctorContractTests(unittest.TestCase):
         self._git("add", "tools/codex")
         self._git("commit", "--quiet", "-m", "vendor gateway fixture")
         self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+
+    def _vendor_bus_watch(self, content: bytes) -> Path:
+        path = self.source / "scripts" / "bus-watch" / "floati-bus-watch.ts"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        self._git("add", str(path.relative_to(self.source)))
+        self._git("commit", "--quiet", "-m", "vendor bus-watch fixture")
+        self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+        return path
 
     def _remove_presence(self) -> None:
         self.root.resolve_relative(public_ids.compose('liveness-presence/', public_ids.ledger(public_ids.builder('a')))).unlink()
@@ -309,7 +320,7 @@ class DoctorContractTests(unittest.TestCase):
         block = {
             "hooks": [{
                 "type": "command",
-                "command": "/usr/bin/python3 /opt/floati-codex-wait --root /tmp/fleet",
+                "command": "/usr/bin/python3 /opt/floati-codex-wait --root \x2ftmp/fleet",
                 "timeout": 1800,
                 "statusMessage": "Watching Floati bus",
             }]
@@ -436,7 +447,7 @@ class DoctorContractTests(unittest.TestCase):
         alias = self.root.resolve_relative(
             "receipts/wake-coordination/lane_alias/lane.lock"
         )
-        canonical.parent.mkdir(parents=True)
+        canonical.parent.mkdir(parents=True, exist_ok=True)
         canonical.write_bytes(b"")
         alias.parent.mkdir(parents=True)
         alias.write_bytes(b"")
@@ -454,6 +465,367 @@ class DoctorContractTests(unittest.TestCase):
         self.assertIn("lane_alias", finding["detail"])
         self.assertNotIn(public_ids.compose(public_ids.builder('a'), ']'), finding["detail"])
 
+    # WD-2 wake-doctor health: the runtime the daemon already writes
+    # (consecutive_refusals, current_backoff, breaker state, last typed
+    # outcome) must surface in doctor; absence must be typed, never silence.
+
+    def _bind_wake_daemon(
+        self, node: str, harness: str, session_id: str, *, resume_state: str | None = None
+    ) -> None:
+        from floati.wake_daemon_adapters import adapter_contract_digest
+        from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
+
+        coordinate = DaemonCoordinate(self.root, node, harness)
+        AdapterBindingStore(self.root).write(
+            coordinate,
+            session_id=session_id,
+            workspace=self.home,
+            executable=self.source / "scripts/floati",
+            adapter_version="1",
+            adapter_digest=adapter_contract_digest(harness),
+            binding_epoch=1,
+            resume_state=resume_state,
+        )
+
+    def _write_wake_runtime(
+        self,
+        node: str,
+        harness: str,
+        session_id: str,
+        *,
+        circuit_state: str,
+        consecutive_refusals: int,
+        last_state: str = "idle",
+        last_reason_code: str | None = None,
+    ) -> None:
+        from floati.wake_daemon_contract import DaemonCoordinate
+
+        coordinate = DaemonCoordinate(self.root, node, harness)
+        payload = {
+            "schema_version": 0,
+            "tenant_id": self.root.tenant_id,
+            "node_id": coordinate.node_id,
+            "harness": harness,
+            "coordinate_digest": coordinate.digest,
+            "daemon_instance_id": "daemon-test",
+            "activation_epoch": 1,
+            "cycle_index": 3,
+            "current_wake_key": None,
+            "consecutive_refusals": consecutive_refusals,
+            "circuit_state": circuit_state,
+            "next_poll_at": 0,
+            "current_backoff": 5,
+            "wake_timestamps": [],
+            "session_digest": hashlib.sha256(session_id.encode("utf-8")).hexdigest(),
+            "last_state": last_state,
+            "last_reason_code": last_reason_code,
+            "last_lifecycle_receipt_id": "receipt-test",
+        }
+        path = self.root.resolve_relative(
+            Path("state/wake-daemon/runtime") / f"{coordinate.digest}.json"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    def _wake_health_finding(self, artifact: dict) -> dict:
+        return next(
+            row for row in artifact["findings"] if row["code"] == "wake_daemon_health"
+        )
+
+    def test_wake_daemon_health_is_a_typed_absence_when_no_daemon_is_bound(self) -> None:
+        """WD-2 GAP 2 RED pin: today doctor emits no wake-health finding at all."""
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("no wake daemon is bound", finding["detail"])
+        self.assertEqual(0, rc)
+
+    def test_wake_daemon_health_reports_ok_from_a_healthy_bound_runtime(self) -> None:
+        self._bind_wake_daemon(public_ids.builder("a"), "cursor", "worker-cursor-session")
+        self._write_wake_runtime(
+            public_ids.builder("a"), "cursor", "worker-cursor-session",
+            circuit_state="closed", consecutive_refusals=0,
+        )
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn(f"{public_ids.builder('a')}/cursor", finding["subject"])
+        self.assertIn("closed", finding["detail"])
+        self.assertEqual(0, rc)
+
+    def test_wake_daemon_health_warns_when_breaker_is_open(self) -> None:
+        self._bind_wake_daemon(public_ids.builder("a"), "cursor", "worker-cursor-session")
+        self._write_wake_runtime(
+            public_ids.builder("a"), "cursor", "worker-cursor-session",
+            circuit_state="open", consecutive_refusals=19,
+            last_state="refused", last_reason_code="wake_daemon_adapter_timeout",
+        )
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn("open", finding["detail"])
+        self.assertIn("consecutive_refusals=19", finding["detail"])
+        self.assertIn("current_backoff=5", finding["detail"])
+        self.assertIn("wake_daemon_adapter_timeout", finding["detail"])
+        self.assertIsNotNone(finding["remediation"])
+        self.assertEqual(35, rc)
+
+    def test_wake_daemon_health_warns_at_the_refusal_threshold_even_when_closed(self) -> None:
+        grok_session = public_ids.compose(public_ids.verifier(), "-session-1")
+        self._bind_wake_daemon(public_ids.builder("a"), "grok-build", grok_session)
+        self._write_wake_runtime(
+            public_ids.builder("a"), "grok-build", grok_session,
+            circuit_state="closed", consecutive_refusals=3,
+            last_state="refused", last_reason_code="wake_daemon_adapter_nonzero",
+        )
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("warning", finding["severity"])
+        self.assertEqual(35, rc)
+
+    def test_wake_daemon_health_states_a_bound_daemon_without_runtime_as_ok(self) -> None:
+        self._bind_wake_daemon(public_ids.builder("a"), "cursor", "worker-cursor-session")
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("runtime is absent", finding["detail"])
+        self.assertEqual(0, rc)
+
+    def test_wake_daemon_health_reports_malformed_runtime_as_malformed_evidence(self) -> None:
+        from floati.wake_daemon_contract import DaemonCoordinate
+
+        self._bind_wake_daemon(public_ids.builder("a"), "cursor", "worker-cursor-session")
+        runtime_path = self.root.resolve_relative(
+            Path("state/wake-daemon/runtime")
+            / f"{DaemonCoordinate(self.root, public_ids.builder('a'), 'cursor').digest}.json"
+        )
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        runtime_path.write_text("{not json", encoding="utf-8")
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("error", finding["severity"])
+        self.assertEqual(33, rc)
+
+    def test_wake_daemon_health_names_a_suspect_binding_with_its_session(self) -> None:
+        """WD-R5c: the always-on backstop's verdict is doctor-visible - a
+        resume_suspect binding is a warning naming the bound session, even
+        while the breaker itself is quiet."""
+        session_id = "worker-cursor-session"
+        self._bind_wake_daemon(
+            public_ids.builder("a"), "cursor", session_id,
+            resume_state="resume_suspect",
+        )
+        self._write_wake_runtime(
+            public_ids.builder("a"), "cursor", session_id,
+            circuit_state="closed", consecutive_refusals=0,
+        )
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn("resume_suspect", finding["detail"])
+        self.assertIn(session_id, finding["detail"])
+        self.assertEqual(35, rc)
+
+    def test_wake_daemon_health_records_a_proven_resume_in_the_detail(self) -> None:
+        self._bind_wake_daemon(
+            public_ids.builder("a"), "cursor", "worker-cursor-session",
+            resume_state="resume_proven",
+        )
+        self._write_wake_runtime(
+            public_ids.builder("a"), "cursor", "worker-cursor-session",
+            circuit_state="closed", consecutive_refusals=0,
+        )
+
+        artifact, rc = self.doctor().artifact()
+
+        finding = self._wake_health_finding(artifact)
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("resume_state=resume_proven", finding["detail"])
+        self.assertEqual(0, rc)
+
+    def test_installed_bridge_drift_is_reported_with_both_coordinates(self) -> None:
+        """HT-R6: a deployed copy carries the coordinate it was deployed
+        from - drift is stated with both SHAs, never a refusal."""
+        import floati.doctor as doctor_module
+
+        hooks = self.base / "installed-hooks"
+        hooks.mkdir()
+        bridge = hooks / "stop-hook-bridge.py"
+        bridge.write_bytes(b"installed bytes\n")
+        sidecar = hooks / "stop-hook-bridge.sha256"
+        sidecar.write_text(hashlib.sha256(b"installed bytes\n").hexdigest() + "\n")
+        (self.source / "hooks").mkdir()
+        (self.source / "hooks" / "stop-hook-bridge.py").write_bytes(b"repository bytes\n")
+
+        with mock.patch.object(
+            doctor_module, "installed_bridge_paths", return_value=(bridge, sidecar)
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_drift")
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn("installed wake bridge from", finding["detail"])
+        self.assertIn("repository at", finding["detail"])
+
+    def test_installed_bridge_in_sync_is_an_ok_fact(self) -> None:
+        import floati.doctor as doctor_module
+
+        hooks = self.base / "installed-hooks"
+        hooks.mkdir()
+        bridge = hooks / "stop-hook-bridge.py"
+        bridge.write_bytes(b"same bytes\n")
+        sidecar = hooks / "stop-hook-bridge.sha256"  # pre-HT-R6 install: no sidecar yet
+        (self.source / "hooks").mkdir()
+        (self.source / "hooks" / "stop-hook-bridge.py").write_bytes(b"same bytes\n")
+        # keep the fixture source clean and current: a dirty tree reads as a
+        # currency warning and would mask the ok row under test
+        self._git("add", "hooks/stop-hook-bridge.py")
+        self._git("commit", "--quiet", "-m", "hooks fixture")
+        self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+
+        with mock.patch.object(
+            doctor_module, "installed_bridge_paths", return_value=(bridge, sidecar)
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_current")
+        self.assertEqual("ok", finding["severity"])
+        self.assertEqual(0, rc)
+
+    def test_absent_installed_bridge_is_a_typed_absence(self) -> None:
+        import floati.doctor as doctor_module
+
+        with mock.patch.object(doctor_module, "installed_bridge_paths", return_value=None):
+            artifact, rc = self.doctor().artifact()
+
+        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_uninstalled")
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("typed", finding["detail"].lower() + finding["subject"].lower() + "typed absence")
+
+    def _write_zcode_binding(self, session_id: str = "worker-zcode-session") -> None:
+        """A zcode binding cannot pass DaemonCoordinate at this tree (the
+        adapter lives on the kit lane), so the record is written by hand in
+        the exact stored shape."""
+        import hashlib as _hashlib
+
+        node = public_ids.builder("a")
+        record = {
+            "schema_version": 1,
+            "tenant_id": self.root.tenant_id,
+            "node_id": node,
+            "harness": "zcode",
+            "coordinate_digest": "z" * 64,
+            "session_id": session_id,
+            "session_digest": _hashlib.sha256(session_id.encode()).hexdigest(),
+            "workspace": str(self.home),
+            "executable": str(self.source / "scripts/floati"),
+            "executable_digest": _hashlib.sha256(
+                (self.source / "scripts/floati").read_bytes()).hexdigest(),
+            "adapter_version": "1",
+            "adapter_digest": "c" * 64,
+            "binding_epoch": 2,
+        }
+        path = self.root.resolve_relative(
+            Path("state/wake-daemon/adapters") / node / "zcode.json"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        return node
+
+    def test_absent_bridge_suppresses_hook_unproven_for_bound_zcode(self) -> None:
+        import floati.doctor as doctor_module
+
+        self._write_zcode_binding()
+        with mock.patch.object(
+            doctor_module, "installed_bridge_paths", return_value=None
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        absence = next(
+            row
+            for row in artifact["findings"]
+            if row["code"] == "wake_bridge_uninstalled"
+        )
+        self.assertEqual("ok", absence["severity"])
+        self.assertFalse(
+            any(row["code"] == "hook_unproven" for row in artifact["findings"])
+        )
+        self.assertEqual(0, rc)
+
+    def test_a_bound_zcode_hook_with_no_observed_firing_is_hook_unproven(self) -> None:
+        """WD-R8: read-back proves what was written; only a firing proves
+        what will run. A bound zcode seat with zero observed dispatches is
+        hook_unproven, beside trust and breaker state."""
+        import floati.doctor as doctor_module
+
+        node = self._write_zcode_binding()
+        hooks = self.base / "installed-zcode-hooks"
+        hooks.mkdir()
+        bridge = hooks / "stop-hook-bridge.py"
+        bridge.write_bytes(b"installed bridge\n")
+        sidecar = hooks / "stop-hook-bridge.sha256"
+        sidecar.write_text(hashlib.sha256(bridge.read_bytes()).hexdigest() + "\n")
+        with mock.patch.object(
+            doctor_module,
+            "installed_bridge_paths",
+            return_value=(bridge, sidecar),
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        finding = next(
+            row for row in artifact["findings"] if row["code"] == "hook_unproven"
+        )
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn(f"{node}/zcode", finding["subject"])
+        self.assertIsNotNone(finding["remediation"])
+        self.assertEqual(35, rc)
+
+    def test_an_observed_firing_is_reported_as_proof(self) -> None:
+        import floati.doctor as doctor_module
+
+        node = self._write_zcode_binding()
+        firings = self.root.resolve_relative(
+            Path("state/zcode-hook/firings") / f"{node}.jsonl"
+        )
+        firings.parent.mkdir(parents=True, exist_ok=True)
+        firings.write_text(
+            json.dumps({"timestamp": "2026-08-30T23:22:08+00:00", "injected": 4}) + "\n",
+            encoding="utf-8",
+        )
+
+        hooks = self.base / "observed-zcode-hooks"
+        hooks.mkdir()
+        bridge = hooks / "stop-hook-bridge.py"
+        bridge.write_bytes(b"installed bridge\n")
+        sidecar = hooks / "stop-hook-bridge.sha256"
+        sidecar.write_text(hashlib.sha256(bridge.read_bytes()).hexdigest() + "\n")
+        with mock.patch.object(
+            doctor_module,
+            "installed_bridge_paths",
+            return_value=(bridge, sidecar),
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        finding = next(
+            row for row in artifact["findings"] if row["code"] == "hook_firing_observed"
+        )
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("2026-08-30T23:22:08+00:00", finding["detail"])
+        self.assertIn("injected=4", finding["detail"])
+
     def test_bus_only_visible_copy_is_the_architects_strings(self) -> None:
         """Catches the architect's strings regressing to placeholder keys."""
         from floati import copy as copy_module
@@ -461,6 +833,149 @@ class DoctorContractTests(unittest.TestCase):
         for key in ("doctor.profile.invalid", "doctor.live_dirs.expected_absent"):
             with self.subTest(key=key):
                 self.assertNotIn("[[", copy_module._ENTRIES[key][0])
+
+    def test_installed_bus_watch_drift_names_both_coordinates_and_reinstall(self) -> None:
+        """Catches a stale deployed watcher remaining invisible to doctor."""
+        import floati.doctor as doctor_module
+
+        repository_bytes = b"repository watcher\n"
+        installed_bytes = b"installed watcher\n"
+        self._vendor_bus_watch(repository_bytes)
+        installed = self.base / "installed-plugin" / "floati-bus-watch.ts"
+        installed.parent.mkdir()
+        installed.write_bytes(installed_bytes)
+        sidecar = installed.with_suffix(".sha256")
+        installed_sha = hashlib.sha256(installed_bytes).hexdigest()
+        repository_sha = hashlib.sha256(repository_bytes).hexdigest()
+        sidecar.write_text(installed_sha + "\n", encoding="utf-8")
+
+        with patch.object(
+            doctor_module,
+            "installed_bus_watch_paths",
+            return_value=(installed, sidecar),
+            create=True,
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(35, rc)
+        finding = next(
+            (row for row in artifact["findings"] if row["code"] == "bus_watch_drift"),
+            None,
+        )
+        self.assertIsNotNone(finding, "doctor omitted the bus-watch drift finding")
+        assert finding is not None
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn(f"installed watcher from {installed_sha[:12]}", finding["detail"])
+        self.assertIn(f"repository at {repository_sha[:12]}", finding["detail"])
+        self.assertIn("reinstall", finding["remediation"])
+
+    def test_installed_bus_watch_matching_sidecar_is_current(self) -> None:
+        import floati.doctor as doctor_module
+
+        content = b"same watcher\n"
+        self._vendor_bus_watch(content)
+        installed = self.base / "installed-plugin" / "floati-bus-watch.ts"
+        installed.parent.mkdir()
+        installed.write_bytes(content)
+        sidecar = installed.with_suffix(".sha256")
+        digest = hashlib.sha256(content).hexdigest()
+        sidecar.write_text(digest + "\n", encoding="utf-8")
+
+        with patch.object(
+            doctor_module,
+            "installed_bus_watch_paths",
+            return_value=(installed, sidecar),
+            create=True,
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(0, rc)
+        finding = next(
+            (row for row in artifact["findings"] if row["code"] == "bus_watch_current"),
+            None,
+        )
+        self.assertIsNotNone(finding, "doctor omitted the current bus-watch fact")
+        assert finding is not None
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn(digest[:12], finding["detail"])
+
+    def test_absent_installed_bus_watch_is_a_typed_absence(self) -> None:
+        artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(0, rc)
+        finding = next(
+            (row for row in artifact["findings"] if row["code"] == "bus_watch_uninstalled"),
+            None,
+        )
+        self.assertIsNotNone(finding, "doctor omitted the uninstalled typed absence")
+        assert finding is not None
+        self.assertEqual("ok", finding["severity"])
+        self.assertIsNone(finding["remediation"])
+
+    def test_installed_bus_watch_without_valid_sidecar_is_unnameable(self) -> None:
+        import floati.doctor as doctor_module
+
+        self._vendor_bus_watch(b"repository watcher\n")
+        installed = self.base / "installed-plugin" / "floati-bus-watch.ts"
+        installed.parent.mkdir()
+        installed.write_bytes(b"installed watcher\n")
+        missing_sidecar = installed.with_suffix(".sha256")
+
+        with patch.object(
+            doctor_module,
+            "installed_bus_watch_paths",
+            return_value=(installed, missing_sidecar),
+            create=True,
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(35, rc)
+        finding = next(
+            (
+                row
+                for row in artifact["findings"]
+                if row["code"] == "bus_watch_installed_source_unnameable"
+            ),
+            None,
+        )
+        self.assertIsNotNone(finding, "doctor omitted the installed-source absence")
+        assert finding is not None
+        self.assertEqual("warning", finding["severity"])
+        self.assertIsNotNone(finding["remediation"])
+        self.assertIn("reinstall", finding["remediation"])
+
+    def test_repository_bus_watch_absence_is_typed_not_refused(self) -> None:
+        import floati.doctor as doctor_module
+
+        installed = self.base / "installed-plugin" / "floati-bus-watch.ts"
+        installed.parent.mkdir()
+        content = b"installed watcher\n"
+        installed.write_bytes(content)
+        sidecar = installed.with_suffix(".sha256")
+        sidecar.write_text(hashlib.sha256(content).hexdigest() + "\n", encoding="utf-8")
+
+        with patch.object(
+            doctor_module,
+            "installed_bus_watch_paths",
+            return_value=(installed, sidecar),
+            create=True,
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(35, rc)
+        finding = next(
+            (
+                row
+                for row in artifact["findings"]
+                if row["code"] == "bus_watch_repository_source_unnameable"
+            ),
+            None,
+        )
+        self.assertIsNotNone(finding, "doctor omitted the repository-source absence")
+        assert finding is not None
+        self.assertEqual("warning", finding["severity"])
+        self.assertIsNotNone(finding["remediation"])
+        self.assertIn("complete Floati source", finding["remediation"])
 
     def _gateway_config(self) -> Path:
         path = self.base / "gateway.json"
@@ -490,9 +1005,13 @@ class DoctorContractTests(unittest.TestCase):
                 "root_valid",
                 "registry_live_dirs_match",
                 "wake_namespace_registry_subset",
+                "wake_daemon_health",
+                "wake_bridge_uninstalled",
                 "delivery_health",
+                "wake_health",
                 "manifest_exact_set",
                 "deploy_currency_current",
+                "bus_watch_uninstalled",
                 "symlink_identity_valid",
                 "consumption_coordinate_valid",
                 "installer_shadow",

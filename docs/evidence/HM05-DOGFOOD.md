@@ -262,40 +262,40 @@ lane ran only the authorized explicit-root onboarding commands.
 Initialization command:
 
 ```sh
-scripts/slip init ~/.slipway-bus/puddle-fleet/
+scripts/slip init ~/.slipway-bus/the fleet/
 ```
 
 Observed: exit 0; status `ok`; root
-`~/.slipway-bus/puddle-fleet`; tenant ID `puddle-fleet`.
+`~/.slipway-bus/the fleet`; tenant ID `the fleet`.
 
 Self-registration command:
 
 ```sh
-scripts/slip register --root ~/.slipway-bus/puddle-fleet/ lane-slipway --harness Codex
+scripts/slip register --root ~/.slipway-bus/the fleet/ build lane --harness Codex
 ```
 
 Observed: exit 0; status `ok`; registry ID
 `registry-019fb8d8659370c6ac10fcfb1769c1a8`. The durable registry ledger is
-`~/.slipway-bus/puddle-fleet/registry/entries.jsonl`; its
-only row is active node `lane-slipway` with role `Codex`. This lane did not
-register `fable` or `lane-app`.
+`~/.slipway-bus/the fleet/registry/entries.jsonl`; its
+only row is active node `build lane` with role `Codex`. This lane did not
+register `the architect` or `build lane`.
 
 First notification attempt:
 
 ```sh
-scripts/slip send --root ~/.slipway-bus/puddle-fleet/ --from lane-slipway --to fable --repo slipway --sha 20816bd4f4be80086f768576f8bff0db6f0fbcd4 --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
+scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo slipway --sha 20816bd4f4be80086f768576f8bff0db6f0fbcd4 --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
 ```
 
 Observed: exit 20; status `refused`; code `unknown_recipient`; detail
 `message refused: unknown_recipient`. The durable denial receipt is
 `denial-019fb8d8d29b7685b746f29c4e0ccd23`, attempt
 `attempt-019fb8d8d29b79508a59f365d5a02159`, at
-`~/.slipway-bus/puddle-fleet/receipts/denials.jsonl`.
+`~/.slipway-bus/the fleet/receipts/denials.jsonl`.
 
 Replay command:
 
 ```sh
-scripts/slip log --root ~/.slipway-bus/puddle-fleet/
+scripts/slip log --root ~/.slipway-bus/the fleet/
 ```
 
 Observed after the denial: exit 32; status `no_result`; `messages` was empty.
@@ -312,7 +312,7 @@ output.
 
 ## Acceptance resend and receipt binding
 
-Fable self-registered from its own Claude harness as active node `fable` at
+the architect self-registered from its own Claude harness as active node `the architect` at
 registry entry `registry-019fb996a3da73bc9be2e2ec8d0360af`. This lane then
 captured its contemporaneous Git tip with `git rev-parse HEAD` and observed
 `8ac460715c3cb60c79a5d6da9cddcf4e218ee4af`. No Git-changing command ran
@@ -321,46 +321,46 @@ between that capture and the acceptance send.
 Acceptance send command:
 
 ```sh
-scripts/slip send --root ~/.slipway-bus/puddle-fleet/ --from lane-slipway --to fable --repo slipway --sha 8ac460715c3cb60c79a5d6da9cddcf4e218ee4af --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
+scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo slipway --sha 8ac460715c3cb60c79a5d6da9cddcf4e218ee4af --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
 ```
 
 Observed: exit 0; status `ok`; message ID
 `msg-019fb99aeadb7b4fa20a2b4fc38f273e`. The durable message envelope is in
-`~/.slipway-bus/puddle-fleet/events.jsonl` and binds sender
-`lane-slipway`, recipient `fable`, repository `slipway`, the exact captured
+`~/.slipway-bus/the fleet/events.jsonl` and binds sender
+`build lane`, recipient `the architect`, repository `slipway`, the exact captured
 SHA, this repository-relative evidence document, and note
 `HM-0.5 delivered`.
 
-Fable subsequently presented its own inbox. The durable delivery receipt is
+the architect subsequently presented its own inbox. The durable delivery receipt is
 `delivery-019fb9a59b457236aae9fb2df4245bb4` at
-`~/.slipway-bus/puddle-fleet/receipts/deliveries/fable.jsonl`.
-It records recipient `fable`, `presentation_count` 1, and the sole `item_ids`
+`~/.slipway-bus/the fleet/receipts/deliveries/the architect.jsonl`.
+It records recipient `the architect`, `presentation_count` 1, and the sole `item_ids`
 entry `msg-019fb99aeadb7b4fa20a2b4fc38f273e`. This is the acceptance delivery
 evidence; it is distinct from message creation.
 
-Fable then acknowledged that exact delivered item. The fleet's first durable
+the architect then acknowledged that exact delivered item. The fleet's first durable
 acknowledgment is `ack-019fb9a59b79788d817c17fb2a83532c` at
-`~/.slipway-bus/puddle-fleet/receipts/acks/fable.jsonl`; its
+`~/.slipway-bus/the fleet/receipts/acks/the architect.jsonl`; its
 sole `item_ids` entry is the same message ID. Per the fleet contract,
 acknowledgment records the exact presented message and does not independently
 claim that the Git evidence was applied, tested, or deployed.
 
 The founding pre-registration denial
 `denial-019fb8d8d29b7685b746f29c4e0ccd23` remains at
-`~/.slipway-bus/puddle-fleet/receipts/denials.jsonl`. It
+`~/.slipway-bus/the fleet/receipts/denials.jsonl`. It
 records the earlier `unknown_recipient` refusal against superseded pre-fix
 checkpoint `20816bd` and remains historical fail-closed evidence, not
 acceptance evidence.
 
 ## Publication authority and remaining gates
 
-- The `FABLE — REGISTERED + PUSH GO (2026-07-31)` section of
+- The `the architect — REGISTERED + PUSH GO (2026-07-31)` section of
   `RULING-REQUEST-HM05-FABLE-PUSH-GATE.md`, committed in `8ac4607`, records
-  Fable's `PUSH GO` for the existing 13 commits and explicitly directs this
+  the architect's `PUSH GO` for the existing 13 commits and explicitly directs this
   lane to bind the message plus delivery receipt, commit, and push. That is the
   publication authority for this acceptance finish.
 - Successful acceptance message and delivery receipt: established above.
-- Fable's first acknowledgment: established above; acknowledgment is not
+- the architect's first acknowledgment: established above; acknowledgment is not
   completion.
 - The evidence-binding commit necessarily succeeds the send-time SHA and does
   not change which checkpoint the durable notification names.

@@ -667,10 +667,14 @@ class SequencerEpochTests(unittest.TestCase):
         def track_jsonl(
             path, *, exclusive,
             timeout_seconds=jsonl.LOCK_TIMEOUT_SECONDS,
+            order_tracked=True,
         ):
             events.append(path.name)
             with original_jsonl_lock(
-                path, exclusive=exclusive, timeout_seconds=timeout_seconds,
+                path,
+                exclusive=exclusive,
+                timeout_seconds=timeout_seconds,
+                order_tracked=order_tracked,
             ):
                 yield
 

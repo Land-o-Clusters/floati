@@ -37,6 +37,7 @@ from floati.adapters.headless_template import (
 )
 from floati.adapters.opencode import OpenCodeAdapter
 from floati.adapters.pi_observation import PiObservationAdapter
+from floati.adapters.zcode import ZcodeAdapter
 from floati.workers import WorkerAdapterFailure
 
 ROSTER = [
@@ -45,6 +46,7 @@ ROSTER = [
     ("opencode", OpenCodeAdapter),
     ("cline", ClineAdapter),
     ("pi-observation", PiObservationAdapter),
+    ("zcode", ZcodeAdapter),
 ]
 
 
@@ -59,7 +61,7 @@ class RosterParityBattery(unittest.TestCase):
     """CHECK-ONE, behavioral: one law, every roster member, really run."""
 
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temp.cleanup)
         self.tmp = Path(self.temp.name)
         self.parent = self.tmp / "floati-work"
@@ -182,6 +184,45 @@ class RosterParityBattery(unittest.TestCase):
                     child_pgid, os.getpgid(0),
                     f"{name}: child shared the parent process group",
                 )
+
+    def test_prompt_shape_is_measured_per_member(self):
+        """K4 finding: the template's `-- <title>` idiom is not universal —
+        zcode refuses it and needs `--prompt <title>` (measured live,
+        capture attempt1-stderr-helpdump.txt). Each member's DEFAULT
+        profile declares its prompt form; the battery proves the spawned
+        argv really carries it. Members without a measurement inherit the
+        template default `--`."""
+        for name, cls in ROSTER:
+            with self.subTest(adapter=name):
+                form = tuple(cls._default_profile().prompt_form)
+                command = _fake_harness(
+                    self.tmp, 'printf \'%s\\n\' "$@"\n')
+                profile = HarnessProfile(
+                    name=name,
+                    command=command,
+                    headless_arguments=(),
+                    stderr_name=f"{name}.stderr",
+                    prompt_form=form,
+                )
+                adapter = cls(profile)
+                _, result = self._spawn_drive(
+                    adapter, work_id=f"w-prompt-{name}")
+                argv_lines = result["payload"]["raw"].splitlines()
+                pair = list(form) + ["battery"]
+                self.assertIn(
+                    pair, [argv_lines[i:i + len(pair)]
+                           for i in range(len(argv_lines))],
+                    f"{name}: spawned argv does not carry the declared "
+                    f"prompt form {form} + title")
+
+    def test_template_default_prompt_form_is_the_unmeasured_idiom(self):
+        """K4 companion pin: the template default stays `--` — a member
+        that has not MEASURED its prompt form must not silently inherit a
+        different idiom. Only a measured declaration moves off default."""
+        profile = HarnessProfile(
+            name="unmeasured", command=("/opt/h/unmeasured",),
+            headless_arguments=(), stderr_name="unmeasured.stderr")
+        self.assertEqual(("--",), tuple(profile.prompt_form))
 
     def test_roster_constructors_default_to_isolation(self):
         """P3 lesson: the TEMPLATE's default is overridden by every roster

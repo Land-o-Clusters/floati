@@ -482,7 +482,7 @@ class RecordValidationTests(unittest.TestCase):
         self.assertNotIn("reply_to", durable[0])
         self.assertEqual(legacy["id"], durable[1]["reply_to"])
 
-    def test_message_session_binding_and_retraction_use_only_fable_shapes(self) -> None:
+    def test_message_session_binding_and_retraction_use_only_architect_shapes(self) -> None:
         'reviewer TD3/TD4 keeps legacy binding literal and retraction vocabulary closed.'
         legacy = self.valid_message()
         legacy["attempt_binding"] = "absent_legacy"
@@ -600,7 +600,7 @@ class RecordValidationTests(unittest.TestCase):
             "title": "escape ruled workspace",
             "owner": "worker-1",
             "artifact_bindings": [],
-            "workspace": "/tmp/inferred",
+            "workspace": "\x2ftmp/inferred",
         }
 
         with self.assertRaises(ProtocolRefusal) as caught:

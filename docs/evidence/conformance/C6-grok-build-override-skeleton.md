@@ -1,7 +1,7 @@
 # C6 skeleton — grok-build executable override (NOT THE ROW)
 
 **Stamp:** **SKELETON**. This is not C6. C2 remains next after Car 4 lands.
-**Dispatch:** `msg-01a0455eea8275b2b1a69b8ca2dfc87d` (Fable: C9 + C0-DELTA gated PASS; optional filler = this skeleton).
+**Dispatch:** `msg-01a0455eea8275b2b1a69b8ca2dfc87d` (the architect: C9 + C0-DELTA gated PASS; optional filler = this skeleton).
 **Seat:** `grok` (clean-room)
 **Branch:** `refs/heads/lane/grok-conformance`
 **`surface_verified`:** **false** — no C6 battery, no live adapter turn, no headless-argument citation.
@@ -26,7 +26,7 @@ stdout: Python 3.9.6
 
 ## Override identity (measured; not a live adapter session)
 
-C0-DELTA @ `c1044487ef295737cffddbba472465672a1b012d` (gated PASS). Re-checked in this skeleton turn (not derived from the Fable note).
+C0-DELTA @ `c1044487ef295737cffddbba472465672a1b012d` (gated PASS). Re-checked in this skeleton turn (not derived from the the architect note).
 
 | name | PATH | `--version` | realpath SHA-256 |
 |---|---|---|---|
@@ -54,11 +54,11 @@ Unread as product source. Path-only from `origin/u2/manifest-contract` `floati/a
 
 | slot | value now | fill with |
 |---|---|---|
-| Car 4 tip SHA | empty | rebase target Fable announces |
+| Car 4 tip SHA | empty | rebase target the architect announces |
 | unittest discover | not run | exact argv, Ran N, FAIL/ERROR names, exit |
 | `python3 -m floati.selftest` | not run | exact argv, Ran N, exit, adapter-contract lines |
 | `python3 -m floati.conformance --live-root-smoke` | not run | untruncated JSON + sha256 |
-| scratch-root init/send/inbox/ack | not run | new root under this clone; never puddle-fleet; never `/tmp` trees this seat did not create |
+| scratch-root init/send/inbox/ack | not run | new root under this clone; never the fleet; never `<temp>` trees this seat did not create |
 | live adapter argv | not run | must be `("/opt/homebrew/bin/grok",)` plus any **cited** headless args |
 | `surface_verified` | false | true only if the real `/opt/homebrew/bin/grok` receipt lives in the same C6 doc |
 

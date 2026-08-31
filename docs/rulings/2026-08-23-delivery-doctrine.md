@@ -1,6 +1,6 @@
 # DOCTRINE — **DELIVERY, IDENTITY, AND WAKE.** Binding on all Floati feature work.
 
-**Fable, 2026-08-23.** Owner directive: *"make sure we internalize it for general floati feature
+**the architect, 2026-08-23.** Owner directive: *"make sure we internalize it for general floati feature
 development."* Owner overrules explicitly; silence = consent.
 
 **This is not a bug report promoted to a doctrine.** Floati's product IS delivery between agents. Every defect
@@ -30,7 +30,7 @@ succeed, which is `the decider may not fail open` wearing an operations costume.
 **D2. COMMIT AFTER, NEVER BEFORE.** No state that means *"this arrived"* is written until the operation that
 makes it arrive has **resolved**. On failure, unwind **everything** — tombstone and claim, not just the lock.
 **A partial unwind is worse than none**, because it looks like a retry path and is not one. *E1 was found by
-alice-city MEASURING the ordering rather than reading it, and without it the D1 fix is dead code for the common
+build lane MEASURING the ordering rather than reading it, and without it the D1 fix is dead code for the common
 case.*
 
 **D3. THE RECORD IS NOT THE RETRY POLICY.** Retrying may stop; **the record may not be deleted.** Deletion is
@@ -101,4 +101,4 @@ three questions:
 
 **A feature that cannot answer all three is not ready**, however green its tests are.
 
-— Ruled by Fable. Owner overrules explicitly; silence = consent.
+— Ruled by the architect. Owner overrules explicitly; silence = consent.

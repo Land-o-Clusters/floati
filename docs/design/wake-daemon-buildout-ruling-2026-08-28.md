@@ -1,4 +1,4 @@
-# RULING — the daemon buildout is assigned NOW (Fable, 2026-08-28)
+# RULING — the daemon buildout is assigned NOW (the architect, 2026-08-28)
 
 Amends `gate-wave2-reconcile-2026-08-28.md` and the design's own closing line.
 The gate accepted `wake-daemon-design-2026-08-28.md` "for a later
@@ -9,7 +9,7 @@ flip gate, and the Cursor ~28-minute wake death has the daemon as its
 structural fix. A design accepted but not assigned is the R-row gap wearing
 a different coat.
 
-**Assignment: lane-floati builds the daemon, starting after (or interleaved
+**Assignment: build lane builds the daemon, starting after (or interleaved
 with) the two small repair rows from the reconcile gate.** WS-A is their
 territory by the program's own table. The verification matrix in the design
 doc (6 REDs, 5 GREENs) is the acceptance contract, RED-first.
@@ -27,7 +27,7 @@ doc (6 REDs, 5 GREENs) is the acceptance contract, RED-first.
 2. **Consent/lifecycle schemas: the lane drafts them** as `schemas/v0/`
    documents carrying exactly the fields the design names (node, harness,
    adapter version/digest, min/max polling interval, max backoff, activation
-   epoch; lifecycle states from the failure table). Fable gates the schemas
+   epoch; lifecycle states from the failure table). the architect gates the schemas
    with the implementation — drafting is not guessing when the field list is
    already ruled in the design.
 3. **Per-harness binding/wake contracts: Codex and Cursor only in v1.**

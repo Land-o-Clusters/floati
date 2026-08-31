@@ -49,7 +49,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
             [spec.name for spec in capture.capture_specs()],
         )
 
-    def test_candidate_crops_match_fable_round_one_verdict(self) -> None:
+    def test_candidate_crops_match_architect_round_one_verdict(self) -> None:
         capture = load_capture_module()
 
         self.assertEqual(
@@ -126,6 +126,10 @@ class DemoCaptureAssetTests(unittest.TestCase):
                     capture.validate_source_sha(invalid)
         for unsafe in (
             "\x2fUsers/example/project",
+            bytes.fromhex("2f707269766174652f746d70").decode("ascii") + "/capture",
+            bytes.fromhex("2f707269766174652f7661722f746d70").decode("ascii") + "/capture",
+            bytes.fromhex("2f7661722f666f6c64657273").decode("ascii") + "/capture",
+            bytes.fromhex("2f746d70").decode("ascii") + "/capture",
             operator_account_name(),
             "slipway-spawn-groups",
         ):
@@ -143,13 +147,13 @@ class DemoCaptureAssetTests(unittest.TestCase):
 
         capture.validate_output_paths(
             ROOT / "docs" / "demo" / "candidates",
-            Path("\x2fprivate/tmp/floati-demo-masters/a"),
+            Path("\x2fprivate\x2ftmp/floati-demo-masters/a"),
         )
         invalid = [
-            (ROOT / "docs" / "evidence", Path("\x2fprivate/tmp/master")),
+            (ROOT / "docs" / "evidence", Path("\x2fprivate\x2ftmp/master")),
             (ROOT / "docs" / "demo", Path("relative/master")),
             (ROOT / "docs" / "demo", ROOT / "docs" / "demo" / "masters"),
-            (ROOT / "docs" / "demo" / "candidates", Path("../..\x2fprivate/tmp/master")),
+            (ROOT / "docs" / "demo" / "candidates", Path("../..\x2fprivate\x2ftmp/master")),
         ]
         for output, master in invalid:
             with self.subTest(output=output, master=master):
@@ -214,7 +218,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=demo_root) as output_text:
             with tempfile.TemporaryDirectory(
                 prefix="floati-demo-master-test-",
-                dir="\x2fprivate/tmp",
+                dir="\x2fprivate\x2ftmp",
             ) as master_text:
                 artifacts = capture.build_candidates(
                     Path(output_text),

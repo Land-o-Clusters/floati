@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence
 
+from .bus_epoch import shared_epoch_operation
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import read_records, transact
+from .jsonl import read_records, read_records_snapshot, transact
 from .records import WAKE_HOLD_KINDS
 from .root import FloatiRoot, validate_identifier
 
@@ -171,6 +172,7 @@ class SparseCursor:
                 delivered.add(str(item_id))
         return frozenset(delivered)
 
+    @shared_epoch_operation
     def ack(
         self,
         recipient: str,
@@ -216,6 +218,12 @@ class SparseCursor:
         ):
             raise ProtocolRefusal("ack_items_invalid", "ack needs 1 to 1000 unique item ids")
         requested = list(item_ids)
+        ack_relative = self._relative_path_for(
+            node, worker_session_id=worker_session_id
+        )
+        delivery_relative = Path("receipts/deliveries").joinpath(
+            *ack_relative.relative_to("receipts/acks").parts
+        )
         frames = self._event_records()
         event_records = [row for row in frames if row["kind"] == "message_envelope"]
         retracted_ids = {
@@ -231,6 +239,11 @@ class SparseCursor:
         for item_id in requested:
             event = events.get(item_id)
             if event is None:
+                if self._item_was_archived(item_id, delivery_relative):
+                    raise ProtocolRefusal(
+                        "ack_item_archived",
+                        f"message {item_id} moved to an owned epoch archive",
+                    )
                 raise ProtocolRefusal("ack_item_unknown", f"message {item_id} is unknown")
             if event.get("recipient") != node:
                 raise ProtocolRefusal("ack_recipient_mismatch", f"message {item_id} belongs to another recipient")
@@ -239,6 +252,11 @@ class SparseCursor:
             if item_id in retracted_ids:
                 raise ProtocolRefusal("ack_item_retracted", f"message {item_id} has been retracted")
             if item_id not in delivered:
+                if self._item_was_archived(item_id, delivery_relative):
+                    raise ProtocolRefusal(
+                        "ack_item_archived",
+                        f"message {item_id} moved to an owned epoch archive",
+                    )
                 raise ProtocolRefusal("ack_item_not_delivered", f"message {item_id} has not been delivered")
 
         current = datetime.now(timezone.utc) if now is None else now
@@ -280,7 +298,34 @@ class SparseCursor:
 
         return transact(
             self.root,
-            self._relative_path_for(node, worker_session_id=worker_session_id),
+            ack_relative,
             decide,
             allowed_kinds={"ack_receipt"},
         )
+
+    def _item_was_archived(self, item_id: str, delivery_relative: Path) -> bool:
+        from .events import EVENT_KINDS
+        from .snapshot import _owned_epoch_archives
+
+        for archive in _owned_epoch_archives(self.root):
+            archive_relative = archive.relative_to(self.root.tenant_home)
+            archived_events = read_records_snapshot(
+                self.root,
+                archive_relative / "events.jsonl",
+                allowed_kinds=set(EVENT_KINDS),
+            )
+            if any(
+                row.get("kind") == "message_envelope" and row.get("id") == item_id
+                for row in archived_events
+            ):
+                return True
+            archived_deliveries = read_records_snapshot(
+                self.root,
+                archive_relative / delivery_relative,
+                allowed_kinds=set(WAKE_HOLD_KINDS),
+            )
+            if any(
+                item_id in row.get("item_ids", []) for row in archived_deliveries
+            ):
+                return True
+        return False

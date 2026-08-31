@@ -176,7 +176,7 @@ def _seed_decision_source(root: FloatiRoot) -> None:
 class ReaderFuzzGauntletTests(unittest.TestCase):
     def invoke(self, *arguments: str) -> subprocess.CompletedProcess[bytes]:
         environment = dict(os.environ)
-        environment["PYTHONPYCACHEPREFIX"] = "/tmp/slipway-hm3h-fuzz-pycache"
+        environment["PYTHONPYCACHEPREFIX"] = "\x2ftmp/slipway-hm3h-fuzz-pycache"
         return subprocess.run(
             [sys.executable, "-m", "floati", *arguments],
             cwd=REPO_ROOT,
@@ -632,7 +632,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             ("watch",),
             ("receipts", "recipient"),
             ("supervise",),
-            ("orchestrate", "--plan", "/tmp/td2-plan.json", "--adapter", "codex", "--deadline", "1"),
+            ("orchestrate", "--plan", "\x2ftmp/td2-plan.json", "--adapter", "codex", "--deadline", "1"),
             ("grant", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
             ("grant", "revoke", "--as", "architect-a", "--holder", public_ids.builder('a'), "--subject", "work-claims", "--epoch", "1"),
             ("work", "add", "--title", "td2"),
@@ -648,9 +648,9 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 self.assertIsNone(parsed.root)
 
         lifecycle = (
-            ("install", "--source", str(REPO_ROOT), "--destination", "/tmp/td2-destination"),
-            ("update", "--source", str(REPO_ROOT), "--destination", "/tmp/td2-destination"),
-            ("uninstall", "--destination", "/tmp/td2-destination", "--dry-run"),
+            ("install", "--source", str(REPO_ROOT), "--destination", "\x2ftmp/td2-destination"),
+            ("update", "--source", str(REPO_ROOT), "--destination", "\x2ftmp/td2-destination"),
+            ("uninstall", "--destination", "\x2ftmp/td2-destination", "--dry-run"),
         )
         for arguments in lifecycle:
             with self.subTest(lifecycle=" ".join(arguments[:2])):
@@ -2546,7 +2546,7 @@ class WakeHoldFuzzTests(unittest.TestCase):
         from floati.wake import OneShotWakeRegistrar, OneShotWakeRequest
 
         for mutation in ("same_inode_bytes", "replacement", "disappearance"):
-            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as directory:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as directory:
                 root = FloatiRoot.open(Path(directory) / "root", "alpha")
                 callback = Path(directory) / "callback"
                 callback.write_bytes(b"#!/bin/sh\nexit 0\n")

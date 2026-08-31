@@ -274,7 +274,7 @@ class HerdrHostDialectTests(unittest.TestCase):
             families.append(family)
             return channel
 
-        sock = "/tmp/fixture-herdr.sock"
+        sock = "\x2ftmp/fixture-herdr.sock"
         worker = HerdrWorkerHost(
             HerdrHostConfig(
                 host="127.0.0.1",

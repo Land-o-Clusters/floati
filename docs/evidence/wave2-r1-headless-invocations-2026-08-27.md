@@ -2,7 +2,7 @@
 
 **Status:** IMPLEMENTED — local verification complete; live surface remains unclaimed.
 
-**Dispatch:** `msg-01a045c7f6a07b8185ab9fcb407d2a9e` from `puddle-floati-architect`.
+**Dispatch:** `msg-01a045c7f6a07b8185ab9fcb407d2a9e` from `the architect`.
 
 **Branch:** `lane/ws-b-wave2`, rooted at fetched `origin/main`.
 

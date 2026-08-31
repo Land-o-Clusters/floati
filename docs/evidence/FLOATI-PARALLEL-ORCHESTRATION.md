@@ -6,7 +6,7 @@ be derived with `git rev-parse HEAD` after commit.
 
 This document separates deterministic local evidence, installed-provider
 evidence, and external release gates. It does not turn local execution into
-hosted CI, deployment, activation, owner-use, or a Fable verdict.
+hosted CI, deployment, activation, owner-use, or a the architect verdict.
 
 ## A — concurrent DAG consumption
 
@@ -49,8 +49,8 @@ frames are suppressed. The maximum scheduling interval is 250 ms.
 bounded terminal frames. Copy is registered once and mechanically equal to
 `docs/COPY-LEDGER.md`.
 
-The copy ledger remains `PROVISIONAL — FABLE VOICE PASS PENDING`. Local tests
-prove registration/equality, not Fable voice approval.
+The copy ledger remains `PROVISIONAL — the architect VOICE PASS PENDING`. Local tests
+prove registration/equality, not the architect voice approval.
 
 ## D — one-command orchestration
 
@@ -100,9 +100,9 @@ The post-evidence gate then observed 258/258 tests passing; selftest emitted
 `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`;
 live-root conformance emitted `{"cases":5,"status":"conformant"}`; source
 scrub emitted no findings; direct manifest verification printed `[]`; and
-`git diff --check` was clean. The same gates will be rerun after any Fable
+`git diff --check` was clean. The same gates will be rerun after any the architect
 verdict commit.
 
-Fable voice review, exact-tip `PUSH GO`, push, local/origin equality, and
+the architect voice review, exact-tip `PUSH GO`, push, local/origin equality, and
 hosted CI are pending and must not be inferred from the local or live-provider
 evidence above.

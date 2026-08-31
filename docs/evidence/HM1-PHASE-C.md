@@ -3,7 +3,7 @@
 Status date: 2026-07-31.
 
 This ledger records the local Harbor Board and synthetic-fleet checkpoint. It
-does not claim Fable live polish, hosted CI, deployment, activation, or push.
+does not claim the architect live polish, hosted CI, deployment, activation, or push.
 
 ## Identity
 
@@ -58,8 +58,8 @@ python3 -m slip.conformance --live-root-smoke
 python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger
 make demo-capture
-python3 -m slip.demo --capture monochrome > /tmp/floati-hm1-mono.txt
-cmp docs/evidence/captures/hm1-tui-monochrome.txt /tmp/floati-hm1-mono.txt
+python3 -m slip.demo --capture monochrome > <temp>/floati-hm1-mono.txt
+cmp docs/evidence/captures/hm1-tui-monochrome.txt <temp>/floati-hm1-mono.txt
 git diff --check
 ```
 
@@ -77,7 +77,7 @@ diff check exit 0 with no output.
 
 - Board model, rendering, keyboard path, durable visible ack, and synthetic
   fleet: locally executed.
-- Fable voice approval and live visual-polish session: pending and unobserved.
+- the architect voice approval and live visual-polish session: pending and unobserved.
 - Bare `slip` remains intentionally unbound: choosing a hidden default root or
   showing synthetic evidence would violate the explicit-root and honest-state
   laws. The operator surfaces are `slip board --root`, `slip board --demo`,

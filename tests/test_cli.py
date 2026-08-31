@@ -180,7 +180,8 @@ class SlipCliTests(unittest.TestCase):
         self.register("recipient")
 
         sent = self.send()
-        message = sent["evidence"]
+        receipt = sent["evidence"]
+        message = receipt["message"]
         self.assertEqual("send", sent["command"])
         self.assertEqual("slipway", message["repo"])
         self.assertEqual(SHA, message["sha"])
@@ -188,6 +189,7 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("HM-0.5 delivered", message["note"])
         self.assertNotIn("body", message)
         self.assertNotIn("wake_cause", message)
+        self.assertEqual("recipient_not_listening", receipt["recipient_readiness"]["state"])
 
         inbox_result = self.run_cli(
             "inbox", "--root", str(self.home), "--as", "recipient"
@@ -282,7 +284,7 @@ class SlipCliTests(unittest.TestCase):
         self.initialize()
         self.register("sender")
         self.register("recipient")
-        first = self.send()["evidence"]
+        first = self.send()["evidence"]["message"]
 
         result = self.run_cli(
             "send",
@@ -298,7 +300,7 @@ class SlipCliTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        reply = self.artifact(result)["evidence"]
+        reply = self.artifact(result)["evidence"]["message"]
         self.assertEqual(first["id"], reply["reply_to"])
         self.assertEqual("reply-1", reply["idempotency_key"])
 
@@ -311,7 +313,16 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual(31, result.returncode)
         artifact = self.artifact(result)
         self.assertEqual("intentional_silence", artifact["status"])
-        self.assertEqual({"messages": [], "receipt": None}, artifact["evidence"])
+        self.assertEqual([], artifact["evidence"]["messages"])
+        self.assertIsNone(artifact["evidence"]["receipt"])
+        self.assertEqual(
+            {
+                "root": str(self.home.resolve()),
+                "tenant": self.home.name,
+                "root_source": "explicit",
+            },
+            artifact["evidence"]["scope"],
+        )
         self.assertFalse((self.home / "receipts" / "deliveries" / "recipient.jsonl").exists())
 
     def test_empty_log_is_no_result_exit_32(self) -> None:
@@ -391,9 +402,9 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual(20, result.returncode)
         artifact = self.artifact(result)
         self.assertEqual("refused", artifact["status"])
-        self.assertEqual("unknown_recipient", artifact["evidence"]["code"])
+        self.assertEqual("recipient_unregistered", artifact["evidence"]["code"])
         self.assertEqual(
-            "message refused: unknown recipient 'unknown'; registered active nodes: sender",
+            "message refused: recipient 'unknown' is not registered; registered nodes: sender",
             artifact["evidence"]["detail"],
         )
         self.assertEqual(before, root_entries(self.home))
@@ -449,7 +460,7 @@ class SlipCliTests(unittest.TestCase):
             ("signature",), ("signature", "sign"), ("signature", "verify"),
             ("inbox",), ("ack",),
             ("log",), ("status",), ("watch",), ("receipts",), ("supervise",),
-            ("board",), ("orchestrate",), ("plan",),
+            ("board",), ("orchestrate",), ("plan",), ("snapshot",),
             ("effects",), ("effect",), ("effect", "show"),
             ("effect", "reconcile"), ("effect", "compensate"),
             ("grant",), ("grant", "revoke"),

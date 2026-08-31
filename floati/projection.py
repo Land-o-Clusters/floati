@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
 
+from .command_scope import CommandScope
 from .errors import ProtocolRefusal, SnapshotRefusal
 from .consumption import ConsumptionLedger, WORK_KINDS
 from .effects import EffectLedger, EffectProjection
@@ -253,17 +254,32 @@ class FleetProjection:
     def __init__(self, root: FloatiRoot) -> None:
         self.root = root
 
-    def snapshot(self, now: datetime) -> Dict[str, object]:
+    def snapshot(
+        self,
+        now: datetime,
+        *,
+        scope: Optional[CommandScope] = None,
+    ) -> Dict[str, object]:
         snapshot, _ = self._snapshot(now)
+        if scope is not None:
+            snapshot["scope"] = scope.evidence()
         return snapshot
 
-    def status_artifact(self, now: datetime) -> Dict[str, object]:
+    def status_artifact(
+        self,
+        now: datetime,
+        *,
+        scope: Optional[CommandScope] = None,
+    ) -> Dict[str, object]:
         current = self._current(now)
         store = None
         try:
             store = self._status_snapshot_store()
             loaded = store.load()
-            return self._status_from_snapshot(current, loaded.payload, loaded.tails)
+            artifact = self._status_from_snapshot(current, loaded.payload, loaded.tails)
+            if scope is not None:
+                artifact["scope"] = scope.evidence()
+            return artifact
         except SnapshotRefusal:
             before_scan = None
             if store is not None:
@@ -291,6 +307,8 @@ class FleetProjection:
                     store.refresh(payload, expected=before_scan)
                 except SnapshotRefusal:
                     pass
+            if scope is not None:
+                artifact["scope"] = scope.evidence()
             return artifact
 
     @staticmethod
@@ -356,6 +374,8 @@ class FleetProjection:
             "authority-grants",
             "mutual-exclusion-holds",
             "liveness-presence",
+            "events.jsonl",
+            "receipts",
         }
         for source in self._status_sources():
             if source.relative.parts[0] not in prefixes:
@@ -403,6 +423,15 @@ class FleetProjection:
                 "snapshot_payload_invalid",
                 "status snapshot predates registered thread testimony",
             )
+        nodes = result.get("nodes")
+        if not isinstance(nodes, list) or any(
+            not isinstance(node, dict) or "wake_health" not in node
+            for node in nodes
+        ):
+            raise SnapshotRefusal(
+                "snapshot_payload_invalid",
+                "status snapshot predates wake-health testimony",
+            )
         result["observed_at"] = self._timestamp(now)
 
         unsupported = set()
@@ -411,7 +440,7 @@ class FleetProjection:
             if not records:
                 continue
             if path == "events.jsonl":
-                self._apply_status_event_tail(result, records)
+                self._apply_status_event_tail(result, records, now=now)
             elif path == ConsumptionLedger.relative_path.as_posix():
                 work_tail = records
             elif path == "receipts/denials.jsonl":
@@ -444,9 +473,17 @@ class FleetProjection:
 
     @staticmethod
     def _apply_status_event_tail(
-        artifact: Dict[str, object], records: Sequence[Dict[str, object]]
+        artifact: Dict[str, object], records: Sequence[Dict[str, object]], *, now: datetime
     ) -> None:
+        from .mail_health import oldest_unread_fact
+
         nodes = {str(row["node_id"]): row for row in artifact["nodes"]}
+        if records and any("wake_health" in node for node in nodes.values()):
+            raise SnapshotRefusal(
+                "snapshot_tail_history_required",
+                "wake-health event tail needs full projection history",
+            )
+        pending_by_recipient: Dict[str, list[Dict[str, object]]] = {}
         for record in records:
             if record.get("kind") != "message_envelope":
                 raise SnapshotRefusal(
@@ -463,11 +500,28 @@ class FleetProjection:
             if sender is not None:
                 sender["last_activity"] = record["timestamp"]
             if recipient is not None:
+                if recipient.get("oldest_unread") is not None:
+                    raise SnapshotRefusal(
+                        "snapshot_tail_history_required",
+                        "unread event tail needs omitted oldest-message history",
+                    )
                 recipient["last_activity"] = record["timestamp"]
                 recipient["inbox_depth"] += 1
+                pending_by_recipient.setdefault(str(record["recipient"]), []).append(record)
+        for recipient_id, pending in pending_by_recipient.items():
+            recipient = nodes.get(recipient_id)
+            if recipient is not None:
+                recipient["oldest_unread"] = oldest_unread_fact(
+                    recipient_id, pending, now=now
+                )
 
     def _snapshot(self, now: datetime) -> tuple[Dict[str, object], str]:
         supervised = Supervisor(self.root).snapshot(now)
+        from .wake_health import WakeHealthProjection
+
+        wake_health = WakeHealthProjection(self.root)
+        for node in supervised["nodes"]:
+            node["wake_health"] = wake_health.fact(str(node["node_id"]), now)
         consumption = ConsumptionLedger(self.root).summary()
         work_counts = dict(consumption["counts"])
         worker_refusals = WorkerRefusals(self.root).records()

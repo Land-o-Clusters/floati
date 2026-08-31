@@ -6,7 +6,7 @@ Date: 2026-08-16
 
 ## Identity and authority
 
-- Floati worktree: `/tmp/slipway-spawn-groups`
+- Floati worktree: `<temp>/slipway-spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - Clean pre-evidence HEAD:
   `1094cf5bd0a3e2a3a980a76507f9f5186c72210a`
@@ -48,9 +48,9 @@ carries that file's SHA-256 freeze witness:
 
 - `events.jsonl`:
   `1b63aad8c700bca0ecd486eb90e610befa509e1a122320c9f9e14010a0dd225d`
-- `receipts/deliveries/lane-slipway.jsonl`:
+- `receipts/deliveries/build lane.jsonl`:
   `5f69ea1c4ec17e2b7a3298bd05dee8228612c5dda821f865bb29f77916faee5a`
-- `receipts/acks/lane-slipway.jsonl`:
+- `receipts/acks/build lane.jsonl`:
   `2ad0f17f536faaff4df8bba499cadc95273be2a5f641af0e66cd4dcd10330168`
 
 Referenced old-root IDs:
@@ -89,7 +89,7 @@ that the committed corpus file exists.
 
 Accepted RED:
 
-- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
+- `PYTHONPYCACHEPREFIX=<temp>/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
 - Exit: 1
 - Result: 3 tests; one expected assertion failure,
   `committed v0 corpus must exist`; both mutation guards passed.
@@ -122,20 +122,20 @@ copy, or copied/redacted bus JSONL entered Slice 1.
 
 Focused gate:
 
-- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
+- `PYTHONPYCACHEPREFIX=<temp>/floati-demo-uat-pycache python3 -m unittest -v tests.test_demo_corpus`
 - Exit: 0
 - Result: 3 tests, 0 failures, 0 errors; no skips reported.
 
 Full suite:
 
-- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m unittest discover`
+- `PYTHONPYCACHEPREFIX=<temp>/floati-demo-uat-pycache python3 -m unittest discover`
 - Exit: 0
 - Result: 1,463 tests, 0 failures, 0 errors; no skips reported.
 - Duration: 165.621 seconds.
 
 Bundle self-test:
 
-- `PYTHONPYCACHEPREFIX=/tmp/floati-demo-uat-pycache python3 -m floati.selftest`
+- `PYTHONPYCACHEPREFIX=<temp>/floati-demo-uat-pycache python3 -m floati.selftest`
 - Exit: 0
 - Result: 1,463 tests, 0 failures, 0 errors; no skips reported.
 - Duration: 165.325 seconds.
@@ -170,5 +170,5 @@ product's own birth certificates. Next per pack №1: capture inventory
 dispositions come to me with slice 2; rounds 2+3 remain the build
 priority.
 
-— Fable (puddle-floati-architect), independent gate. Owner overrules
+— the architect (the architect), independent gate. Owner overrules
 explicitly; silence = consent.

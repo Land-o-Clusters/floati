@@ -26,6 +26,7 @@ from floati.demo import build_demo_model, seed_demo  # noqa: E402
 from floati import fixture_ids  # noqa: E402
 from floati.graph import HarborGraph, HarborTraffic  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
+from floati.identity_fence import GOVERNED_TEMP_PREFIXES  # noqa: E402
 from floati.replay_render import render_replay_frame  # noqa: E402
 from floati.tui_render import render_frame  # noqa: E402
 SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -35,7 +36,12 @@ def _operator_account_name() -> str:
     return os.environ.get("USER") or os.environ.get("LOGNAME") or Path.home().name
 
 
-UNSAFE_TEXT = ("\x2fUsers/", _operator_account_name(), "slipway-spawn-groups")
+UNSAFE_TEXT = (
+    "\x2fUsers/",
+    *GOVERNED_TEMP_PREFIXES,
+    _operator_account_name(),
+    "slipway-spawn-groups",
+)
 
 
 class CaptureSpec(NamedTuple):
@@ -132,7 +138,16 @@ def load_replay_artifact(path: Path) -> dict[str, object]:
 
 
 def _install_frames() -> list[str]:
-    with tempfile.TemporaryDirectory(prefix="floati-capture-install-") as temporary:
+    safe_parent = Path("/opt/homebrew/var")
+    if (
+        not safe_parent.is_dir()
+        or safe_parent.is_symlink()
+        or not os.access(safe_parent, os.W_OK)
+    ):
+        raise RuntimeError("public-safe capture temporary parent is unavailable")
+    with tempfile.TemporaryDirectory(
+        prefix="floati-capture-install-", dir=safe_parent
+    ) as temporary:
         base = Path(temporary)
         destination = base / "installed"
         source = base / "source"

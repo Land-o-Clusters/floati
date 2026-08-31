@@ -9,10 +9,11 @@ import hashlib
 import os
 import sys
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
+from .bus_epoch import LOCK_ORDER_LEDGER, epoch_guard, lock_order_guard
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .framing import FrameError, decode_frames, encode_frame
 from .records import is_known_record_kind, validate_record, validate_unknown_record
@@ -44,6 +45,38 @@ def _is_wake_hold_delivery_path(path: Path) -> bool:
         path.parent.name == "deliveries"
         or path.parent.parent.name == "deliveries"
     )
+
+
+def _is_epoch_selected_relative(relative: Union[Path, str]) -> bool:
+    """Classify the validated lexical coordinate before symlinks are resolved."""
+
+    candidate = Path(relative)
+    if candidate.is_absolute() or any(
+        part in {"", ".", ".."} for part in candidate.parts
+    ):
+        return False
+    if candidate == Path("events.jsonl"):
+        return True
+    parts = candidate.parts
+    return (
+        len(parts) >= 3
+        and parts[0] == "receipts"
+        and parts[1] in {"deliveries", "acks"}
+        and candidate.suffix == ".jsonl"
+    )
+
+
+@contextmanager
+def _epoch_writer_guard(
+    authority: Authority, relative: Union[Path, str],
+) -> Iterator[None]:
+    """Share the barrier only for the derived epoch-selected planes."""
+
+    if isinstance(authority, FloatiRoot) and _is_epoch_selected_relative(relative):
+        with epoch_guard(authority, exclusive=False):
+            yield
+        return
+    yield
 
 
 def _kinds(allowed_kinds: Optional[Set[str]]) -> FrozenSet[str]:
@@ -83,33 +116,40 @@ def _resolve(authority: Authority, relative: Union[Path, str], *, write: bool) -
 def _locked_path(
     path: Path, *, exclusive: bool,
     timeout_seconds: float = LOCK_TIMEOUT_SECONDS,
+    order_tracked: bool = True,
 ) -> Iterator[None]:
     """Take the bounded advisory lock at one already-authorized fixed path."""
-    operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        handle = path.open("a+b")
-    except OSError as exc:
-        raise _durability_failure(exc, path) from exc
-    with handle:
-        deadline = time.monotonic() + timeout_seconds
-        while True:
-            try:
-                fcntl.flock(handle.fileno(), operation | fcntl.LOCK_NB)
-                break
-            except BlockingIOError as exc:
-                if time.monotonic() >= deadline:
-                    raise ProtocolRefusal(
-                        "ledger_lock_timeout",
-                        f"{path.name} lock remained contended for {timeout_seconds:g} second",
-                    ) from exc
-                time.sleep(LOCK_POLL_SECONDS)
-            except OSError as exc:
-                raise _durability_failure(exc, path) from exc
+    order = (
+        lock_order_guard(path, LOCK_ORDER_LEDGER, label="ledger")
+        if order_tracked
+        else nullcontext()
+    )
+    with order:
+        operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
         try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            handle = path.open("a+b")
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+        with handle:
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                try:
+                    fcntl.flock(handle.fileno(), operation | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError as exc:
+                    if time.monotonic() >= deadline:
+                        raise ProtocolRefusal(
+                            "ledger_lock_timeout",
+                            f"{path.name} lock remained contended for {timeout_seconds:g} second",
+                        ) from exc
+                    time.sleep(LOCK_POLL_SECONDS)
+                except OSError as exc:
+                    raise _durability_failure(exc, path) from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _decode_path_records(
@@ -142,13 +182,26 @@ def _decode_path_records(
             raise IntegrityFailure("ledger_record_limit", f"{path.name} exceeds {MAX_LEDGER_RECORDS} records")
         record_id = raw_record.get("id", "<absent>") if isinstance(raw_record, dict) else "<absent>"
         kind = raw_record.get("kind", "<absent>") if isinstance(raw_record, dict) else "<absent>"
+        if kind == "bus_epoch_roll_receipt" and line_number != 1:
+            raise IntegrityFailure(
+                "bus_epoch_roll_receipt_position_invalid",
+                "one bus epoch roll receipt is permitted only as physical record one",
+            )
         try:
             if unrecognized is not None and not is_known_record_kind(kind):
                 record = validate_unknown_record(raw_record, tenant)
                 summary = unrecognized.setdefault(
-                    str(kind), {"kind": str(kind), "count": 0, "first_id": str(record["id"])}
+                    str(kind), {
+                        "kind": str(kind),
+                        "count": 0,
+                        "first_id": str(record["id"]),
+                        "max_schema_version": 0,
+                    },
                 )
                 summary["count"] = int(summary["count"]) + 1
+                summary["max_schema_version"] = max(
+                    int(summary["max_schema_version"]), int(record["schema_version"])
+                )
             else:
                 record = validate_record(raw_record, tenant, allowed_kinds, integrity=True)
         except IntegrityFailure as exc:
@@ -194,7 +247,23 @@ def _read_path_records(
 def _unrecognized_rows(
     summaries: Dict[str, Dict[str, object]],
 ) -> List[Dict[str, object]]:
-    return [dict(summaries[kind]) for kind in sorted(summaries)]
+    return [
+        {
+            "kind": str(summaries[kind]["kind"]),
+            "count": int(summaries[kind]["count"]),
+            "first_id": str(summaries[kind]["first_id"]),
+        }
+        for kind in sorted(summaries)
+    ]
+
+
+def _unrecognized_versions(
+    summaries: Dict[str, Dict[str, object]],
+) -> Dict[str, int]:
+    return {
+        kind: int(summary["max_schema_version"])
+        for kind, summary in summaries.items()
+    }
 
 
 def _encode_record(
@@ -338,7 +407,9 @@ def append_record(authority: Authority, relative: Union[Path, str], record: Dict
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
     encoded = _encode_record(record, tenant, kinds, max_bytes=max_bytes)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    with _epoch_writer_guard(authority, relative), _locked_path(
+        path.with_name(path.name + ".lock"), exclusive=True
+    ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         if len(existing) >= MAX_LEDGER_RECORDS:
             raise ProtocolRefusal("ledger_record_limit", f"ledger maximum is {MAX_LEDGER_RECORDS} records")
@@ -350,7 +421,9 @@ def append_record(authority: Authority, relative: Union[Path, str], record: Dict
 def transact(authority: FloatiRoot, relative: Union[Path, str], decide: Callable[[List[Dict[str, Any]]], Tuple[Any, Optional[Dict[str, Any]]]], *, allowed_kinds: Optional[Set[str]] = None, max_bytes: int = MAX_RECORD_BYTES) -> Any:
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    with _epoch_writer_guard(authority, relative), _locked_path(
+        path.with_name(path.name + ".lock"), exclusive=True
+    ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         result, record = decide(existing)
         if record is not None:
@@ -379,7 +452,9 @@ def transact_records(
 
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    with _epoch_writer_guard(authority, relative), _locked_path(
+        path.with_name(path.name + ".lock"), exclusive=True
+    ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         result, candidates = decide(existing)
         batch = tuple(candidates)
@@ -426,7 +501,9 @@ def transact_exact_frame(
 
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    with _epoch_writer_guard(authority, relative), _locked_path(
+        path.with_name(path.name + ".lock"), exclusive=True
+    ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         try:
             data = path.read_bytes() if path.exists() else b""
@@ -453,6 +530,152 @@ def transact_exact_frame(
             )
         _append_frame(path, encoded)
         return result
+
+
+def _replace_epoch_selected(
+    authority: FloatiRoot,
+    selected: Sequence[tuple[str, Path, str, object]],
+    receipt_frame: bytes,
+    *,
+    fault: Optional[Callable[[str], None]] = None,
+) -> None:
+    """Replace the selected epoch under its ordinary ledger locks.
+
+    The caller owns the exclusive epoch barrier and all applicable wake
+    coordination locks.  Keeping this sealed mutation beside the ordinary
+    JSONL primitives prevents an unguarded selected-plane write surface from
+    escaping the ledger module.
+    """
+
+    if not isinstance(authority, FloatiRoot):
+        raise TypeError("epoch replacement requires a FloatiRoot")
+    bound: list[tuple[str, Path, str, object]] = []
+    for item in selected:
+        if not isinstance(item, tuple) or len(item) != 4:
+            raise TypeError("epoch replacement members must be closed tuples")
+        relative, path, plane, identity = item
+        if (
+            not isinstance(relative, str)
+            or not isinstance(path, Path)
+            or not isinstance(plane, str)
+            or not _is_epoch_selected_relative(relative)
+            or path != authority.resolve_relative(relative)
+        ):
+            raise ProtocolRefusal(
+                "epoch_selected_member_changed",
+                "epoch replacement member is not bound to the selected root",
+            )
+        bound.append((relative, path, plane, identity))
+    if not isinstance(receipt_frame, bytes) or not receipt_frame:
+        raise TypeError("epoch replacement requires one nonempty receipt frame")
+
+    def boundary(name: str) -> None:
+        if fault is not None:
+            fault(name)
+
+    with ExitStack() as stack:
+        for _relative, path, _plane, _identity in sorted(
+            bound, key=lambda item: item[0].encode("utf-8")
+        ):
+            stack.enter_context(
+                _locked_path(path.with_name(path.name + ".lock"), exclusive=True)
+            )
+
+        events_item = next(
+            (item for item in bound if item[0] == "events.jsonl"), None
+        )
+        if events_item is None:
+            raise ProtocolRefusal(
+                "epoch_selected_member_changed",
+                "epoch replacement is missing its events coordinate",
+            )
+        _events_relative, events, _events_plane, events_identity = events_item
+        flags = os.O_WRONLY | os.O_CREAT
+        if events_identity is None:
+            flags |= os.O_EXCL
+        flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(events, flags, 0o600)
+        except OSError as exc:
+            raise _durability_failure(exc, events) from exc
+        try:
+            observed = os.fstat(descriptor)
+            observed_identity = (
+                observed.st_dev, observed.st_ino, observed.st_mode, observed.st_nlink,
+                observed.st_size, observed.st_mtime_ns, observed.st_ctime_ns,
+            )
+            if events_identity is not None and observed_identity != events_identity:
+                raise DurabilityFailure(
+                    "epoch_selected_member_changed",
+                    "selected epoch events changed before replacement",
+                )
+            try:
+                os.ftruncate(descriptor, 0)
+            except OSError as exc:
+                raise _durability_failure(exc, events) from exc
+            boundary("live_events_replaced")
+            offset = 0
+            write_index = 0
+            while offset < len(receipt_frame):
+                try:
+                    written = os.write(descriptor, receipt_frame[offset:])
+                except OSError as exc:
+                    raise _durability_failure(exc, events) from exc
+                if written <= 0:
+                    raise DurabilityFailure(
+                        "short_write", "live epoch receipt could not be written completely"
+                    )
+                offset += written
+                write_index += 1
+                boundary(f"live_events_write_{write_index}")
+            try:
+                os.fsync(descriptor)
+            except OSError as exc:
+                raise _durability_failure(exc, events) from exc
+            boundary("live_events_synced")
+        finally:
+            os.close(descriptor)
+
+        for index, (relative, path, plane, identity) in enumerate(bound):
+            if plane == "events" or identity is None:
+                continue
+            try:
+                status = path.lstat()
+            except OSError as exc:
+                raise _durability_failure(exc, path) from exc
+            observed = (
+                status.st_dev, status.st_ino, status.st_mode, status.st_nlink,
+                status.st_size, status.st_mtime_ns, status.st_ctime_ns,
+            )
+            if observed != identity:
+                raise DurabilityFailure(
+                    "epoch_selected_member_changed",
+                    f"selected epoch member {relative} changed before retirement",
+                )
+            try:
+                os.unlink(path)
+            except OSError as exc:
+                raise _durability_failure(exc, path) from exc
+            boundary(f"live_member_{index}_retired")
+            try:
+                parent = os.open(path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(parent)
+                finally:
+                    os.close(parent)
+            except OSError as exc:
+                raise _durability_failure(exc, path.parent) from exc
+            boundary(f"live_member_{index}_parent_synced")
+
+        try:
+            parent = os.open(authority.tenant_home, os.O_RDONLY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+        except OSError as exc:
+            raise _durability_failure(exc, authority.tenant_home) from exc
+        boundary("live_epoch_parent_synced")
 
 
 def _transact_wake_hold_records(
@@ -484,7 +707,9 @@ def _transact_wake_hold_records(
         raise ProtocolRefusal("wake_controller_only", "wake hold testimony requires the exact controller transaction")
     path, tenant = _resolve(authority, relative, write=True)
     kinds = frozenset(WAKE_HOLD_KINDS)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    with _epoch_writer_guard(authority, relative), _locked_path(
+        path.with_name(path.name + ".lock"), exclusive=True
+    ):
         existing = _read_path_records(path, tenant, kinds)
         digest = hashlib.sha256(b"slipway-wake-hold-deliveries-v1\0")
         raw_frames = path.read_bytes().splitlines(keepends=True) if path.exists() else []
@@ -819,8 +1044,7 @@ class VerifiedLedgerCursor:
             raise IntegrityFailure(
                 "ledger_too_large", f"{path.name} exceeds {MAX_LEDGER_BYTES} bytes"
             )
-        if stat.st_size == self._byte_length:
-            return self.snapshot()
+        retained_prefix_changed = False
         try:
             with path.open("rb") as handle:
                 opened = os.fstat(handle.fileno())
@@ -830,9 +1054,16 @@ class VerifiedLedgerCursor:
                         "ledger_identity_changed_during_read",
                         f"{path.name} changed identity or length before incremental read",
                     )
-                handle.seek(self._byte_length)
-                appended = handle.read(stat.st_size - self._byte_length)
-                final = os.fstat(handle.fileno())
+                if self._records:
+                    expected_head = encode_frame(self._records[0])
+                    retained_prefix_changed = handle.read(len(expected_head)) != expected_head
+                if retained_prefix_changed or stat.st_size == self._byte_length:
+                    appended = b""
+                    final = os.fstat(handle.fileno())
+                else:
+                    handle.seek(self._byte_length)
+                    appended = handle.read(stat.st_size - self._byte_length)
+                    final = os.fstat(handle.fileno())
         except IntegrityFailure:
             raise
         except OSError as exc:
@@ -840,12 +1071,19 @@ class VerifiedLedgerCursor:
         if (
             (int(final.st_dev), int(final.st_ino)) != identity
             or final.st_size != stat.st_size
-            or len(appended) != stat.st_size - self._byte_length
+            or (
+                not retained_prefix_changed
+                and len(appended) != stat.st_size - self._byte_length
+            )
         ):
             raise IntegrityFailure(
                 "ledger_identity_changed_during_read",
                 f"{path.name} changed identity or length during incremental read",
             )
+        if retained_prefix_changed:
+            return self._full_replay(path, tenant, kinds, domain, max_bytes)
+        if stat.st_size == self._byte_length:
+            return self.snapshot()
         line_offset = len(self._records)
         for line_number, raw in enumerate(appended.splitlines(), start=line_offset + 1):
             if len(raw) + 1 > max_bytes:
@@ -929,6 +1167,33 @@ class VerifiedLedgerCursor:
             return self._read_locked(path, tenant, kinds, domain, max_bytes)
         with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
             return self._read_locked(path, tenant, kinds, domain, max_bytes)
+
+
+def read_records_compatible_with_versions(
+    authority: Authority,
+    relative: Union[Path, str],
+    *,
+    allowed_kinds: Optional[Set[str]] = None,
+    max_bytes: int = MAX_RECORD_BYTES,
+    snapshot: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, object]], Dict[str, int]]:
+    """Read compatible rows plus private version evidence for an outer fact."""
+
+    kinds = _kinds(allowed_kinds)
+    path, tenant = _resolve(authority, relative, write=False)
+    summaries: Dict[str, Dict[str, object]] = {}
+    if not path.exists():
+        return [], [], {}
+    if snapshot or isinstance(authority, TenantObservation):
+        records = _read_path_records(
+            path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
+        )
+    else:
+        with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+            records = _read_path_records(
+                path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
+            )
+    return records, _unrecognized_rows(summaries), _unrecognized_versions(summaries)
 
 
 def read_records_with_prefix_digests(

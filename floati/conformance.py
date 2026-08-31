@@ -17,8 +17,8 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 from .cursor import SparseCursor
 from .adapters.acp import ACPAdapter, ACPRefusal, probe_reference_harness
 from .errors import IntegrityFailure, ProtocolRefusal
-from .events import EventLog
 from . import fixture_ids
+from .events import EVENT_KINDS, EventLog
 from .ids import uuid7_hex
 from .jsonl import append_record, read_records_snapshot
 from .planes import AuthorityGrantStore, LivenessPresenceStore, MutualExclusionHoldStore
@@ -288,21 +288,24 @@ def _expect_protocol_refusal(
 
 
 def _append_retired_registry_entry(root: FloatiRoot, node_id: str, role: str) -> None:
-    append_record(
-        root,
-        "registry/entries.jsonl",
-        {
-            "schema_version": 0,
-            "id": "registry-" + uuid7_hex(),
-            "tenant_id": root.tenant_id,
-            "timestamp": utc_now(),
-            "kind": "registry_entry",
-            "node_id": node_id,
-            "role": role,
-            "state": "retired",
-        },
-        allowed_kinds={"registry_entry"},
-    )
+    from .bus_epoch import epoch_guard
+
+    with epoch_guard(root, exclusive=False):
+        append_record(
+            root,
+            "registry/entries.jsonl",
+            {
+                "schema_version": 0,
+                "id": "registry-" + uuid7_hex(),
+                "tenant_id": root.tenant_id,
+                "timestamp": utc_now(),
+                "kind": "registry_entry",
+                "node_id": node_id,
+                "role": role,
+                "state": "retired",
+            },
+            allowed_kinds={"registry_entry"},
+        )
 
 
 def _remove_registry_lock(root: FloatiRoot) -> None:
@@ -346,7 +349,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
             before_events = read_records_snapshot(
                 root,
                 "events.jsonl",
-                allowed_kinds={"message_envelope", "message_retracted"},
+                allowed_kinds=set(EVENT_KINDS),
             )
             evidence = _expect_ok(
                 adapter,
@@ -359,22 +362,27 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 f"notification {character}",
                 f"{run_key}-{character}",
             )
+            message = evidence.get("message")
+            readiness = evidence.get("recipient_readiness")
             if (
-                evidence.get("kind") != "message_envelope"
-                or evidence.get("sha") != character.lower() * 40
-                or evidence.get("doc") != f"docs/evidence/{character}.md"
+                not isinstance(message, dict)
+                or not isinstance(readiness, dict)
+                or readiness.get("state") != "recipient_not_listening"
+                or message.get("kind") != "message_envelope"
+                or message.get("sha") != character.lower() * 40
+                or message.get("doc") != f"docs/evidence/{character}.md"
             ):
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "message evidence mismatch")
             after_events = read_records_snapshot(
                 root,
                 "events.jsonl",
-                allowed_kinds={"message_envelope", "message_retracted"},
+                allowed_kinds=set(EVENT_KINDS),
             )
             if (
                 _root_snapshot(root) == before_registered_send
                 or len(after_events) != len(before_events) + 1
                 or after_events[-1].get("kind") != "message_envelope"
-                or after_events[-1].get("id") != evidence.get("id")
+                or after_events[-1].get("id") != message.get("id")
                 or after_events[-1].get("sender") != _PRIMARY_NODE
                 or after_events[-1].get("recipient") != "bob"
                 or after_events[-1].get("repo") != "slipway"
@@ -388,7 +396,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                     "conformance_failed",
                     "registered send did not append durable event",
                 )
-            sent.append(evidence)
+            sent.append(message)
 
         first = _expect_ok(adapter, "present", "bob")
         first_ids = [item.get("id") for item in first.get("messages", [])]
@@ -403,13 +411,16 @@ def run(adapter: object, root: FloatiRoot) -> int:
         if second_ids != [sent[0]["id"], sent[2]["id"]]:
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "sparse acknowledgment mismatch")
 
-        roster_suffix = "registered active nodes: " + ", ".join(
+        active_roster_suffix = "registered active nodes: " + ", ".join(
             sorted((_PRIMARY_NODE, "bob", "charlie", "delta"))
         )
-        for code, sender, recipient, key in (
-            ("unknown_sender", "stranger", "bob", "unknown-sender"),
-            ("unknown_recipient", _PRIMARY_NODE, "stranger", "unknown-recipient"),
-            ("unknown_sender", "retired", "bob", "retired-sender"),
+        registered_roster_suffix = "registered nodes: " + ", ".join(
+            sorted((_PRIMARY_NODE, "bob", "charlie", "delta"))
+        )
+        for code, sender, recipient, key, roster_suffix in (
+            ("unknown_sender", "stranger", "bob", "unknown-sender", active_roster_suffix),
+            ("recipient_unregistered", _PRIMARY_NODE, "stranger", "unknown-recipient", registered_roster_suffix),
+            ("unknown_sender", "retired", "bob", "retired-sender", active_roster_suffix),
         ):
             before_denial = _root_snapshot(root)
             _expect_refused(
@@ -512,41 +523,45 @@ def run_live_root_smoke() -> int:
                 "throwaway live-root smoke",
                 idempotency_key="live-root-smoke",
             )
+            message = sent.get("message")
+            readiness = sent.get("recipient_readiness")
             if (
-                sent.get("kind") != "message_envelope"
-                or sent.get("sender") != "smoke-sender"
-                or sent.get("recipient") != "smoke-recipient"
-                or sent.get("repo") != "slipway"
-                or sent.get("sha") != "a" * 40
-                or sent.get("doc") != "docs/evidence/live-root-smoke.md"
+                not isinstance(message, dict)
+                or not isinstance(readiness, dict)
+                or readiness.get("state") != "recipient_not_listening"
+                or message.get("kind") != "message_envelope"
+                or message.get("sender") != "smoke-sender"
+                or message.get("recipient") != "smoke-recipient"
+                or message.get("repo") != "slipway"
+                or message.get("sha") != "a" * 40
+                or message.get("doc") != "docs/evidence/live-root-smoke.md"
             ):
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "message evidence mismatch")
 
             messages, delivery = events.present("smoke-recipient")
             if (
-                [message.get("id") for message in messages] != [sent["id"]]
+                [message.get("id") for message in messages] != [message["id"]]
                 or delivery is None
                 or delivery.get("kind") != "delivery_receipt"
-                or delivery.get("item_ids") != [sent["id"]]
+                or delivery.get("item_ids") != [message["id"]]
             ):
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "delivery evidence mismatch")
 
             acknowledgment = cursor.ack(
                 "smoke-recipient",
-                [sent["id"]],
+                [message["id"]],
                 acting_session_id="conformance-session",
             )
             if (
                 acknowledgment.get("kind") != "ack_receipt"
-                or acknowledgment.get("item_ids") != [sent["id"]]
+                or acknowledgment.get("item_ids") != [message["id"]]
             ):
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "ack evidence mismatch")
 
-            roster_suffix = "registered active nodes: smoke-extra, smoke-recipient, smoke-sender"
-            for sender, recipient, code, key in (
-                ("stranger", "smoke-recipient", "unknown_sender", "live-root-smoke-unknown-sender"),
-                ("smoke-sender", "stranger", "unknown_recipient", "live-root-smoke-unknown-recipient"),
-                ("smoke-retired", "smoke-recipient", "unknown_sender", "live-root-smoke-retired-sender"),
+            for sender, recipient, code, key, roster_suffix in (
+                ("stranger", "smoke-recipient", "unknown_sender", "live-root-smoke-unknown-sender", "registered active nodes: smoke-extra, smoke-recipient, smoke-sender"),
+                ("smoke-sender", "stranger", "recipient_unregistered", "live-root-smoke-unknown-recipient", "registered nodes: smoke-extra, smoke-recipient, smoke-sender"),
+                ("smoke-retired", "smoke-recipient", "unknown_sender", "live-root-smoke-retired-sender", "registered active nodes: smoke-extra, smoke-recipient, smoke-sender"),
             ):
                 before_denial = _root_snapshot(root)
                 _expect_protocol_refusal(

@@ -223,14 +223,14 @@ class PurgeCliRegistrationTests(unittest.TestCase):
         register_cli(commands)
 
         parsed = parser.parse_args(
-            ["purge", "--root", "/tmp/one", "--preserved-root", "/tmp/two", "--dry-run"]
+            ["purge", "--root", "\x2ftmp/one", "--preserved-root", "\x2ftmp/two", "--dry-run"]
         )
 
         self.assertEqual("purge", parsed.command)
-        self.assertEqual(["/tmp/one", "/tmp/two"], parsed.roots)
+        self.assertEqual(["\x2ftmp/one", "\x2ftmp/two"], parsed.roots)
         self.assertTrue(parsed.dry_run)
         with self.assertRaises(SystemExit):
-            parser.parse_args(["purge", "--root", "/tmp/one", "--purge"])
+            parser.parse_args(["purge", "--root", "\x2ftmp/one", "--purge"])
 
 
 if __name__ == "__main__":

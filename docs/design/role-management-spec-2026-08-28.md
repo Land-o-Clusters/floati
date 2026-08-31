@@ -1,4 +1,4 @@
-# WS-D SPEC — ROLE MANAGEMENT: boot and teardown as projections (Fable, 2026-08-28)
+# WS-D SPEC — ROLE MANAGEMENT: boot and teardown as projections (the architect, 2026-08-28)
 
 **Origin:** owner question 2026-08-27 ("how will floati know how to give them identities, rules,
 roles beyond a name — make it magical for the user and smart for us"). This spec is the build
@@ -30,7 +30,7 @@ versioned, receipted like every registry write). Editing a role later is a recor
 
 **2. Boot and teardown are PROJECTIONS, never stored strings.** `floati node boot <id>` composes
 the boot command at invocation time from live truth:
-- identity, harness, and the seat's EXACT managed-bus verb shapes (the 2026-08-27 lane-puddle
+- identity, harness, and the seat's EXACT managed-bus verb shapes (the 2026-08-27 build lane
   send-shape stall is the binding precedent — a seat must never have to guess its transport);
 - workspace path from the B2 layout convention; state-file location (below);
 - the current fleet map: architect node, sibling nodes and roles, declared roots;

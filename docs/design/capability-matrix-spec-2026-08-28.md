@@ -1,4 +1,4 @@
-# CAPABILITY MATRIX SPEC — the README grid, generated (Fable, 2026-08-28; owner-ordered)
+# CAPABILITY MATRIX SPEC — the README grid, generated (the architect, 2026-08-28; owner-ordered)
 
 **Owner order:** the README matrix must show capabilities across all
 providers — bus support, wake class, auto-turnover — so a reader knows at a
@@ -36,7 +36,7 @@ the dataset WITH its new receipt, and the README follows mechanically.
 Gates the README swap (the swap ships the grid). Build is small: dataset
 seeded from C-rows + posture matrix + T1 (all on main), generator +
 drift test. Seat: first lane with queue room before the swap nears —
-or Fable builds it as storefront instrumentation if seats are saturated
+or the architect builds it as storefront instrumentation if seats are saturated
 (fence/checker precedent). Cell data updates ride each future gate that
 changes a capability.
 
@@ -69,7 +69,7 @@ changes a capability.
 ## CORRECTION + PREFERENCE ORDER (owner, 2026-08-28)
 
 My amendment above cited "alice-class Claude seats" as the wake evidence —
-WRONG PROVENANCE, owner-corrected: alice is not Claude. The admissible
+WRONG PROVENANCE, owner-corrected: build lane is not Claude. The admissible
 historical evidence is the incumbent bus's ENGINEER seats (sre, ghops, and
 kin): Claude-hosted, event-driven-woken, weeks of organic operation on the
 incumbent bus (read-only evidence, never written). The re-measurement row
@@ -107,7 +107,7 @@ day someone runs it — the instrument is specified; the seat does not
 currently exist on this machine. TESTIMONY OPENS A MEASUREMENT; ONLY A
 RECEIPT FLIPS A CELL.
 
-## CORRECTION AT FIRST SEEDING (Fable, 2026-08-28): DERIVABILITY IS NOT CAPABILITY
+## CORRECTION AT FIRST SEEDING (the architect, 2026-08-28): DERIVABILITY IS NOT CAPABILITY
 
 The spec's auto-turnover column named "tide table T1" as its authority —
 MY conflation, caught at grok's first seed: T1 proves a metric is
@@ -122,7 +122,7 @@ means THE HARNESS'S OWN native compact verb, and the rendered header must
 say so. A CELL'S RECEIPT MUST PROVE THE CELL'S CLAIM, NOT ITS
 PRECONDITION.
 
-## DATASET GATED PASS (Fable, 2026-08-28, third round)
+## DATASET GATED PASS (the architect, 2026-08-28, third round)
 
 `docs/capability-matrix.v0.json` @ `e4c65667` merged: 133 cells, zero
 doc-class citations (verified by scan — COPY-LEDGER and WEEKEND_PROGRAM
@@ -130,11 +130,11 @@ absent from the amendment columns), work cells derived from adapter modules
 on main citing their C-row receipts, boot honest at one photographed yes,
 managed_send citing the live transport test. The seeding took three rounds
 and each round's defect was a receipts-law lesson now written in this doc.
-Remaining before the swap: the drift test (Fable wires), value flips ride
+Remaining before the swap: the drift test (the architect wires), value flips ride
 future gates (tide ship-day, wake family close), and the renderer's grid
 lands in README-NEXT only at swap time.
 
-## WAKE FAMILY GREEN (Fable gate, 2026-08-28 morning)
+## WAKE FAMILY GREEN (the architect gate, 2026-08-28 morning)
 
 `H-wake-family-close` @ `f729a62a`, capture digest matched, merged. The
 family closes on: daemon half (acceptance, three witnessed wakes) · hook +

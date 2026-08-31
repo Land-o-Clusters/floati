@@ -17,7 +17,7 @@ from .errors import ProtocolRefusal
 from .events import EventLog
 from .ids import uuid7_hex
 from .jsonl import append_record
-from .locks.cleanup import CleanupInspector
+from .worktree_safety import require_worktree_commits_referenced
 from .records import validate_record
 from .registry import Registry, utc_now
 from .root import FloatiRoot
@@ -457,7 +457,7 @@ class DeliveryVerifier:
                         raise _Unrunnable(
                             "checkout_dirty", "inspect the retained dirty verification scratch"
                         )
-                    CleanupInspector(repository).require_eligible(scratch)
+                    require_worktree_commits_referenced(scratch, repository=repository)
                     self._git(
                         repository,
                         "worktree",

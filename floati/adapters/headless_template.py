@@ -18,9 +18,10 @@ import os
 import signal
 import subprocess
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from ..storage_identity import EVIDENCE_DIRECTORY, refuse_legacy_workspace_artifacts
 from ..workers import WorkerAdapterFailure
@@ -46,6 +47,14 @@ class HarnessProfile:
     - headless_arguments: CITED spellings, or () until live intake —
       an empty tuple is the honest state, not a placeholder
     - stderr_name: evidence filename for this harness's stderr capture
+    - help_dump_signature: optional measured needles that identify a help/usage
+      dump; None keeps today's marker scan (tolerant read, no forced migration)
+    - prompt_form: how the work title is passed as the prompt. Default
+      ("--",) — the Claude-Code idiom the template was written with.
+      K4 finding (ZC1-K1 receipt, live): that idiom is NOT universal —
+      zcode refuses `-- <title>` and its measured spelling is
+      `--prompt <text>`. A member that has measured its prompt form
+      declares it here; unmeasured members keep the default.
     """
 
     name: str
@@ -53,6 +62,8 @@ class HarnessProfile:
     headless_arguments: Sequence[str] = ()
     stderr_name: str = "stderr"
     cited_source: Optional[str] = None
+    help_dump_signature: Optional[Tuple[str, ...]] = None
+    prompt_form: Sequence[str] = ("--",)
 
     def __post_init__(self) -> None:
         if not isinstance(self.command, (tuple, list)) or not self.command:
@@ -65,6 +76,16 @@ class HarnessProfile:
             raise WorkerAdapterFailure("process_start_failed")
         if any(not isinstance(a, str) or not a
                for a in self.headless_arguments):
+            raise WorkerAdapterFailure("process_start_failed")
+        if self.help_dump_signature is not None:
+            if not isinstance(self.help_dump_signature, tuple):
+                raise WorkerAdapterFailure("process_start_failed")
+            if any(not isinstance(part, str) or not part
+                   for part in self.help_dump_signature):
+                raise WorkerAdapterFailure("process_start_failed")
+        if not isinstance(self.prompt_form, tuple):
+            raise WorkerAdapterFailure("process_start_failed")
+        if any(not isinstance(f, str) or not f for f in self.prompt_form):
             raise WorkerAdapterFailure("process_start_failed")
         # Condition law: non-empty args REQUIRE a cited source (live intake).
         stripped_source = (self.cited_source or "").strip()
@@ -175,8 +196,7 @@ class HeadlessProfileAdapter(CodexAppServerAdapter):
                 [
                     *self.command,
                     *self.profile.headless_arguments,
-                    "--",
-                    str(item.get("title", "")),
+                    *self._prompt_arguments(item),
                 ],
                 cwd=filesystem_workspace,
                 stdin=subprocess.DEVNULL,
@@ -236,6 +256,12 @@ class HeadlessProfileAdapter(CodexAppServerAdapter):
             "return_code": return_code,
         }
 
+    def _prompt_arguments(self, item: Dict[str, object]) -> Sequence[str]:
+        """The trailing prompt invocation: the profile's prompt form, then
+        the work title. Default ("--",) reproduces the original inline
+        argv exactly for every unmeasured member."""
+        return (*self.profile.prompt_form, str(item.get("title", "")))
+
     def cancel(self) -> None:
         if self._active_process is None:
             return
@@ -268,6 +294,26 @@ class HeadlessProfileAdapter(CodexAppServerAdapter):
                 raise WorkerAdapterFailure("deadline_exceeded")
             time.sleep(0.05)
 
+    def _help_dump_present(self, lowered: str) -> bool:
+        signature = self.profile.help_dump_signature
+        if not signature:
+            return False
+        return all(needle.lower() in lowered for needle in signature)
+
+    def _testimony_outside_help_dump(self, combined: str) -> str:
+        signature = self.profile.help_dump_signature
+        if not signature:
+            return combined
+        lowered = combined.lower()
+        starts = [
+            lowered.find(needle.lower())
+            for needle in signature
+            if needle.lower() in lowered
+        ]
+        if not starts:
+            return combined
+        return combined[: min(starts)]
+
     def _validate_result(self, payload: bytes, return_code: int,
                          stderr_path: Path) -> None:
         combined = ""
@@ -280,12 +326,20 @@ class HeadlessProfileAdapter(CodexAppServerAdapter):
         except OSError:
             pass
         lowered = combined.lower()
+        dump_present = self._help_dump_present(lowered)
+        scan = (
+            self._testimony_outside_help_dump(combined).lower()
+            if dump_present
+            else lowered
+        )
         if return_code != 0:
             for marker in _PERMISSION_MARKERS:
-                if marker in lowered:
+                if marker in scan:
                     raise WorkerAdapterFailure("permission_required")
-            raise WorkerAdapterFailure("process_failed")
-        if any(marker in lowered for marker in _PERMISSION_MARKERS):
+            raise WorkerAdapterFailure(
+                "process_failed", help_dump_present=dump_present
+            )
+        if any(marker in scan for marker in _PERMISSION_MARKERS):
             raise WorkerAdapterFailure("permission_required")
 
     def _terminate(self, process: subprocess.Popen[bytes]) -> None:

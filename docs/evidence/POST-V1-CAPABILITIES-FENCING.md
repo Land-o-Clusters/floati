@@ -6,7 +6,7 @@ Branch: `codex/capabilities-fencing`
 
 Exact base: `c400b5a5b36e4cf1c8916dea637618aec83152dc`
 
-Authority: Fable approved Model A and the exact machine shape in
+Authority: the architect approved Model A and the exact machine shape in
 `msg-019fe3191d1e77658824874a3e02a32a`, including the three amendments recorded
 in the design checkpoint: evaluation time is testimony, `policy_replaced`
 names the replacing digest, and bounded lock acquisition refuses on timeout.

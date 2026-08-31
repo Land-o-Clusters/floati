@@ -14,7 +14,7 @@ separate gates are observed.
 - Boot tip matched `origin/lane/hm0`; `6e2cd6b` was an ancestor.
 - Required boot inbox poll returned exit 31 with `intentional_silence`.
 
-A later pre-stand-down poll presented Fable message
+A later pre-stand-down poll presented the architect message
 `msg-019fba10d6947750894720570f1198ad`, binding worker consumption laws 11–12
 from Puddle commit `616be1263c1e901db32e40ca8f8199ad5d4fc6e6`. The named Git document was
 read before stand-down, the consumption changes below were implemented, and
@@ -52,13 +52,13 @@ creates neither delivery nor acknowledgment receipts.
 
 ## Codex app-server worker
 
-The Fable ruling committed at `aedf92b` answered executable ownership,
+The the architect ruling committed at `aedf92b` answered executable ownership,
 provider traffic, credential inheritance, workspace, approval, deadline,
 shutdown, and artifact questions. The implementation checkpoint is
 `baafa20c3881dc5d40c63eead96cc5cfa5abc065`.
 
 Work items opt into one derived mapping at
-`/tmp/slipway-work/<work-id>`. The worker creates it only after the
+`<temp>/slipway-work/<work-id>`. The worker creates it only after the
 authority-checked claim. The local reference harness executes the exact stdio
 sequence `initialize → initialized → thread/start → turn/start`, interleaves
 unrelated responses and notifications, and completes one real local file
@@ -90,9 +90,9 @@ and remains available to the outer runner for abrupt-death cleanup.
 ### Real-provider proof boundary
 
 A fresh fleet was created at
-`/tmp/slipway-hm1b-live-20260731-1`. The first real item was
+`<temp>/slipway-hm1b-live-20260731-1`. The first real item was
 `work-019fba52105171f2b9473c25db908d78`, with retained workspace
-`/tmp/slipway-work/work-019fba52105171f2b9473c25db908d78`.
+`<temp>/slipway-work/work-019fba52105171f2b9473c25db908d78`.
 The exact CLI command durably wrote claim receipt
 `worker-receipt-019fba523cfe74729d29b1034a897809`, then degradation receipt
 `worker-receipt-019fba523de7790aae834c20cd9b9441` with
@@ -118,7 +118,7 @@ normal Codex credentials/provider traffic and again forbidding workaround.
 The open item remained unclaimed and no new workspace, app-server process,
 provider request, or worker receipt was created.
 
-Fable then committed and pushed the approval-path ruling at `b72287b`, with
+the architect then committed and pushed the approval-path ruling at `b72287b`, with
 `PUSH GO` for `a8e2c21`. The owner supplied the exact informed approval in the
 lane. Under fresh authority grant
 `authority-019fba82502c7c3ca1936e8714c3a72b` at epoch 4, this exact approved
@@ -126,7 +126,7 @@ command executed once unsandboxed:
 
 ```sh
 python3 -m slip worker run \
-  --root /tmp/slipway-hm1b-live-20260731-1 \
+  --root <temp>/slipway-hm1b-live-20260731-1 \
   --as floati-proof --adapter codex
 ```
 
@@ -141,7 +141,7 @@ It returned exit 0 with `transition=complete` for work item
 5. `complete` — `worker-receipt-019fba82fe06725bada7bdb343c0c383`
 
 Both binding receipts and the completed work item name the retained workspace
-`/tmp/slipway-work/work-019fba52a0f77de6a5d41c0a0080b359`,
+`<temp>/slipway-work/work-019fba52a0f77de6a5d41c0a0080b359`,
 repository `local/work-019fba52a0f77de6a5d41c0a0080b359`, document
 `PROOF.txt`, and commit `746dc783b96f75b586fa77ab9bd1aa90fe730af8`.
 Independent verification observed commit type `commit`, exact tree
@@ -248,5 +248,5 @@ Important findings with push readiness `Yes`. Its one Minor follow-up is to
 add finite JSON-RPC envelope, transcript/stderr, and aggregate artifact byte
 ceilings before broader production use. The reviewed implementation and
 approval-path ruling are pushed through `b72287b`; final evidence checkpoint
-SHA, its Fable push gate, push, hosted CI, and the final stand-down inbox poll
+SHA, its the architect push gate, push, hosted CI, and the final stand-down inbox poll
 remain pending.

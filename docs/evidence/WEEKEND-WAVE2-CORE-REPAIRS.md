@@ -22,7 +22,7 @@ Dispatch: `msg-01a046107a2577b8af928dfab2ea2c83`
 
 The tenant-derived test ran before the production fix. Two real validation
 paths failed with `seat_fence_identity_mismatch`, demanding the stale literal
-`lane-current@puddle-fleet` instead of the fixture root's
+`lane-current@the fleet` instead of the fixture root's
 `lane-current@fleet`.
 
 After the minimal production correction:
@@ -46,7 +46,7 @@ Final manifest SHA-256:
 No README, live bus root, hook registration, daemon state, wake state, flip,
 release, or publication surface was changed by these repair rows.
 
-## FABLE GATE VERDICT: PASS AND MERGED (2026-08-28)
+## the architect GATE VERDICT: PASS AND MERGED (2026-08-28)
 
 Re-derived, not read: `_uninstall` and every `purge` reference gone from
 `floati/cli.py` (grep empty) · `seat_fence.py:45` derives

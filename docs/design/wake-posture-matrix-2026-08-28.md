@@ -1,4 +1,4 @@
-# WAKE POSTURE MATRIX — the wake family's opening row (Fable, 2026-08-28)
+# WAKE POSTURE MATRIX — the wake family's opening row (the architect, 2026-08-28)
 
 **Owner order (2026-08-28):** the daemon v1 covers Codex + Cursor, which is
 fine — but the gauntlet must establish what EVERY claimed harness actually

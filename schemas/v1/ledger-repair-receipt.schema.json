@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/ledger-repair-receipt.schema.json",
+  "title": "Floati Ledger Repair Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "ledger", "record_id", "idempotency_key", "original_digest", "repaired_digest", "quarantine_path", "quarantine_digest", "replaced_inode", "invalidated_followers"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^ledger-repair-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "ledger_repair_receipt"},
+    "ledger": {"const": "events.jsonl"},
+    "record_id": {"type": "string", "minLength": 1, "maxLength": 256, "x-floati-terminal-unsafe": true},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true},
+    "original_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "repaired_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "quarantine_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
+    "quarantine_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "replaced_inode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after", "changed"],
+      "properties": {
+        "before": {"$ref": "#/$defs/inode_coordinate"},
+        "after": {"$ref": "#/$defs/inode_coordinate"},
+        "changed": {"const": true}
+      }
+    },
+    "invalidated_followers": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "tail_followers"},
+        {"const": "waiters"},
+        {"const": "monitors"}
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  },
+  "$defs": {
+    "inode_coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "inode"],
+      "properties": {
+        "device": {"type": "integer", "minimum": 0},
+        "inode": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

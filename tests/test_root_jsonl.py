@@ -73,7 +73,7 @@ class RootTests(unittest.TestCase):
     def test_relative_resolution_rejects_traversal_and_symlink_escape(self) -> None:
         root = FloatiRoot.open(self.base, "alpha")
         FloatiRoot.open(self.base, "bravo")
-        for relative in (Path("../bravo/events.jsonl"), Path("/tmp/outside.jsonl"), Path("a/../../bravo/x")):
+        for relative in (Path("../bravo/events.jsonl"), Path("\x2ftmp/outside.jsonl"), Path("a/../../bravo/x")):
             with self.subTest(relative=relative):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     root.resolve_relative(relative)

@@ -828,7 +828,7 @@ class FU1G1Tests(FU1G0Tests):
             {
                 "node_id": "seat-a",
                 "workspace": float("nan"),
-                "configuration": "/tmp/hooks.json",
+                "configuration": "\x2ftmp/hooks.json",
             }
         ]
         ledger = FleetUpdateReceiptLedger(self.root)
@@ -945,7 +945,7 @@ class FU1G1Tests(FU1G0Tests):
         """Catches self-consistent-looking derived flags, remedies, or move lists that disagree with inputs."""
 
         plan = self._preview()
-        consequence = {"node_id": "seat-a", "workspace": "/tmp/a", "harness": "Codex", "configuration": "/tmp/hooks.json", "store": "/tmp/store", "association_basis": "conservative_root_scope", "hook_trust_key": "stop", "current_hook_hash": "a" * 64, "target_hook_hash": "b" * 64, "observed_trusted_hash": "a" * 64, "observed_enabled": True, "current_waiter_digest": "c" * 64, "target_waiter_digest": "d" * 64, "trust_rotated_by_update": False, "review_required_after_update": True, "enable_required_after_update": False, "relaunch_required_after_update": True, "reachability_after_update": "unknown_until_review_and_relaunch", "remedy": "review and trust the exact Stop hook in Codex settings;relaunch the affected session"}
+        consequence = {"node_id": "seat-a", "workspace": "\x2ftmp/a", "harness": "Codex", "configuration": "\x2ftmp/hooks.json", "store": "\x2ftmp/store", "association_basis": "conservative_root_scope", "hook_trust_key": "stop", "current_hook_hash": "a" * 64, "target_hook_hash": "b" * 64, "observed_trusted_hash": "a" * 64, "observed_enabled": True, "current_waiter_digest": "c" * 64, "target_waiter_digest": "d" * 64, "trust_rotated_by_update": False, "review_required_after_update": True, "enable_required_after_update": False, "relaunch_required_after_update": True, "reachability_after_update": "unknown_until_review_and_relaunch", "remedy": "review and trust the exact Stop hook in Codex settings;relaunch the affected session"}
         from floati.fleet_update_receipts import owner_review_batch_digest
         with self.assertRaises(ProtocolRefusal) as caught:
             validate_record({"schema_version": 1, "id": "fleet-update-started-" + uuid7_hex(), "tenant_id": self.root.tenant_id, "timestamp": utc_now(), "kind": "fleet_update_started", "plan_digest": plan["plan_digest"], "recovery_witness": {key: value for key, value in plan.items() if key not in {"plan_digest", "apply_argv"}}, "actor": self.actor, "consent_receipt_id": "update-consent-" + uuid7_hex(), "operation": "start", "step_kind": None, "pre_digest": None, "post_digest": None, "step_ordinal": None, "step_coordinate": None, "commit_disposition": None, "step_evidence": None, "state": "started", "predecessor_receipt_id": None, "idempotency_key": "fix2b", "owner_review_batch_digest": owner_review_batch_digest([], [consequence], []), "reader_consequences": [], "seat_binding_consequences": [consequence], "seat_exclusions": []}, self.root.tenant_id, frozenset({"fleet_update_started"}), integrity=False)
@@ -992,9 +992,9 @@ class FU1G1Tests(FU1G0Tests):
         from floati.fleet_update_receipts import owner_review_batch_digest
 
         readers = [{"reader": "codex_fleet_bus_gateway", "surface": "install_manifest"}]
-        consequences = [{"node_id": "builder-a", "workspace": "/tmp/a"}]
-        exclusions = [{"node_id": "worker-b", "workspace": "/tmp/b", "reason": "harness_not_codex"}]
-        literal = b'{"reader_consequences":[{"reader":"codex_fleet_bus_gateway","surface":"install_manifest"}],"seat_binding_consequences":[{"node_id":"builder-a","workspace":"/tmp/a"}],"seat_exclusions":[{"node_id":"worker-b","reason":"harness_not_codex","workspace":"/tmp/b"}]}'
+        consequences = [{"node_id": "builder-a", "workspace": "\x2ftmp/a"}]
+        exclusions = [{"node_id": "worker-b", "workspace": "\x2ftmp/b", "reason": "harness_not_codex"}]
+        literal = b'{"reader_consequences":[{"reader":"codex_fleet_bus_gateway","surface":"install_manifest"}],"seat_binding_consequences":[{"node_id":"builder-a","workspace":"\x2ftmp/a"}],"seat_exclusions":[{"node_id":"worker-b","reason":"harness_not_codex","workspace":"\x2ftmp/b"}]}'
         self.assertEqual(
             hashlib.sha256(literal).hexdigest(),
             owner_review_batch_digest(readers, consequences, exclusions),

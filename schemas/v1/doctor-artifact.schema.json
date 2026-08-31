@@ -92,13 +92,105 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["code", "severity", "subject", "detail", "remediation"],
+      "allOf": [
+        {
+          "if": {"properties": {"code": {"const": "delivery_health"}}},
+          "then": {"required": ["oldest_unread"]},
+          "else": {"not": {"required": ["oldest_unread"]}}
+        },
+        {
+          "if": {"properties": {"code": {"const": "version_skew"}}},
+          "then": {"required": ["vocabulary_skew"]},
+          "else": {"not": {"required": ["vocabulary_skew"]}}
+        },
+        {
+          "if": {"properties": {"code": {"const": "bus_epoch_roll_reconciled"}}},
+          "then": {"required": ["epoch_roll"]},
+          "else": {"not": {"required": ["epoch_roll"]}}
+        },
+        {
+          "if": {"properties": {"code": {"const": "wake_health"}}},
+          "then": {"required": ["wake_health"]},
+          "else": {"not": {"required": ["wake_health"]}}
+        }
+      ],
       "properties": {
         "code": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?$"},
         "severity": {"enum": ["ok", "warning", "error"]},
         "subject": {"type": "string", "minLength": 1, "maxLength": 4096},
         "detail": {"type": "string", "minLength": 1, "maxLength": 8192},
         "remediation": {"type": ["string", "null"], "maxLength": 4096},
-        "installer_shadow": {"$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"}
+        "installer_shadow": {"$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"},
+        "oldest_unread": {"$ref": "fleet-status-artifact.schema.json#/$defs/oldest_unread"},
+        "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},
+        "epoch_roll": {"$ref": "#/$defs/epoch_roll"},
+        "wake_health": {"$ref": "wake-health-fact.schema.json"}
+      }
+    },
+    "epoch_roll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "tenant_id", "request", "classification", "direction", "receipt"],
+      "allOf": [
+        {
+          "if": {"properties": {"classification": {"const": "PREPARED"}}},
+          "then": {
+            "properties": {
+              "direction": {"const": "rollback"},
+              "receipt": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"classification": {"const": "COMMITTED"}}},
+          "then": {
+            "properties": {
+              "direction": {"const": "roll_forward"},
+              "receipt": {"$ref": "bus-epoch-roll-receipt.schema.json"}
+            }
+          }
+        }
+      ],
+      "properties": {
+        "root": {"$ref": "#/properties/root"},
+        "tenant_id": {"$ref": "bus-epoch-roll-receipt.schema.json#/properties/tenant_id"},
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actor", "idempotency_key", "request_id"],
+          "properties": {
+            "actor": {"$ref": "bus-epoch-roll-receipt.schema.json#/properties/actor"},
+            "idempotency_key": {"$ref": "bus-epoch-roll-receipt.schema.json#/properties/idempotency_key"},
+            "request_id": {"type": "string", "minLength": 1, "maxLength": 256, "x-floati-terminal-unsafe": true}
+          }
+        },
+        "classification": {"enum": ["PREPARED", "COMMITTED"]},
+        "direction": {"enum": ["rollback", "roll_forward"]},
+        "receipt": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "bus-epoch-roll-receipt.schema.json"}
+          ]
+        }
+      }
+    },
+    "vocabulary_skew": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reader_version", "ledger_version", "unknown_kinds", "remedy", "observed_at"],
+      "properties": {
+        "state": {"const": "version_skew"},
+        "reader_version": {"const": "0"},
+        "ledger_version": {"type": "string", "pattern": "^[0-9]+$"},
+        "unknown_kinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$"}
+        },
+        "remedy": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "observed_at": {"type": "string", "pattern": "Z$"}
       }
     }
   }

@@ -2,7 +2,7 @@
 
 **Status:** IMPLEMENTED — DRAFT evidence for architect restamp; live surface remains unclaimed.
 
-**Dispatch:** `msg-01a045c7f6a07b8185ab9fcb407d2a9e` from `puddle-floati-architect`.
+**Dispatch:** `msg-01a045c7f6a07b8185ab9fcb407d2a9e` from `the architect`.
 
 **Branch:** `lane/ws-b-wave2`, rooted at fetched `origin/main`
 (`eb24ca58a2da69618f28d190f59fc7cab73131f5`).

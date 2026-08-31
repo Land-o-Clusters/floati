@@ -32,7 +32,7 @@ artifact or foreign bus root was written.
   breaker, pause, and revocation behavior.
 - `824f6f7` — deterministic LaunchAgent install/start/status/stop/remove/revoke.
 - `4adeeb3` — DRAFT public CLI/help/copy surfaces and hidden `serve`.
-- `3fa0cd9` — merged current `origin/main`, retained main's Fable restamp on
+- `3fa0cd9` — merged current `origin/main`, retained main's the architect restamp on
   existing surfaces, retained the ordered DRAFT fence on the new daemon copy,
   and updated `docs/TRUTH-GUARANTEES.md` for the standing no-listener fence.
 
@@ -192,7 +192,7 @@ the exact deployable tree. The pushed commit and manifest digest are bound in
 the architect envelope; that envelope does not claim the gauntlet wake family,
 flip, release, or publication complete.
 
-## FABLE GATE: ACCEPTANCE + REPAIRS + DISARM — PASS AND MERGED (2026-08-28 morning)
+## the architect GATE: ACCEPTANCE + REPAIRS + DISARM — PASS AND MERGED (2026-08-28 morning)
 
 The strongest verification position of the program: I couriered every drill
 envelope and watched every receipt land live, and the delivered evidence

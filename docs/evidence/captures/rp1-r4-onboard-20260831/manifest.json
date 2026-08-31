@@ -1,0 +1,35 @@
+{
+  "captured_at": "2026-08-31T17:14:21.386Z",
+  "captures": [
+    {
+      "animated": true,
+      "files": [
+        {
+          "bytes": 687,
+          "path": "onboard-wizard-standard.txt",
+          "sha256": "ec60e01386f31e51f9c708f78745c7278172a8dadf2a1f3736826b5ca4a1d39f"
+        },
+        {
+          "bytes": 79126,
+          "path": "onboard-wizard-dark.gif",
+          "sha256": "80cc29b17a499200b43010d795a20c233816df7a82fad038205062ab1761aff6"
+        },
+        {
+          "bytes": 79260,
+          "path": "onboard-wizard-light.gif",
+          "sha256": "c162805d9f218a1f1eb73ca8b1f7fdfeb4671cb646877aa2209652fcf0989110"
+        }
+      ],
+      "frame_count": 3,
+      "name": "onboard-wizard",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rp1-r4b/scratch/onboard-wizard"
+    }
+  ],
+  "generator": "scripts/capture-readme-real-ledgers.py",
+  "note": "This bank ships the onboard-wizard slot of one capture-readme-real-ledgers.py run. The record below is that run's own entry, unedited, filtered to the files this directory contains. The run's other slots are not shipped here.",
+  "schema_version": 0,
+  "scratch": "/opt/homebrew/var/floati-rp1-r4b/scratch",
+  "source_sha": "5d959a6f70744cead5dd3e4950596a99aa851332",
+  "synthetic": false
+}

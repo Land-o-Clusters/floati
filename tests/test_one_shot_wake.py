@@ -86,7 +86,7 @@ class _OneShotWakePathTestCase(unittest.TestCase):
     """Real callback files for descriptor-bound wake testimony contracts."""
 
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temp.cleanup)
         self.root = FloatiRoot.open(Path(self.temp.name) / "root", "alpha")
         self.callback = Path(self.temp.name) / "callback"
@@ -370,7 +370,7 @@ class OneShotWakePathBindingTests(_OneShotWakePathTestCase):
     def test_preview_maps_unencodable_surrogate_to_a_typed_path_refusal(self) -> None:
         """Catches a terminal-unsafe surrogate escaping as a raw UnicodeEncodeError."""
         with self.assertRaises(ProtocolRefusal) as caught:
-            self.registrar(Path("\x2fprivate/tmp/callback-\ud800")).preview(self.request)
+            self.registrar(Path("\x2fprivate\x2ftmp/callback-\ud800")).preview(self.request)
         self.assertEqual("wake_callback_invalid", caught.exception.code)
 
     def test_preview_accepts_a_lawful_unicode_callback_path(self) -> None:

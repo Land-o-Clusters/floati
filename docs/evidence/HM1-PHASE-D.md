@@ -66,8 +66,8 @@ python3 -m slip.conformance --live-root-smoke
 python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger tests.test_codex_adapter_contract
 make demo-capture
-python3 -m slip.demo --capture monochrome > /tmp/floati-hm1-mono.txt
-cmp docs/evidence/captures/hm1-tui-monochrome.txt /tmp/floati-hm1-mono.txt
+python3 -m slip.demo --capture monochrome > <temp>/floati-hm1-mono.txt
+cmp docs/evidence/captures/hm1-tui-monochrome.txt <temp>/floati-hm1-mono.txt
 git diff --check
 ```
 
@@ -82,5 +82,5 @@ diff check exit 0 with no output.
 - Dark Codex schemas/codec and fixture round-trip: locally executed.
 - ACP mapping study: documented from current official sources; no runtime
   adapter exists.
-- Fable voice/gate verdict, push, hosted CI, deployment, activation, live
+- the architect voice/gate verdict, push, hosted CI, deployment, activation, live
   Codex compatibility, and live ACP compatibility: pending or unobserved.

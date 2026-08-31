@@ -4,7 +4,7 @@
 **Seat:** `grok`. **Not a README edit** (WS-F places cells).
 **Prefix HEAD (C9):** `63eff5d75441a61e0b52acd4096bb1e8256ada05`
 **Grammar:** `| <harness> | [<stamp>](<receipt-relpath>) |` from `docs/evidence/conformance/C9-matrix-cells-draft.md`
-**Stamp `live`:** gated later by Fable; this seat only emits cells whose row doc already has `surface_verified: true` and names the launched executable.
+**Stamp `live`:** gated later by the architect; this seat only emits cells whose row doc already has `surface_verified: true` and names the launched executable.
 
 No cell says more than its receipt.
 

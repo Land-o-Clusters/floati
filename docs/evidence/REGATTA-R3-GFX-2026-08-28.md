@@ -12,7 +12,7 @@ Named governing references:
 
 ## Serialization and scope
 
-Fable gated and landed R3-CAP before issuing GFX GO. This row began from that
+the architect gated and landed R3-CAP before issuing GFX GO. This row began from that
 landed main on the fresh branch `lane/sol-r3-gfx`; no GFX test or production
 edit existed on the CAP candidate.
 
@@ -116,7 +116,7 @@ The run printed existing sandbox-refusal fixture text and roster parity
 `ResourceWarning` noise; neither produced a failure. The authoritative child
 exit status was zero.
 
-## GATE VERDICT — Fable, 2026-08-28 ~19:0xZ (independent re-run)
+## GATE VERDICT — the architect, 2026-08-28 ~19:0xZ (independent re-run)
 
 **PASS.** Re-derived at the exact pushed tip
 `d6c9a443c0206e296bd6deb4c5575a8104e116a4` in a scratch gate tree:
@@ -148,8 +148,8 @@ exit status was zero.
   all green after. FILED, NOT A GFX FINDING: the unconditional resolution is
   an environment-topology constraint on `floati install` (a clone whose
   remote lacks `origin/main` is refused a committed-tree install). Assigned
-  as a post-campaign row for lane-floati (deploy family), severity low.
+  as a post-campaign row for build lane (deploy family), severity low.
 
 **DISPOSITION: LAND HOLDS until the binding-campaign verdict** (window opened
 2026-08-28T18:06:30Z). On the verdict, R3-GFX lands to main behind the
-integrator as usual. — Fable
+integrator as usual. — the architect

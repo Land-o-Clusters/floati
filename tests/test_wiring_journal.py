@@ -21,12 +21,12 @@ class WiringJournalTests(unittest.TestCase):
     def test_append_creates_journal_with_chain_and_defaults_enforced(self):
         first = wiring_journal.append_entry(self.destination, {
             "v": 1, "ts": "t", "actor": {}, "action": "install",
-            "kind": "file", "path": "/tmp/a", "op": "create",
+            "kind": "file", "path": "\x2ftmp/a", "op": "create",
             "sha256": "a" * 64,
         })
         second = wiring_journal.append_entry(self.destination, {
             "v": 1, "ts": "t", "actor": {}, "action": "update",
-            "kind": "file", "path": "/tmp/a", "op": "replace",
+            "kind": "file", "path": "\x2ftmp/a", "op": "replace",
             "sha256": "b" * 64,
         })
         self.assertEqual(first.ordinal, 1)
@@ -52,7 +52,7 @@ class WiringJournalTests(unittest.TestCase):
         with mock.patch.object(wiring_journal.os, "fsync", side_effect=observe):
             wiring_journal.append_entry(self.destination, {
                 "v": 1, "ts": "t", "actor": {}, "action": "install",
-                "kind": "file", "path": "/tmp/a", "op": "create",
+                "kind": "file", "path": "\x2ftmp/a", "op": "create",
                 "sha256": "a" * 64,
             })
 
@@ -62,14 +62,14 @@ class WiringJournalTests(unittest.TestCase):
     def test_read_stops_at_first_corrupt_line_fail_closed(self):
         good = wiring_journal.append_entry(self.destination, {
             "v": 1, "ts": "t", "actor": {}, "action": "install",
-            "kind": "file", "path": "/tmp/a", "op": "create",
+            "kind": "file", "path": "\x2ftmp/a", "op": "create",
         })
         path = wiring_journal.journal_path(self.destination)
         with open(path, "a", encoding="utf-8") as handle:
             handle.write("{broken\n")
             handle.write(json.dumps({
                 "v": 1, "ts": "t", "actor": {}, "action": "install",
-                "kind": "file", "path": "/tmp/b", "op": "create",
+                "kind": "file", "path": "\x2ftmp/b", "op": "create",
                 "prevHash": good.payload["entryHash"],
                 "entryHash": "whatever",
             }) + "\n")
@@ -86,7 +86,7 @@ class WiringJournalTests(unittest.TestCase):
             {"op": "banish"},
         ):
             payload = {"v": 1, "ts": "t", "actor": {}, "action": "install",
-                       "kind": "file", "path": "/tmp/x", "op": "create"}
+                       "kind": "file", "path": "\x2ftmp/x", "op": "create"}
             payload.update(bad)
             with self.assertRaises(ValueError):
                 wiring_journal.append_entry(self.destination, payload)
@@ -95,7 +95,7 @@ class WiringJournalTests(unittest.TestCase):
         # Parity with the honest-cell doctrine: an absent optional stays nil.
         entry = wiring_journal.append_entry(self.destination, {
             "v": 1, "ts": "t", "actor": {}, "action": "install",
-            "kind": "bus_root", "path": "/tmp/root", "op": "create",
+            "kind": "bus_root", "path": "\x2ftmp/root", "op": "create",
             "preserved": True,
         })
         self.assertIsNone(entry.sha256)

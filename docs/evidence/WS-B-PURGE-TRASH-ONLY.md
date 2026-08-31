@@ -1,6 +1,6 @@
 # WS-B purge — Trash-only preserved-root sanitation
 
-Status: **DRAFT - seven-finding dark repair complete; activation and Fable
+Status: **DRAFT - seven-finding dark repair complete; activation and the architect
 copy restamp remain separate**
 
 Original base: `0701f4d88f5a1dfb638e3550b2b0e489bddcf894`

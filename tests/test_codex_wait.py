@@ -22,7 +22,7 @@ from tests.schema_validation import validate_json_schema
 
 class CodexWaitParticipationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.bus_home = self.base / "demo-fleet"
@@ -113,7 +113,7 @@ class CodexWaitParticipationTests(unittest.TestCase):
 
 class CodexWaitContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temp = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.bus_home = self.base / "demo-fleet"

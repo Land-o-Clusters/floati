@@ -7,7 +7,7 @@ be derived with `git rev-parse HEAD` after commit.
 
 This checkpoint implements Puddle cohesion ruling C6 and only the contract
 preparation authorized by C7. It does not claim Puddle integration, network
-discovery, installation, deployment, activation, hosted CI, or Fable voice
+discovery, installation, deployment, activation, hosted CI, or the architect voice
 approval.
 
 ## A — flight recorder
@@ -45,7 +45,7 @@ expired state refuses.
 
 The README now begins with the useful one-harness flow, then introduces
 cross-harness orchestration as the superpower. The positioning and all newly
-registered strings remain `PROVISIONAL — FABLE VOICE PASS PENDING`.
+registered strings remain `PROVISIONAL — the architect VOICE PASS PENDING`.
 
 ## C — TUI wall
 
@@ -58,7 +58,7 @@ state.
 
 The wall is a synthetic review instrument, not live execution evidence.
 `docs/evidence/wall/PUNCH-LIST.md` remains explicitly
-`OPEN — FABLE POLISH DRIVE`; the wall's existence does not close those taste
+`OPEN — the architect POLISH DRIVE`; the wall's existence does not close those taste
 items.
 
 ## D — C7 contracts only
@@ -101,13 +101,13 @@ real-replay review exposed paired work/worker transitions that looked
 duplicated because provenance was hidden; a failing renderer assertion drove
 the visible source labels now present in both captures and the wall.
 
-At the pre-review checkpoint recorded above, Fable review, exact-tip
+At the pre-review checkpoint recorded above, the architect review, exact-tip
 `PUSH GO`, push, local/origin equality, and hosted CI remained separate
 pending gates. Local gates were rerun after the verdict commit.
 
 ## Post-gate technical review correction
 
-Fable reproduced and pushed implementation tip `e33488d` in gate commit
+the architect reproduced and pushed implementation tip `e33488d` in gate commit
 `f13dcf4`, granting the requested voice pass while leaving the wall punch list
 open. A subsequent independent technical review found three connected gaps
 that the first green suite had not detected:
@@ -146,4 +146,4 @@ git diff --check: clean
 ```
 
 The earlier `PUSH GO` names `e33488d`, not this correction. A fresh exact-tip
-Fable verdict and push are required and are not inferred here.
+the architect verdict and push are required and are not inferred here.

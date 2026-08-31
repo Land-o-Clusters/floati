@@ -129,7 +129,7 @@ finding remains open in the F10 scope.
 
 ---
 
-# GATE — F10 @ `aeb7cb79`: PASS, DARK, COMPLETE (Fable, 2026-08-26)
+# GATE — F10 @ `aeb7cb79`: PASS, DARK, COMPLETE (the architect, 2026-08-26)
 
 **All four R-bindings verified, every count my own run, and the lane's acceptance caveat DISSOLVED
 under measurement rather than waved.**
@@ -154,4 +154,4 @@ under measurement rather than waved.**
 F10 remains DARK per its own charter's phase order (observe, then refuse, then act) — the wiring
 order's exception is recorded in W-0: the charter IS the dissolving condition here.
 
-— Fable, 2026-08-26
+— the architect, 2026-08-26

@@ -18,15 +18,58 @@ from .wake_daemon_contract import (
     AdapterBindingStore,
     DaemonCoordinate,
 )
+from .wake_timeout_forensics import (
+    forensics_relative_path,
+    run_with_timeout_forensics,
+)
 
 
 CODEX_EXECUTABLE = Path("/opt/homebrew/bin/codex")
-_ADAPTER_VERSIONS = {"codex": "1", "cursor": "1", "grok-build": "1"}
+# Measured zcode wake surface (banked on lane/zc1-zcode-kit; not a git merge).
+# The entry script is the product bytes the binding digests; node is the
+# fixed interpreter that runs it.
+ZCODE_NODE = Path("/opt/homebrew/bin/node")
+ZCODE_ENTRY_SCRIPT = Path(
+    "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+)
+_ADAPTER_VERSIONS = {"codex": "1", "cursor": "1", "grok-build": "1", "zcode": "1"}
 _ADAPTER_CONTRACTS = {
     "codex": "floati:wake-daemon:codex:v1:queue --thread SESSION --message REASON",
     "cursor": "floati:wake-daemon:cursor:v1:--print --output-format json --single-turn --resume SESSION REASON",
     "grok-build": "floati:wake-daemon:grok-build:v1:-p REASON --output-format json --resume SESSION",
+    "zcode": "floati:wake-daemon:zcode:v1:node ENTRY --json --no-color --resume SESSION --prompt REASON",
 }
+# WD-R5a (Am.1 5fc3f7d): every adapter DECLARES its resume-probe class. Each
+# declared wake shape above consumes a turn, so all three declare
+# costs_one_turn today; a turn_free declaration arrives only when an adapter
+# grows a read-only liveness primitive. ABSENT IS UNDECLARED AND REFUSES -
+# never silently none.
+_ADAPTER_RESUME_PROBES = {
+    "codex": "costs_one_turn",
+    "cursor": "costs_one_turn",
+    "grok-build": "costs_one_turn",
+    "zcode": "costs_one_turn",
+}
+# WD-R5b: the bind-time probe is ONE resume against the named session,
+# bounded by the adapter deadline machinery's own cap - no new constant is
+# invented for it.
+PROBE_REASON = (
+    "[floati] bind-time resume probe: reply briefly to prove this session can wake"
+)
+PROBE_DEADLINE_SECONDS = 300
+
+
+def resume_probe_class(harness: str) -> str:
+    """Return the adapter's declared resume_probe class, refusing if undeclared."""
+
+    declared = _ADAPTER_RESUME_PROBES.get(harness) if isinstance(harness, str) else None
+    if declared not in ("turn_free", "costs_one_turn", "none"):
+        raise ProtocolRefusal(
+            "wake_daemon_resume_probe_undeclared",
+            "adapter declares no resume_probe class (turn_free | costs_one_turn | none); "
+            "an undeclared adapter cannot be bound",
+        )
+    return declared
 
 
 @dataclass(frozen=True)
@@ -44,6 +87,7 @@ class AdapterBinding:
     adapter_version: str
     adapter_digest: str
     binding_epoch: int
+    resume_state: Optional[str] = None
 
     @classmethod
     def from_record(cls, record: Mapping[str, object]) -> "AdapterBinding":
@@ -62,6 +106,11 @@ class AdapterBinding:
                 adapter_version=str(record["adapter_version"]),
                 adapter_digest=str(record["adapter_digest"]),
                 binding_epoch=int(record["binding_epoch"]),
+                resume_state=(
+                    str(record["resume_state"])
+                    if record.get("resume_state") is not None
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise IntegrityFailure(
@@ -88,7 +137,7 @@ def adapter_contract_digest(harness: str) -> str:
     except (KeyError, TypeError) as exc:
         raise ProtocolRefusal(
             "wake_daemon_harness_unsupported",
-            "wake daemon v1 supports only codex, cursor, or grok-build",
+            "wake daemon v1 supports only codex, cursor, grok-build, or zcode",
         ) from exc
     return hashlib.sha256(contract.encode("utf-8")).hexdigest()
 
@@ -132,14 +181,7 @@ def record_codex_daemon_binding(
 def _default_runner(
     argv: tuple[str, ...], cwd: Path, timeout: int
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        list(argv),
-        cwd=str(cwd),
-        timeout=timeout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    return run_with_timeout_forensics(argv, cwd, timeout)
 
 
 def _reason(value: object) -> str:
@@ -173,6 +215,10 @@ class _BoundWakeAdapter:
         self.coordinate = coordinate
         self.store = AdapterBindingStore(coordinate.root)
         self._runner = _default_runner if runner is None else runner
+        self._timeout_forensics_key: Optional[str] = None
+
+    def arm_timeout_forensics(self, attempt_key: str) -> None:
+        self._timeout_forensics_key = attempt_key
 
     def exact_binding(self) -> AdapterBinding:
         record = self.store.read(self.coordinate)
@@ -214,9 +260,29 @@ class _BoundWakeAdapter:
             )
         return current
 
-    def _run(self, argv: tuple[str, ...], binding: AdapterBinding, deadline: int) -> WakeAdapterResult:
+    def _run(
+        self, argv: tuple[str, ...], workspace: Path, deadline: int, session_id: str
+    ) -> WakeAdapterResult:
+        sidecar_path = None
+        attempt_key = self._timeout_forensics_key
+        if self._runner is _default_runner and isinstance(attempt_key, str):
+            try:
+                sidecar_path = self.coordinate.root.resolve_relative(
+                    forensics_relative_path(attempt_key)
+                )
+            except (ValueError, OSError):
+                sidecar_path = None
         try:
-            result = self._runner(argv, binding.workspace, deadline)
+            if self._runner is _default_runner:
+                result = run_with_timeout_forensics(
+                    argv,
+                    workspace,
+                    deadline,
+                    sidecar_path=sidecar_path,
+                    attempt_key=attempt_key,
+                )
+            else:
+                result = self._runner(argv, workspace, deadline)
         except subprocess.TimeoutExpired:
             return WakeAdapterResult("unknown", "wake_daemon_adapter_timeout", None, None)
         except OSError:
@@ -227,16 +293,38 @@ class _BoundWakeAdapter:
             return WakeAdapterResult(
                 "refused", "wake_daemon_adapter_nonzero", result.returncode, digest
             )
-        return self._successful_result(result.returncode, output, digest, binding)
+        return self._successful_result(result.returncode, output, digest, session_id)
 
     def _successful_result(
         self,
         exit_code: int,
         output: str,
         digest: str,
-        binding: AdapterBinding,
+        session_id: str,
     ) -> WakeAdapterResult:
         raise NotImplementedError
+
+    def resume_argv(
+        self, executable: Path, session_id: str, reason: str
+    ) -> tuple[str, ...]:
+        raise ProtocolRefusal(
+            "wake_daemon_probe_unavailable",
+            "adapter declares no resume shape the bind-time probe can drive",
+        )
+
+    def probe_resume(
+        self,
+        executable: Path,
+        workspace: Path,
+        session_id: str,
+        reason: str,
+        deadline: int,
+    ) -> WakeAdapterResult:
+        """WD-R5b: one bounded resume against the named session, judged by
+        this adapter's own result validation - no persisted binding needed."""
+        return self._run(
+            self.resume_argv(executable, session_id, reason), workspace, deadline, session_id
+        )
 
 
 class CodexQueueWakeAdapter(_BoundWakeAdapter):
@@ -268,14 +356,14 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
             "--message",
             wake_reason,
         )
-        return self._run(argv, current, deadline)
+        return self._run(argv, current.workspace, deadline, current.session_id)
 
     def _successful_result(
         self,
         exit_code: int,
         output: str,
         digest: str,
-        binding: AdapterBinding,
+        session_id: str,
     ) -> WakeAdapterResult:
         return WakeAdapterResult("woke", None, exit_code, digest)
 
@@ -283,30 +371,36 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
 class CursorResumeWakeAdapter(_BoundWakeAdapter):
     harness = "cursor"
 
+    @staticmethod
+    def resume_argv(
+        executable: Path, session_id: str, reason: str
+    ) -> tuple[str, ...]:
+        return (
+            str(executable),
+            "--print",
+            "--output-format",
+            "json",
+            "--single-turn",
+            "--resume",
+            session_id,
+            reason,
+        )
+
     def request_wake(
         self, binding: object, reason: str, deadline_seconds: int
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         wake_reason = _reason(reason)
         deadline = _deadline(deadline_seconds)
-        argv = (
-            str(current.executable),
-            "--print",
-            "--output-format",
-            "json",
-            "--single-turn",
-            "--resume",
-            current.session_id,
-            wake_reason,
-        )
-        return self._run(argv, current, deadline)
+        argv = self.resume_argv(current.executable, current.session_id, wake_reason)
+        return self._run(argv, current.workspace, deadline, current.session_id)
 
     def _successful_result(
         self,
         exit_code: int,
         output: str,
         digest: str,
-        binding: AdapterBinding,
+        session_id: str,
     ) -> WakeAdapterResult:
         if not output.strip():
             return WakeAdapterResult(
@@ -323,7 +417,7 @@ class CursorResumeWakeAdapter(_BoundWakeAdapter):
             or parsed.get("type") != "result"
             or parsed.get("subtype") != "success"
             or parsed.get("is_error") is not False
-            or parsed.get("session_id") != binding.session_id
+            or parsed.get("session_id") != session_id
         ):
             return WakeAdapterResult(
                 "unknown", "wake_daemon_cursor_result_invalid", exit_code, digest
@@ -334,29 +428,35 @@ class CursorResumeWakeAdapter(_BoundWakeAdapter):
 class GrokBuildResumeWakeAdapter(_BoundWakeAdapter):
     harness = "grok-build"
 
+    @staticmethod
+    def resume_argv(
+        executable: Path, session_id: str, reason: str
+    ) -> tuple[str, ...]:
+        return (
+            str(executable),
+            "-p",
+            reason,
+            "--output-format",
+            "json",
+            "--resume",
+            session_id,
+        )
+
     def request_wake(
         self, binding: object, reason: str, deadline_seconds: int
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         wake_reason = _reason(reason)
         deadline = _deadline(deadline_seconds)
-        argv = (
-            str(current.executable),
-            "-p",
-            wake_reason,
-            "--output-format",
-            "json",
-            "--resume",
-            current.session_id,
-        )
-        return self._run(argv, current, deadline)
+        argv = self.resume_argv(current.executable, current.session_id, wake_reason)
+        return self._run(argv, current.workspace, deadline, current.session_id)
 
     def _successful_result(
         self,
         exit_code: int,
         output: str,
         digest: str,
-        binding: AdapterBinding,
+        session_id: str,
     ) -> WakeAdapterResult:
         if not output.strip():
             return WakeAdapterResult(
@@ -370,11 +470,87 @@ class GrokBuildResumeWakeAdapter(_BoundWakeAdapter):
             )
         if (
             not isinstance(parsed, dict)
-            or parsed.get("sessionId") != binding.session_id
+            or parsed.get("sessionId") != session_id
             or parsed.get("stopReason") != "end_turn"
         ):
             return WakeAdapterResult(
                 "unknown", "wake_daemon_grok_result_invalid", exit_code, digest
+            )
+        return WakeAdapterResult("woke", None, exit_code, digest)
+
+
+class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
+    """Wake zcode by resuming the bound session headless.
+
+    Argv is the measured K4 shape: `--json --no-color --resume SESSION --prompt REASON`.
+    Success requires the artifact `sessionId` to name the bound session and a
+    non-empty `response`. Empty / invalid / mismatched output emit the three
+    zcode reason codes the ledger must record as themselves.
+    """
+
+    harness = "zcode"
+
+    @staticmethod
+    def resume_argv(
+        executable: Path, session_id: str, reason: str
+    ) -> tuple[str, ...]:
+        return (
+            str(ZCODE_NODE),
+            str(executable),
+            "--json",
+            "--no-color",
+            "--resume",
+            session_id,
+            "--prompt",
+            reason,
+        )
+
+    def request_wake(
+        self, binding: object, reason: str, deadline_seconds: int
+    ) -> WakeAdapterResult:
+        current = self._require_current(binding)
+        try:
+            entry = ZCODE_ENTRY_SCRIPT.resolve(strict=True)
+        except OSError as exc:
+            raise ProtocolRefusal(
+                "wake_daemon_zcode_entry_absent",
+                "the fixed zcode entry script is absent",
+            ) from exc
+        if entry != current.executable:
+            raise ProtocolRefusal(
+                "wake_daemon_zcode_entry_mismatch",
+                "the binding does not name the pinned zcode entry script",
+            )
+        wake_reason = _reason(reason)
+        deadline = _deadline(deadline_seconds)
+        argv = self.resume_argv(current.executable, current.session_id, wake_reason)
+        return self._run(argv, current.workspace, deadline, current.session_id)
+
+    def _successful_result(
+        self,
+        exit_code: int,
+        output: str,
+        digest: str,
+        session_id: str,
+    ) -> WakeAdapterResult:
+        if not output.strip():
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_zcode_output_empty", exit_code, digest
+            )
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError:
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_zcode_output_invalid", exit_code, digest
+            )
+        if (
+            not isinstance(parsed, dict)
+            or parsed.get("sessionId") != session_id
+            or not isinstance(parsed.get("response"), str)
+            or not parsed["response"]
+        ):
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_zcode_result_invalid", exit_code, digest
             )
         return WakeAdapterResult("woke", None, exit_code, digest)
 
@@ -393,7 +569,9 @@ def wake_adapter_for(
         return CursorResumeWakeAdapter(coordinate, runner=runner)
     if harness == "grok-build":
         return GrokBuildResumeWakeAdapter(coordinate, runner=runner)
+    if harness == "zcode":
+        return ZcodeResumeWakeAdapter(coordinate, runner=runner)
     raise ProtocolRefusal(
         "wake_daemon_harness_unsupported",
-        "wake daemon v1 supports only codex, cursor, or grok-build",
+        "wake daemon v1 supports only codex, cursor, grok-build, or zcode",
     )

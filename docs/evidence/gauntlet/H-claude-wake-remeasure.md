@@ -47,7 +47,7 @@ That is ~eight weeks of **deliveries**. It does not name harness or prove Stop-h
 | `opencode-desktop` | 14 | alice3..alice6 |
 | `codex` | 3 | sol |
 
-No `sre` / `ghops` identity session files. Alice session files are **opencode-desktop** (owner correction: alice is not Claude — **matches** this photograph).
+No `sre` / `ghops` identity session files. build lane session files are **opencode-desktop** (owner correction: build lane is not Claude — **matches** this photograph).
 
 ## Verdict
 

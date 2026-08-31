@@ -72,7 +72,7 @@ OK
 Private-cache compilation and `git diff --check` are green:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/puddle-lane-d4d5-pycache python3 -m py_compile floati/node_explain.py floati/state_receipts.py tests/test_node_explain.py tests/test_state_receipts.py
+PYTHONPYCACHEPREFIX=<temp>/puddle-lane-d4d5-pycache python3 -m py_compile floati/node_explain.py floati/state_receipts.py tests/test_node_explain.py tests/test_state_receipts.py
 git diff --check
 ```
 

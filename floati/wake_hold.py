@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
+from .bus_epoch import (
+    LOCK_ORDER_WAKE,
+    epoch_guard,
+    lock_order_guard,
+    shared_epoch_operation,
+)
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import (
@@ -17,10 +23,16 @@ from .jsonl import (
     _locked_path,
     _transact_wake_hold_records,
     read_records,
+    read_records_snapshot,
     read_records_with_prefix_digests,
     transact,
 )
-from .records import WAKE_HOLD_KINDS, validate_record, wake_hold_decision_digest
+from .records import (
+    WAKE_ATTEMPT_REFUSED_REASONS,
+    WAKE_HOLD_KINDS,
+    validate_record,
+    wake_hold_decision_digest,
+)
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
 
@@ -84,6 +96,7 @@ class WakeAttemptLedger:
     def __init__(self, root: FloatiRoot) -> None:
         self.root = root
 
+    @shared_epoch_operation
     def record(
         self,
         *,
@@ -123,6 +136,26 @@ class WakeAttemptLedger:
         recorded_outcome = outcome
         recorded_reason = reason_code
         selected = [envelopes.get(item_id) for item_id in requested]
+        missing = {item_id for item_id in requested if item_id not in envelopes}
+        if missing:
+            from .snapshot import _owned_epoch_archives
+
+            for archive in _owned_epoch_archives(self.root):
+                archive_relative = archive.relative_to(self.root.tenant_home)
+                archived_events = read_records_snapshot(
+                    self.root,
+                    archive_relative / "events.jsonl",
+                    allowed_kinds=set(EVENT_KINDS),
+                )
+                if any(
+                    row.get("kind") == "message_envelope"
+                    and row.get("id") in missing
+                    for row in archived_events
+                ):
+                    raise ProtocolRefusal(
+                        "wake_envelope_archived",
+                        "wake envelope moved to an owned epoch archive",
+                    )
         owned = (
             requested == [item_id for item_id in ordered if item_id in set(requested)]
             and all(
@@ -160,7 +193,7 @@ class WakeAttemptLedger:
                 recorded_outcome = "refused"
                 recorded_reason = "wake_decision_mismatch"
 
-        if recorded_outcome == "refused" and recorded_reason is None:
+        if recorded_outcome == "refused" and recorded_reason not in WAKE_ATTEMPT_REFUSED_REASONS:
             recorded_reason = "wake_prompt_failed"
         row: Dict[str, object] = {
             "schema_version": 1,
@@ -222,13 +255,16 @@ def wake_coordination_guard(
 ) -> Iterator[None]:
     """Serialize every session for one registered seat without storing truth."""
 
-    node = Registry(root).resolve_node_id(recipient, field="recipient")
-    if worker_session_id is not None:
-        from .cursor import SparseCursor
-        SparseCursor._session_component(worker_session_id)
-    lock = root.resolve_relative(Path("receipts/wake-coordination") / node / "lane.lock")
-    with _locked_path(lock, exclusive=True, timeout_seconds=5.0):
-        yield
+    with lock_order_guard(root, LOCK_ORDER_WAKE, label="wake"):
+        node = Registry(root).resolve_node_id(recipient, field="recipient")
+        if worker_session_id is not None:
+            from .cursor import SparseCursor
+            SparseCursor._session_component(worker_session_id)
+        lock = root.resolve_relative(
+            Path("receipts/wake-coordination") / node / "lane.lock"
+        )
+        with _locked_path(lock, exclusive=True, timeout_seconds=5.0):
+            yield
 
 
 def _validate_wake_key(key: object) -> str:
@@ -274,7 +310,11 @@ def project_wake_items(
             validated_events.append(validate_record(
                 dict(event) if isinstance(event, Mapping) else event,
                 tenant,
-                frozenset({"message_envelope", "message_retracted"}),
+                frozenset({
+                    "message_envelope", "message_retracted",
+                    "bus_epoch_roll_receipt",
+                    "ledger_repair_receipt",
+                }),
                 integrity=True,
             ))
         except (IntegrityFailure, ProtocolRefusal, KeyError, TypeError, ValueError) as exc:
@@ -300,6 +340,8 @@ def project_wake_items(
             if not isinstance(item_id, str) or item_id not in event_by_id or item_id in retracted:
                 raise _unavailable("retractions do not follow one current message")
             retracted.add(item_id)
+        elif kind in {"bus_epoch_roll_receipt", "ledger_repair_receipt"}:
+            continue
         else:
             raise _unavailable("event prefix contains an unknown kind")
     matching = [
@@ -589,6 +631,23 @@ class WakeHoldController:
         self, recipient: str, *, idempotency_key: str, worker_session_id: Optional[str] = None,
         limit: int = 1000,
     ) -> Dict[str, object]:
+        if globals() is not _WAKE_HOLD_CONTROLLER_GLOBALS:
+            raise ProtocolRefusal(
+                "wake_controller_only",
+                "wake evaluation requires its original module globals",
+            )
+        with epoch_guard(self.root, exclusive=False):
+            return self._evaluate_already_guarded(
+                recipient,
+                idempotency_key=idempotency_key,
+                worker_session_id=worker_session_id,
+                limit=limit,
+            )
+
+    def _evaluate_already_guarded(
+        self, recipient: str, *, idempotency_key: str, worker_session_id: Optional[str] = None,
+        limit: int = 1000,
+    ) -> Dict[str, object]:
         node = Registry(self.root).resolve_node_id(recipient, field="recipient")
         if worker_session_id is not None:
             from .cursor import SparseCursor
@@ -669,6 +728,6 @@ class WakeHoldController:
             )
 
 
-_WAKE_HOLD_EVALUATE_CODE = WakeHoldController.evaluate.__code__
+_WAKE_HOLD_EVALUATE_CODE = WakeHoldController._evaluate_already_guarded.__code__
 _WAKE_HOLD_PRIVATE_APPEND_CODE = WakeHoldController._append_receipt_already_guarded.__code__
 _WAKE_HOLD_CONTROLLER_GLOBALS = WakeHoldController.evaluate.__globals__

@@ -473,6 +473,116 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         self.assertEqual(intruder, durable[0]["acting_session_id"])
         self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids("bob", worker_session_id=owner))
 
+    def test_refused_without_reason_code_records_wake_prompt_failed(self) -> None:
+        """WD-R1-F1: WakeAttemptLedger.record(outcome=refused, reason_code=None) hits the fallback."""
+        from floati.jsonl import read_records
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        message = self.events.send(
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+            "docs/evidence/wake-attempt.md", "wake attempt omitted reason",
+            idempotency_key="wake-attempt-omitted-reason-message",
+        )
+        decision = WakeHoldController(self.root).evaluate(
+            "bob", idempotency_key="wake-attempt-omitted-reason-decision",
+        )
+        with self.assertRaises(ProtocolRefusal) as caught:
+            WakeAttemptLedger(self.root).record(
+                recipient="bob",
+                acting_session_id="session-018f7e9b3c137abc8def0123456789ab",
+                item_ids=[message["id"]],
+                decision_receipt_id=decision["receipt"]["id"],
+                message_worker_session_id=None,
+                idempotency_key="wake-attempt-omitted-reason-action",
+                outcome="refused",
+            )
+        self.assertEqual("wake_prompt_failed", caught.exception.code)
+        durable = read_records(
+            self.root, "receipts/wakes/bob.jsonl",
+            allowed_kinds={"wake_attempt_receipt"},
+        )
+        self.assertEqual(1, len(durable))
+        self.assertEqual("refused", durable[0]["outcome"])
+        self.assertEqual("wake_prompt_failed", durable[0]["reason_code"])
+
+    def test_refused_with_explicit_reason_code_is_not_rewritten_to_wake_prompt_failed(self) -> None:
+        """WD-R1-F1: an owned refused attempt keeps every adapter-emitted reason."""
+        from floati.jsonl import read_records
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+        from tests.test_wake_daemon_adapters import _emitted_wake_adapter_reasons
+
+        for code in sorted(_emitted_wake_adapter_reasons()):
+            with self.subTest(code=code):
+                message = self.events.send(
+                    public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                    "docs/evidence/wake-attempt.md", f"wake attempt {code}",
+                    idempotency_key=f"wake-attempt-emitted-{code}-message",
+                )
+                decision = WakeHoldController(self.root).evaluate(
+                    "bob", idempotency_key=f"wake-attempt-emitted-{code}-decision",
+                )
+                with self.assertRaises(ProtocolRefusal) as caught:
+                    WakeAttemptLedger(self.root).record(
+                        recipient="bob",
+                        acting_session_id="session-018f7e9b3c137abc8def0123456789ab",
+                        item_ids=[message["id"]],
+                        decision_receipt_id=decision["receipt"]["id"],
+                        message_worker_session_id=None,
+                        idempotency_key=f"wake-attempt-emitted-{code}-action",
+                        outcome="refused",
+                        reason_code=code,
+                    )
+                self.assertEqual(code, caught.exception.code)
+                durable = read_records(
+                    self.root, "receipts/wakes/bob.jsonl",
+                    allowed_kinds={"wake_attempt_receipt"},
+                )
+                matching = [row for row in durable if row["reason_code"] == code]
+                self.assertEqual(1, len(matching))
+                self.assertEqual("refused", matching[0]["outcome"])
+
+    def test_zcode_output_codes_record_as_themselves_not_wake_prompt_failed(self) -> None:
+        """WD-R2-F1: zcode adapter reasons join the refused set; they are not rewritten."""
+        from floati.jsonl import read_records
+        from floati.records import WAKE_ATTEMPT_REFUSED_REASONS
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        codes = (
+            "wake_daemon_zcode_output_empty",
+            "wake_daemon_zcode_output_invalid",
+            "wake_daemon_zcode_result_invalid",
+        )
+        self.assertTrue(set(codes) <= set(WAKE_ATTEMPT_REFUSED_REASONS))
+        for code in codes:
+            with self.subTest(code=code):
+                message = self.events.send(
+                    public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                    "docs/evidence/wake-attempt.md", f"wake attempt {code}",
+                    idempotency_key=f"wake-attempt-{code}-message",
+                )
+                decision = WakeHoldController(self.root).evaluate(
+                    "bob", idempotency_key=f"wake-attempt-{code}-decision",
+                )
+                with self.assertRaises(ProtocolRefusal) as caught:
+                    WakeAttemptLedger(self.root).record(
+                        recipient="bob",
+                        acting_session_id="session-018f7e9b3c137abc8def0123456789ab",
+                        item_ids=[message["id"]],
+                        decision_receipt_id=decision["receipt"]["id"],
+                        message_worker_session_id=None,
+                        idempotency_key=f"wake-attempt-{code}-action",
+                        outcome="refused",
+                        reason_code=code,
+                    )
+                self.assertEqual(code, caught.exception.code)
+                durable = read_records(
+                    self.root, "receipts/wakes/bob.jsonl",
+                    allowed_kinds={"wake_attempt_receipt"},
+                )
+                matching = [row for row in durable if row["reason_code"] == code]
+                self.assertEqual(1, len(matching))
+                self.assertEqual("refused", matching[0]["outcome"])
+
 
 class WakeHoldProjectionTests(unittest.TestCase):
     """Pure physical-order replay; a stateful seen cursor would not satisfy these cases."""

@@ -161,7 +161,15 @@ def model_from_root(root: FloatiRoot, now: Optional[datetime] = None) -> HarborB
 def _model_from_root_full(root: FloatiRoot, current: datetime) -> HarborBoardModel:
     snapshot = FleetProjection(root).snapshot(current)
     snapshot["effects"] = EffectStatusProjection(root).summary()
-    events = read_records_snapshot(root, "events.jsonl", allowed_kinds={"message_envelope"})
+    from .events import EVENT_KINDS
+
+    events = [
+        record
+        for record in read_records_snapshot(
+            root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
+        )
+        if record["kind"] == "message_envelope"
+    ]
     deliveries = []
     acknowledgments = []
     acked = set()
@@ -242,6 +250,15 @@ def _board_from_snapshot(
             nodes = [dict(row) for row in model.nodes]
             by_id = {str(row["node_id"]): row for row in nodes}
             for record in records:
+                if record.get("kind") in {
+                    "delivery_claim", "ledger_repair_receipt",
+                }:
+                    continue
+                if record.get("kind") != "message_envelope":
+                    raise SnapshotRefusal(
+                        "snapshot_tail_history_required",
+                        "event tail needs full ledger history",
+                    )
                 if record.get("reply_to") is not None:
                     raise SnapshotRefusal(
                         "snapshot_tail_history_required",

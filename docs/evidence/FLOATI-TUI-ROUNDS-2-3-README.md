@@ -1,7 +1,7 @@
 # FLOATI TUI ROUNDS 2–3 + README EVIDENCE
 
 Date: 2026-08-16
-Lane: `lane-floati`
+Lane: `build lane`
 Repository: `floati`
 Branch: `codex/herdr-adapter-source`
 Implementation commit: `dea6b3e86a04b6af1c7b1b8dfa859fec7880c822`
@@ -99,7 +99,7 @@ did not mask drift.
 
 ## Gate request
 
-Request Fable eye review number 2 for rounds 2 and 3, the traffic companion,
+Request the architect eye review number 2 for rounds 2 and 3, the traffic companion,
 the three buoy moments, the re-shot 28-capture wall, and the README voice and
 presentation pass.
 

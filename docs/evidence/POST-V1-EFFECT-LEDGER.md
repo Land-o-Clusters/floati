@@ -482,7 +482,7 @@ ignored consolidated-fix task report.
 
 ## Supported-host callback-contract fix round (2026-08-14)
 
-Fable's closure ruling at
+the architect's closure ruling at
 `docs/rulings/2026-08-14-post-v1-closure-herdr-ruling.md` found the first real
 supported-macOS execution degraded with `spawn_context_hook_missing`. The
 fresh-exec bootstrap reconstructs `CodexAppServerAdapter`,
@@ -535,7 +535,7 @@ the discarded run is not counted.
 
 ## Supported-host Git finalization and fixture repair (2026-08-14)
 
-Fable's first independent supported-macOS rerun after the callback-contract fix
+the architect's first independent supported-macOS rerun after the callback-contract fix
 removed `spawn_context_hook_missing` but found nine failures in the exact
 `WorkerEffectPipeTests` plus `WorkerEffectAuthorityTests` bank. This lane
 reproduced the same nine `git_finalize_failed` outcomes in 13.106 seconds.
@@ -564,7 +564,7 @@ keeps inherited-descriptor closure in its dedicated real-backend control, and
 accepts either canonical supported or typed-unavailable first frames in tests
 that stop before adapter execution. No additional production authority or
 adapter behavior changed. The nine exposed selectors passed 9/9 in 9.729
-seconds. Fable's exact two-class bank then passed 43/43 in 12.455 seconds on
+seconds. the architect's exact two-class bank then passed 43/43 in 12.455 seconds on
 `macos-sandbox`, with no `git_finalize_failed` or `process_timeout` outcome.
 
 The first expanded isolation/bootstrap/Effect/adapter/manifest bank passed 143
@@ -619,9 +619,9 @@ worktree.
   live external or supported-host pass.
 - The prior callback-contract round exercised the real built-in classes but not
   the supported macOS kernel boundary. This follow-up executed that boundary
-  locally outside the nested Codex sandbox. Fable's independent rerun remains
+  locally outside the nested Codex sandbox. the architect's independent rerun remains
   the external closure gate; this lane's supported-host GREEN is not relabeled
-  as Fable's receipt.
+  as the architect's receipt.
 
 ## Review status
 
@@ -632,7 +632,7 @@ consolidated wave fixes all four with local GREEN evidence. A second independent
 post-fix verdict is not claimed here. No push, bus checkpoint, publication,
 activation, deployment, release, or merge is authorized by these local results.
 
-## Fable supported-host gate verdict (2026-08-14, round 2)
+## the architect supported-host gate verdict (2026-08-14, round 2)
 
 **PASS — GATE GREEN at `9736ab6f`.** On this supported host (unsandboxed
 macOS, sandbox-exec available) — the environment where round 1 degraded
@@ -646,4 +646,4 @@ ruling: **item 5 (Effect Ledger) CLOSED** · items 6 (Thread Observer)
 and 7 (Wake/Hold) conditional-closures **RESOLVED — CLOSED**. The
 post-v1 program is fully closed. Lane proceeds to the name sweep
 (FLOATI_NAME_SWEEP_BRIEF.md, license task included), then TD-5301.
-— Fable.
+— the architect.

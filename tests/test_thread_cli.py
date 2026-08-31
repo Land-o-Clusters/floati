@@ -305,6 +305,11 @@ class ThreadCliTests(unittest.TestCase):
 
         evidence = FleetProjection(self.root).status_artifact(NOW)
         evidence["status_schema_version"] = 1
+        evidence["scope"] = {
+            "root": str(self.root.path),
+            "tenant": self.root.tenant_id,
+            "root_source": "explicit",
+        }
         evidence["installer_shadow"] = {
             "outcome": "affirmative_none",
             "enumerated_roots": [],

@@ -3,9 +3,11 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import hashlib
+import json
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from floati.errors import ProtocolRefusal
@@ -35,7 +37,7 @@ class _Runner:
 
 class WakeDaemonAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
@@ -321,6 +323,190 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             .outcome,
         )
 
+    def test_zcode_uses_only_the_bound_resume_vector(self) -> None:
+        """WD-R2: the zcode wake vector is the measured headless resume
+        shape — K4's live receipt proved `--json --no-color … --prompt`
+        parses and returns the typed artifact; am1 proved `--resume`
+        parses. Success requires the artifact's sessionId to name the
+        bound session (the only machine-checkable session fact zcode's
+        artifact carries — it has no stopReason)."""
+        from floati import wake_daemon_adapters as adapters
+
+        binding = self.binding("zcode")
+        stdout = (
+            '{"sessionId":"session-1","traceId":"t-1","turnId":"turn-1",'
+            '"response":"WD-R2 woke","usage":{"source":"provider"}}\n'
+        )
+        runner = _Runner(stdout=stdout)
+        coordinate = DaemonCoordinate(self.root, "lane-a", "zcode")
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        adapter = adapters.ZcodeResumeWakeAdapter(coordinate, runner=runner)
+        result = adapter.request_wake(binding, "[floati] 1 new message: msg-1", 45)
+
+        self.assertEqual("woke", result.outcome)
+        self.assertIsNone(result.reason_code)
+        self.assertEqual(
+            hashlib.sha256(stdout.encode("utf-8")).hexdigest(),
+            result.output_digest,
+        )
+        self.assertEqual(
+            (
+                "/opt/homebrew/bin/node",
+                str(self.target),
+                "--json",
+                "--no-color",
+                "--resume",
+                "session-1",
+                "--prompt",
+                "[floati] 1 new message: msg-1",
+            ),
+            runner.calls[0][0],
+        )
+        self.assertEqual(self.workspace, runner.calls[0][1])
+        self.assertEqual(45, runner.calls[0][2])
+
+    def test_zcode_probe_resume_uses_the_measured_vector(self) -> None:
+        from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
+
+        stdout = '{"sessionId":"session-1","response":"probe woke"}\n'
+        runner = _Runner(stdout=stdout)
+        adapter = ZcodeResumeWakeAdapter(
+            DaemonCoordinate(self.root, public_ids.builder("a"), "zcode"),
+            runner=runner,
+        )
+
+        result = adapter.probe_resume(
+            self.target,
+            self.workspace,
+            "session-1",
+            "[floati] probe",
+            45,
+        )
+
+        self.assertEqual("woke", result.outcome)
+        self.assertEqual(
+            (
+                "/opt/homebrew/bin/node",
+                str(self.target),
+                "--json",
+                "--no-color",
+                "--resume",
+                "session-1",
+                "--prompt",
+                "[floati] probe",
+            ),
+            runner.calls[0][0],
+        )
+
+    def test_zcode_result_requires_exact_session_and_a_response(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+        from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        binding = self.binding("zcode")
+        coordinate = DaemonCoordinate(self.root, "lane-a", "zcode")
+        cases = (
+            ("", "wake_daemon_zcode_output_empty"),
+            ("{\n", "wake_daemon_zcode_output_invalid"),
+            (
+                '{"sessionId":"another-session","response":"ok"}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '{"sessionId":"session-1"}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '{"sessionId":"session-1","response":""}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '[{"sessionId":"session-1","response":"ok"}]\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+        )
+
+        for stdout, reason_code in cases:
+            with self.subTest(stdout=stdout):
+                result = ZcodeResumeWakeAdapter(
+                    coordinate, runner=_Runner(stdout=stdout)
+                ).request_wake(binding, "wake", 30)
+                self.assertEqual("unknown", result.outcome)
+                self.assertEqual(reason_code, result.reason_code)
+
+    def test_zcode_timeout_and_nonzero_never_claim_woke(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+        from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        binding = self.binding("zcode")
+        coordinate = DaemonCoordinate(self.root, "lane-a", "zcode")
+        timeout = _Runner()
+        timeout.raise_timeout = True
+        unavailable = _Runner()
+        unavailable.raise_oserror = True
+        nonzero = _Runner(
+            returncode=7,
+            stdout='{"sessionId":"session-1","response":"ok"}\n',
+        )
+
+        timed_out = ZcodeResumeWakeAdapter(
+            coordinate, runner=timeout
+        ).request_wake(binding, "wake", 30)
+        missing = ZcodeResumeWakeAdapter(
+            coordinate, runner=unavailable
+        ).request_wake(binding, "wake", 30)
+        refused = ZcodeResumeWakeAdapter(
+            coordinate, runner=nonzero
+        ).request_wake(binding, "wake", 30)
+
+        self.assertEqual("unknown", timed_out.outcome)
+        self.assertEqual("wake_daemon_adapter_timeout", timed_out.reason_code)
+        self.assertEqual("unknown", missing.outcome)
+        self.assertEqual("wake_daemon_adapter_unavailable", missing.reason_code)
+        self.assertEqual("refused", refused.outcome)
+        self.assertEqual("wake_daemon_adapter_nonzero", refused.reason_code)
+
+    def test_zcode_wake_vector_is_derivable_and_entry_is_digest_bound(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        # The adapter is reachable through the factory, and the contract
+        # digest pins the argv shape the adapter must build.
+        binding = self.binding("zcode")
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        adapter = adapters.wake_adapter_for(
+            self.root, "lane-a", "zcode", runner=_Runner()
+        )
+        self.assertIsInstance(adapter, adapters.ZcodeResumeWakeAdapter)
+
+        # A binding naming a DIFFERENT entry script is refused: the wake
+        # vector runs one exact measured interpreter + entry pair.
+        other = self.base / "other-entry.cjs"
+        other.write_bytes(b"// not the pinned entry\n")
+        other.chmod(0o700)
+        mismatched = AdapterBindingStore(self.root).write(
+            DaemonCoordinate(self.root, "lane-a", "zcode"),
+            session_id="session-1",
+            workspace=self.workspace,
+            executable=other,
+            adapter_version="1",
+            adapter_digest=adapters.adapter_contract_digest("zcode"),
+            binding_epoch=2,
+        )
+        with self.assertRaisesRegex(ProtocolRefusal, "entry"):
+            adapter.request_wake(mismatched, "wake", 30)
+
     def test_unsupported_harness_and_caller_argument_surface_are_absent(self) -> None:
         from floati.wake_daemon_adapters import (
             CursorResumeWakeAdapter,
@@ -346,6 +532,287 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             grok.request_wake(
                 self.binding("grok-build"), "wake", 30, argv=("sh",)
             )
+
+    def test_zcode_uses_only_the_bound_resume_vector(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        binding = self.binding("zcode")
+        stdout = (
+            '{"sessionId":"session-1","traceId":"t-1","turnId":"turn-1",'
+            '"response":"WD-R2 woke","usage":{"source":"provider"}}\n'
+        )
+        runner = _Runner(stdout=stdout)
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "zcode")
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        adapter = adapters.ZcodeResumeWakeAdapter(coordinate, runner=runner)
+        result = adapter.request_wake(binding, "[floati] 1 new message: msg-1", 45)
+
+        self.assertEqual("woke", result.outcome)
+        self.assertIsNone(result.reason_code)
+        self.assertEqual(
+            hashlib.sha256(stdout.encode("utf-8")).hexdigest(),
+            result.output_digest,
+        )
+        self.assertEqual(
+            (
+                "/opt/homebrew/bin/node",
+                str(self.target),
+                "--json",
+                "--no-color",
+                "--resume",
+                "session-1",
+                "--prompt",
+                "[floati] 1 new message: msg-1",
+            ),
+            runner.calls[0][0],
+        )
+        self.assertEqual(self.workspace, runner.calls[0][1])
+        self.assertEqual(45, runner.calls[0][2])
+
+    def test_zcode_result_requires_exact_session_and_a_response(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+        from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        binding = self.binding("zcode")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "zcode")
+        cases = (
+            ("", "wake_daemon_zcode_output_empty"),
+            ("{\n", "wake_daemon_zcode_output_invalid"),
+            (
+                '{"sessionId":"another-session","response":"ok"}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '{"sessionId":"session-1"}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '{"sessionId":"session-1","response":""}\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+            (
+                '[{"sessionId":"session-1","response":"ok"}]\n',
+                "wake_daemon_zcode_result_invalid",
+            ),
+        )
+
+        for stdout, reason_code in cases:
+            with self.subTest(stdout=stdout):
+                result = ZcodeResumeWakeAdapter(
+                    coordinate, runner=_Runner(stdout=stdout)
+                ).request_wake(binding, "wake", 30)
+                self.assertEqual("unknown", result.outcome)
+                self.assertEqual(reason_code, result.reason_code)
+
+    def test_zcode_timeout_and_nonzero_never_claim_woke(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+        from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+
+        binding = self.binding("zcode")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "zcode")
+        timeout = _Runner()
+        timeout.raise_timeout = True
+        unavailable = _Runner()
+        unavailable.raise_oserror = True
+        nonzero = _Runner(
+            returncode=7,
+            stdout='{"sessionId":"session-1","response":"ok"}\n',
+        )
+
+        timed_out = ZcodeResumeWakeAdapter(
+            coordinate, runner=timeout
+        ).request_wake(binding, "wake", 30)
+        missing = ZcodeResumeWakeAdapter(
+            coordinate, runner=unavailable
+        ).request_wake(binding, "wake", 30)
+        refused = ZcodeResumeWakeAdapter(
+            coordinate, runner=nonzero
+        ).request_wake(binding, "wake", 30)
+
+        self.assertEqual("unknown", timed_out.outcome)
+        self.assertEqual("wake_daemon_adapter_timeout", timed_out.reason_code)
+        self.assertEqual("unknown", missing.outcome)
+        self.assertEqual("wake_daemon_adapter_unavailable", missing.reason_code)
+        self.assertEqual("refused", refused.outcome)
+        self.assertEqual("wake_daemon_adapter_nonzero", refused.reason_code)
+
+    def test_zcode_wake_vector_is_derivable_and_entry_is_digest_bound(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        adapter = adapters.wake_adapter_for(
+            self.root, public_ids.builder('a'), "zcode", runner=_Runner()
+        )
+        self.assertIsInstance(adapter, adapters.ZcodeResumeWakeAdapter)
+
+        other = self.base / "other-entry.cjs"
+        other.write_bytes(b"// not the pinned entry\n")
+        other.chmod(0o700)
+        mismatched = AdapterBindingStore(self.root).write(
+            DaemonCoordinate(self.root, public_ids.builder('a'), "zcode"),
+            session_id="session-1",
+            workspace=self.workspace,
+            executable=other,
+            adapter_version="1",
+            adapter_digest=adapters.adapter_contract_digest("zcode"),
+            binding_epoch=2,
+        )
+        with self.assertRaisesRegex(ProtocolRefusal, "entry"):
+            adapter.request_wake(mismatched, "wake", 30)
+
+
+def _emitted_wake_adapter_reasons() -> set[str]:
+    """Derive refused reasons from WakeAdapterResult literals in the adapter module."""
+    import ast
+
+    source = Path(__file__).parents[1] / "floati" / "wake_daemon_adapters.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    emitted: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+        if name != "WakeAdapterResult" or len(node.args) < 2:
+            continue
+        reason = node.args[1]
+        if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
+            emitted.add(reason.value)
+    return emitted
+
+
+class WakeAdapterEmittedReasonPinTests(unittest.TestCase):
+    def test_refused_reason_set_covers_adapter_emissions_and_matches_schema(self) -> None:
+        """Row 20: the ledger set is derived from adapter emissions, not hand-copied."""
+        import json
+
+        from floati.records import WAKE_ATTEMPT_REFUSED_REASONS
+
+        emitted = _emitted_wake_adapter_reasons()
+        self.assertTrue(
+            {code for code in emitted if "zcode" in code},
+            "derived pin must see zcode emissions; walking only the cursor adapter stays green through erasure",
+        )
+        self.assertTrue(
+            emitted <= set(WAKE_ATTEMPT_REFUSED_REASONS),
+            emitted - set(WAKE_ATTEMPT_REFUSED_REASONS),
+        )
+        schema = json.loads(
+            (Path(__file__).parents[1] / "schemas/v1/wake-attempt-record.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        enum = set(schema["properties"]["reason_code"]["enum"])
+        self.assertEqual(enum, {None} | set(WAKE_ATTEMPT_REFUSED_REASONS))
+
+
+class ResumeProbeTests(unittest.TestCase):
+    """WD-R5b: the probe runs the adapter's OWN resume shape without a
+    persisted binding - one bounded resume, judged by the adapter's own
+    result validation. It exists only for costs_one_turn adapters."""
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
+        self.addCleanup(self.temporary.cleanup)
+        self.base = Path(self.temporary.name)
+        self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
+        Registry(self.root).register(public_ids.builder("a"), "worker")
+        self.workspace = self.base / "workspace"
+        self.workspace.mkdir()
+        self.executable = self.base / "cursor-proof"
+        self.executable.write_bytes(b"#!/bin/sh\nexit 0\n")
+        self.executable.chmod(0o700)
+
+    def test_probe_resume_judges_by_the_adapters_own_result_shape(self) -> None:
+        from floati.wake_daemon_adapters import PROBE_REASON, CursorResumeWakeAdapter
+
+        stdout = json.dumps({
+            "type": "result", "subtype": "success",
+            "is_error": False, "session_id": "cursor-session-1",
+        })
+        runner = _Runner(stdout=stdout)
+        coordinate = DaemonCoordinate(self.root, public_ids.builder("a"), "cursor")
+        adapter = CursorResumeWakeAdapter(coordinate, runner=runner)
+
+        result = adapter.probe_resume(
+            self.executable, self.workspace, "cursor-session-1", PROBE_REASON, 300,
+        )
+
+        self.assertEqual("woke", result.outcome)
+        self.assertEqual(1, len(runner.calls))
+        argv, cwd, deadline = runner.calls[0]
+        self.assertEqual(str(self.executable), argv[0])
+        self.assertEqual("--resume", argv[5])
+        self.assertEqual("cursor-session-1", argv[6])
+        self.assertEqual(PROBE_REASON, argv[7])
+        self.assertEqual(self.workspace, cwd)
+        self.assertEqual(300, deadline)
+
+    def test_probe_resume_rejects_a_result_from_another_session(self) -> None:
+        from floati.wake_daemon_adapters import PROBE_REASON, CursorResumeWakeAdapter
+
+        stdout = json.dumps({
+            "type": "result", "subtype": "success",
+            "is_error": False, "session_id": "someone-else",
+        })
+        runner = _Runner(stdout=stdout)
+        coordinate = DaemonCoordinate(self.root, public_ids.builder("a"), "cursor")
+        adapter = CursorResumeWakeAdapter(coordinate, runner=runner)
+
+        result = adapter.probe_resume(
+            self.executable, self.workspace, "cursor-session-1", PROBE_REASON, 300,
+        )
+
+        self.assertEqual("unknown", result.outcome)
+        self.assertEqual("wake_daemon_cursor_result_invalid", result.reason_code)
+
+    def test_probe_resume_fails_closed_where_no_resume_shape_exists(self) -> None:
+        from floati.wake_daemon_adapters import CodexQueueWakeAdapter
+
+        coordinate = DaemonCoordinate(self.root, public_ids.builder("a"), "codex")
+        adapter = CodexQueueWakeAdapter(coordinate, runner=_Runner())
+
+        with self.assertRaises(ProtocolRefusal) as ctx:
+            adapter.probe_resume(
+                self.executable, self.workspace, "session-1", "probe", 300,
+            )
+        self.assertEqual("wake_daemon_probe_unavailable", ctx.exception.code)
+
+
+class ResumeProbeDeclarationTests(unittest.TestCase):
+    """WD-R5a: the adapter DECLARES its probe class; absent is UNDECLARED and refuses.
+
+    Am.1 (5fc3f7d) re-cut WD-R5 after the lane measured that no turn-free
+    resume probe exists for any adapter. The declaration is where the next
+    adapter keeps the guard honest instead of assuming the primitive.
+    """
+
+    def test_every_declared_wake_adapter_declares_costs_one_turn(self) -> None:
+        from floati.wake_daemon_adapters import _ADAPTER_VERSIONS, resume_probe_class
+
+        for harness in _ADAPTER_VERSIONS:
+            self.assertEqual("costs_one_turn", resume_probe_class(harness))
+
+    def test_resume_probe_declaration_refuses_when_absent(self) -> None:
+        from floati import wake_daemon_adapters as module
+
+        with mock.patch.object(module, "_ADAPTER_RESUME_PROBES", {"codex": "costs_one_turn"}):
+            with self.assertRaises(ProtocolRefusal) as ctx:
+                module.resume_probe_class("cursor")
+        self.assertEqual("wake_daemon_resume_probe_undeclared", ctx.exception.code)
 
 
 if __name__ == "__main__":

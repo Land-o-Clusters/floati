@@ -1,4 +1,4 @@
-# RULING — ACK HYGIENE (Fable, 2026-08-28; owner-prompted, dogfood-measured)
+# RULING — ACK HYGIENE (the architect, 2026-08-28; owner-prompted, dogfood-measured)
 
 **The measurement that shaped this:** the owner suspected a seat of not acking; the ledger showed
 **231 delivered / 231 acked — perfect seat hygiene** — and yet neither owner nor architect could

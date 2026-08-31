@@ -1,6 +1,6 @@
 # WS-B2 workspace-layout wiring
 
-Status: **DRAFT - awaiting integration-train reconciliation and Fable copy gate**
+Status: **DRAFT - awaiting integration-train reconciliation and the architect copy gate**
 
 ## Dark module delivered
 

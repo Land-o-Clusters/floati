@@ -6,9 +6,11 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from floati.doctor import Doctor
 from floati.errors import IntegrityFailure
+from floati.events import EventLog
 from floati.framing import encode_frame
 from floati.graph import HarborGraph, HarborTraffic
 from floati.projection import FleetProjection
@@ -80,6 +82,33 @@ class CrossVersionReaderLawTests(unittest.TestCase):
         for name, artifact in artifacts.items():
             with self.subTest(surface=name):
                 self.assertEqual(expected, artifact["unrecognized_kinds"])
+
+    def test_status_retains_known_oldest_unread_with_a_well_formed_newer_event(self) -> None:
+        """Catches status rereading events strictly after Supervisor tolerated a newer kind."""
+        with patch("floati.events.utc_now", return_value="2026-08-28T11:50:00.000Z"):
+            EventLog(self.root).send(
+                public_ids.worker("alpha"), "bravo", "floati", "a" * 40,
+                "docs/evidence/known-mail.md", "known unread",
+                idempotency_key="known-unread",
+            )
+        future_id = "future-receipt-01a04900000070008000000000000000"
+        self.append_raw_event(self.unknown(future_id))
+
+        status = FleetProjection(self.root).status_artifact(NOW)
+
+        bravo = next(row for row in status["nodes"] if row["node_id"] == "bravo")
+        self.assertEqual(
+            {
+                "node": "bravo",
+                "age_minutes": 10,
+                "observed_at": "2026-08-28T12:00:00Z",
+            },
+            bravo["oldest_unread"],
+        )
+        self.assertEqual(
+            [{"kind": "future_receipt", "count": 1, "first_id": future_id}],
+            status["unrecognized_kinds"],
+        )
 
     def test_malformed_known_kind_stays_fatal_and_names_its_coordinate(self) -> None:
         record_id = "msg-01a04900000070008000000000000000"

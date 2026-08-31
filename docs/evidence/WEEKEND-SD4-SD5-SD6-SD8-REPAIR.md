@@ -1,7 +1,7 @@
 # DRAFT — Weekend SD-4, SD-5, SD-6, and SD-8 repair evidence
 
 Date: 2026-08-28  
-Lane: `lane-floati`  
+Lane: `build lane`  
 Branch: `repair/sd4-5-6-8-20260828`  
 Current program parent used for the corrected frozen run: `b22c2b1e40a8ee09c65807ed7d7449e74a003dc7`
 

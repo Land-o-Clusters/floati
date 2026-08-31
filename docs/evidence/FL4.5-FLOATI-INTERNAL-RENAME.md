@@ -1,7 +1,7 @@
 # FL4.5 Floati internal-rename evidence
 
 Status: local, SHA-bound implementation evidence only. This record does not
-claim a Fable verdict, publication, push, installation, restart, activation,
+claim a the architect verdict, publication, push, installation, restart, activation,
 release, or owner-only repository/folder rename.
 
 ## Immutable identities and review boundary
@@ -14,7 +14,7 @@ release, or owner-only repository/folder rename.
   is documentation-only and is intentionally separate from the tested
   implementation candidate.
 
-At this document commit, the Fable gate is **NOT YET requested/received**.
+At this document commit, the the architect gate is **NOT YET requested/received**.
 The local reviews and command receipts below are not a substitute for that
 gate.
 
@@ -96,7 +96,7 @@ is:
 - Present schema identifiers use the owned
   https://landoclusters.com/floati/schemas/ origin. Floati titles replace
   retired product titles; x-floati-* replaces x-slipway-*; and positive
-  work-root references use /tmp/floati-work.
+  work-root references use <temp>/floati-work.
 - Wake schema/runtime labels use the exact
   com.landoclusters.floati.oneshot.* identity, including the JSON-escaped
   regular-expression form. The intentionally missing ten schema $id values
@@ -117,7 +117,7 @@ is:
   refs/heads/lane/hm0 are preserved.
 - Current living documentation was reconciled only in docs/DESIGN.md and
   docs/COPY-LEDGER.md. Those changes replace current .slipway-install,
-  .slipway, and /tmp/slipway-work instructions/transcript coordinates
+  .slipway, and <temp>/slipway-work instructions/transcript coordinates
   with their ruled Floati equivalents; no historical material was rewritten.
 
 ### Class 4 — owner-only external coordinates: pending
@@ -141,12 +141,12 @@ commit:
 | git status --short --branch | Clean at the tested candidate. |
 
 The bundle_verified artifact proves the selftest's local test-and-manifest
-contract only. It is not publication or Fable acceptance.
+contract only. It is not publication or the architect acceptance.
 
 ## Non-vacuous mutation controls
 
 All four controls began from the same clean candidate, copied the target to
-/tmp/floati-task8-mutation.Vjz6lq before mutation, restored the exact
+<temp>/floati-task8-mutation.Vjz6lq before mutation, restored the exact
 backup afterward, and confirmed the stated pre/post SHA-256 equality before
 the next control. Every focused gate exited 1 for its intended reason; status
 was clean after each restoration.
@@ -168,11 +168,11 @@ was performed during the mutation-only step itself.
 - Historical documents, prior evidence, rulings, HM material, and captures
   were classified and retained; they were not rewritten by this rename.
 - The live ~/.slipway-bus state and the governed
-  ~/.slipway-bus/puddle-fleet bus root were not migrated.
+  ~/.slipway-bus/the fleet bus root were not migrated.
 - No install, restart, activation, release, push, or publication has occurred
   as part of this evidence packet.
 - Class 4 remains owner-pending, as above.
 
 The next external action, if separately authorized by the governing flow, is a
-SHA-bound Fable gate request for this evidence commit. Until an explicit PASS
+SHA-bound the architect gate request for this evidence commit. Until an explicit PASS
 clears publication, the branch remains local-only.

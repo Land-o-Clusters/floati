@@ -24,7 +24,7 @@ DAEMON_KINDS = frozenset({
     "wake_daemon_consent_receipt",
     "wake_daemon_lifecycle_receipt",
 })
-SUPPORTED_HARNESSES = frozenset({"codex", "cursor", "grok-build"})
+SUPPORTED_HARNESSES = frozenset({"codex", "cursor", "grok-build", "zcode"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _VERSION = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$")
 _BINDING_FIELDS = frozenset({
@@ -33,10 +33,18 @@ _BINDING_FIELDS = frozenset({
     "executable", "executable_digest", "adapter_version", "adapter_digest",
     "binding_epoch",
 })
+# WD-R5c-F1: resume_state is additive-optional. Two exact shapes are valid:
+# the closed pre-R5c record, and that record plus one of the three bindable
+# resume states. Unknown extra keys remain invalid.
+_BINDABLE_RESUME_STATES = frozenset({
+    "resume_proven", "resume_unproven", "resume_suspect",
+})
 
 
 def _schema_version(harness: str) -> int:
-    return 1 if harness == "grok-build" else 0
+    # grok-build and zcode carry the v1 daemon record shape; the v1
+    # harness enum in records.py is widened to match (WD-R2).
+    return 1 if harness in ("grok-build", "zcode") else 0
 
 
 def _sha256(value: object, field: str) -> str:
@@ -72,7 +80,7 @@ class DaemonCoordinate:
         if self.harness not in SUPPORTED_HARNESSES:
             raise ProtocolRefusal(
                 "wake_daemon_harness_unsupported",
-                "wake daemon v1 supports only codex, cursor, or grok-build",
+                "wake daemon v1 supports only codex, cursor, grok-build, or zcode",
             )
         object.__setattr__(self, "node_id", node)
 
@@ -308,9 +316,16 @@ class AdapterBindingStore:
         adapter_version: str,
         adapter_digest: str,
         binding_epoch: int,
+        resume_state: Optional[str] = None,
     ) -> Dict[str, Any]:
         self._require_coordinate(coordinate)
         session = validate_session_id(session_id)
+        if resume_state is not None and resume_state not in _BINDABLE_RESUME_STATES:
+            raise ProtocolRefusal(
+                "wake_daemon_resume_state_invalid",
+                "binding resume_state must be one of: "
+                + ", ".join(sorted(_BINDABLE_RESUME_STATES)),
+            )
         workspace_path = self._ordinary_directory(workspace, "workspace")
         executable_path = self._ordinary_executable(executable)
         record = {
@@ -328,6 +343,8 @@ class AdapterBindingStore:
             "adapter_digest": _sha256(adapter_digest, "adapter_digest"),
             "binding_epoch": _positive_integer(binding_epoch, "binding_epoch", maximum=2**63 - 1),
         }
+        if resume_state is not None:
+            record["resume_state"] = resume_state
         encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         path = self.path(coordinate)
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -360,7 +377,13 @@ class AdapterBindingStore:
             record = json.loads(raw.decode("utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding is unreadable") from exc
-        if not isinstance(record, dict) or set(record) != _BINDING_FIELDS:
+        # WD-R5b: resume_state is additive-optional - a record with it (new
+        # binds) and a legacy record without it (pre-probe binds, codex
+        # waiter binds) are both valid shapes; anything else is drift.
+        if not isinstance(record, dict) or set(record) not in (
+            _BINDING_FIELDS,
+            _BINDING_FIELDS | {"resume_state"},
+        ):
             raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding shape is invalid")
         session = validate_session_id(record.get("session_id"))
         if (
@@ -381,6 +404,10 @@ class AdapterBindingStore:
         _positive_integer(record.get("binding_epoch"), "binding_epoch", maximum=2**63 - 1)
         if str(workspace) != record["workspace"] or str(executable) != record["executable"]:
             raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding paths are not canonical")
+        if "resume_state" in record and record["resume_state"] not in _BINDABLE_RESUME_STATES:
+            raise IntegrityFailure(
+                "wake_daemon_binding_invalid", "adapter binding resume_state is invalid"
+            )
         return dict(record)
 
     def remove(self, coordinate: DaemonCoordinate) -> Dict[str, Any]:

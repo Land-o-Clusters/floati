@@ -147,7 +147,7 @@ def main() -> int:
         {
             "id": initialize["id"],
             "result": {
-                "codexHome": "\x2fprivate/tmp/reference-codex-home",
+                "codexHome": "\x2fprivate\x2ftmp/reference-codex-home",
                 "platformFamily": "unix",
                 "platformOs": "macos",
                 "userAgent": "slipway-reference-harness/0",
@@ -287,7 +287,7 @@ def main() -> int:
                     shutil.move(str(workspace / ".git"), replaced)
                     (workspace / ".git").symlink_to(replaced, target_is_directory=True)
                 elif args.mode == "complete-symlink":
-                    (workspace / "ESCAPE").symlink_to("\x2fprivate/tmp")
+                    (workspace / "ESCAPE").symlink_to("\x2fprivate\x2ftmp")
                 final_status = "completed"
             else:
                 final_status = "failed"

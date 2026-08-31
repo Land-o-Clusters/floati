@@ -1,7 +1,7 @@
 {
   "schema_version": 0,
   "spec_path": "docs/design/capability-matrix-spec-2026-08-28.md",
-  "seeded_by": "grok",
+  "seeded_by": "verification lane",
   "seeded_at": "2026-08-28",
   "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals \u2014 those do not vary by surface.",
   "orchestrator_note": "Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.",

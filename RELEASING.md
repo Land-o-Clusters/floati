@@ -13,6 +13,19 @@ records.
 `__version__` must be three spellings of the same value; the release check
 refuses otherwise. Versions are numbers, not names.
 
+The check is `floati/release.py`, and it has two modes because the repository
+legitimately sits at `Unreleased` between releases:
+
+    python3 -m floati.release                    # the pair: __version__ and the heading
+    python3 -m floati.release --tag v0.1.0       # all three, and the heading must be dated
+
+The first runs two ways: as `tests/test_release_check.py` inside the canonical
+suite, so a drift goes red on every seat and every branch; and as a step in
+`release-gate.yml`, which is gated to the public repository and therefore runs
+on the exported projection. **The second mode is the one that gates a release,
+and it is run by hand before the tag is cut** — a tag that does not exist yet
+cannot be checked by anything that reads tags.
+
 ## A release is a receipt
 
 Every release consists of:

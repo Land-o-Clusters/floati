@@ -74,7 +74,7 @@ The one turn was submitted to the authenticated local server with this exact
 dispatch command (the cookie file contained only the local T3 session):
 
 ```sh
-/usr/bin/curl -fsS -b /tmp/t3-luna-cookie -H 'content-type: application/json' --data-raw '{"type":"thread.turn.start","commandId":"0f3b3dd4-1e9f-42b8-a01c-df098dbb3bb0","threadId":"db0322e0-2d90-4cf1-a721-6a8f72782f6c","message":{"messageId":"352b90ea-81f1-4669-9e7d-4fa7d7c42404","role":"user","text":"Reply exactly with model=deepseek/deepseek-v4-flash-0731 and nothing else.","attachments":[]},"modelSelection":{"instanceId":"grok","model":"luna-openrouter-deepseek"},"runtimeMode":"auto","interactionMode":"default","createdAt":"2026-08-28T02:00:02.000Z"}' http://127.0.0.1:3774/api/orchestration/dispatch
+/usr/bin/curl -fsS -b <temp>/t3-luna-cookie -H 'content-type: application/json' --data-raw '{"type":"thread.turn.start","commandId":"0f3b3dd4-1e9f-42b8-a01c-df098dbb3bb0","threadId":"db0322e0-2d90-4cf1-a721-6a8f72782f6c","message":{"messageId":"352b90ea-81f1-4669-9e7d-4fa7d7c42404","role":"user","text":"Reply exactly with model=deepseek/deepseek-v4-flash-0731 and nothing else.","attachments":[]},"modelSelection":{"instanceId":"grok","model":"luna-openrouter-deepseek"},"runtimeMode":"auto","interactionMode":"default","createdAt":"2026-08-28T02:00:02.000Z"}' http://127.0.0.1:3774/api/orchestration/dispatch
 ```
 
 The server reached its ready message; the dispatch reported exit `0` and the
@@ -92,11 +92,11 @@ its `totalTokens` field was `12253`.
 - No credential value appears in the committed branch or in the config entries
   changed for this lane; no provider log was copied into the branch.
 
-## ADDENDUM (Fable, 2026-08-28): cline GAP → WIRED via native ChatGPT auth
+## ADDENDUM (the architect, 2026-08-28): cline GAP → WIRED via native ChatGPT auth
 
 The owner chose cline's own ChatGPT sign-in over a pasted literal — the
 better custody model (cline-managed auth tokens, no raw key in
-`providers.json`). Verification probe run by Fable, no credential contact:
+`providers.json`). Verification probe run by the architect, no credential contact:
 `cline --json --auto-approve false -- "Reply exactly with the word OK…"` →
 exit 0, response `OK`, provider `openai-codex`, model `gpt-5.6-luna`,
 usage 3,810 in / 5 out, cost $0.000768. Cost accounting note: cline drill

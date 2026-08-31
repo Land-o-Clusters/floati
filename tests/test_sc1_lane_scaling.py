@@ -264,6 +264,96 @@ class Sc1LaneScalingTests(unittest.TestCase):
         self.assertFalse((self.root.path / "nodes" / node).exists())
         self.assertNotIn(node, Registry(self.root).active_node_ids())
 
+    def test_renderer_appends_the_inbox_read_to_a_readless_template(self) -> None:
+        """K5 mandatory condition (gate verdict b031de0c), THE PERMAFIX IN
+        THE MACHINERY: ZC1-F2 was a seat told to send and never to read,
+        and it built on a refusal that had nowhere to land. The renderer —
+        the one place every seat's boot prompt is minted — appends the
+        canonical inbox read to any template that does not already name
+        it, so no profile, existing or future, can mint a one-way
+        channel."""
+        module = self.module()
+        profile = self.write_profile(
+            name="readless",
+            prompt="Operate as {instance} from {workspace}.",
+        )
+        loaded = module.load_role_profiles(self.profiles)
+        prompt = module.render_boot_prompt(
+            loaded["readless"],
+            instance="readless-1",
+            workspace=self.root.path / "nodes" / "readless-1",
+            architect="architect-a",
+            root=self.root,
+        )
+        self.assertIn("inbox --root", prompt)
+        self.assertIn(str(self.root.path), prompt)
+        self.assertIn("--as readless-1", prompt)
+
+    def test_every_shipped_profile_renders_with_the_inbox_read(self) -> None:
+        """The same condition, derived over the SHIPPED profile glob: a
+        restamped profile must render with the read (template or renderer
+        guarantee); a DRAFT-stamped profile is typed pending-restamp copy —
+        its rendered prompt will carry the read the same way once the
+        architect restamps it. Survives restamping because it checks the
+        rendered prompt, not the stamp."""
+        module = self.module()
+        profiles = sorted((REPOSITORY_ROOT / "roles" / "profiles").glob("*.json"))
+        self.assertTrue(profiles, "no shipped profiles found to check")
+        for path in profiles:
+            with self.subTest(profile=path.name):
+                record = json.loads(path.read_text(encoding="utf-8"))
+                loaded = module.load_role_profiles(
+                    REPOSITORY_ROOT / "roles" / "profiles")
+                profile = loaded[record["name"]]
+                try:
+                    prompt = module.render_boot_prompt(
+                        profile,
+                        instance=f"{record['name']}-1",
+                        workspace=self.root.path / "nodes" / f"{record['name']}-1",
+                        architect="architect-a",
+                        root=self.root,
+                    )
+                except ProtocolRefusal as refused:
+                    self.assertEqual(
+                        "lane_profile_copy_draft", refused.code,
+                        f"{record['name']}: refused for an unexpected reason")
+                    self.assertTrue(
+                        record["boot_prompt_template"].startswith("DRAFT - "),
+                        f"{record['name']}: DRAFT refusal without the stamp")
+                else:
+                    self.assertIn(
+                        "inbox --root", prompt,
+                        f"{record['name']}: rendered boot prompt does not "
+                        "name the inbox read — it mints a one-way channel")
+
+    def test_inbox_appender_cannot_bypass_the_ascii_gate(self) -> None:
+        """K5 gate verdict 29d20f69: the appender sat AFTER the long-standing
+        prompt.encode('ascii') gate, so a template naming NEITHER {root} NOR
+        {workspace} rendered and RETURNED a non-ASCII prompt under a
+        non-ASCII root, while the control (naming {root}) was correctly
+        refused. A VALIDATION THAT RUNS BEFORE THE LAST MUTATION VALIDATES
+        SOMETHING THAT IS NOT WHAT SHIPS. The probe removes {workspace} and
+        {root} from the template so the appended sentence is the ONLY path
+        by which the root enters — a probe that cannot reach the code under
+        test reports the absence of the defect it could not reach."""
+        module = self.module()
+        cafe_root = FloatiRoot.open_direct_home(
+            self.base / "café" / "fleet", create=True)
+        Registry(cafe_root).register("architect-a", "architect")
+        self.write_profile(name="readless", prompt="Operate as {instance}.")
+        loaded = module.load_role_profiles(self.profiles)
+        with self.assertRaises(ProtocolRefusal) as refused:
+            module.render_boot_prompt(
+                loaded["readless"],
+                instance="readless-1",
+                workspace=cafe_root.path / "nodes" / "readless-1",
+                architect="architect-a",
+                root=cafe_root,
+            )
+        self.assertEqual(
+            "lane_profile_copy_invalid", refused.exception.code,
+            "a non-ASCII root reached the shipped prompt past the ASCII gate")
+
     def test_public_two_word_routes_render_restamped_help_and_shipped_profile_spawns(self) -> None:
         """Catches unreachable public verbs and DRAFT copy escaping onto a live help surface."""
 

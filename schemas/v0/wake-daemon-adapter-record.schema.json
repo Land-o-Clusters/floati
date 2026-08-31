@@ -17,6 +17,7 @@
     "executable_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "adapter_version": {"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"},
     "adapter_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "binding_epoch": {"type": "integer", "minimum": 1}
+    "binding_epoch": {"type": "integer", "minimum": 1},
+    "resume_state": {"enum": ["resume_proven", "resume_unproven", "resume_suspect"]}
   }
 }

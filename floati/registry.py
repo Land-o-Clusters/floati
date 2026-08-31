@@ -6,15 +6,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from .bus_epoch import shared_epoch_operation
 from .copy import (
     REGISTRY_RETIRE_ALREADY_RETIRED_DETAIL,
     REGISTRY_RETIRE_UNKNOWN_NODE_DETAIL,
 )
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import read_records, read_records_snapshot, transact
+from .jsonl import _locked_path, read_records, read_records_snapshot, transact
 from .records import validate_role
 from .root import FloatiRoot, validate_identifier
+from .seat_declaration import FleetGovernance
 
 
 REGISTRY_KINDS = {
@@ -33,6 +35,7 @@ class Registry:
         self.relative_path = Path("registry/entries.jsonl")
         self.path = root.resolve_relative(self.relative_path)
 
+    @shared_epoch_operation
     def register(self, node_id: str, role: str) -> Dict[str, object]:
         node = self.resolve_node_id(node_id, require_active=False)
         role = validate_role(role)
@@ -51,8 +54,39 @@ class Registry:
                 raise ProtocolRefusal("registry_duplicate", f"node {node} is already registered")
             return record, record
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=REGISTRY_KINDS)
+        coordination_lock = self.root.resolve_relative(
+            Path("receipts/wake-coordination") / node / "lane.lock"
+        )
+        with _locked_path(coordination_lock, exclusive=True):
+            pass
+        return transact(
+            self.root, self.relative_path, decide, allowed_kinds=REGISTRY_KINDS
+        )
 
+    def record_governance(
+        self,
+        *,
+        topology: str,
+        coordinator: str,
+        coordinator_authority: Tuple[str, ...],
+        owner_tier: Tuple[str, ...],
+    ) -> FleetGovernance:
+        """Record immutable fleet governance outside the append-only node ledger."""
+
+        return FleetGovernance.create(
+            self.root,
+            topology=topology,
+            coordinator=coordinator,
+            coordinator_authority=coordinator_authority,
+            owner_tier=owner_tier,
+        )
+
+    def governance(self) -> Optional[FleetGovernance]:
+        """Return the validated governed-onboarding record, when one exists."""
+
+        return FleetGovernance.load(self.root)
+
+    @shared_epoch_operation
     def retire(self, node_id: str) -> Dict[str, object]:
         """Append one retirement row for a node that is retiring itself."""
 

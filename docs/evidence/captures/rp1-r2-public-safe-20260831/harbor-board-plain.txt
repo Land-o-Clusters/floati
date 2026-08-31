@@ -1,0 +1,23 @@
+ROOT=/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/harbor-board
+$ floati board --root $ROOT --session capture-session --no-animation
+
+PLAIN DUMP
+OBSERVED 2026-08-31T16:24:06.616Z
+
+NODE               LIVE       AUTH       MUTEX      INBOX  LAST
+> architect-codex    PRESENT    ACTIVE     ACTIVE         0  16:24:04.616
+  builder-claude     PRESENT    NONE       NONE           1  16:24:01.616
+  reviewer-opencode  EXPIRED    ACTIVE     NONE           0  16:22:06.616
+
+WORK DAG  [░░░░░░░░░░]   0%
+  CLAIMED   capture the three-plane harbor  holder:architect-codex
+  BLOCKED   review the frozen frame  holder:-  needs:work-01a058a29adb74d1905a2fdc1433437e
+
+CONSUMPTION  WORK AVAILABLE
+  coordinate: work/items.jsonl
+
+WORKERS
+  NONE
+
+RECEIPTS
+  NONE

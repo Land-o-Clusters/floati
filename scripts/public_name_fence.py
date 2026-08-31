@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import io
 import json
 import os
@@ -18,40 +19,65 @@ from typing import Iterable
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT))
 
+from floati.identity_fence import (  # noqa: E402
+    GOVERNED_TEMP_FENCES,
+    HOME_PATTERN,
+    HOME_PREFIX,
+    OWNER_USERNAME,
+)
 from floati.scrub import scan_generated_tree  # noqa: E402
 
 
 COMMAND = "public-name-fence"
 ENCODINGS = ("utf-8", "utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be")
-OWNER_USERNAME = bytes.fromhex("63687269736d656e656e64657a").decode("ascii")
 FENCE_TOKENS = (
-    ("operator_home_path", bytes.fromhex("2f55736572732f").decode("ascii")),
-    ("private_tmp_path", bytes.fromhex("2f707269766174652f746d70").decode("ascii")),
+    ("operator_home_path", HOME_PREFIX),
+    *GOVERNED_TEMP_FENCES,
     ("owner_username", OWNER_USERNAME),
 )
+TEMP_FENCE_CODES = frozenset(code for code, _prefix in GOVERNED_TEMP_FENCES)
 EXCLUDED_PARTS = frozenset((".git", "__pycache__"))
 MAX_GIT_OUTPUT = 16 * 1024 * 1024
 PATH_LITERAL_CONTRACT_PREFIXES = ("bundle/c7.1/", "bundle/c7.2/", "schemas/")
-SEAT_NAME_EXEMPT_PATHS = frozenset(
-    ("docs/capability-matrix.md", "docs/capability-matrix.v0.json")
-)
 _VERIFICATION_SEAT = bytes.fromhex("67726f6b").decode("ascii")
 _VERIFICATION_SEAT_EXPLICIT = bytes.fromhex(
     "67726f6b2d7468652d73656174"
 ).decode("ascii")
 _ARCHITECT_SEAT = bytes.fromhex("6661626c65").decode("ascii")
-_BUILD_SEAT_PREFIX = bytes.fromhex("616c696365").decode("ascii")
-_LANE_SEAT_PREFIX = bytes.fromhex("6c616e652d").decode("ascii")
-_SHORT_BUILD_SEAT = bytes.fromhex("736f6c").decode("ascii")
+FLEET_REGISTRY_NODE_ROLE_LABELS = {
+    bytes.fromhex("616c696365").decode("ascii"): "build lane",
+    bytes.fromhex("616c6963652d63697479").decode("ascii"): "build lane",
+    bytes.fromhex("616c6963652d6e6563726f").decode("ascii"): "build lane",
+    _ARCHITECT_SEAT: "the architect",
+    bytes.fromhex("6c616e652d617070").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d666c6f617469").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d707564646c65").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d736c6970776179").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d736f6c").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d7a636f6465").decode("ascii"): "build lane",
+}
+REVIEWED_FLEET_IDENTITY_ROLE_LABELS = {
+    bytes.fromhex("707564646c652d666c656574").decode("ascii"): "the fleet",
+    bytes.fromhex("707564646c652d666c6f6174692d617263686974656374").decode("ascii"): "the architect",
+}
+SEAT_ROLE_LABELS = {
+    **FLEET_REGISTRY_NODE_ROLE_LABELS,
+    **REVIEWED_FLEET_IDENTITY_ROLE_LABELS,
+}
+_EXACT_SEAT_IDS = "|".join(
+    re.escape(token)
+    for token in sorted(SEAT_ROLE_LABELS, key=lambda value: (-len(value), value))
+)
 _SEAT_PATTERN = re.compile(
-    rf"(?<![A-Za-z0-9_])(?:"
+    rf"(?<![A-Za-z0-9_-])(?:"
     rf"{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|"
-    rf"{re.escape(_VERIFICATION_SEAT)}(?![-_]build)|"
-    rf"{re.escape(_ARCHITECT_SEAT)}|"
-    rf"{re.escape(_BUILD_SEAT_PREFIX)}[A-Za-z0-9._-]*|"
-    rf"(?<!verification )(?<!build ){re.escape(_LANE_SEAT_PREFIX)}[A-Za-z0-9._-]+|"
-    rf"{re.escape(_SHORT_BUILD_SEAT)}"
-    rf")(?![A-Za-z0-9_])",
+    rf"{_EXACT_SEAT_IDS}"
+    rf")(?![A-Za-z0-9_-])",
+    re.IGNORECASE,
+)
+_SEAT_PATH_PATTERN = re.compile(
+    rf"(?<![A-Za-z0-9_])(?:{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|{_EXACT_SEAT_IDS})"
+    rf"(?![A-Za-z0-9_])",
     re.IGNORECASE,
 )
 SEAT_NAME_SITE_ALLOWLIST = (
@@ -120,11 +146,34 @@ def is_record_class_path(relative: str) -> bool:
     )
 
 
-def _seat_name_exempt(relative: str) -> bool:
-    return (
-        relative in SEAT_NAME_EXEMPT_PATHS
-        or is_record_class_path(relative)
-    )
+def _decode_json_text(data: bytes) -> tuple[str, str, bytes]:
+    for bom, encoding in (
+        (codecs.BOM_UTF32_LE, "utf-32-le"),
+        (codecs.BOM_UTF32_BE, "utf-32-be"),
+        (codecs.BOM_UTF16_LE, "utf-16-le"),
+        (codecs.BOM_UTF16_BE, "utf-16-be"),
+        (codecs.BOM_UTF8, "utf-8"),
+    ):
+        if data.startswith(bom):
+            return data[len(bom) :].decode(encoding), encoding, bom
+    if len(data) >= 4:
+        if data[:3] == b"\x00\x00\x00":
+            encoding = "utf-32-be"
+        elif data[1:4] == b"\x00\x00\x00":
+            encoding = "utf-32-le"
+        elif data[0] == 0 and data[2] == 0:
+            encoding = "utf-16-be"
+        elif data[1] == 0 and data[3] == 0:
+            encoding = "utf-16-le"
+        else:
+            encoding = "utf-8"
+    else:
+        encoding = "utf-8"
+    return data.decode(encoding), encoding, b""
+
+
+def _encode_json_text(text: str, encoding: str, bom: bytes) -> bytes:
+    return bom + text.encode(encoding)
 
 
 def _seat_name_hits(path: Path, data: bytes) -> list[tuple[int, str]]:
@@ -154,6 +203,58 @@ def _seat_name_hits(path: Path, data: bytes) -> list[tuple[int, str]]:
         ]
         if hits:
             return hits
+    if path.suffix in (".json", ".jsonl"):
+        documents: list[object] = []
+        try:
+            text, _encoding, _bom = _decode_json_text(data)
+            if path.suffix == ".jsonl":
+                documents = [json.loads(line) for line in text.splitlines() if line]
+            else:
+                documents = [json.loads(text)]
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            documents = []
+
+        capability_matrix = path.as_posix().endswith(
+            "/docs/capability-matrix.v0.json"
+        )
+
+        def semantic_token(value: object, field: str | None = None) -> str | None:
+            if isinstance(value, str):
+                match = _SEAT_PATTERN.search(value)
+                if match:
+                    return match.group(0)
+                if (
+                    capability_matrix
+                    and field is not None
+                    and (
+                        field.casefold() in {"seeded_by", "seat"}
+                        or field.casefold().endswith("_seat")
+                    )
+                    and value.casefold() == _VERIFICATION_SEAT
+                ):
+                    return value
+                return None
+            if isinstance(value, list):
+                return next(
+                    (
+                        token
+                        for item in value
+                        if (token := semantic_token(item, field))
+                    ),
+                    None,
+                )
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    token = semantic_token(key) or semantic_token(
+                        item, key if isinstance(key, str) else None
+                    )
+                    if token:
+                        return token
+            return None
+
+        token = semantic_token(documents)
+        if token:
+            return [(1, token)]
     return []
 
 
@@ -373,8 +474,7 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
 
     for path in _entries(base):
         relative = path.relative_to(base).as_posix()
-        seat_exempt = _seat_name_exempt(relative)
-        if not seat_exempt and _SEAT_PATTERN.search(relative):
+        if _SEAT_PATH_PATTERN.search(relative):
             findings.append({"code": "seat_name_path", "path": relative})
         if path.is_symlink():
             findings.append({"code": "symlink_path", "path": relative})
@@ -385,14 +485,18 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
             findings.append({"code": "file_unreadable", "path": relative})
             continue
         scannable = _scannable_data(path, data)
+        temp_found = False
         for code, variants in token_variants.items():
             if relative.startswith(PATH_LITERAL_CONTRACT_PREFIXES):
                 continue
+            if code in TEMP_FENCE_CODES and temp_found:
+                continue
             if any(variant in scannable for variant in variants):
                 findings.append({"code": code, "path": relative})
-        if not seat_exempt:
-            for line in _unallowlisted_seat_name_lines(relative, path, data):
-                findings.append({"code": "seat_name", "line": line, "path": relative})
+                if code in TEMP_FENCE_CODES:
+                    temp_found = True
+        for line in _unallowlisted_seat_name_lines(relative, path, data):
+            findings.append({"code": "seat_name", "line": line, "path": relative})
         if relative in private_project_paths:
             findings.append({"code": "private_project_name", "path": relative})
 

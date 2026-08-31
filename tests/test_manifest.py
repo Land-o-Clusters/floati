@@ -16,12 +16,14 @@ _FROZEN_PROTOCOL_ASSET_ROOTS = (
     "bundle/c7.1",
     "bundle/c7.2",
 )
-_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 151
+_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 157
 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256 = (
-    "aad91335a71ce7e9a775e58ff87f8cc59544dc778d14a7d822aead9fad12b530"
+    "e8f3429df0a7e03cea690dcbc3772da4bbc90141f4758c09e2cb512d83af6361"
 )
 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256 = (
-    "0918081e2e09eef6365af76bacb66c539462b8c507d42cc01ee4f9e63925a35a"
+    # Full-history composition adds the receipts-read v0 bundle schema and
+    # Zcode enum/reason rows atop main's WD-R5c/Grok wake-daemon schema bytes.
+    "303d8c8aef948d18c941484cf52b67053f7e1e8d29c665e54bebcf3a5be860bb"
 )
 
 
@@ -525,6 +527,31 @@ class ManifestTests(unittest.TestCase):
             "floati/records.py",
             "floati/wake.py",
             "floati/wake_hold.py",
+        }
+        self.assertEqual(sorted(paths), paths)
+        self.assertTrue(required <= set(paths), required - set(paths))
+        by_path = {entry["path"]: entry["sha256"] for entry in entries}
+        for relative in sorted(required):
+            with self.subTest(path=relative):
+                self.assertEqual(
+                    hashlib.sha256(Path(relative).read_bytes()).hexdigest(),
+                    by_path.get(relative),
+                )
+
+    def test_repository_manifest_includes_complete_g5_g7_runtime_contract(self) -> None:
+        """Catches an install missing epoch, waiter-exit, or wake-health bytes."""
+
+        manifest = json.loads(Path("bundle-manifest.v0.json").read_text(encoding="utf-8"))
+        entries = manifest["files"]
+        paths = [entry["path"] for entry in entries]
+        required = {
+            "floati/bus_epoch.py",
+            "floati/entrypoint_contract.py",
+            "floati/wake_exit.py",
+            "floati/wake_health.py",
+            "schemas/v1/bus-epoch-roll-receipt.schema.json",
+            "schemas/v1/wake-health-fact.schema.json",
+            "schemas/v1/wake-waiter-exit-receipt.schema.json",
         }
         self.assertEqual(sorted(paths), paths)
         self.assertTrue(required <= set(paths), required - set(paths))

@@ -1,4 +1,4 @@
-# WS-E SPEC — CONTEXT MANAGEMENT, HONESTLY (Fable, 2026-08-28)
+# WS-E SPEC — CONTEXT MANAGEMENT, HONESTLY (the architect, 2026-08-28)
 
 Build contract for North Star V5 — the last genuinely-new capability. The governing law is the
 honesty boundary: **harnesses differ wildly in what they expose about their context windows, and

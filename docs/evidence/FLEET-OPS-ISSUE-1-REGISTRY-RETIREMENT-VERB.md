@@ -6,7 +6,7 @@ Date: 2026-08-18
 
 ## Identity and authority
 
-- Node: `lane-floati` (builder seat, ad-hoc fleet-ops window)
+- Node: `build lane` (builder seat, ad-hoc fleet-ops window)
 - Worktree: `~/Projects/floati`
 - Branch: `lane/fleet-ops-window`
 - Predecessor commit (P2, gated DONE):
@@ -147,23 +147,23 @@ reported in either authoritative run. No contamination was observed.
 The verb was exercised only against `tempfile` roots inside tests and one
 throwaway `mktemp -d` root for a manual end-to-end check, which was deleted.
 
-`~/.floati-bus/puddle-fleet/registry/entries.jsonl` was **read only**, to
+`~/.floati-bus/the fleet/registry/entries.jsonl` was **read only**, to
 prove it is unchanged:
 
 - SHA-256:
   `411f4c31f1b73c2afc1d819465f9ebd9765510d9226b2de8b98007d9cb8a3774`
-- 6 rows, every one `state: "active"`: `lane-slipway`, `fable`, `lane-app`,
-  `puddle-floati-architect`, `lane-floati`, `lane-puddle-relief`
+- 6 rows, every one `state: "active"`: `build lane`, `the architect`, `build lane`,
+  `the architect`, `build lane`, `lane-puddle-relief`
 - count of `"state":"retired"` rows: 0
 
-The dormant rows named in issue #1 — `fable` and the older lane rows — are
+The dormant rows named in issue #1 — `the architect` and the older lane rows — are
 still active and were **not** retired. Retiring them is a separate
 architect-gated exercise that happens only after this verb passes its gate.
 
 ## Explicitly not claimed
 
 - **Not done: the live retirement of the dormant rows.** No write of any kind
-  reached `~/.floati-bus/puddle-fleet`. That exercise is not started and is
+  reached `~/.floati-bus/the fleet`. That exercise is not started and is
   not requested by this packet.
 - Not claimed: any push to `main`, merge, publication, release, or tag. Only
   `lane/fleet-ops-window` was pushed.

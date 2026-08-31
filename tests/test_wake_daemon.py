@@ -3,6 +3,7 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +31,7 @@ class _Adapter:
         self.coordinate = coordinate
         self.calls: list[tuple[str, str, int]] = []
         self.outcome = "woke"
+        self.reason_code: str | None = None
 
     def exact_binding(self) -> AdapterBinding:
         return AdapterBinding.from_record(self.store.read(self.coordinate))
@@ -41,7 +43,16 @@ class _Adapter:
         self, binding: AdapterBinding, reason: str, deadline_seconds: int
     ) -> WakeAdapterResult:
         self.calls.append((binding.session_id, reason, deadline_seconds))
-        reason_code = None if self.outcome == "woke" else "fake_adapter_" + self.outcome
+        if self.outcome == "woke":
+            reason_code = None
+        elif self.reason_code is not None:
+            reason_code = self.reason_code
+        else:
+            reason_code = (
+                "wake_daemon_adapter_timeout"
+                if self.outcome == "unknown"
+                else "wake_prompt_failed"
+            )
         return WakeAdapterResult(self.outcome, reason_code, 0, "e" * 64)
 
 
@@ -66,7 +77,7 @@ class _TideEvaluator:
 
 class _WakeDaemonFixture(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
@@ -81,7 +92,7 @@ class _WakeDaemonFixture(unittest.TestCase):
         self.coordinate = DaemonCoordinate(self.root, public_ids.builder('a'), "cursor")
         self.adapter = _Adapter(self.root, self.coordinate)
 
-    def bind(self, session_id: str = "cursor-session-1") -> None:
+    def bind(self, session_id: str = "cursor-session-1", *, resume_state: str | None = None) -> None:
         AdapterBindingStore(self.root).write(
             self.coordinate,
             session_id=session_id,
@@ -90,6 +101,7 @@ class _WakeDaemonFixture(unittest.TestCase):
             adapter_version="1",
             adapter_digest=adapter_contract_digest("cursor"),
             binding_epoch=1,
+            resume_state=resume_state,
         )
 
     def consent(self, *, key: str = "daemon-consent") -> None:
@@ -266,6 +278,46 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
             self.root.resolve_relative(public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('a')))).exists()
         )
 
+    def test_adapter_timeout_is_recorded_on_the_attempt_receipt(self) -> None:
+        from floati.jsonl import read_records
+
+        self.bind()
+        self.consent()
+        self.send_unbound("timeout-message")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_timeout"
+        result = self.daemon().run_cycle(100.0)
+        self.assertEqual("adapter_unknown", result["state"])
+        self.assertEqual("wake_daemon_adapter_timeout", result["reason_code"])
+        rows = read_records(
+            self.root,
+            public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))),
+            allowed_kinds={"wake_attempt_receipt"},
+        )
+        self.assertEqual(1, len(rows))
+        self.assertEqual("refused", rows[0]["outcome"])
+        self.assertEqual("wake_daemon_adapter_timeout", rows[0]["reason_code"])
+
+    def test_genuine_prompt_failure_still_records_wake_prompt_failed(self) -> None:
+        from floati.jsonl import read_records
+
+        self.bind()
+        self.consent()
+        self.send_unbound("prompt-fail-message")
+        self.adapter.outcome = "refused"
+        self.adapter.reason_code = "wake_prompt_failed"
+        result = self.daemon().run_cycle(100.0)
+        self.assertEqual("refused", result["state"])
+        self.assertEqual("wake_prompt_failed", result["reason_code"])
+        rows = read_records(
+            self.root,
+            public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))),
+            allowed_kinds={"wake_attempt_receipt"},
+        )
+        self.assertEqual(1, len(rows))
+        self.assertEqual("refused", rows[0]["outcome"])
+        self.assertEqual("wake_prompt_failed", rows[0]["reason_code"])
+
 
 class WakeDaemonGreenTests(_WakeDaemonFixture):
     def setUp(self) -> None:
@@ -382,6 +434,203 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         replacement = DaemonOwner(self.coordinate)
         replacement.acquire()
         replacement.release()
+
+    def test_adapter_unavailable_does_not_mark_unproven_binding_suspect(self) -> None:
+        """WD-R5c-F1 RED: OSError opening the executable is unknown, not exhaustion."""
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-f1-unavailable")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_unavailable"
+        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_unproven", record["resume_state"])
+
+    def test_timeout_reason_flips_unproven_to_suspect(self) -> None:
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-f1-timeout")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_timeout"
+        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_suspect", record["resume_state"])
+
+    def test_subsequent_woke_clears_resume_suspect(self) -> None:
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-f1-clear-suspect")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_timeout"
+        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
+        self.assertEqual(
+            "resume_suspect",
+            AdapterBindingStore(self.root).read(self.coordinate)["resume_state"],
+        )
+        self.adapter.outcome = "woke"
+        self.adapter.reason_code = None
+        self.assertEqual("woke", self.daemon().run_cycle(102.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_proven", record["resume_state"])
+
+    def test_first_wake_of_an_unproven_binding_flips_it_proven(self) -> None:
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-f1-woke-proven")
+        self.assertEqual("woke", self.daemon().run_cycle(100.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_proven", record["resume_state"])
+
+    def test_first_wake_verdict_leaves_proven_and_absent_bindings_alone(self) -> None:
+        self.bind(resume_state="resume_proven")
+        self.send("r5c-f1-proven-untouched")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_timeout"
+        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_proven", record["resume_state"])
+
+        AdapterBindingStore(self.root).remove(self.coordinate)
+        self.bind()
+        self.send("r5c-f1-absent-untouched")
+        self.adapter.outcome = "woke"
+        self.adapter.reason_code = None
+        self.assertEqual("woke", self.daemon().run_cycle(102.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertNotIn("resume_state", record)
+
+
+class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
+    """WD-R7: when the breaker opens, the daemon says so ONCE, locally.
+
+    The notice names the bound session and the remedy, is present for exactly
+    as long as the circuit stays open (written when open and absent -
+    presence, never a count standing in for presence - so a lost notice
+    re-derives from the durable runtime), and is cleared when the daemon
+    recovers (circuit closed again). Local only: one state file, no network,
+    no telemetry.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bind()
+        self.consent()
+
+    def notice_path(self) -> Path:
+        return self.root.resolve_relative(
+            Path("state/wake-daemon/notices") / f"{self.coordinate.digest}.json"
+        )
+
+    def open_breaker(self) -> dict:
+        self.send("breaker-notice-message")
+        self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "fake_adapter_unknown"
+        daemon = self.daemon()
+        states = [daemon.run_cycle(now)["state"] for now in (100.0, 102.0, 106.0)]
+        self.assertEqual(["adapter_unknown"] * 3, states)
+        return daemon.read_runtime()
+
+    def test_breaker_opening_writes_one_local_notice_naming_session_and_remedy(self) -> None:
+        self.open_breaker()
+
+        raw = self.notice_path().read_text(encoding="utf-8")
+        self.assertTrue(raw.endswith("\n"))
+        notice = json.loads(raw)
+        self.assertEqual(public_ids.builder("a"), notice["node_id"])
+        self.assertEqual("cursor", notice["harness"])
+        self.assertEqual("cursor-session-1", notice["session_id"])
+        self.assertEqual(3, notice["consecutive_refusals"])
+        self.assertEqual("fake_adapter_unknown", notice["last_reason_code"])
+        self.assertIn("headless", notice["remedy"])
+        self.assertIn("unresumable", notice["remedy"])
+
+    def test_open_circuit_cycles_never_duplicate_or_rewrite_the_notice(self) -> None:
+        """WD-R7-F2: the pin drives DUE cycles and counts the mechanism's calls.
+
+        A blind pin asserts bytes on a path that never reaches the code: the
+        pre-next_poll_at early return skips _maintain_breaker_notice entirely,
+        so the old 107.0/108.0 cycles proved a no-op, not a no-rewrite.
+        """
+        self.open_breaker()
+        before = self.notice_path().read_bytes()
+
+        daemon = self.daemon()
+        with mock.patch.object(
+            daemon,
+            "_maintain_breaker_notice",
+            wraps=daemon._maintain_breaker_notice,
+        ) as spy:
+            self.assertEqual("backpressure", daemon.run_cycle(114.0)["state"])
+            self.assertEqual("backpressure", daemon.run_cycle(122.0)["state"])
+
+        self.assertGreaterEqual(spy.call_count, 2)
+        self.assertEqual(before, self.notice_path().read_bytes())
+
+    def test_a_lost_notice_rederives_on_the_next_due_cycle_while_open(self) -> None:
+        """WD-R7-F1: presence, never a count standing in for presence.
+
+        The old crossing condition (refusals == threshold) held exactly once,
+        so a lost notice never came back while the daemon went on refusing.
+        """
+        self.open_breaker()
+        self.notice_path().unlink()
+
+        daemon = self.daemon()
+        self.assertEqual("backpressure", daemon.run_cycle(114.0)["state"])
+
+        notice = json.loads(self.notice_path().read_text(encoding="utf-8"))
+        self.assertEqual(public_ids.builder("a"), notice["node_id"])
+        self.assertEqual("cursor-session-1", notice["session_id"])
+        self.assertEqual(4, notice["consecutive_refusals"])
+        self.assertIn("headless", notice["remedy"])
+
+    def test_a_recovered_daemon_clears_the_notice(self) -> None:
+        from floati.wake_control import WakeController
+
+        self.open_breaker()
+        self.assertTrue(self.notice_path().is_file())
+
+        control = WakeController(self.root)
+        control.pause(public_ids.builder("a"), "cursor-session-1", idempotency_key="pause-recovery")
+        self.assertEqual("paused", self.daemon().run_cycle(114.0)["state"])
+        self.assertFalse(self.notice_path().exists())
+
+    def test_first_wake_of_an_unproven_binding_flips_it_proven(self) -> None:
+        """WD-R5c: the first wake is the always-on backstop - a successful
+        first wake records the proof the bind-time probe never got."""
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-woke-message")
+        daemon = self.daemon()
+        self.assertEqual("woke", daemon.run_cycle(100.0)["state"])
+
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_proven", record["resume_state"])
+
+    def test_first_wake_bound_exhaustion_flips_unproven_to_suspect(self) -> None:
+        """WD-R5c: exhausting the wake bound flips resume_unproven to
+        resume_suspect - checked expensively AFTER the fact, once and loudly."""
+        self.bind(resume_state="resume_unproven")
+        self.send("r5c-timeout-message")
+        self.adapter.outcome = "unknown"
+        daemon = self.daemon()
+        self.assertEqual("adapter_unknown", daemon.run_cycle(100.0)["state"])
+
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_suspect", record["resume_state"])
+
+    def test_first_wake_verdict_leaves_proven_and_absent_bindings_alone(self) -> None:
+        """The verdict resolves only the unproven state - proven (bind-time
+        probe) and legacy-absent (codex waiter) bindings are untouched."""
+        self.bind(resume_state="resume_proven")
+        self.send("r5c-proven-message")
+        self.adapter.outcome = "unknown"
+        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertEqual("resume_proven", record["resume_state"])
+
+        AdapterBindingStore(self.root).remove(self.coordinate)
+        self.bind()
+        self.send("r5c-absent-message")
+        self.adapter.outcome = "woke"
+        self.assertEqual("woke", self.daemon().run_cycle(102.0)["state"])
+        record = AdapterBindingStore(self.root).read(self.coordinate)
+        self.assertNotIn("resume_state", record)
 
 
 if __name__ == "__main__":

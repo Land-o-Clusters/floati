@@ -6,12 +6,13 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, FrozenSet, Mapping, Optional, Sequence, Tuple
 
-from .errors import ProtocolRefusal, SnapshotRefusal
+from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
 from .framing import FrameError, decode_frames
 from .jsonl import MAX_LEDGER_BYTES, MAX_LEDGER_RECORDS, MAX_RECORD_BYTES
 from .records import validate_record
@@ -103,6 +104,117 @@ def _checksum(value: Mapping[str, object]) -> str:
 
 def _fingerprint(record_id: str) -> str:
     return hashlib.sha256(record_id.encode("utf-8")).hexdigest()[:16]
+
+
+def _owned_epoch_archives(root: FloatiRoot) -> Tuple[Path, ...]:
+    """Follow only receipt-named, tenant-contained epoch archives."""
+
+    events_path = root.resolve_relative("events.jsonl")
+    archives = []
+    seen = set()
+    for _index in range(MAX_LEDGER_RECORDS):
+        try:
+            status = events_path.lstat()
+            if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
+                if archives:
+                    raise IntegrityFailure(
+                        "epoch_receipt_chain_invalid",
+                        "a receipt-owned archive event ledger is not a regular file",
+                    )
+                break
+            data = events_path.read_bytes()
+            if len(data) > MAX_LEDGER_BYTES:
+                raise IntegrityFailure(
+                    "epoch_receipt_chain_invalid",
+                    "a receipt-owned epoch event ledger exceeds the read bound",
+                )
+            framed = decode_frames(data)
+            if not framed:
+                break
+            if framed[0].get("kind") != "bus_epoch_roll_receipt":
+                break
+            receipt = validate_record(
+                framed[0],
+                root.tenant_id,
+                frozenset({"bus_epoch_roll_receipt"}),
+                integrity=True,
+            )
+        except FileNotFoundError as exc:
+            if archives:
+                raise IntegrityFailure(
+                    "epoch_receipt_chain_invalid",
+                    "a receipt-owned archive event ledger is unavailable",
+                ) from exc
+            break
+        except FrameError as exc:
+            raise IntegrityFailure(
+                "epoch_receipt_chain_invalid",
+                "a claimed receipt-owned epoch event ledger is malformed",
+            ) from exc
+        except OSError as exc:
+            raise IntegrityFailure(
+                "epoch_receipt_chain_invalid",
+                "a claimed receipt-owned epoch event ledger is unavailable",
+            ) from exc
+        try:
+            from .bus_epoch import validate_epoch_receipt_archive
+
+            archive = validate_epoch_receipt_archive(root, receipt)
+        except ProtocolRefusal as exc:
+            raise IntegrityFailure(exc.code, exc.detail) from exc
+        if archive in seen:
+            raise IntegrityFailure(
+                "epoch_receipt_chain_invalid",
+                "roll receipt archive lineage contains a cycle",
+            )
+        seen.add(archive)
+        archives.append(archive)
+        events_path = archive / "events.jsonl"
+    return tuple(archives)
+
+
+def _anchor_was_archived(anchor: object, archives: Sequence[Path]) -> bool:
+    if not isinstance(anchor, dict) or frozenset(anchor) != _SOURCE_FIELDS:
+        return False
+    relative_value = anchor.get("path")
+    offset = anchor.get("byte_offset")
+    digest = anchor.get("prefix_sha256")
+    if (
+        not isinstance(relative_value, str)
+        or not isinstance(offset, int)
+        or isinstance(offset, bool)
+        or offset < 0
+        or not isinstance(digest, str)
+        or _HEX64.fullmatch(digest) is None
+    ):
+        return False
+    relative = Path(relative_value)
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or any(part in ("", ".", "..") for part in relative.parts)
+    ):
+        return False
+    for archive in archives:
+        source = archive / relative
+        try:
+            source_status = source.lstat()
+            if (
+                source.resolve(strict=False) != source
+                or stat.S_ISLNK(source_status.st_mode)
+                or not stat.S_ISREG(source_status.st_mode)
+            ):
+                continue
+            data = source.read_bytes()
+        except OSError:
+            continue
+        if (
+            len(data) <= MAX_LEDGER_BYTES
+            and offset <= len(data)
+            and hashlib.sha256(data[:offset]).hexdigest() == digest
+        ):
+            return True
+    return False
 
 
 class SnapshotStore:
@@ -371,6 +483,14 @@ class SnapshotStore:
         if not isinstance(anchors, list):
             raise SnapshotRefusal(
                 "snapshot_source_set_mismatch", "derived snapshot sources are invalid"
+            )
+        archives = _owned_epoch_archives(self.root)
+        if archives and any(
+            _anchor_was_archived(anchor, archives) for anchor in anchors
+        ):
+            raise SnapshotRefusal(
+                "snapshot_source_archived",
+                "derived snapshot source moved to an owned epoch archive",
             )
         sources = self._sources()
         if [source.relative.as_posix() for source in sources] != [

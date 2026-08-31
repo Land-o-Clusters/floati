@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Sequence
 
 from .errors import ProtocolRefusal
 from .consumption import ConsumptionLedger
+from .delivery_health import DeliveryHealthAnalyzer
 from .events import EVENT_KINDS, validate_event_records
 from .jsonl import read_records_compatible_snapshot, read_records_snapshot
 from .registry import REGISTRY_KINDS
@@ -70,6 +71,10 @@ class Supervisor:
             self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
         )
         validate_event_records(events)
+        events = [
+            record for record in events
+            if record.get("kind") == "message_envelope"
+        ]
         stale = self._stale(authority, "authority", "subject_id", current)
         stale.extend(self._stale(mutex, "mutex", "resource_id", current))
         stale.sort(key=lambda item: (str(item["plane"]), str(item["subject_id"])))
@@ -111,6 +116,15 @@ class Supervisor:
                     "turnover_state": tide_status.status(node_id)["turnover_state"],
                 },
             })
+
+        health = DeliveryHealthAnalyzer.analyze(
+            events=events,
+            root=self.root,
+            nodes=[str(row["node_id"]) for row in nodes],
+            now=current,
+        )
+        for row in nodes:
+            row["oldest_unread"] = health.by_node[str(row["node_id"])].oldest_unread
 
         return {
             "mode": "report_only",

@@ -83,10 +83,10 @@ argparse refusal diagnostics, sandbox-refusal diagnostics, and
 was `OK`.
 
 The exact pushed SHA and delivery-envelope receipt are bound in the architect
-envelope. This document does not claim a Fable verdict, flip, release, or
+envelope. This document does not claim a the architect verdict, flip, release, or
 publication.
 
-## FABLE GATE: PASS AND MERGED (2026-08-28)
+## the architect GATE: PASS AND MERGED (2026-08-28)
 
 Re-derived at the delivered tip: **1,930 tests, OK, exit 0
 (pipestatus-captured), frozen tree**; manifest exact. The merge onto main

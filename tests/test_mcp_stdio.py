@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from floati import __version__
 from floati import fixture_ids as public_ids
 
 import json
@@ -24,7 +25,7 @@ def compact(value: object) -> str:
 
 class McpStdioTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate/tmp")
+        self.temporary = tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp")
         self.addCleanup(self.temporary.cleanup)
         self.root = FloatiRoot.open_direct_home(
             Path(self.temporary.name) / "fleet",
@@ -96,7 +97,7 @@ class McpStdioTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "status",
-                    "arguments": {"root": "\x2fprivate/tmp/actor-switch"},
+                    "arguments": {"root": "\x2fprivate\x2ftmp/actor-switch"},
                 },
             },
         ])
@@ -110,7 +111,7 @@ class McpStdioTests(unittest.TestCase):
             {
                 "protocolVersion": LATEST_PROTOCOL,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "floati", "version": "0.0.0"},
+                "serverInfo": {"name": "floati", "version": __version__},
             },
             responses[0]["result"],
         )

@@ -1,6 +1,6 @@
 # C9 draft — README matrix cells from C0+C1 (grok, 2026-08-27)
 
-**Row:** C9 format draft. **Not** a README edit (WS-F places cells). Filler while holding for Car 4, per Fable `msg-01a0454701847b89a1c894bf35759d9a`.
+**Row:** C9 format draft. **Not** a README edit (WS-F places cells). Filler while holding for Car 4, per the architect `msg-01a0454701847b89a1c894bf35759d9a`.
 **C0 receipt:** `docs/evidence/conformance/C0-machine-harness-inventory.md` (gated PASS).
 **C1 receipt:** `docs/evidence/conformance/C1-codex-conformance-live.md` @ `48794c3c78074244c31d39850d680ab38025f5ba` (gated PASS, `surface_verified: true`).
 **Inventory bound:** C0. **No cell says more than its row receipt.**
@@ -48,7 +48,7 @@ C0 live-eligible vs battery-only is a prediction, not a status. Replace `SLOT` w
 | C7 | pi | NOT PRESENT | `BATTERY-ONLY` unless a binary appears after C0 | `docs/evidence/conformance/C7-pi-conformance.md` |
 | C8 | herdr | NOT PRESENT | `BATTERY-ONLY` unless a binary appears after C0 | `docs/evidence/conformance/C8-herdr-conformance.md` |
 
-After C8, this doc's "Filled cells" block is the collected C9 payload Fable pastes. Until then, only the `codex` line is paste-ready.
+After C8, this doc's "Filled cells" block is the collected C9 payload the architect pastes. Until then, only the `codex` line is paste-ready.
 
 ## Mechanical append
 

@@ -15,7 +15,7 @@ run.
 - `git merge-base --is-ancestor 6ee8582 origin/lane/hm0`: exit 0.
 - Boot fleet poll: `intentional_silence`; no message and no delivery receipt.
 - Untouched baseline:
-  `PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-baseline python3 -m unittest discover -v`
+  `PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-baseline python3 -m unittest discover -v`
   ran 324 tests in 17.752 seconds, exit 0, `OK`.
 
 ## A — Crash-point injection
@@ -29,7 +29,7 @@ The durable writer inventory resolves every record append and transaction to
 - before and after short-write rollback truncation; and
 - before and after rollback `fsync`.
 
-`PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-crash python3 -m unittest -v tests.test_gauntlet_crash`
+`PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-crash python3 -m unittest -v tests.test_gauntlet_crash`
 ran 3 tests in 0.090 seconds, exit 0, `OK`.
 
 Observed laws:
@@ -62,7 +62,7 @@ implementation deadline and stable refusal codes. Focused plus adjacent
 verification:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-cas-green python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-cas-green python3 -m unittest -v \
   tests.test_gauntlet_concurrency tests.test_planes tests.test_process_atomicity
 Ran 17 tests in 2.215s
 OK
@@ -72,7 +72,7 @@ The 12-process hammer ran sends, registrations, acknowledgments, and work
 claims against one root:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-hammer python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-hammer python3 -m unittest -v \
   tests.test_gauntlet_concurrency.ConcurrentWriterGauntletTests.test_twelve_process_send_register_ack_and_claim_torture_has_no_double_effects
 Ran 1 test in 1.091s
 OK
@@ -93,7 +93,7 @@ available exercised volume satisfies both named properties.
 
 ### A/B checkpoint verification
 
-`PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-ab-full python3 -m unittest discover -v`
+`PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-ab-full python3 -m unittest discover -v`
 ran 330 tests in 25.847 seconds, exit 0, `OK`. Direct manifest verification
 returned `[]`; generated copy-ledger equality and `git diff --check` both
 exited 0.
@@ -114,7 +114,7 @@ and adjacent tests ran in 3.615 seconds, `OK`.
 The final matrix command was:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-fuzz-full python3 -m unittest -v tests.test_gauntlet_fuzz
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fuzz-full python3 -m unittest -v tests.test_gauntlet_fuzz
 Ran 3 tests in 2.370s
 OK
 ```
@@ -153,7 +153,7 @@ under fixed source precedence and keeps replay elapsed time monotonic and
 nonnegative.
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-time-green2 python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-time-green2 python3 -m unittest -v \
   tests.test_gauntlet_time tests.test_replay tests.test_supervisor tests.test_tui_render
 Ran 26 tests in 0.329s
 OK
@@ -166,7 +166,7 @@ torn tail; chmod read-only escaped raw; deleted-root watch emitted an empty
 fleet change and exited 0. F.6 records the shared cause and correction.
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-recovery-green2 python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-recovery-green2 python3 -m unittest -v \
   tests.test_gauntlet_recovery tests.test_root_jsonl tests.test_cli tests.test_watch
 Ran 42 tests in 7.529s
 OK
@@ -184,12 +184,12 @@ with `root_deleted` and no traceback.
 - E time hostility: passed after F.5 correction.
 - F recovery drills: passed after F.6 correction.
 - G final findings/evidence/push: full-suite verification complete; checkpoint
-  commit, Fable gate, push, and stand-down poll remain.
+  commit, the architect gate, push, and stand-down poll remain.
 
 ## G — Full-suite verification
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-final-full python3 -m unittest discover -v
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-final-full python3 -m unittest discover -v
 Ran 339 tests in 32.239s
 OK
 ```
@@ -201,13 +201,13 @@ coverage. It does not convert the failed D budgets into a pass.
 The repository gate was then run directly against the same working tree:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-final-selftest python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-final-selftest python3 -m slip.selftest
 Ran 339 tests in 26.827s
 OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 ```
 
-## Fable gate — A/B checkpoint (2026-08-01)
+## the architect gate — A/B checkpoint (2026-08-01)
 
 Independent re-verification in a SHA-bound scratch checkout at
 `5830ef9d60aaa1cde4dea89c15d682b8afa73362` (never the live worktree):
@@ -225,9 +225,9 @@ Independent re-verification in a SHA-bound scratch checkout at
 - `git diff --check`: clean.
 
 **VERDICT: PUSH GO at exact SHA 5830ef9.** Phases C–G remain open; this GO
-covers the A/B checkpoint only. — Fable
+covers the A/B checkpoint only. — the architect
 
-## Fable gate — C–G checkpoint (2026-08-01)
+## the architect gate — C–G checkpoint (2026-08-01)
 
 Independent re-verification in a SHA-bound scratch checkout at
 `f543beb` (full id in git):
@@ -245,13 +245,13 @@ Independent re-verification in a SHA-bound scratch checkout at
 FAILED and F.4 remains OPEN — this GO banks the honest evidence and the
 C/E/F corrections; it does not convert D. Publication performance gate stays
 closed until the authorized read-acceleration feature lands and D re-runs
-green. — Fable
+green. — the architect
 
 ## Fix-round — anchored snapshot projection
 
 Implementation checkpoint:
 `6e3fe180cd27a0eedbb6b4c5ee267700aa14dec4`. This section is bound by its
-containing evidence commit, which is the exact SHA submitted for Fable
+containing evidence commit, which is the exact SHA submitted for the architect
 re-verification; the implementation checkpoint identifies the source and test
 state measured before this evidence-only append.
 
@@ -269,7 +269,7 @@ The harness and budgets were unchanged: exact 10,000-work-item / 100,000-event
 profiles, one warmup, three measured samples, median statistic.
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-fix-soak python3 scripts/hm3h-soak.py
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-soak python3 scripts/hm3h-soak.py
 ```
 
 | Reader | Budget | Samples (ms) | Median | Gate |
@@ -310,7 +310,7 @@ The permanent hostile matrix was then run with the existing crash, fuzz, time,
 and recovery gauntlets:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-fix-gauntlets python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-gauntlets python3 -m unittest -v \
   tests.test_gauntlet_snapshot tests.test_gauntlet_crash \
   tests.test_gauntlet_fuzz tests.test_gauntlet_time \
   tests.test_gauntlet_recovery
@@ -326,14 +326,14 @@ evidence into an answer.
 ### Full-suite verification — MEASURED
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-fix-full python3 -m unittest discover -v
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-full python3 -m unittest discover -v
 Ran 354 tests in 28.795s
 OK
 ```
 
 The 354 tests include the new envelope, inbox, status, replay, board, and
 hostile-snapshot suites plus every pre-existing contract and gauntlet. Local D
-and the publication performance gate now pass. F.4 awaits Fable's independent
+and the publication performance gate now pass. F.4 awaits the architect's independent
 exact-SHA re-verification; this local evidence does not manufacture that
 external verdict.
 
@@ -341,13 +341,13 @@ The governed repository gate was then run against the same implementation and
 evidence worktree:
 
 ```text
-PYTHONPYCACHEPREFIX=/tmp/slipway-hm3h-fix-selftest3 python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-selftest3 python3 -m slip.selftest
 Ran 354 tests in 30.241s
 OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 ```
 
-## Fable gate — fix-round (2026-08-01)
+## the architect gate — fix-round (2026-08-01)
 
 Independent re-verification in a SHA-bound scratch checkout at
 `3ed8f846180038405f63a736f7b90cad23c9934f`:
@@ -371,4 +371,4 @@ Independent re-verification in a SHA-bound scratch checkout at
 **VERDICT: PUSH GO at exact SHA 3ed8f84. F.4 is CLOSED on this evidence;
 the publication performance gate is no longer held open by HM-3H.** The
 Gauntlet (A–G + fix-round) is complete. Lane stands down for re-charter per
-the succession ruling. — Fable
+the succession ruling. — the architect

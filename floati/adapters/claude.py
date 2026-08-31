@@ -20,6 +20,7 @@ from .codex_live import (
     _secure_directory,
     CodexAppServerAdapter,
 )
+from .headless_template import _PERMISSION_MARKERS
 
 
 MAX_CLAUDE_OUTPUT_BYTES = 1024 * 1024
@@ -36,7 +37,6 @@ _HEADLESS_ARGUMENTS = (
     "--tools",
     "Read,Write,Edit",
 )
-_PERMISSION_MARKERS = ("approval", "permission", "requires user", "not allowed")
 
 
 @dataclass

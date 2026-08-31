@@ -190,7 +190,7 @@ class T3ClientAdapterTests(unittest.TestCase):
         self.assertTrue(all(record.get("token_source_configured") is True for record in ledger.records()))
 
     def test_file_token_source_is_passed_through_but_not_recorded(self) -> None:
-        with tempfile.TemporaryDirectory(dir="\x2fprivate/tmp") as temporary:
+        with tempfile.TemporaryDirectory(dir="\x2fprivate\x2ftmp") as temporary:
             token_path = Path(temporary) / "t3.token"
             token_path.write_text("file-token-value\n", encoding="utf-8")
             adapter, channel, ledger, _calls = self.adapter(

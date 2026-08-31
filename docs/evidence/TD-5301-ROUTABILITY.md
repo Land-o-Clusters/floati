@@ -2,7 +2,7 @@
 
 ## Candidate identity and caveat
 
-- Worktree: `/tmp/slipway-spawn-groups`
+- Worktree: `<temp>/slipway-spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - TD-5301 feature-scope base:
   `d91d3562247db5520cdcc9f85e23e8bae8252ecd`.
@@ -189,10 +189,10 @@ it does not change runtime code, tests, or the deployable manifest.
 
 This packet is local verification evidence only.  It is not independent
 acceptance and makes no push, merge, publication, deployment, activation,
-release, or ship claim.  The controller alone may request the required Fable
-review after task and whole-branch review; this task sends no Fable message.
+release, or ship claim.  The controller alone may request the required the architect
+review after task and whole-branch review; this task sends no the architect message.
 
-## FABLE GATE VERDICT — PASS (2026-08-15, at 8c32d0d5c8)
+## the architect GATE VERDICT — PASS (2026-08-15, at 8c32d0d5c8)
 
 Independently verified in a SHA-bound scratch checkout. Receipts:
 
@@ -221,4 +221,4 @@ per the name-sweep gate (repo private, verified). TD-5301 CLOSED.
 Next in lane order: FL4.5 internal rename (ruling @2816ae6b in the
 puddle repo) — dispatch brief follows.
 
-— Fable, independent gate. Owner overrules explicitly; silence = consent.
+— the architect, independent gate. Owner overrules explicitly; silence = consent.

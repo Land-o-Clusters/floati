@@ -10,7 +10,7 @@
 Command:
 
 ```bash
-PYTHONPYCACHEPREFIX=/tmp/slipway-pycache python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/slipway-pycache python3 -m slip.selftest
 ```
 
 Observed result at the implementation SHA:
@@ -33,7 +33,7 @@ Commands:
 
 ```bash
 git diff --check d0ebbe6..HEAD
-PYTHONPYCACHEPREFIX=/tmp/slipway-pycache python3 -m py_compile slip/*.py tests/*.py
+PYTHONPYCACHEPREFIX=<temp>/slipway-pycache python3 -m py_compile slip/*.py tests/*.py
 ```
 
 Observed result: both exited `0` with no diagnostic output.
@@ -85,7 +85,7 @@ conformance, activation, deployment, or completion claim in this evidence.
 
 ## Evidence ceilings before push
 
-- Fable push gate: **PENDING** for implementation SHA `d1b9291`.
+- the architect push gate: **PENDING** for implementation SHA `d1b9291`.
 - Hosted CI: **NOT OBSERVED** because the branch has not been pushed.
 - Remote branch equality: **NOT OBSERVED** because push remains gated.
 - Installed/deployed bundle: **NOT DEPLOYED / NOT CLAIMED**.

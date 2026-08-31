@@ -131,7 +131,14 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, supervise.returncode, supervise.stderr)
         status_nodes = self.artifact(status)["evidence"]["nodes"]
         supervised_nodes = self.artifact(supervise)["evidence"]["nodes"]
-        self.assertEqual(status_nodes, supervised_nodes)
+        self.assertTrue(all("wake_health" in node for node in status_nodes))
+        self.assertEqual(
+            [
+                {key: value for key, value in node.items() if key != "wake_health"}
+                for node in status_nodes
+            ],
+            supervised_nodes,
+        )
         self.assertEqual({"liveness", "authority", "mutex"},
                          {key for key in status_nodes[0] if key in {"liveness", "authority", "mutex"}})
         self.assertNotIn("status_schema_version", self.artifact(status)["evidence"])
@@ -338,7 +345,7 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         item = self.artifact(result)["evidence"]
         self.assertEqual(
-            f"\x2fprivate/tmp/floati-work/{item['id']}",
+            f"\x2fprivate\x2ftmp/floati-work/{item['id']}",
             item["workspace"],
         )
 

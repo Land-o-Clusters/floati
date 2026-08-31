@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "receipts_read_bundle",
+  "tenant_id": "fleet",
+  "snapshot_at": "2026-08-29T12:00:00.000Z",
+  "grant_id": "confluence-grant-01a05300000070008000000000000000",
+  "entries": [
+    {
+      "sequence": 1,
+      "source": "receipts/deliveries/builder-b.jsonl",
+      "source_ordinal": 1,
+      "record": {
+        "schema_version": 0,
+        "id": "delivery-01a05300000070008000000000000000",
+        "tenant_id": "fleet",
+        "timestamp": "2026-08-29T12:00:00.000Z",
+        "kind": "delivery_receipt",
+        "recipient": "builder-b",
+        "item_ids": [
+          "msg-01a05300000070008000000000000000"
+        ],
+        "presentation_count": 1
+      }
+    }
+  ]
+}

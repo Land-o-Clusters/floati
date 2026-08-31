@@ -1,17 +1,17 @@
 # Weekend P0 — Floati Codex Stop waiter
 
-Status: **DRAFT — INTEGRATOR EVIDENCE, FABLE RESTAMP PENDING**
+Status: **DRAFT — INTEGRATOR EVIDENCE, the architect RESTAMP PENDING**
 
 Date: 2026-08-27
 
 ## Identity
 
-- Node: `lane-floati`
+- Node: `build lane`
 - Branch: `integrate/weekend-20260828`
 - Ratified branch-cut base: `932e377e9b88d801dfd545e1c238c50af5ec58ba`
 - Car 2 banked tip: `6fa5af3f4ec867168b967316e117f8f4a99dbc20`
 - P0 implementation commit: `94f19c9aacc9dc19ec6a2d9fbc29b81883671075`
-- Live Floati root: `~/.floati-bus/puddle-fleet`
+- Live Floati root: `~/.floati-bus/the fleet`
 
 ## RED-first safety proof
 
@@ -138,7 +138,7 @@ node then supplied the governed live ping.
 - Reply-bound proof envelope: `msg-01a0455ff5a97af094854ef668a6a26a`.
 
 The waiter observed and emitted the ping before the later inbox delivery. This
-closes the hand-delivery era for `lane-floati`.
+closes the hand-delivery era for `build lane`.
 
 ## Fences
 
@@ -146,4 +146,4 @@ closes the hand-delivery era for `lane-floati`.
 - No foreign-bus artifact, target, marker, or backup was modified.
 - No OpenCode restart occurred.
 - No README edit was made by the integrator.
-- This evidence copy remains DRAFT-stamped for Fable's gate.
+- This evidence copy remains DRAFT-stamped for the architect's gate.

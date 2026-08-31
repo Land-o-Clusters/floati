@@ -80,8 +80,8 @@ Observed: 234 tests passed; selftest emitted
 `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`;
 direct manifest verification printed `[]`; and diff check was clean.
 `docs/COPY-LEDGER.md` was regenerated from the registered visible-string
-catalog and remains `PROVISIONAL — FABLE VOICE PASS PENDING`.
+catalog and remains `PROVISIONAL — the architect VOICE PASS PENDING`.
 
-Fable's exact-tip gate and the subsequent push are still external release
+the architect's exact-tip gate and the subsequent push are still external release
 steps for this evidence document; hosted CI and live Pi proof remain unclaimed
 unless separately observed.

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/workspace-seat-declaration.schema.json",
+  "title": "Workspace Seat Declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "root",
+    "node_id",
+    "topology",
+    "coordinator",
+    "coordinator_authority",
+    "owner_tier"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "root": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "topology": {
+      "type": "string",
+      "enum": [
+        "star",
+        "mesh"
+      ]
+    },
+    "coordinator": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "coordinator_authority": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "dispatch_bounded_work",
+          "gate_results_before_merge",
+          "decide_non_owner_tier_questions"
+        ]
+      }
+    },
+    "owner_tier": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "publishing",
+          "credentials",
+          "key_custody"
+        ]
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
 from .cursor import SparseCursor
 from .copy import (
@@ -24,6 +24,7 @@ from .copy import (
     EFFECT_PLAN_DIGEST_INVALID_DETAIL,
     EFFECT_RUN_INVALID_DETAIL,
 )
+from .command_scope import CommandScope, resolve_command_scope
 from .deploy import DeploymentWriter
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .events import EventLog
@@ -37,6 +38,13 @@ from .projection import (
 )
 from .registry import Registry
 from .root import FloatiRoot, resolve_command_root
+from .seat_declaration import (
+    COORDINATOR_AUTHORITIES,
+    OWNER_TIERS,
+    TOPOLOGIES,
+    require_declared_coordinate,
+    validate_governance_options,
+)
 from .supervisor import Supervisor
 from .work import WorkLog
 from .workers import WorkerRunner
@@ -103,6 +111,123 @@ def _root(path: Optional[str], *, create: bool = False) -> FloatiRoot:
     return resolve_command_root(path, create=create)
 
 
+def _with_scope(scope: CommandScope, evidence: Dict[str, Any]) -> Dict[str, Any]:
+    return {**evidence, "scope": scope.evidence()}
+
+
+def _scoped_failure(
+    scope: CommandScope,
+    exc: Union[ProtocolRefusal, IntegrityFailure, DurabilityFailure],
+) -> HandlerResult:
+    if isinstance(exc, ProtocolRefusal):
+        return (
+            "refused",
+            _with_scope(scope, _protocol_refusal_evidence(exc)),
+            CONFIGURATION_REFUSED,
+        )
+    evidence = _with_scope(scope, {"code": exc.code, "detail": exc.detail})
+    if isinstance(exc, IntegrityFailure):
+        return "malformed_evidence", evidence, MALFORMED_EVIDENCE
+    return "degraded", evidence, DEGRADED
+
+
+def _confluence_grant(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import ConfluenceGrantLedger
+
+    record = ConfluenceGrantLedger(_root(args.root)).grant(
+        args.consumer, args.idempotency_key)
+    return "ok", {
+        "grant_id": record["id"],
+        "consumer": record["consumer"],
+        "state": record["state"],
+    }, OK
+
+
+def _confluence_revoke(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import ConfluenceGrantLedger
+
+    record = ConfluenceGrantLedger(_root(args.root)).revoke(
+        args.consumer, args.idempotency_key)
+    return "ok", {
+        "grant_id": record["id"],
+        "consumer": record["consumer"],
+        "state": record["state"],
+        "predecessor_receipt_id": record["predecessor_receipt_id"],
+    }, OK
+
+
+def _confluence_status(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import ConfluenceGrantLedger
+
+    grants = ConfluenceGrantLedger(_root(args.root)).grants()
+    return "ok", {
+        "grants": [
+            {
+                "grant_id": record["id"],
+                "consumer": record["consumer"],
+                "state": record["state"],
+                "timestamp": record["timestamp"],
+            }
+            for record in grants
+        ]
+    }, OK
+
+
+def _confluence_adopt(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import confluence_adopt
+
+    record = confluence_adopt(
+        _root(args.root),
+        consumer=args.consumer,
+        session=args.session,
+        manager=args.manager,
+        authority_subject=args.authority_subject,
+        authority_epoch=args.authority_epoch,
+        authority_expires_at=args.authority_expires_at,
+    )
+    return "ok", {
+        "adoption_id": record["id"],
+        "session_id": record["session_id"],
+        "mode": record["mode"],
+        "manager_node_id": record["manager_node_id"],
+        "lease_subject": record["lease_subject"],
+        "lease_epoch": record["lease_epoch"],
+    }, OK
+
+
+def _confluence_release(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import confluence_release
+
+    record = confluence_release(
+        _root(args.root),
+        consumer=args.consumer,
+        session=args.session,
+        manager=args.manager,
+        authority_epoch=args.authority_epoch,
+    )
+    return "ok", {
+        "release_id": record["id"],
+        "session_id": record["session_id"],
+        "adoption_id": record["adoption_id"],
+        "manager_node_id": record["manager_node_id"],
+    }, OK
+
+
+def _confluence_bundle(args: argparse.Namespace) -> HandlerResult:
+    from .confluence import materialize_bundle
+
+    out = materialize_bundle(
+        _root(args.root), consumer=args.consumer, out=Path(args.out))
+    document = json.loads(out.read_text(encoding="utf-8"))
+    return "ok", {
+        "grant_id": document["grant_id"],
+        "consumer": args.consumer,
+        "out": str(out),
+        "entries": len(document["entries"]),
+        "snapshot_at": document["snapshot_at"],
+    }, OK
+
+
 def _init(args: argparse.Namespace) -> HandlerResult:
     if args.solo is None and args.harness is not None:
         raise ProtocolRefusal("arguments_invalid", "--harness requires --solo")
@@ -113,8 +238,22 @@ def _init(args: argparse.Namespace) -> HandlerResult:
         solo_inputs = validate_solo_bootstrap_inputs(
             args.solo, "solo" if args.harness is None else args.harness
         )
+    governance = validate_governance_options(
+        args.topology,
+        args.coordinator,
+        args.coordinator_authority,
+        args.owner_tier,
+    )
     root = _root(args.root, create=True)
     evidence: Dict[str, Any] = {"root": str(root.path), "tenant_id": root.tenant_id}
+    if governance is not None:
+        recorded = Registry(root).record_governance(
+            topology=governance[0],
+            coordinator=governance[1],
+            coordinator_authority=governance[2],
+            owner_tier=governance[3],
+        )
+        evidence["governance"] = recorded.artifact()
     if solo_inputs is not None:
         from .solo import initialize_solo
 
@@ -154,6 +293,22 @@ def _journal_verify(args: argparse.Namespace) -> HandlerResult:
     journal = _journal(args)
     checkpoint = journal.read_checkpoint(Path(args.checkpoint))
     return "ok", journal.verify(checkpoint, historical=args.historical), OK
+
+
+def _repair_quarantine(args: argparse.Namespace) -> HandlerResult:
+    from .ledger_repair import LedgerRepair
+
+    root = _root(args.root)
+    receipt = LedgerRepair(root).quarantine(
+        args.ledger,
+        args.record_id,
+        key=args.idempotency_key,
+    )
+    return "ok", {
+        "root": str(root.path),
+        "tenant_id": root.tenant_id,
+        "receipt": receipt,
+    }, OK
 
 
 def _signature_sign(args: argparse.Namespace) -> HandlerResult:
@@ -224,9 +379,21 @@ def _verify(args: argparse.Namespace) -> HandlerResult:
 
 
 def _inbox(args: argparse.Namespace) -> HandlerResult:
-    root = _root(args.root)
-    messages, receipt = EventLog(root).present(args.recipient)
-    evidence = {"messages": messages, "receipt": receipt}
+    root, scope = resolve_command_scope(args.root)
+    try:
+        identity = require_declared_coordinate(Path.cwd(), args.recipient, root)
+        messages, receipt = EventLog(root).present(args.recipient)
+    except (ProtocolRefusal, IntegrityFailure, DurabilityFailure) as exc:
+        if isinstance(exc, ProtocolRefusal) and exc.code == "unknown_node":
+            exc = ProtocolRefusal(
+                "recipient_unregistered",
+                exc.detail,
+                exc.remedy,
+            )
+        return _scoped_failure(scope, exc)
+    evidence = _with_scope(
+        scope, {"messages": messages, "receipt": receipt, **identity}
+    )
     if not messages:
         return "intentional_silence", evidence, INTENTIONAL_SILENCE
     return "ok", evidence, OK
@@ -327,17 +494,46 @@ def _parse_time(value: Optional[str]) -> Optional[datetime]:
 
 
 def _status(args: argparse.Namespace) -> HandlerResult:
-    projection = FleetProjection(_root(args.root))
-    snapshot = (
-        projection.status_artifact(_current_time())
-        if args.json
-        else projection.snapshot(_current_time())
-    )
+    root, scope = resolve_command_scope(args.root)
+    consumer = getattr(args, "consumer", None)
+    if consumer is not None:
+        # Confluence dispatch: a consumer that declares itself on the
+        # read contract must hold an active grant; the operator path
+        # (no --consumer) stays unchanged.
+        from .confluence import ConfluenceGrantLedger
+
+        ConfluenceGrantLedger(root).require_active(consumer)
+    projection = FleetProjection(root)
+    try:
+        snapshot = (
+            projection.status_artifact(_current_time(), scope=scope)
+            if args.json
+            else projection.snapshot(_current_time(), scope=scope)
+        )
+    except (ProtocolRefusal, IntegrityFailure, DurabilityFailure) as exc:
+        return _scoped_failure(scope, exc)
     shadow = observe_installer_shadow(getattr(args, "destination", None))
     snapshot["installer_shadow"] = shadow
     if args.json:
         snapshot["status_schema_version"] = 1
     return "ok", snapshot, observation_exit_code(shadow)
+
+
+def _snapshot_bundle(args: argparse.Namespace) -> HandlerResult:
+    from .support_bundle import create_support_bundle
+
+    evidence = create_support_bundle(
+        root=_root(args.root),
+        source=Path(__file__).resolve().parents[1],
+        out=Path(args.out),
+        lines=args.lines,
+        yes=args.yes,
+        stream=sys.stdout,
+        input_stream=sys.stdin,
+    )
+    if not evidence["written"]:
+        return "intentional_silence", evidence, INTENTIONAL_SILENCE
+    return "ok", evidence, OK
 
 
 def _typed_effect_filters(args: argparse.Namespace) -> None:
@@ -1041,7 +1237,67 @@ def _parser() -> _ArtifactParser:
     init.add_argument("--root")
     init.add_argument("--solo")
     init.add_argument("--harness")
+    init.add_argument("--topology", choices=TOPOLOGIES)
+    init.add_argument("--coordinator")
+    init.add_argument(
+        "--coordinator-authority",
+        action="append",
+        choices=COORDINATOR_AUTHORITIES,
+    )
+    init.add_argument("--owner-tier", action="append", choices=OWNER_TIERS)
     init.set_defaults(handler=_init)
+
+    confluence = commands.add_parser("confluence")
+    confluence_commands = confluence.add_subparsers(
+        dest="confluence_command", required=True
+    )
+    confluence_grant = confluence_commands.add_parser(
+        "grant", floati_mcp_exposure="read"
+    )
+    confluence_grant.add_argument("--root", required=True)
+    confluence_grant.add_argument("--consumer", required=True)
+    confluence_grant.add_argument("--idempotency-key", required=True)
+    confluence_grant.set_defaults(handler=_confluence_grant)
+
+    confluence_revoke = confluence_commands.add_parser(
+        "revoke", floati_mcp_exposure="read"
+    )
+    confluence_revoke.add_argument("--root", required=True)
+    confluence_revoke.add_argument("--consumer", required=True)
+    confluence_revoke.add_argument("--idempotency-key", required=True)
+    confluence_revoke.set_defaults(handler=_confluence_revoke)
+
+    confluence_status = confluence_commands.add_parser(
+        "status", floati_mcp_exposure="read"
+    )
+    confluence_status.add_argument("--root", required=True)
+    confluence_status.set_defaults(handler=_confluence_status)
+
+    confluence_bundle = confluence_commands.add_parser(
+        "bundle", floati_mcp_exposure="read"
+    )
+    confluence_bundle.add_argument("--root", required=True)
+    confluence_bundle.add_argument("--consumer", required=True)
+    confluence_bundle.add_argument("--out", required=True)
+    confluence_bundle.set_defaults(handler=_confluence_bundle)
+
+    confluence_adopt = confluence_commands.add_parser("adopt")
+    confluence_adopt.add_argument("--root", required=True)
+    confluence_adopt.add_argument("--consumer", required=True)
+    confluence_adopt.add_argument("--session", required=True)
+    confluence_adopt.add_argument("--manager", required=True)
+    confluence_adopt.add_argument("--authority-subject", required=True)
+    confluence_adopt.add_argument("--authority-epoch", type=int, required=True)
+    confluence_adopt.add_argument("--authority-expires-at", required=True)
+    confluence_adopt.set_defaults(handler=_confluence_adopt)
+
+    confluence_release = confluence_commands.add_parser("release")
+    confluence_release.add_argument("--root", required=True)
+    confluence_release.add_argument("--consumer", required=True)
+    confluence_release.add_argument("--session", required=True)
+    confluence_release.add_argument("--manager", required=True)
+    confluence_release.add_argument("--authority-epoch", type=int, required=True)
+    confluence_release.set_defaults(handler=_confluence_release)
 
     register = commands.add_parser("register")
     register.add_argument("--root")
@@ -1077,6 +1333,15 @@ def _parser() -> _ArtifactParser:
     journal_verify.add_argument("--historical", action="store_true")
     journal_verify.add_argument("--json", action="store_true")
     journal_verify.set_defaults(handler=_journal_verify)
+
+    repair = commands.add_parser("repair")
+    repair_commands = repair.add_subparsers(dest="repair_command", required=True)
+    repair_quarantine = repair_commands.add_parser("quarantine")
+    repair_quarantine.add_argument("--root", required=True)
+    repair_quarantine.add_argument("--ledger", required=True)
+    repair_quarantine.add_argument("--record-id", required=True)
+    repair_quarantine.add_argument("--idempotency-key", required=True)
+    repair_quarantine.set_defaults(handler=_repair_quarantine)
 
     signature = commands.add_parser("signature")
     signature_commands = signature.add_subparsers(
@@ -1181,6 +1446,13 @@ def _parser() -> _ArtifactParser:
     status.add_argument("--destination")
     status.add_argument("--json", action="store_true")
     status.set_defaults(handler=_status)
+
+    snapshot_bundle = commands.add_parser("snapshot")
+    snapshot_bundle.add_argument("--root", required=True)
+    snapshot_bundle.add_argument("--out", required=True)
+    snapshot_bundle.add_argument("--lines", type=int, default=240)
+    snapshot_bundle.add_argument("--yes", action="store_true")
+    snapshot_bundle.set_defaults(handler=_snapshot_bundle)
 
     effects = commands.add_parser("effects", floati_mcp_exposure="read")
     effects.add_argument("--root")
@@ -1422,8 +1694,10 @@ def _parser() -> _ArtifactParser:
     update_fleet_apply.add_argument("--idempotency-key", required=True)
     update_fleet_apply.set_defaults(handler=_fleet_update_apply)
 
+    from .bus_epoch import register_cli as register_epoch
     from .grants import register_cli as register_grant
 
+    register_epoch(commands)
     register_grant(commands)
     register_admin_commands(commands)
     from .context import register_cli as register_context
@@ -1462,11 +1736,15 @@ def _emit(
 
 
 def _protocol_refusal_evidence(exc: ProtocolRefusal) -> Dict[str, object]:
-    return {
+    evidence: Dict[str, object] = {
         "code": exc.code,
         "detail": exc.detail,
         "remedy": exc.remedy or None,
     }
+    context = getattr(exc, "artifact_context", None)
+    if isinstance(context, dict) and set(context) == {"root", "tenant_id"}:
+        evidence = {**context, **evidence}
+    return evidence
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

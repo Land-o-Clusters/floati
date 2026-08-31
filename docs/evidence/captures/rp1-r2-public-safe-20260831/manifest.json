@@ -1,0 +1,116 @@
+{
+  "captured_at": "2026-08-31T16:24:11.666Z",
+  "captures": [
+    {
+      "files": [
+        {
+          "bytes": 862,
+          "path": "harbor-board-standard.txt",
+          "sha256": "f14c86e53e05f4ec2c4b0abe7aeabcdde83e1bab1bdc704596e02be88b8c07cb"
+        },
+        {
+          "bytes": 768,
+          "path": "harbor-board-plain.txt",
+          "sha256": "061ae49debb0f2712d8c270f0e1ffdfcaf970e5b3bbd313548250074ea54e905"
+        },
+        {
+          "bytes": 2398,
+          "path": "harbor-board-dark.svg",
+          "sha256": "0061fc001c9f571d2ab03c37e8e4e4ca559d96b7f6cdd0a1a1b34c9e001f6b8b"
+        },
+        {
+          "bytes": 2399,
+          "path": "harbor-board-light.svg",
+          "sha256": "0023a079401a53cab6ff109745bfdf80f112bd844faf92d600e97ff565d06c62"
+        }
+      ],
+      "name": "harbor-board",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/harbor-board"
+    },
+    {
+      "declared_roots": "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/declared-roots.json",
+      "files": [
+        {
+          "bytes": 474,
+          "path": "harbor-chart-multibus-standard.txt",
+          "sha256": "901ae615c8d9c8e7e3ad8739e29e6b2387f0bdd45b289ba492f53d818c9bd919"
+        },
+        {
+          "bytes": 1461,
+          "path": "harbor-chart-multibus-dark.svg",
+          "sha256": "3d0454b1f7a28d0e1bf6bae2ec7c8ea3a094d9ce44295771a392711e421ab6c9"
+        },
+        {
+          "bytes": 1462,
+          "path": "harbor-chart-multibus-light.svg",
+          "sha256": "4df48b21a3b576dd0f44f6e65a424142a50fc0d8cdea77bd22596c87abb0e0f9"
+        }
+      ],
+      "name": "harbor-chart-multibus",
+      "real_ledger": true,
+      "roots": [
+        "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/harbor-upstream",
+        "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/harbor-downstream"
+      ]
+    },
+    {
+      "files": [
+        {
+          "bytes": 755,
+          "path": "doctor-delivery-health-standard.txt",
+          "sha256": "160bfbc8b3503ced3d248d12455ddeecbe4dffcbaf73835925109de2dcea4001"
+        },
+        {
+          "bytes": 2046,
+          "path": "doctor-delivery-health-dark.svg",
+          "sha256": "8205810f70d6f96bdf48e3fdfb851476e53afbd9a3928fb92930d098ad08e849"
+        },
+        {
+          "bytes": 2047,
+          "path": "doctor-delivery-health-light.svg",
+          "sha256": "776eb47730b51f78bda017510e8000cde17ddeea53abad02ffe745c6d9322aaf"
+        }
+      ],
+      "name": "doctor-delivery-health",
+      "probe_budget_seconds": 1,
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rp1-r2-aa305ce/doctor"
+    },
+    {
+      "animated": true,
+      "event_count": 14,
+      "files": [
+        {
+          "bytes": 1765,
+          "path": "flight-recorder-replay-standard.txt",
+          "sha256": "23ae71efce6925332ae541b655f4a57a11e01be7ee1e0869b9f1e34430f319af"
+        },
+        {
+          "bytes": 1489,
+          "path": "flight-recorder-replay-plain.txt",
+          "sha256": "a3e61c6d7a1c5a9cc560f47a1d889e6df735205ac801a8e4ffddcaab7a6f2e64"
+        },
+        {
+          "bytes": 833534,
+          "path": "flight-recorder-replay-dark.gif",
+          "sha256": "04a39f5367fb365413470cac255f90eb727a97f5ad99748fc2ccd039eccd955e"
+        },
+        {
+          "bytes": 835094,
+          "path": "flight-recorder-replay-light.gif",
+          "sha256": "5b04e6ea6116d70a9751d53e50af84a5aa3a5078b5be9e0978c7bed79755dc68"
+        }
+      ],
+      "frame_count": 14,
+      "name": "flight-recorder-replay",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch/flight-recorder"
+    }
+  ],
+  "generator": "scripts/capture-readme-real-ledgers.py",
+  "schema_version": 0,
+  "scratch": "/opt/homebrew/var/floati-rp1-r2-aa305ce/scratch",
+  "source_sha": "aa305cefd3ca4a295568c54a2e023ec381e860a3",
+  "synthetic": false
+}

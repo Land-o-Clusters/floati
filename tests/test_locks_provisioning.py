@@ -80,7 +80,7 @@ class ExternalResourceHook(FileHook):
 
     def prepare(self, staging_root: Path) -> dict[str, object]:
         self.prepared_root = staging_root
-        return {"resource": "\x2fprivate/tmp/outside-locks-staging"}
+        return {"resource": "\x2fprivate\x2ftmp/outside-locks-staging"}
 
 
 class SymlinkResourceHook(FileHook):

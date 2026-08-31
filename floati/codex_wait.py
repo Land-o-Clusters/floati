@@ -19,11 +19,34 @@ from .codex_wait_contract import (
 )
 from .ids import uuid7_hex
 from .wake_control import validate_session_id
+from .wake_exit import WakeExitLedger
 from .wake_hold import WakeAttemptLedger, WakeHoldController
 
 
 BREAKER_WINDOW_SECONDS = 60.0
 BREAKER_MAX_INVOCATIONS = 20
+
+
+def _record_exit(
+    participant: object,
+    *,
+    session_digest: str,
+    reason_code: str,
+    waited_seconds: int,
+    invocation_id: str,
+) -> None:
+    """Best-effort exit testimony must never widen the Stop-hook outcome."""
+
+    try:
+        WakeExitLedger(participant.root).record(
+            node_id=participant.binding.node_id,
+            session_digest=session_digest,
+            reason_code=reason_code,
+            waited_seconds=waited_seconds,
+            idempotency_key=f"{invocation_id}-exit-{reason_code}",
+        )
+    except Exception:
+        pass
 
 
 def _breaker_tripped(root: object, node_id: str, *, now: float) -> bool:
@@ -89,6 +112,8 @@ def run_stop_waiter(
         session_id = validate_session_id(hook_payload.get("session_id"))
     except Exception:
         return 0
+    session_digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
+    invocation_id = "codex-stop-" + uuid7_hex()
     try:
         session_authority = CodexWaitSessionLedger(participant.root).participate(
             participant.binding,
@@ -96,6 +121,11 @@ def run_stop_waiter(
             session_id,
         )
     except Exception:
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="integrity_failure", waited_seconds=0,
+            invocation_id=invocation_id,
+        )
         return 0
     if session_authority is None:
         return 0
@@ -109,25 +139,69 @@ def run_stop_waiter(
         from .wake_control import is_session_paused
 
         if is_session_paused(participant.root, participant.binding.node_id, session_id):
+            _record_exit(
+                participant, session_digest=session_digest,
+                reason_code="paused", waited_seconds=0,
+                invocation_id=invocation_id,
+            )
             return 0
     except Exception:
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="integrity_failure", waited_seconds=0,
+            invocation_id=invocation_id,
+        )
         return 0
-    session_digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
     if _breaker_tripped(
         participant.root,
         participant.binding.node_id,
         now=wall_time(),
     ):
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="breaker", waited_seconds=0,
+            invocation_id=invocation_id,
+        )
         return 0
     deadline_seconds = consent.get("wait_deadline_seconds")
     if not isinstance(deadline_seconds, int) or isinstance(deadline_seconds, bool):
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="integrity_failure", waited_seconds=0,
+            invocation_id=invocation_id,
+        )
         return 0
     if not isinstance(poll_interval_seconds, (int, float)) or poll_interval_seconds <= 0:
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="integrity_failure", waited_seconds=0,
+            invocation_id=invocation_id,
+        )
         return 0
     started = monotonic()
     deadline = started + deadline_seconds
     controller = WakeHoldController(participant.root)
     while True:
+        try:
+            current_authority = CodexWaitSessionLedger(
+                participant.root
+            ).participate(participant.binding, consent, session_id)
+        except Exception:
+            _record_exit(
+                participant, session_digest=session_digest,
+                reason_code="integrity_failure",
+                waited_seconds=max(0, int(monotonic() - started)),
+                invocation_id=invocation_id,
+            )
+            return 0
+        if current_authority is None:
+            _record_exit(
+                participant, session_digest=session_digest,
+                reason_code="not_claimant",
+                waited_seconds=max(0, int(monotonic() - started)),
+                invocation_id=invocation_id,
+            )
+            return 0
         invocation_key = "codex-stop-" + uuid7_hex()
         try:
             artifact = controller.evaluate(
@@ -135,6 +209,12 @@ def run_stop_waiter(
                 idempotency_key=invocation_key,
             )
         except Exception:
+            _record_exit(
+                participant, session_digest=session_digest,
+                reason_code="integrity_failure",
+                waited_seconds=max(0, int(monotonic() - started)),
+                invocation_id=invocation_id,
+            )
             return 0
         state = artifact.get("state")
         if state == "fresh_work" and artifact.get("wake_required"):
@@ -174,6 +254,11 @@ def run_stop_waiter(
         now = monotonic()
         if now >= deadline:
             waited = max(0, int(now - started))
+            _record_exit(
+                participant, session_digest=session_digest,
+                reason_code="exhausted", waited_seconds=waited,
+                invocation_id=invocation_id,
+            )
             try:
                 CodexWaitReceiptLedger(participant.root).record_exhaustion(
                     node_id=participant.binding.node_id,

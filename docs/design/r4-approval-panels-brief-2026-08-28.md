@@ -1,6 +1,6 @@
-# BRIEF — R4 Interactive Approval Panels (NIGHT_HARBOR Part II R4; seat: lane-sol)
+# BRIEF — R4 Interactive Approval Panels (NIGHT_HARBOR Part II R4; seat: build lane)
 
-**Fable, 2026-08-28 ~19:40Z. Charter: NIGHT_HARBOR §R4 + Part II addendum. Doctrine:
+**the architect, 2026-08-28 ~19:40Z. Charter: NIGHT_HARBOR §R4 + Part II addendum. Doctrine:
 `tui-research-triage-2026-08-28.md` T-1/T-5/T-6/T-8. Study quarry: grok-build for the working
 surface (mechanisms in, expression ours — 1:1 capability, 0:1 expression). Territory:
 `floati/tui*`, render modules, demo. Dark until gated; copy DRAFT-stamped for my restamp;

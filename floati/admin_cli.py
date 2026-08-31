@@ -504,10 +504,60 @@ def _wake_daemon_display(artifact: Mapping[str, Any]) -> str:
     }.get(state, WAKE_DAEMON_UNKNOWN_DISPLAY)
 
 
+def _bind_resume_probe(
+    coordinate,
+    args: argparse.Namespace,
+    executable: Path,
+    workspace: Path,
+    session: str,
+) -> Optional[str]:
+    """WD-R5b (Am.1): a turn-costing resume probe is a consent surface, not a
+    silent cost. Bind offers it - showing what will run and what it costs -
+    and asks; --yes is the exception, not the interface. Declining produces a
+    recorded absence (resume_unproven); probe failure refuses the bind."""
+    from .errors import ProtocolRefusal
+    from .wake_daemon import WAKE_BREAKER_REMEDY
+    from .wake_daemon_adapters import (
+        PROBE_DEADLINE_SECONDS,
+        PROBE_REASON,
+        resume_probe_class,
+        wake_adapter_for,
+    )
+    import time
+
+    if resume_probe_class(coordinate.harness) != "costs_one_turn":
+        return None
+    adapter = wake_adapter_for(coordinate.root, coordinate.node_id, coordinate.harness)
+    if not getattr(args, "yes", False):
+        sys.stderr.write(
+            "floati wake daemon bind: this adapter's resume probe costs one turn.\n"
+            f"It will run ONE resume against session {session!r} (bounded at "
+            f"{PROBE_DEADLINE_SECONDS}s)\nto prove the session can wake before "
+            "binding. Run the probe now? [y/N]: "
+        )
+        sys.stderr.flush()
+        answer = sys.stdin.readline().strip().casefold()
+        if answer not in ("y", "yes"):
+            return "resume_unproven"
+    started = time.monotonic()
+    result = adapter.probe_resume(
+        executable, workspace, session, PROBE_REASON, PROBE_DEADLINE_SECONDS
+    )
+    observed = round(time.monotonic() - started, 3)
+    if result.outcome != "woke":
+        raise ProtocolRefusal(
+            "wake_bind_target_unresumable",
+            f"resume probe failed after {observed}s "
+            f"(outcome={result.outcome}, reason={result.reason_code}); "
+            f"{WAKE_BREAKER_REMEDY}",
+        )
+    return "resume_proven"
+
+
 def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
     from .copy import WAKE_DAEMON_BOUND_DISPLAY, WAKE_DAEMON_GROK_BOUND_DISPLAY
     from .errors import ProtocolRefusal
-    from .wake_daemon_adapters import adapter_contract_digest
+    from .wake_daemon_adapters import adapter_contract_digest, resume_probe_class
     from .wake_daemon_contract import AdapterBindingStore
 
     coordinate = _wake_daemon_coordinate(args)
@@ -516,14 +566,26 @@ def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
             "wake_daemon_codex_binding_source_invalid",
             "Codex daemon binding is accepted only from trusted waiter participation",
         )
+    # WD-R5a: an adapter that declares no resume_probe class cannot be bound.
+    probe_class = resume_probe_class(coordinate.harness)
+    workspace_path = Path(args.workspace)
+    executable_path = Path(args.executable)
+    resume_state = (
+        None
+        if probe_class != "costs_one_turn"
+        else _bind_resume_probe(
+            coordinate, args, executable_path, workspace_path, args.session
+        )
+    )
     artifact = AdapterBindingStore(coordinate.root).write(
         coordinate,
         session_id=args.session,
-        workspace=Path(args.workspace),
-        executable=Path(args.executable),
+        workspace=workspace_path,
+        executable=executable_path,
         adapter_version="1",
         adapter_digest=adapter_contract_digest(coordinate.harness),
         binding_epoch=args.binding_epoch,
+        resume_state=resume_state,
     )
     artifact["display"] = (
         WAKE_DAEMON_GROK_BOUND_DISPLAY
@@ -645,7 +707,7 @@ def _add_wake_daemon_identity(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
     parser.add_argument("--as", dest="actor", required=True)
     parser.add_argument(
-        "--harness", choices=("codex", "cursor", "grok-build"), required=True
+        "--harness", choices=("codex", "cursor", "grok-build", "zcode"), required=True
     )
 
 
@@ -814,6 +876,10 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     daemon_bind.add_argument("--workspace", required=True)
     daemon_bind.add_argument("--executable", required=True)
     daemon_bind.add_argument("--binding-epoch", type=int, required=True)
+    daemon_bind.add_argument(
+        "--yes", action="store_true",
+        help="consent to the turn-costing resume probe without the interactive ask",
+    )
     daemon_bind.set_defaults(handler=_wake_daemon_bind)
 
     for operation, handler in (

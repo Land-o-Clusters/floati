@@ -14,12 +14,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
 from .admin_registry import RegistryAdminBackend
+from .bus_epoch import shared_epoch_operation
 from .cursor import SparseCursor
 from .errors import ProtocolRefusal
 from .events import EventLog
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact, transact_records
-from .locks.cleanup import CleanupInspector
+from .worktree_safety import require_worktree_commits_referenced
 from .records import validate_record, validate_role
 from .registry import REGISTRY_KINDS, Registry
 from .role_templates import RoleTemplate, load_shipped_role_templates
@@ -183,6 +184,14 @@ def load_role_profiles(directory: Path) -> Dict[str, RoleProfile]:
     return profiles
 
 
+_INBOX_READ_SENTENCE = (
+    " BEFORE you start a row and AFTER you envelope one, drain your"
+    " channel: floati inbox --root {root} --as {instance} - ack what it"
+    " presents; an empty inbox is a measurement and you may proceed;"
+    " contents outrank your queue."
+)
+
+
 def render_boot_prompt(
     profile: RoleProfile,
     *,
@@ -213,6 +222,13 @@ def render_boot_prompt(
             committer_name=node,
             committer_email=committer_email,
         )
+        # K5 gate verdict 29d20f69: the appender MUST run before the ASCII
+        # gate — a validation that runs before the last mutation validates
+        # something that is not what ships. The appended sentence carries
+        # the root path, so under a non-ASCII root it is exactly the bytes
+        # the gate must judge.
+        if "inbox --root" not in prompt:
+            prompt += _INBOX_READ_SENTENCE.format(root=str(root.path), instance=node)
         prompt.encode("ascii")
     except (KeyError, ValueError, UnicodeEncodeError) as exc:
         raise ProtocolRefusal("lane_profile_copy_invalid", "boot prompt cannot render safely") from exc
@@ -326,6 +342,7 @@ class LaneScalingService:
             "compensated": compensated,
         }
 
+    @shared_epoch_operation
     def spawn(
         self,
         *,
@@ -613,11 +630,12 @@ class LaneScalingService:
             return False
         if not (workspace / ".git").exists():
             _refuse("lane_workspace_not_empty", "non-Git workspace contains retained bytes")
-        CleanupInspector(workspace).require_eligible(workspace)
+        require_worktree_commits_referenced(workspace)
         if self._git_status(workspace):
             _refuse("lane_workspace_dirty", "workspace has uncommitted or untracked bytes")
         return True
 
+    @shared_epoch_operation
     def retire(self, *, actor: str, instance: str, drain: bool) -> Dict[str, Any]:
         architect = self._require_architect(actor)
         if drain is not True:

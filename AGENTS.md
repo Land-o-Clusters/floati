@@ -109,11 +109,22 @@ contract for each.
   acknowledgment are separate receipts; `status: ok` from `send` proves the
   append, never the delivery.
 - **Truth surfaces:** `describe --json` · `verify` · `journal {checkpoint|verify}` ·
-  `signature {sign|verify}` · `status` · `log` (`--replay` reconstructs from the
+  `signature {sign|verify}` · `status` · `snapshot` (consented maintainer bundle) ·
+  `log` (`--replay` reconstructs from the
   ledger) · `effects` / `effect` · `threads` / `thread` · `graph` · `plan` ·
   `receipts` · `board` (TUI).
+- **Repair:** `repair quarantine` preserves one exact selected event frame beneath
+  the tenant, atomically replaces the ledger, and receipts follower invalidation.
 - **Health:** `doctor` (per-node delivery scoreboard; `--probe` loopback
   deafness probe) · `watch`.
+- **Epoch lifecycle:** `epoch roll --root ROOT --as NODE --idempotency-key KEY`
+  performs one authority-gated coherent roll of the selected event, delivery,
+  and acknowledgment planes.
+- **Confluence:** `confluence {grant|revoke|status|bundle}` — the read
+  seam for a consuming observer app: one explicit per-root, per-consumer
+  read grant; the bundle materializes the receipts-read surface under the
+  grant it was produced under. No discovery, no watcher, no network, no
+  mutation API.
 - **Work:** `grant` / `grant revoke` · `work` · `worker` · `sequencer`
   · `supervise` · `orchestrate`.
 - **Agent transport:** `mcp serve --root ROOT --as NODE --session SESSION`
@@ -127,6 +138,10 @@ contract for each.
   registration is never edited. A paused session is recorded state, not
   absence or deafness; `wake status` names what it cannot see (the running
   session's cache, the harness trust gate).
+- **Codex Stop waiter:** `scripts/floati-codex-wait --root ROOT` is the
+  documented installed entrypoint. It derives node, workspace, and acting
+  session only from the validated hook payload; those identities are not
+  caller-selectable flags.
 - **Cartography:** `chart --declared-roots FILE` (only explicitly declared
   roots) · `survey` (user-invoked, read-only report of buses floati did not
   install — it never writes, drains, acks, registers, or locks a foreign
@@ -151,14 +166,14 @@ shape.
   add and claim work. The reverse uses the same coordinate and architect gate.
 
 ```text
-floati init --root /var/tmp/fleet
-floati node add --root /var/tmp/fleet --node architect-a --harness Codex --lifetime permanent
-floati node role --root /var/tmp/fleet --node architect-a --template architect --answer repo=floati --answer never_touch=foreign-project --answer owner_stops=owner-tier
-floati node add --root /var/tmp/fleet --node builder-a --harness Codex --lifetime permanent
-floati grant --root /var/tmp/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
-floati work add --root /var/tmp/fleet --title bounded-work --owner builder-a
-floati work claim --root /var/tmp/fleet --id work-00000000000070008000000000000000 --as builder-a --authority-subject work-claims --authority-epoch 1
-floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
+floati init --root /var<temp>/fleet
+floati node add --root /var<temp>/fleet --node architect-a --harness Codex --lifetime permanent
+floati node role --root /var<temp>/fleet --node architect-a --template architect --answer repo=floati --answer never_touch=foreign-project --answer owner_stops=owner-tier
+floati node add --root /var<temp>/fleet --node builder-a --harness Codex --lifetime permanent
+floati grant --root /var<temp>/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
+floati work add --root /var<temp>/fleet --title bounded-work --owner builder-a
+floati work claim --root /var<temp>/fleet --id work-00000000000070008000000000000000 --as builder-a --authority-subject work-claims --authority-epoch 1
+floati grant revoke --root /var<temp>/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
 ```
 
 - **Health check:** `doctor --root R` → chase every red with the receipt it
