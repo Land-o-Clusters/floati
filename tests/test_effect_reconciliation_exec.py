@@ -211,6 +211,85 @@ class EffectReconciliationExecTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def untrusted_interpreter(self) -> Path:
+        candidates = [Path(sys.executable)]
+        if sys.platform == "darwin":
+            candidates.extend(
+                Path(candidate)
+                for candidate in (
+                    "/opt/homebrew/bin/python3",
+                    "/opt/homebrew/opt/python@3.14/bin/python3.14",
+                    "/usr/local/bin/python3",
+                )
+            )
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve(strict=True)
+                if resolved.stat().st_uid != 0 and os.access(resolved, os.X_OK):
+                    return resolved
+            except OSError:
+                continue
+        if sys.platform == "darwin":
+            self.skipTest("no runnable non-root-owned Python interpreter")
+        directory = self.base / "untrusted"
+        directory.mkdir()
+        interpreter = directory / "python3"
+        shutil.copyfile(sys.executable, interpreter)
+        interpreter.chmod(0o700)
+        return interpreter
+
+    def run_untrusted_interpreter(
+        self, interpreter: Path, *arguments: str,
+    ) -> subprocess.CompletedProcess[str]:
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
+        environment["PYTHONNOUSERSITE"] = "1"
+        return subprocess.run(
+            [str(interpreter), *arguments],
+            cwd=Path(__file__).resolve().parents[1],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_untrusted_interpreter_help_is_available(self) -> None:
+        interpreter = self.untrusted_interpreter()
+        result = self.run_untrusted_interpreter(interpreter, "-m", "floati", "--help")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertIn("NAME\n", result.stdout)
+        self.assertIn(
+            "floati - inspect and operate an explicit fleet root",
+            result.stdout,
+        )
+
+    def test_untrusted_interpreter_exec_is_typed(self) -> None:
+        interpreter = self.untrusted_interpreter()
+        script = "\n".join((
+            "from floati.effect_reconciliation_exec import observe_effect_reconciliation",
+            "from floati.effect_reconciliation_protocol import build_request",
+            "request = build_request(",
+            "    operation_id='effect-op-018f7e9b3c117abc8def0123456789ab',",
+            "    current_evidence_id='effect-unknown-018f7e9b3c117abc8def0123456789ab',",
+            "    adapter='none',",
+            "    target={'kind': 'shell_environment', 'coordinate': 'workspace', 'identity_digest': '0' * 64},",
+            "    expected_confirmation={'kind': 'none', 'locator': 'none', 'expected_digest': '0' * 64},",
+            "    budget_claim={},",
+            "    local_repository_identity=None,",
+            "    request_id='1' * 32,",
+            ")",
+            "result = observe_effect_reconciliation(request, timeout_seconds=1.0)",
+            "print(result.outcome + ':' + result.reason_code)",
+        ))
+        result = self.run_untrusted_interpreter(interpreter, "-c", script)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            "unknown:effect_reconciliation_interpreter_untrusted\n",
+            result.stdout,
+        )
+
     @staticmethod
     def valid_result_body(*, suffix: str = "") -> str:
         return (
@@ -304,7 +383,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
     def test_exec_trusts_only_frozen_root_owned_canonical_interpreter(self) -> None:
         """Catches mutable or noncanonical interpreter selection reaching spawn."""
         launcher = self.exec_module()
-        trusted = launcher._TRUSTED_INTERPRETER
+        trusted = launcher._trusted_interpreter()
         expected = Path(os.path.realpath(sys.executable))
         self.assertEqual(expected, trusted.path)
         self.assertTrue(expected.is_absolute())
@@ -335,7 +414,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
             side_effect=AssertionError("replaced interpreter reached spawn"),
         ) as forbidden_spawn:
             refused = self.observe(self.request_none())
-        self.assertEqual("observer_launch_failed", refused.reason_code)
+        self.assertEqual("effect_reconciliation_interpreter_untrusted", refused.reason_code)
         forbidden_spawn.assert_not_called()
 
         during_hash = self.base / "during-hash-python"

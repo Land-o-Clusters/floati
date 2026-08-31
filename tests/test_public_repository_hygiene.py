@@ -222,7 +222,7 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
         self.assertIn("git -C public push", runs)
         self.assertIn("gh pr create", runs)
         self.assertIn("gh pr edit", runs)
-        self.assertIn("gh pr merge --auto --merge", runs)
+        self.assertIn("gh pr merge --merge", runs)
         for forbidden in ("--squash", "--rebase", "gh release", "git tag"):
             self.assertNotIn(forbidden, runs)
 

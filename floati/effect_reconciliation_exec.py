@@ -126,6 +126,9 @@ class _TrustedInterpreter:
     digest: str
 
 
+_TRUSTED_INTERPRETER_LOCK = threading.Lock()
+
+
 class _ChannelTimeout(TimeoutError):
     pass
 
@@ -147,6 +150,10 @@ class _EOFMissing(_ChannelTimeout):
 
 
 class _ObserverCleanupFailure(RuntimeError):
+    pass
+
+
+class _InterpreterUntrusted(RuntimeError):
     pass
 
 
@@ -280,7 +287,22 @@ def _revalidate_trusted_interpreter(trusted: _TrustedInterpreter) -> Path:
     return trusted.path
 
 
-_TRUSTED_INTERPRETER = _freeze_trusted_interpreter(os.path.realpath(sys.executable))
+_TRUSTED_INTERPRETER: Optional[_TrustedInterpreter] = None
+
+
+def _trusted_interpreter() -> _TrustedInterpreter:
+    global _TRUSTED_INTERPRETER
+    if _TRUSTED_INTERPRETER is None:
+        with _TRUSTED_INTERPRETER_LOCK:
+            if _TRUSTED_INTERPRETER is None:
+                try:
+                    _TRUSTED_INTERPRETER = _freeze_trusted_interpreter(
+                        os.path.realpath(sys.executable),
+                    )
+                except OSError as exc:
+                    raise _InterpreterUntrusted from exc
+    assert _TRUSTED_INTERPRETER is not None
+    return _TRUSTED_INTERPRETER
 
 
 def _close_descriptors(descriptors: Sequence[int]) -> None:
@@ -845,7 +867,10 @@ def _spawn_observer(
             for descriptor in sorted(actual)
             if descriptor >= 3 and descriptor not in final_targets
         )
-        interpreter_path = _revalidate_trusted_interpreter(_TRUSTED_INTERPRETER)
+        try:
+            interpreter_path = _revalidate_trusted_interpreter(_trusted_interpreter())
+        except OSError as exc:
+            raise _InterpreterUntrusted from exc
         interpreter = str(interpreter_path)
         raw_pid = os.posix_spawn(
             interpreter,
@@ -920,6 +945,8 @@ def observe_effect_reconciliation(
     deadline = time.monotonic() + float(timeout_seconds)
     try:
         process, channel = _spawn_observer(selected_request)
+    except _InterpreterUntrusted:
+        return _failure(selected_request, "effect_reconciliation_interpreter_untrusted")
     except _ObserverCleanupFailure:
         return _failure(selected_request, "observer_cleanup_failed")
     except Exception as exc:
