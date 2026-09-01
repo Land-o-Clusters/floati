@@ -117,6 +117,10 @@ contract for each.
   the tenant, atomically replaces the ledger, and receipts follower invalidation.
 - **Health:** `doctor` (per-node delivery scoreboard; `--probe` loopback
   deafness probe) · `watch`.
+- **Presence:** `presence report --root ROOT --as NODE --ttl-seconds N`
+  records only the acting node's own bounded report · `presence show --root
+  ROOT` lists what each active node last reported and when; expiry is never
+  translated into "down".
 - **Epoch lifecycle:** `epoch roll --root ROOT --as NODE --idempotency-key KEY`
   performs one authority-gated coherent roll of the selected event, delivery,
   and acknowledgment planes.
@@ -127,6 +131,9 @@ contract for each.
   mutation API.
 - **Work:** `grant` / `grant revoke` · `work` · `worker` · `sequencer`
   · `supervise` · `orchestrate`.
+- **Intake:** `intake {scan|adopt|show}` reads or adopts explicitly supplied
+  local Markdown; adoption and outbound issue operations remain unavailable to
+  agent sessions.
 - **Agent transport:** `mcp serve --root ROOT --as NODE --session SESSION`
   binds one local stdio server to one exact active node and session.
 - **Context:** `context` projects or records bounded Tide context evidence.

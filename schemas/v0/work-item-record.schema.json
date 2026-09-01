@@ -18,7 +18,8 @@
     "owner": {"type": "string", "minLength": 1, "maxLength": 64},
     "workspace": {
       "type": ["string", "null"],
-      "pattern": "^/private/tmp/floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))/(?:[^/]+/)*floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {"type": "string", "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺\uDB40\uDC01\uDB40\uDC20-\uDB40\uDC7F]"}
     },
     "needs": {
       "type": "array", "maxItems": 64, "uniqueItems": true,

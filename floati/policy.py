@@ -69,6 +69,7 @@ _LIMIT_BOUNDS = {
 }
 _BUDGET_UNITS = frozenset(("attempts", "tokens", "milliseconds", "microcurrency"))
 _CANCEL_MODES = frozenset(("native", "local_process_only", "unavailable"))
+_SECRET_ISOLATION_MODES = frozenset(("process", "helper", "none"))
 _RETRY_CLASSES = (
     "transient",
     "permanent",
@@ -162,6 +163,7 @@ class WorkerProfile:
     cancel_mode: str
     callback_support: bool
     max_concurrency: int
+    secret_isolation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -269,6 +271,11 @@ class RepositoryPolicy:
                     "cancel_mode": profile.cancel_mode,
                     "callback_support": profile.callback_support,
                     "max_concurrency": profile.max_concurrency,
+                    **(
+                        {"secret_isolation": profile.secret_isolation}
+                        if profile.secret_isolation is not None
+                        else {}
+                    ),
                 }
                 for identifier, profile in self.worker_profiles.items()
             },
@@ -866,6 +873,11 @@ def _build_policy(raw: Dict[str, Any]) -> RepositoryPolicy:
                 "cancel_mode": profile.cancel_mode,
                 "callback_support": profile.callback_support,
                 "max_concurrency": profile.max_concurrency,
+                **(
+                    {"secret_isolation": profile.secret_isolation}
+                    if profile.secret_isolation is not None
+                    else {}
+                ),
             }
             for identifier, profile in worker_profiles.items()
         },
@@ -949,11 +961,17 @@ def _build_budgets(value: object) -> Mapping[str, Budget]:
 def _build_worker_profiles(value: object) -> Mapping[str, WorkerProfile]:
     result: Dict[str, WorkerProfile] = {}
     for identifier, entry in _validate_named_mapping(value, "worker_profiles").items():
-        fields = _validate_exact_keys(
-            entry,
-            ("capabilities", "cancel_mode", "callback_support", "max_concurrency"),
-            "worker_profiles." + identifier,
-        )
+        required = {
+            "capabilities", "cancel_mode", "callback_support", "max_concurrency",
+        }
+        if set(entry) not in (required, required | {"secret_isolation"}):
+            _refuse(
+                "policy_fields_invalid",
+                "worker_profiles." + identifier
+                + " must contain capabilities, cancel_mode, callback_support, "
+                "max_concurrency, and optional secret_isolation",
+            )
+        fields = entry
         capabilities = _validate_sorted_identifier_set(
             fields["capabilities"], "worker_profiles." + identifier + ".capabilities"
         )
@@ -968,8 +986,20 @@ def _build_worker_profiles(value: object) -> Mapping[str, WorkerProfile]:
         max_concurrency = _validate_bounded_integer(
             fields["max_concurrency"], "worker_profiles." + identifier + ".max_concurrency", 1, MAX_CONCURRENCY
         )
+        secret_isolation = fields.get("secret_isolation")
+        if secret_isolation is not None:
+            secret_isolation = _validate_plain_text(
+                secret_isolation,
+                "worker_profiles." + identifier + ".secret_isolation",
+            )
+            if secret_isolation not in _SECRET_ISOLATION_MODES:
+                _refuse(
+                    "policy_secret_isolation_invalid",
+                    "worker secret_isolation is outside process, helper, or none",
+                )
         result[identifier] = WorkerProfile(
-            identifier, capabilities, cancel_mode, callback_support, max_concurrency
+            identifier, capabilities, cancel_mode, callback_support,
+            max_concurrency, secret_isolation,
         )
     return dict(sorted(result.items()))
 

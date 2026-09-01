@@ -291,6 +291,31 @@ class EffectReconciliationExecTests(unittest.TestCase):
             result.stdout,
         )
 
+    def test_untrusted_interpreter_result_names_first_failing_component(self) -> None:
+        """Catches the trust walk discarding its first rejected component."""
+        directory = self.base / "untrusted-evidence"
+        directory.mkdir()
+        interpreter = directory / "python3"
+        interpreter.write_bytes(b"#!/bin/sh\nexit 0\n")
+        interpreter.chmod(0o700)
+        metadata = os.lstat(directory)
+        expected = {
+            "component_mode": metadata.st_mode,
+            "component_uid": metadata.st_uid,
+            "failing_component": str(directory),
+            "interpreter_path": str(interpreter),
+        }
+        launcher = self.exec_module()
+        with mock.patch.object(
+            launcher.sys, "executable", str(interpreter),
+        ), mock.patch.object(
+            launcher, "_TRUSTED_INTERPRETER", None,
+        ):
+            result = self.observe(self.request_none())
+
+        self.assertEqual("effect_reconciliation_interpreter_untrusted", result.reason_code)
+        self.assertEqual(expected, result.observation)
+
     @staticmethod
     def valid_result_body(*, suffix: str = "") -> str:
         return (

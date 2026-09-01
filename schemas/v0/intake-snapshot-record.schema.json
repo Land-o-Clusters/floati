@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/intake-snapshot-record.schema.json",
+  "title": "Floati Intake Snapshot Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "source_kind", "source_id", "retrieved_at_testimony",
+    "content_digest", "metadata_digest", "payload_path", "title",
+    "work_item_id", "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^intake-snapshot-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "intake_snapshot"},
+    "source_kind": {"enum": ["local_markdown", "github_issue"]},
+    "source_id": {
+      "type": "string",
+      "pattern": "^(?:file:[A-Za-z0-9._][A-Za-z0-9._/-]{0,255}|github:[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}#[1-9][0-9]{0,9})$"
+    },
+    "retrieved_at_testimony": {"type": "string", "format": "date-time"},
+    "content_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "metadata_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "payload_path": {
+      "type": "string",
+      "pattern": "^intake/v0/intake-snapshot-[0-9a-f]{32}\\.json$"
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "idempotency_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+  }
+}

@@ -112,6 +112,16 @@
           "if": {"properties": {"code": {"const": "wake_health"}}},
           "then": {"required": ["wake_health"]},
           "else": {"not": {"required": ["wake_health"]}}
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {"const": "effect_reconciliation_interpreter_trust"},
+              "severity": {"const": "warning"}
+            }
+          },
+          "then": {"required": ["interpreter_trust"]},
+          "else": {"not": {"required": ["interpreter_trust"]}}
         }
       ],
       "properties": {
@@ -124,7 +134,21 @@
         "oldest_unread": {"$ref": "fleet-status-artifact.schema.json#/$defs/oldest_unread"},
         "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},
         "epoch_roll": {"$ref": "#/$defs/epoch_roll"},
-        "wake_health": {"$ref": "wake-health-fact.schema.json"}
+        "wake_health": {"$ref": "wake-health-fact.schema.json"},
+        "interpreter_trust": {"$ref": "#/$defs/interpreter_trust"}
+      }
+    },
+    "interpreter_trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interpreter_path", "failing_component", "component_uid", "component_mode"
+      ],
+      "properties": {
+        "interpreter_path": {"type": "string", "pattern": "^/", "maxLength": 4096},
+        "failing_component": {"type": "string", "pattern": "^/", "maxLength": 4096},
+        "component_uid": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "component_mode": {"type": "integer", "minimum": 0, "maximum": 4294967295}
       }
     },
     "epoch_roll": {

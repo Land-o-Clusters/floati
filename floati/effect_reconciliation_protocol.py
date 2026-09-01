@@ -552,6 +552,26 @@ def _parent_observation(
 ) -> bool:
     if observation is None:
         return True
+    if reason_code == "effect_reconciliation_interpreter_untrusted":
+        fields = frozenset({
+            "interpreter_path", "failing_component",
+            "component_uid", "component_mode",
+        })
+        if not _exact_observation(observation, fields):
+            return False
+        paths = (observation["interpreter_path"], observation["failing_component"])
+        return (
+            all(
+                type(path) is str
+                and os.path.isabs(path)
+                and 0 < len(path.encode("utf-8")) <= 4096
+                for path in paths
+            )
+            and type(observation["component_uid"]) is int
+            and 0 <= observation["component_uid"] <= 2 ** 32 - 1
+            and type(observation["component_mode"]) is int
+            and 0 <= observation["component_mode"] <= 2 ** 32 - 1
+        )
     if reason_code == "observer_launch_failed":
         return (
             _exact_observation(observation, frozenset({"error_type"}))

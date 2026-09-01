@@ -27,6 +27,7 @@ from unittest import mock
 from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.approvals import ApprovalLedger
 from floati.effects import EffectController, EffectLedger
+from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.planes import AuthorityGrantStore
 from floati.registry import Registry
@@ -323,7 +324,7 @@ class _EffectWorkerCase:
             "owner": "node-a",
             "artifact_bindings": [],
         }
-        workspace = Path("\x2fprivate/tmp/floati-work") / self.run.parent
+        workspace = worker_workspace_root() / self.run.parent
         shutil.rmtree(workspace, ignore_errors=True)
         testcase.addCleanup(shutil.rmtree, workspace, True)
         work_item["workspace"] = str(workspace)
@@ -2798,7 +2799,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         ):
             result = case.execute()
 
-        workspace = Path("\x2fprivate/tmp/floati-work") / case.run.parent
+        workspace = worker_workspace_root() / case.run.parent
         self.assertEqual(1, len(policies))
         policy = policies[0]
         self.assertTrue(policy.write_probe.name.startswith(".floati-effect-worker-"))

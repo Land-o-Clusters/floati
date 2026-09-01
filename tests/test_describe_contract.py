@@ -76,9 +76,9 @@ class DescribeContractTests(unittest.TestCase):
         hidden = described - public
 
         self.assertEqual(_registered_paths(parser), described)
-        self.assertEqual(119, contract["command_count"])
+        self.assertEqual(128, contract["command_count"])
         self.assertEqual(len(described), contract["command_count"])
-        self.assertEqual(110, len(public))
+        self.assertEqual(119, len(public))
         self.assertEqual({
             ("wake-evaluate",),
             ("wake-record",),

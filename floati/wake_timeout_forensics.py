@@ -1,13 +1,13 @@
-"""Photograph a hung wake-adapter child before kill. Sidecar is keyed by attempt id."""
+"""Photograph a capped wake child without making its continued output a pipe."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
-import signal
 import subprocess
+import tempfile
+import threading
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -15,6 +15,15 @@ from typing import Mapping, Optional, Sequence
 _SAFE_KEY = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _SAMPLE = "/usr/bin/sample"
 _LSOF = "/usr/sbin/lsof"
+
+
+def _reap_abandoned(process: subprocess.Popen[str], attempt_directory: Path) -> None:
+    """One daemon reaper owns the capped child until wait() and file cleanup finish."""
+
+    try:
+        process.wait()
+    finally:
+        shutil.rmtree(attempt_directory, ignore_errors=True)
 
 
 def forensics_relative_path(attempt_key: str) -> Path:
@@ -81,40 +90,51 @@ def run_with_timeout_forensics(
     sidecar_path: Optional[Path] = None,
     attempt_key: Optional[str] = None,
 ) -> subprocess.CompletedProcess[str]:
-    process = subprocess.Popen(
-        list(argv),
-        cwd=str(cwd),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
+    key = attempt_key if isinstance(attempt_key, str) and _SAFE_KEY.fullmatch(attempt_key) else "unkeyed"
+    attempt_directory = Path(
+        tempfile.mkdtemp(prefix=f".floati-wake-{key}-", dir=str(cwd))
     )
+    stdout_path = attempt_directory / "stdout"
+    stderr_path = attempt_directory / "stderr"
+    stdout_sink = stdout_path.open("w", encoding="utf-8")
+    stderr_sink = stderr_path.open("w", encoding="utf-8")
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+        process = subprocess.Popen(
+            list(argv),
+            cwd=str(cwd),
+            stdout=stdout_sink,
+            stderr=stderr_sink,
+            text=True,
+            start_new_session=True,
+        )
+    except Exception:
+        stdout_sink.close()
+        stderr_sink.close()
+        shutil.rmtree(attempt_directory, ignore_errors=True)
+        raise
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
         try:
-            key = attempt_key or "unkeyed"
             if sidecar_path is not None and process.pid:
                 row = photograph_hung_child(pid=process.pid, argv=argv, attempt_key=key)
                 write_sidecar(sidecar_path, row)
         except Exception:
             pass
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError, OSError):
-            try:
-                process.kill()
-            except (ProcessLookupError, OSError):
-                pass
-        try:
-            process.communicate(timeout=5)
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                try:
-                    stream.close()
-                except OSError:
-                    pass
-        raise
-    return subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
+        stdout_sink.close()
+        stderr_sink.close()
+        threading.Thread(
+            target=_reap_abandoned,
+            args=(process, attempt_directory),
+            name=f"floati-wake-reaper-{process.pid}",
+            daemon=True,
+        ).start()
+        raise error
+    stdout_sink.close()
+    stderr_sink.close()
+    try:
+        stdout = stdout_path.read_text(encoding="utf-8")
+        stderr = stderr_path.read_text(encoding="utf-8")
+    finally:
+        shutil.rmtree(attempt_directory, ignore_errors=True)
+    return subprocess.CompletedProcess(list(argv), returncode, stdout, stderr)

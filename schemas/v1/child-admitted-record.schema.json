@@ -131,7 +131,7 @@
     },
     "workspace": {
       "type": "string",
-      "pattern": "^/private/tmp/floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))/(?:[^/]+/)*floati-work/work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
       "not": {
         "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
       }

@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from floati.errors import ProtocolRefusal
 from floati.root import FloatiRoot
@@ -35,6 +34,11 @@ class MinisignSigningTests(unittest.TestCase):
         self._copy_fixture("checkpoint.json", self.artifact)
         self._copy_fixture("checkpoint.json.minisig", self.signature)
         self._copy_fixture("fixture.pub", self.public_key)
+        selected = shutil.which("minisign")
+        self.assertIsNotNone(
+            selected, "the S2 constants must execute against a real minisign binary"
+        )
+        self.minisign = Path(selected).resolve(strict=True)
 
     def _copy_fixture(self, name: str, relative: Path) -> Path:
         target = self.root.resolve_relative(relative)
@@ -46,8 +50,15 @@ class MinisignSigningTests(unittest.TestCase):
         self.assertIsNotNone(sign_minisign, "floati.signing must own S2 signing")
         self.assertIsNotNone(verify_minisign, "floati.signing must own S2 verification")
 
-    def _verify(self, *, version: str = "2.0.0-fixture"):
+    def _verify(
+        self,
+        *,
+        version: str = "2.0.0-fixture",
+        minisign_executable: Path | None = None,
+    ):
         self._require_api()
+        if minisign_executable is None:
+            minisign_executable = self.minisign
         return verify_minisign(
             self.root,
             self.artifact,
@@ -56,14 +67,10 @@ class MinisignSigningTests(unittest.TestCase):
             version=version,
             journal_id="fixture-journal",
             through_seq=7,
+            minisign_executable=minisign_executable,
         )
 
     def test_s2_real_minisign_binary_verifies_fixture_and_signed_binding(self) -> None:
-        self.assertIsNotNone(
-            shutil.which("minisign"),
-            "the S2 constants must execute against a real minisign binary",
-        )
-
         result = self._verify()
 
         self.assertEqual("signature_verified", result["state"])
@@ -90,6 +97,7 @@ class MinisignSigningTests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
+            minisign_executable=self.minisign,
         )
         verified = verify_minisign(
             self.root,
@@ -99,6 +107,7 @@ class MinisignSigningTests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
+            minisign_executable=self.minisign,
         )
 
         self.assertEqual("signature_signed", signed["state"])
@@ -121,15 +130,22 @@ class MinisignSigningTests(unittest.TestCase):
 
         self.assertEqual("signature_binding_mismatch", caught.exception.code)
 
-    def test_s2_absent_tool_is_typed_unverified_fact_not_a_pass(self) -> None:
+    def test_s2_absent_declaration_is_a_typed_refusal_with_a_remedy(self) -> None:
         self._require_api()
-        with mock.patch("floati.signing.shutil.which", return_value=None):
-            result = self._verify()
+        with self.assertRaises(ProtocolRefusal) as caught:
+            verify_minisign(
+                self.root,
+                self.artifact,
+                self.signature,
+                self.public_key,
+                version="2.0.0-fixture",
+                journal_id="fixture-journal",
+                through_seq=7,
+            )
 
-        self.assertEqual(
-            ("signature_unverified", "tool_absent", "minisign"),
-            (result["state"], result["reason"], result["tool"]),
-        )
+        self.assertEqual("signature_tool_absent", caught.exception.code)
+        self.assertIn("operator-declared", caught.exception.detail)
+        self.assertIn("--minisign-executable", caught.exception.remedy or "")
 
     def test_s2_cli_verify_emits_one_machine_artifact(self) -> None:
         completed = subprocess.run(
@@ -142,6 +158,7 @@ class MinisignSigningTests(unittest.TestCase):
                 "--version", "2.0.0-fixture",
                 "--journal-id", "fixture-journal",
                 "--through-seq", "7",
+                "--minisign-executable", str(self.minisign),
                 "--json",
             ],
             cwd=REPOSITORY_ROOT,
@@ -169,6 +186,7 @@ class MinisignSigningTests(unittest.TestCase):
                 "--version", "2.0.0-fixture",
                 "--journal-id", "fixture-journal",
                 "--through-seq", "7",
+                "--minisign-executable", str(self.minisign),
                 "--json",
             ],
             cwd=REPOSITORY_ROOT,
@@ -184,7 +202,7 @@ class MinisignSigningTests(unittest.TestCase):
         self.assertEqual("signature_signed", artifact["evidence"]["state"])
         self.assertTrue(self.root.resolve_relative(output).is_file())
 
-    def test_s2_cli_absent_tool_is_no_result_not_ok(self) -> None:
+    def test_s2_cli_absent_declaration_is_a_named_refusal(self) -> None:
         environment = dict(os.environ)
         environment.update(
             {"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
@@ -208,12 +226,12 @@ class MinisignSigningTests(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(32, completed.returncode, completed.stdout)
+        self.assertEqual(20, completed.returncode, completed.stdout)
         self.assertEqual("", completed.stdout)
         artifact = json.loads(completed.stderr)
-        self.assertEqual("no_result", artifact["status"])
-        self.assertEqual("signature_unverified", artifact["evidence"]["state"])
-        self.assertEqual("tool_absent", artifact["evidence"]["reason"])
+        self.assertEqual("refused", artifact["status"])
+        self.assertEqual("signature_tool_absent", artifact["evidence"]["code"])
+        self.assertIn("--minisign-executable", artifact["evidence"]["remedy"])
 
     def test_s2_help_is_restamped_and_trust_scaffold_stays_draft_until_ceremony(self) -> None:
         for command in (

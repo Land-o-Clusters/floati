@@ -27,7 +27,7 @@ not presented as evidence that a phase ran.
 ## F.2 — Durable free-text fields admitted terminal controls and bidi overrides
 
 - **Phase:** C — reader fuzz
-- **Status:** CLOSED LOCALLY — checkpoint SHA and architect push gate pending
+- **Status:** CLOSED — held on `origin/main` by `tests/test_gauntlet_fuzz.py` `test_hostile_control_and_bidi_strings_are_typed_before_every_reader_renders`; the "push gate pending" line stood for a month after the tests landed and was struck by `docs/rulings/2026-09-02-gate1-two-release-gates-discharged-late.md` §3.
 - **Severity:** terminal integrity
 - **Reproduction:** valid framed note, title, role, and claimed-identity fields
   containing ANSI ESC plus U+202E were supplied to inbox, log, replay, board,
@@ -43,7 +43,7 @@ not presented as evidence that a phase ran.
 ## F.3 — Three readers accepted causally reordered evidence
 
 - **Phase:** C — reader fuzz
-- **Status:** CLOSED LOCALLY — checkpoint SHA and architect push gate pending
+- **Status:** CLOSED — held on `origin/main` by `tests/test_gauntlet_fuzz.py` `test_causally_reordered_mail_and_work_records_are_typed_by_every_reader`; "pending" struck by `docs/rulings/2026-09-02-gate1-two-release-gates-discharged-late.md` §3.
 - **Severity:** durable-order integrity
 - **Reproduction:** inbox and log accepted a reply frame placed before its
   referenced original; replay accepted a work transition placed before its
@@ -59,7 +59,7 @@ not presented as evidence that a phase ran.
 ## F.4 — Four published 10k-item / 100k-event budgets are exceeded
 
 - **Phase:** D — soak and performance budgets
-- **Status:** FIXED LOCALLY — exact-SHA architect re-verification pending
+- **Status:** CLOSED — architect PUSH GO at exact SHA `3ed8f846` (`docs/evidence/HM3H-GAUNTLET.md` "the architect gate — fix-round", all five budgets re-measured under budget); this line was never updated to say so and was reconciled by `docs/rulings/2026-09-02-gate1-two-release-gates-discharged-late.md` §3. The hostile-snapshot matrix lives in `tests/test_gauntlet_snapshot.py`.
 - **Severity:** publication performance gate
 - **Reproduction:** exact-scale mail and replay profiles, one warmup and three
   measured samples, median statistic.
@@ -91,7 +91,7 @@ not presented as evidence that a phase ran.
 ## F.5 — Replay, status, and receipt ticker trusted timestamps over ordinals
 
 - **Phase:** E — time hostility
-- **Status:** CLOSED LOCALLY — checkpoint SHA and architect push gate pending
+- **Status:** CLOSED — held on `origin/main` by `tests/test_gauntlet_time.py` (`…source_ordinal_beats_skew…`, `…latest_append_not_largest_timestamp`, `…reverse_append_ordinal_not_timestamp`); "pending" struck by `docs/rulings/2026-09-02-gate1-two-release-gates-discharged-late.md` §3.
 - **Severity:** ordering integrity
 - **Reproduction:** future, backward-skewed, and UTC records spanning the
   2026-11-01 DST boundary caused replay to reorder frames, status to choose the
@@ -108,7 +108,7 @@ not presented as evidence that a phase ran.
 ## F.6 — Recovery failures escaped raw or erased live root state silently
 
 - **Phase:** F — recovery drills
-- **Status:** CLOSED LOCALLY — checkpoint SHA and architect push gate pending
+- **Status:** CLOSED — held on `origin/main` by `tests/test_gauntlet_recovery.py` (`…disk_full…rolls_back…`, `…read_only_root…typed…`, `…deleted_root…exits_typed…`); "pending" struck by `docs/rulings/2026-09-02-gate1-two-release-gates-discharged-late.md` §3.
 - **Severity:** durability integrity
 - **Reproduction:** injected ENOSPC after a partial write escaped as `OSError`
   and left a torn tail; a chmod read-only root escaped as `PermissionError`; a

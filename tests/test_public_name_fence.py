@@ -48,16 +48,15 @@ class PublicNameFenceTests(unittest.TestCase):
     def test_public_product_source_has_no_private_seat_vocabulary(self) -> None:
         """A private seat identifier reaching product code or tests is rejected."""
 
-        require_private_artifact(self, 'scripts/export_public.py')
-
         module = self.module()
-        policy = json.loads(
-            (REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        private_only = set(policy["private_only_paths"])
-        private_prefixes = tuple(policy["class3_prefixes"])
+        policy_path = REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json"
+        if policy_path.is_file():
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            private_only = set(policy["private_only_paths"])
+            private_prefixes = tuple(policy["class3_prefixes"])
+        else:
+            private_only = set()
+            private_prefixes = ()
         public_prefixes = (
             ".github/",
             "bundle/",

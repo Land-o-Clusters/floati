@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import typing
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -89,6 +90,9 @@ class AU1S1Tests(unittest.TestCase):
         self.destination.mkdir()
         self.entrypoint = self._write_standalone_install(self.destination)
         self.channel = "https://updates.example.invalid/release-index.v0"
+        selected = shutil.which("minisign")
+        self.assertIsNotNone(selected, "AU1-S1 requires a real minisign binary")
+        self.minisign = Path(selected).resolve(strict=True)
         self.index = {
             "schema_version": 0,
             "channel_id": "stable-fixture",
@@ -221,6 +225,7 @@ class AU1S1Tests(unittest.TestCase):
             signature,
             secret_key=(MINISIGN_FIXTURES / "fixture.key").resolve(),
             version=signed_version or str((index or self.index)["index_version"]),
+            minisign_executable=self.minisign,
         )
         return payload, root.resolve_relative(signature).read_bytes()
 
@@ -289,6 +294,43 @@ class AU1S1Tests(unittest.TestCase):
         self.assertFalse((refusal.remedy or "").startswith("DRAFT"))
         self.assertIn(str(self.destination), refusal.remedy or "")
         self.assertIn(self.channel, refusal.remedy or "")
+
+    def test_s1_00_cli_accepts_an_explicit_minisign_before_consent(self) -> None:
+        """Catches update check lacking the operator declaration surface."""
+
+        completed = subprocess.run(
+            [
+                "python3",
+                "-m",
+                "floati",
+                "update",
+                "check",
+                "--destination",
+                str(self.destination),
+                "--channel",
+                self.channel,
+                "--idempotency-key",
+                "check-without-consent",
+                "--minisign-executable",
+                str(self.minisign),
+                "--json",
+            ],
+            cwd=REPOSITORY_ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(20, completed.returncode, completed.stdout)
+        artifact = json.loads(completed.stderr)
+        self.assertEqual("update_consent_missing", artifact["evidence"]["code"])
+
+    def test_s1_00_update_check_type_hints_resolve_the_executable_seam(self) -> None:
+        """Catches a postponed annotation naming an unavailable type."""
+
+        hints = typing.get_type_hints(verify_release_index)
+        self.assertIn("minisign_executable", hints)
 
     def test_s1_01_revoked_consent_never_imports_transport_or_opens_socket(self) -> None:
         """Catches revocation becoming advisory while checks still reach a socket."""
@@ -450,15 +492,25 @@ class AU1S1Tests(unittest.TestCase):
         index, signature = self._signed_index()
         tampered = index.replace(b'"bundle_size":123', b'"bundle_size":124')
         with self.assertRaises(ProtocolRefusal) as caught:
-            verify_release_index(self.destination, tampered, signature)
+            verify_release_index(
+                self.destination,
+                tampered,
+                signature,
+                minisign_executable=self.minisign,
+            )
         self.assertEqual("signature_invalid", caught.exception.code)
 
         index, wrong_binding = self._signed_index(signed_version="8")
         with self.assertRaises(ProtocolRefusal) as caught:
-            verify_release_index(self.destination, index, wrong_binding)
+            verify_release_index(
+                self.destination,
+                index,
+                wrong_binding,
+                minisign_executable=self.minisign,
+            )
         self.assertEqual("signature_binding_mismatch", caught.exception.code)
 
-    def test_s1_08_absent_minisign_is_a_typed_refusal_not_an_observation(self) -> None:
+    def test_s1_08_undeclared_minisign_is_a_typed_refusal_not_an_observation(self) -> None:
         """Catches tool absence being projected as a verified release fact."""
 
         self.assertIsNotNone(
@@ -466,16 +518,13 @@ class AU1S1Tests(unittest.TestCase):
             "S1 must turn V2 tool absence into an update refusal",
         )
         index, signature = self._signed_index()
-        with (
-            mock.patch("floati.signing.shutil.which", return_value=None),
-            self.assertRaises(ProtocolRefusal) as caught,
-        ):
+        with self.assertRaises(ProtocolRefusal) as caught:
             verify_release_index(self.destination, index, signature)
 
-        self.assertEqual("update_signature_unverified", caught.exception.code)
-        self.assertIn("minisign", caught.exception.detail)
+        self.assertEqual("signature_tool_absent", caught.exception.code)
+        self.assertIn("operator-declared", caught.exception.detail)
         self.assertTrue((caught.exception.remedy or "").strip())
-        self.assertFalse((caught.exception.remedy or "").startswith("DRAFT"))
+        self.assertIn("--minisign-executable", caught.exception.remedy or "")
 
     def test_s1_09_identical_idempotency_key_returns_observation_without_refetch(self) -> None:
         """Catches an exact check replay opening a second network request."""
@@ -494,12 +543,14 @@ class AU1S1Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-replay",
+                minisign_executable=self.minisign,
             )
             second = check_for_updates(
                 destination=self.destination,
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-replay",
+                minisign_executable=self.minisign,
             )
 
         self.assertEqual(first, second)
@@ -599,6 +650,7 @@ class AU1S1Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-symlinked-retention",
+                minisign_executable=self.minisign,
             )
 
         self.assertEqual("update_index_storage_invalid", caught.exception.code)

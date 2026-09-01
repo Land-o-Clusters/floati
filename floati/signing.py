@@ -6,12 +6,12 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, Optional
 
 from .errors import DurabilityFailure, ProtocolRefusal
+from .fleet_update import _explicit_executable
 from .ids import uuid7_hex
 from .root import FloatiRoot, validate_identifier
 
@@ -79,23 +79,20 @@ def _comment(binding: Dict[str, object]) -> str:
     )
 
 
-def _minisign() -> Optional[Path]:
-    selected = shutil.which("minisign")
-    if selected is None:
-        return None
-    try:
-        resolved = Path(selected).resolve(strict=True)
-    except OSError:
-        return None
-    if not resolved.is_file() or not os.access(resolved, os.X_OK):
-        return None
-    return resolved
+def _minisign(executable: Optional[Path] = None) -> Path:
+    if executable is None:
+        raise ProtocolRefusal(
+            "signature_tool_absent",
+            "signing is unavailable without an operator-declared Minisign executable",
+            remedy="pass --minisign-executable with one absolute canonical executable path",
+        )
+    return Path(_explicit_executable(executable, "signature_tool_invalid"))
 
 
 def _ordinary(path: Path, code: str, detail: str) -> Path:
     try:
-        if path.is_symlink() or path.resolve(strict=True) != path or not path.is_file():
-            raise OSError("not one canonical ordinary file")
+        if path.is_symlink() or not path.is_file():
+            raise OSError("not one ordinary file")
     except OSError as exc:
         raise ProtocolRefusal(code, detail) from exc
     return path
@@ -174,6 +171,7 @@ def sign_minisign(
     version: str,
     journal_id: Optional[str] = None,
     through_seq: Optional[int] = None,
+    minisign_executable: Optional[Path] = None,
 ) -> Dict[str, object]:
     """Create one Minisign signature; key generation is deliberately absent."""
 
@@ -195,10 +193,10 @@ def sign_minisign(
     key = _ordinary(
         key,
         "signature_key_unavailable",
-        "the release secret key is not one canonical ordinary file",
+        "the release secret key is not one ordinary file",
     )
     try:
-        key.relative_to(root.tenant_home)
+        Path(key).resolve(strict=True).relative_to(Path(root.tenant_home).resolve())
     except ValueError:
         pass
     else:
@@ -207,11 +205,7 @@ def sign_minisign(
             "a release secret key must remain outside the explicit Floati root",
         )
     binding = _binding(artifact, version, journal_id, through_seq)
-    tool = _minisign()
-    if tool is None:
-        raise ProtocolRefusal(
-            "signature_tool_absent", "install minisign before signing an artifact"
-        )
+    tool = _minisign(minisign_executable)
     temporary = signature.with_name("." + signature.name + ".tmp-" + uuid7_hex())
     try:
         signature.parent.mkdir(parents=True, exist_ok=True)
@@ -283,6 +277,7 @@ def verify_minisign(
     version: str,
     journal_id: Optional[str] = None,
     through_seq: Optional[int] = None,
+    minisign_executable: Optional[Path] = None,
 ) -> Dict[str, object]:
     """Verify files beneath one explicit Floati root."""
 
@@ -294,6 +289,7 @@ def verify_minisign(
         version=version,
         journal_id=journal_id,
         through_seq=through_seq,
+        minisign_executable=minisign_executable,
     )
 
 
@@ -306,6 +302,7 @@ def verify_minisign_paths(
     version: str,
     journal_id: Optional[str] = None,
     through_seq: Optional[int] = None,
+    minisign_executable: Optional[Path] = None,
 ) -> Dict[str, object]:
     """Verify exact bytes beneath one explicit ordinary directory."""
 
@@ -325,17 +322,7 @@ def verify_minisign_paths(
         "the pinned Minisign public key is not one ordinary file inside the root",
     )
     expected = _binding(artifact, version, journal_id, through_seq)
-    tool = _minisign()
-    if tool is None:
-        return {
-            "state": "signature_unverified",
-            "reason": "tool_absent",
-            "tool": "minisign",
-            "artifact": str(artifact_relative),
-            "signature": str(signature_relative),
-            "public_key": str(public_key_relative),
-            "binding": expected,
-        }
+    tool = _minisign(minisign_executable)
     completed = _run(
         [
             os.fspath(tool),

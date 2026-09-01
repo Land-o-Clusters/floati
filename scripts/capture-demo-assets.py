@@ -26,7 +26,11 @@ from floati.demo import build_demo_model, seed_demo  # noqa: E402
 from floati import fixture_ids  # noqa: E402
 from floati.graph import HarborGraph, HarborTraffic  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
-from floati.identity_fence import GOVERNED_TEMP_PREFIXES  # noqa: E402
+from floati.host_paths import capture_temporary_parent  # noqa: E402
+from floati.identity_fence import (  # noqa: E402
+    GOVERNED_TEMP_PREFIXES,
+    redact_governed_temp_prefixes,
+)
 from floati.replay_render import render_replay_frame  # noqa: E402
 from floati.tui_render import render_frame  # noqa: E402
 SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -42,6 +46,7 @@ UNSAFE_TEXT = (
     _operator_account_name(),
     "slipway-spawn-groups",
 )
+INSTALL_CAPTURE_TEMPORARY_PREFIX = "floati-capture-install-"
 
 
 class CaptureSpec(NamedTuple):
@@ -109,6 +114,22 @@ def ensure_capture_text_safe(text: str) -> str:
     return text
 
 
+def _collapse_install_staging_coordinate(text: str) -> str:
+    temporary_prefix = INSTALL_CAPTURE_TEMPORARY_PREFIX
+    exposed_coordinate = temporary_prefix.removesuffix("-")
+    return re.sub(
+        re.escape(f"<temp>/{temporary_prefix}") + r"[a-z0-9_]{8}(?=/)",
+        f"<temp>/{exposed_coordinate}",
+        text,
+    )
+
+
+def _expose_install_receipt(text: str) -> str:
+    exposed = redact_governed_temp_prefixes(text)
+    exposed = _collapse_install_staging_coordinate(exposed)
+    return ensure_capture_text_safe(exposed)
+
+
 def validate_output_paths(output: Path, master_output: Path) -> None:
     if not master_output.is_absolute():
         raise ValueError("master output must be absolute and outside the repository")
@@ -137,16 +158,28 @@ def load_replay_artifact(path: Path) -> dict[str, object]:
     raise ValueError("banked replay artifact is absent")
 
 
-def _install_frames() -> list[str]:
-    safe_parent = Path("/opt/homebrew/var")
+def _validated_capture_temporary_parent(candidate: Path | None = None) -> Path:
+    safe_parent = candidate if candidate is not None else capture_temporary_parent()
+    repository_root = REPOSITORY_ROOT.resolve()
+    resolved = safe_parent.resolve()
     if (
-        not safe_parent.is_dir()
+        not safe_parent.is_absolute()
+        or not safe_parent.is_dir()
         or safe_parent.is_symlink()
         or not os.access(safe_parent, os.W_OK)
+        or resolved == repository_root
+        or repository_root in resolved.parents
     ):
-        raise RuntimeError("public-safe capture temporary parent is unavailable")
+        raise RuntimeError(
+            f"public-safe capture temporary parent is unavailable: {safe_parent}"
+        )
+    return resolved
+
+
+def _install_frames() -> list[str]:
+    safe_parent = _validated_capture_temporary_parent()
     with tempfile.TemporaryDirectory(
-        prefix="floati-capture-install-", dir=safe_parent
+        prefix=INSTALL_CAPTURE_TEMPORARY_PREFIX, dir=safe_parent
     ) as temporary:
         base = Path(temporary)
         destination = base / "installed"
@@ -196,7 +229,7 @@ def _install_frames() -> list[str]:
         )
         if result.returncode != 0:
             raise RuntimeError(f"committed-tree install failed: {result.stderr.strip()}")
-        receipt = ensure_capture_text_safe(result.stdout.strip())
+        receipt = _expose_install_receipt(result.stdout.strip())
     logical_lines = receipt.replace(',"', ',\n"').splitlines()
     wrapped = [
         piece

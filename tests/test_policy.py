@@ -219,6 +219,36 @@ class RepositoryPolicyTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assert_refuses(candidate)
 
+    def test_secret_isolation_is_closed_and_canonical_only_when_declared(self) -> None:
+        try:
+            declared = self.load(VALID_POLICY.replace(
+                'max_concurrency = 1',
+                'max_concurrency = 1\nsecret_isolation = "process"',
+                1,
+            ))
+        except ProtocolRefusal as exc:
+            self.fail(f"explicit secret isolation must load: {exc.code}")
+
+        self.assertEqual(
+            "process", declared.worker_profiles["codex"].secret_isolation
+        )
+        self.assertEqual(
+            "process",
+            declared.canonical()["worker_profiles"]["codex"]["secret_isolation"],
+        )
+        baseline = self.load()
+        self.assertIsNone(baseline.worker_profiles["codex"].secret_isolation)
+        self.assertNotIn(
+            "secret_isolation", baseline.canonical()["worker_profiles"]["codex"]
+        )
+        for invalid in ("", "token", "file", "PROCESS"):
+            with self.subTest(invalid=invalid):
+                self.assert_refuses(VALID_POLICY.replace(
+                    'max_concurrency = 1',
+                    f'max_concurrency = 1\nsecret_isolation = "{invalid}"',
+                    1,
+                ))
+
     def test_loading_verification_argv_never_launches_a_process(self) -> None:
         """Treating verification argv as executable at load time would make policy parsing an effect."""
         marker = self.root / "argv-was-executed"

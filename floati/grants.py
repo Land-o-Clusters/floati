@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from .admin_registry import RegistryAdminBackend
+from .credential_leases import CredentialLeaseLedger
 from .errors import ProtocolRefusal
 from .planes import AuthorityGrantStore
 from .registry import Registry
@@ -106,7 +107,15 @@ class AuthorityGrantService:
         record = self.store.revoke_exact(
             authority_subject, owner, exact_epoch, _now(now)
         )
-        return {"operation": "revoke", "grantor": actor, "record": record}
+        lease_revocations = CredentialLeaseLedger(self.root).revoke_alias(
+            authority_subject, owner, exact_epoch, now=_now(now)
+        )
+        return {
+            "operation": "revoke",
+            "grantor": actor,
+            "record": record,
+            "credential_lease_revocations": lease_revocations,
+        }
 
 
 def _arguments(args: argparse.Namespace) -> tuple[FloatiRoot, str, str, str, int]:

@@ -5,9 +5,11 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import json
+import shlex
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from floati.registry import Registry
 from floati.root import FloatiRoot
@@ -103,6 +105,63 @@ class CodexHookInstallerTests(unittest.TestCase):
         ):
             self.assertRegex(receipt[field], r"^[0-9a-f]{64}$")
         self.assertEqual("installed", receipt["state"])
+
+    def test_installed_waiter_launcher_declares_the_fixed_stop_hook_interpreter(self) -> None:
+        receipt = self.installer().install(
+            self.workspace,
+            public_ids.builder('floati'),
+            hook_timeout_seconds=10,
+            wait_deadline_seconds=2,
+        )
+
+        installed = json.loads(self.hooks_path.read_text(encoding="utf-8"))
+        command = installed["hooks"]["Stop"][2]["hooks"][0]["command"]
+        launcher = self.destination / receipt["bundle_digest"] / "scripts" / "floati-codex-wait"
+        self.assertEqual("/usr/bin/python3", shlex.split(command)[0])
+        with launcher.open("rb") as stream:
+            self.assertEqual(b"#!/usr/bin/python3\n", stream.readline())
+
+    def test_install_names_the_absent_fixed_host_interpreter_before_writing(self) -> None:
+        from floati.errors import ProtocolRefusal
+
+        missing = self.base / "missing-usr-bin-python3"
+        hooks_before = self.hooks_path.read_bytes()
+        with mock.patch("floati.codex_hook_install._CODEX_WAIT_INTERPRETER", missing):
+            with self.assertRaises(ProtocolRefusal) as caught:
+                self.installer().install(
+                    self.workspace,
+                    public_ids.builder('floati'),
+                    hook_timeout_seconds=10,
+                    wait_deadline_seconds=2,
+                )
+
+        self.assertEqual("codex_wait_host_interpreter_absent", caught.exception.code)
+        self.assertIn(str(missing), caught.exception.detail)
+        self.assertEqual(hooks_before, self.hooks_path.read_bytes())
+        self.assertFalse(self.destination.exists())
+
+    def test_rebind_names_the_absent_fixed_host_interpreter_before_shape_validation(self) -> None:
+        from floati.codex_hook_install import plan_waiter_rebind
+        from floati.errors import ProtocolRefusal
+
+        receipt = self.installer().install(
+            self.workspace,
+            public_ids.builder('floati'),
+            hook_timeout_seconds=10,
+            wait_deadline_seconds=2,
+        )
+        self.assertRegex(receipt["bundle_digest"], r"^[0-9a-f]{64}$")
+        malformed = json.loads(self.hooks_path.read_text(encoding="utf-8"))
+        malformed["hooks"]["Stop"][2]["hooks"][0]["command"] = "echo floati-codex-wait"
+        self.hooks_path.write_text(json.dumps(malformed), encoding="utf-8")
+        missing = self.base / "missing-usr-bin-python3"
+
+        with mock.patch("floati.codex_hook_install._CODEX_WAIT_INTERPRETER", missing):
+            with self.assertRaises(ProtocolRefusal) as caught:
+                plan_waiter_rebind(self.hooks_path, self.destination, "1" * 64)
+
+        self.assertEqual("codex_wait_host_interpreter_absent", caught.exception.code)
+        self.assertIn(str(missing), caught.exception.detail)
 
     def test_exact_retry_never_duplicates_the_floati_block(self) -> None:
         first = self.installer().install(

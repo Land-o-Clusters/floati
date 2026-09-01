@@ -478,9 +478,13 @@ def _wake_daemon_coordinate(args: argparse.Namespace):
 
 
 def _wake_daemon_manager(coordinate):
+    launcher = Path(__file__).resolve().parents[1] / "scripts" / "floati"
+    if sys.platform.startswith("linux"):
+        from .wake_daemon_systemd import SystemdUserUnitManager
+
+        return SystemdUserUnitManager(coordinate, installed_launcher=launcher)
     from .wake_daemon_launchd import LaunchAgentManager
 
-    launcher = Path(__file__).resolve().parents[1] / "scripts" / "floati"
     return LaunchAgentManager(coordinate, installed_launcher=launcher)
 
 

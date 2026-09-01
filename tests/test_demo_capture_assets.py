@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from tests.temp_roots import REAL_TEMP_ROOT
+from unittest import mock
 
 if importlib.util.find_spec("PIL") is not None:
     from PIL import Image
@@ -37,6 +38,129 @@ def load_capture_module():
 
 @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
 class DemoCaptureAssetTests(unittest.TestCase):
+    def test_install_staging_coordinate_is_deterministic_and_exact(self) -> None:
+        """Catches random instrument coordinates or generic suffix redaction."""
+
+        capture = load_capture_module()
+        first = (
+            '{"wiring_journal":"\x2fprivate/tmp/'
+            'floati-capture-install-ab12_cd3/installed/journal.jsonl",'
+            '"signature":"real-content-deadbeef"}'
+        )
+        second = first.replace("ab12_cd3", "zy98_wv7")
+        expected = (
+            '{"wiring_journal":"<temp>/floati-capture-install/'
+            'installed/journal.jsonl","signature":"real-content-deadbeef"}'
+        )
+
+        self.assertEqual(expected, capture._expose_install_receipt(first))
+        self.assertEqual(expected, capture._expose_install_receipt(second))
+        self.assertEqual(
+            "floati-capture-install-",
+            capture.INSTALL_CAPTURE_TEMPORARY_PREFIX,
+        )
+
+        unrelated = (
+            '{"wiring_journal":"\x2fprivate/tmp/'
+            'floati-capture-fixture-ab12_cd3/installed/journal.jsonl",'
+            '"signature":"real-content-deadbeef"}'
+        )
+        self.assertEqual(
+            unrelated.replace("\x2fprivate/tmp", "<temp>"),
+            capture._expose_install_receipt(unrelated),
+        )
+
+    def test_install_staging_coordinate_perturbation_reverts_exactly(self) -> None:
+        """Proves the named coordinate collapse is the determinism mechanism."""
+
+        capture = load_capture_module()
+        first = "\x2ftmp/floati-capture-install-ab12_cd3/installed"
+        second = "\x2ftmp/floati-capture-install-zy98_wv7/installed"
+
+        self.assertEqual(
+            capture._expose_install_receipt(first),
+            capture._expose_install_receipt(second),
+        )
+        with mock.patch.object(
+            capture,
+            "_collapse_install_staging_coordinate",
+            side_effect=lambda text: text,
+        ):
+            self.assertNotEqual(
+                capture._expose_install_receipt(first),
+                capture._expose_install_receipt(second),
+            )
+        self.assertEqual(
+            capture._expose_install_receipt(first),
+            capture._expose_install_receipt(second),
+        )
+
+    def test_install_receipt_keeps_field_and_redacts_governed_parent(self) -> None:
+        """Catches capture rendering that leaks or deletes its staging path."""
+
+        capture = load_capture_module()
+        self.assertTrue(
+            hasattr(capture, "_expose_install_receipt"),
+            "capture rendering must expose install receipts through the house redactor",
+        )
+
+        for parent in ("\x2fprivate/tmp", "\x2ftmp"):
+            with self.subTest(parent=parent):
+                receipt = (
+                    '{"wiring_journal":"'
+                    + parent
+                    + '/floati-capture-install-fixed/installed/'
+                    '.floati-install/wiring-journal.v1.jsonl"}'
+                )
+                self.assertEqual(
+                    '{"wiring_journal":"<temp>/floati-capture-install-fixed/'
+                    'installed/.floati-install/wiring-journal.v1.jsonl"}',
+                    capture._expose_install_receipt(receipt),
+                )
+
+    def test_capture_temporary_parent_accepts_only_public_safe_storage(self) -> None:
+        """Catches capture staging that bypasses or weakens its storage fence."""
+
+        capture = load_capture_module()
+        self.assertTrue(
+            hasattr(capture, "_validated_capture_temporary_parent"),
+            "capture staging must validate its derived temporary parent",
+        )
+
+        with tempfile.TemporaryDirectory(
+            prefix="floati-capture-parent-valid-", dir=REAL_TEMP_ROOT
+        ) as valid_text:
+            valid = Path(valid_text)
+            self.assertEqual(
+                valid.resolve(),
+                capture._validated_capture_temporary_parent(valid),
+            )
+
+            missing = valid / "missing"
+            regular_file = valid / "file"
+            regular_file.write_text("not a directory", encoding="utf-8")
+            real_directory = valid / "real-directory"
+            real_directory.mkdir()
+            symlink = valid / "symlink"
+            symlink.symlink_to(real_directory, target_is_directory=True)
+            unwritable = valid / "unwritable"
+            unwritable.mkdir()
+            unwritable.chmod(0o400)
+
+            invalid = (
+                Path("relative-capture-parent"),
+                missing,
+                regular_file,
+                symlink,
+                unwritable,
+                ROOT,
+            )
+            for candidate in invalid:
+                with self.subTest(candidate=str(candidate)):
+                    with self.assertRaises(RuntimeError) as refusal:
+                        capture._validated_capture_temporary_parent(candidate)
+                    self.assertIn(str(candidate), str(refusal.exception))
+
     def test_specs_name_exact_ruled_candidate_set(self) -> None:
         capture = load_capture_module()
 

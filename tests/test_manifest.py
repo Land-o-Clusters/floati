@@ -11,50 +11,93 @@ from pathlib import Path
 
 
 _FROZEN_PROTOCOL_ASSET_ROOTS = (
-    "schemas/v0",
-    "schemas/v1",
     "bundle/c7.1",
     "bundle/c7.2",
 )
-_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 157
+_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT = 8
 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256 = (
-    "e8f3429df0a7e03cea690dcbc3772da4bbc90141f4758c09e2cb512d83af6361"
+    # These eight JSON assets are published bundles. Their membership and
+    # bytes are frozen because changing them changes something users have.
+    "3c2a92c232ced0d126a5742e3b30004c75ff34f2da24b01265bc867e5698052a"
 )
 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256 = (
-    # Full-history composition adds the receipts-read v0 bundle schema and
-    # Zcode enum/reason rows atop main's WD-R5c/Grok wake-daemon schema bytes.
-    "303d8c8aef948d18c941484cf52b67053f7e1e8d29c665e54bebcf3a5be860bb"
+    "f4576f0719fe6f960fe56b2aca3233802cf6b949d8c2702b393df01253fddcb8"
+)
+
+_GOVERNED_PROTOCOL_ASSET_ROOTS = (
+    "schemas/v0",
+    "schemas/v1",
+)
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 156
+_FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
+    # Versioned schemas may evolve in place, but their reviewed membership is
+    # fixed. Content bytes deliberately do not participate in this pin.
+    "20e0c4b7f26f4061cc41f8e86b300c95de262634b9a7d73681aae74eaa692ff9"
+)
+_FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
+_FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (
+    # Derived as the intersection of the top-level keys carried by every
+    # governed schema; this pins shared shape without pinning schema content.
+    "631b0bf76158a24d761e0f1e6c8921afa534c55e924512efb3d18eb86b1f2ea8"
 )
 
 
-def _frozen_protocol_snapshot() -> tuple[int, str, str]:
-    'Return the exact reviewer-approved Floati frozen protocol snapshot.'
-
+def _protocol_json_paths(relative_roots: tuple[str, ...], label: str) -> list[Path]:
     root = Path.cwd()
     paths: list[Path] = []
-    for relative_root in _FROZEN_PROTOCOL_ASSET_ROOTS:
+    for relative_root in relative_roots:
         asset_root = root / relative_root
         if not asset_root.is_dir() or asset_root.is_symlink():
-            raise AssertionError(f"frozen protocol root is not a regular directory: {relative_root}")
+            raise AssertionError(f"{label} root is not a regular directory: {relative_root}")
         for path in asset_root.rglob("*"):
             relative = path.relative_to(root)
             if path.is_symlink():
-                raise AssertionError(f"frozen protocol asset is a symlink: {relative}")
+                raise AssertionError(f"{label} asset is a symlink: {relative}")
             if path.is_dir():
                 continue
             if not path.is_file():
-                raise AssertionError(f"frozen protocol asset is not a regular file: {relative}")
+                raise AssertionError(f"{label} asset is not a regular file: {relative}")
             if path.suffix == ".json":
                 paths.append(relative)
-    paths = sorted(paths)
-    paths_sha256 = hashlib.sha256(
+    return sorted(paths)
+
+
+def _protocol_paths_sha256(paths: list[Path]) -> str:
+    return hashlib.sha256(
         "\n".join(path.as_posix() for path in paths).encode("utf-8")
-    )
+    ).hexdigest()
+
+
+def _frozen_protocol_snapshot() -> tuple[int, str, str]:
+    """Return the reviewer-approved published-bundle byte snapshot."""
+
+    root = Path.cwd()
+    paths = _protocol_json_paths(_FROZEN_PROTOCOL_ASSET_ROOTS, "frozen protocol")
     snapshot_sha256 = hashlib.sha256()
     for path in paths:
         relative = path.as_posix().encode("utf-8")
         snapshot_sha256.update(relative + b"\0" + (root / path).read_bytes() + b"\0")
-    return len(paths), paths_sha256.hexdigest(), snapshot_sha256.hexdigest()
+    return len(paths), _protocol_paths_sha256(paths), snapshot_sha256.hexdigest()
+
+
+def _governed_protocol_snapshot() -> tuple[int, str, int, str]:
+    """Return governed schema membership and shared JSON-object shape."""
+
+    root = Path.cwd()
+    paths = _protocol_json_paths(_GOVERNED_PROTOCOL_ASSET_ROOTS, "governed protocol")
+    common_keys: set[str] | None = None
+    for path in paths:
+        try:
+            document = json.loads((root / path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise AssertionError(f"governed protocol asset is not valid JSON: {path}") from exc
+        if not isinstance(document, dict):
+            raise AssertionError(f"governed protocol asset is not a JSON object: {path}")
+        keys = set(document)
+        common_keys = keys if common_keys is None else common_keys & keys
+    derived_keys = sorted(common_keys or set())
+    keys_sha256 = hashlib.sha256("\n".join(derived_keys).encode("utf-8")).hexdigest()
+    return len(paths), _protocol_paths_sha256(paths), len(derived_keys), keys_sha256
 
 try:
     from floati.manifest import verify_manifest
@@ -583,7 +626,35 @@ class ManifestTests(unittest.TestCase):
         )
 
     def test_frozen_protocol_json_bytes_match_the_floati_rebaseline(self) -> None:
-        """Catches unruled byte drift across both schema versions and C7 assets."""
+        """Catches unruled byte drift in the eight published C7 JSON assets."""
+
+        self.assertEqual(
+            (
+                _FLOATI_FROZEN_PROTOCOL_ASSET_COUNT,
+                _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256,
+                _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256,
+            ),
+            _frozen_protocol_snapshot(),
+        )
+        self.assertEqual(
+            (
+                _FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
+            ),
+            _governed_protocol_snapshot(),
+        )
+
+    def test_governed_protocol_json_content_is_not_byte_pinned(self) -> None:
+        """Catches schema content edits being mistaken for published-bundle drift."""
+
+        schema = Path("schemas/v1/doctor-artifact.schema.json")
+        original = schema.read_bytes()
+        self.addCleanup(schema.write_bytes, original)
+        payload = json.loads(original)
+        payload["description"] = "governed schema content may evolve"
+        schema.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 
         self.assertEqual(
             (
@@ -594,16 +665,78 @@ class ManifestTests(unittest.TestCase):
             _frozen_protocol_snapshot(),
         )
 
-    def test_frozen_protocol_json_inventory_matches_the_floati_rebaseline(self) -> None:
-        """Catches additions, removals, links, or path drift in all frozen JSON assets."""
+    def test_governed_protocol_json_inventory_and_shape_match_the_reviewed_set(self) -> None:
+        """Catches additions, removals, invalid JSON, or shared schema-shape drift."""
 
         self.assertEqual(
+            (
+                _FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
+            ),
+            _governed_protocol_snapshot(),
+        )
+
+    def test_adding_a_governed_schema_moves_the_membership_pin(self) -> None:
+        """Catches an unreviewed schema addition escaping governed membership."""
+
+        added = Path("schemas/v1/unreviewed-addition.schema.json")
+        self.addCleanup(added.unlink, missing_ok=True)
+        added.write_text('{"$schema":"https://json-schema.org/draft/2020-12/schema"}\n')
+
+        self.assertNotEqual(
+            (
+                _FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
+            ),
+            _governed_protocol_snapshot(),
+        )
+
+    def test_governed_schema_must_parse_and_keep_the_shared_shape(self) -> None:
+        """Catches malformed JSON or removal of a key shared by every schema."""
+
+        schema = Path("schemas/v1/doctor-artifact.schema.json")
+        original = schema.read_bytes()
+        self.addCleanup(schema.write_bytes, original)
+        schema.write_text("not-json\n", encoding="utf-8")
+        with self.assertRaisesRegex(
+            AssertionError,
+            r"governed protocol asset is not valid JSON: schemas/v1/doctor-artifact\.schema\.json",
+        ):
+            _governed_protocol_snapshot()
+
+        payload = json.loads(original)
+        payload.pop("$schema")
+        schema.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        self.assertNotEqual(
+            (
+                _FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
+                _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
+            ),
+            _governed_protocol_snapshot(),
+        )
+
+    def test_changing_a_frozen_bundle_asset_moves_the_byte_pin(self) -> None:
+        """Catches published bundle drift while naming the perturbed asset."""
+
+        asset = Path("bundle/c7.1/bundle-index.json")
+        original = asset.read_bytes()
+        self.addCleanup(asset.write_bytes, original)
+        asset.write_bytes(original + b" ")
+
+        self.assertNotEqual(
             (
                 _FLOATI_FROZEN_PROTOCOL_ASSET_COUNT,
                 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256,
                 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256,
             ),
             _frozen_protocol_snapshot(),
+            f"frozen protocol byte drift was not detected: {asset}",
         )
 
     def test_manifest_rejects_a_symlinked_parent_component(self) -> None:

@@ -13,8 +13,9 @@ from pathlib import Path
 
 from floati.decisions import decision_digest, validate_decision_binding
 from floati.errors import ProtocolRefusal
+from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
-from floati.records import validate_record
+from floati.records import _SPECS, validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
 
@@ -812,6 +813,85 @@ class SchemaContractTests(unittest.TestCase):
         with self.assertRaises(SchemaValidationError):
             validate_json_schema(replaced, V1_SCHEMA_DIR / "capability-revoked-record.schema.json")
 
+    def test_v1_credential_lease_schemas_match_the_closed_runtime_records(self) -> None:
+        """Catches shipping credential lease truth without its strict v1 schemas."""
+        suffixes = {
+            "lease": "018f7e9b3c117abc8def0123456789ab",
+            "consumed": "018f7e9b3c127abc8def0123456789ab",
+            "revoked": "018f7e9b3c137abc8def0123456789ab",
+            "attempt": "018f7e9b3c147abc8def0123456789ab",
+            "authority": "018f7e9b3c157abc8def0123456789ab",
+            "snapshot": "018f7e9b3c167abc8def0123456789ab",
+        }
+        common = {
+            "schema_version": 1,
+            "tenant_id": "alpha",
+            "timestamp": "2026-08-30T18:30:00.000Z",
+        }
+        granted = dict(
+            common,
+            id="credential-lease-" + suffixes["lease"],
+            kind="credential_lease_granted",
+            attempt_id="attempt-" + suffixes["attempt"],
+            principal="builder-a",
+            capability="workspace_write",
+            secret_alias="openrouter-api",
+            ttl_seconds=30,
+            expires_at="2026-08-30T18:30:30.000Z",
+            authority_epoch=1,
+            authority_record_id="authority-" + suffixes["authority"],
+            capability_set_bound_id="capability-set-bound-" + suffixes["snapshot"],
+        )
+        consumed = dict(
+            common,
+            id="credential-lease-consumed-" + suffixes["consumed"],
+            kind="credential_lease_consumed",
+            lease_id=granted["id"],
+            delivery_mode="inherited_fd",
+            consumed_at_testimony="2026-08-30T18:30:01.000Z",
+        )
+        revoked = dict(
+            common,
+            id="credential-lease-revoked-" + suffixes["revoked"],
+            kind="credential_lease_revoked",
+            lease_id=granted["id"],
+            authority_epoch=1,
+            revoked_at_testimony="2026-08-30T18:30:02.000Z",
+        )
+        cases = {
+            "credential-lease-granted-record.schema.json": granted,
+            "credential-lease-consumed-record.schema.json": consumed,
+            "credential-lease-revoked-record.schema.json": revoked,
+        }
+        for name, instance in cases.items():
+            with self.subTest(name=name):
+                path = V1_SCHEMA_DIR / name
+                schema = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(1, schema["properties"]["schema_version"]["const"])
+                self.assertFalse(schema["additionalProperties"])
+                validate_json_schema(instance, path)
+                validate_record(
+                    instance,
+                    "alpha",
+                    frozenset({instance["kind"]}),
+                    integrity=False,
+                )
+                hostile = dict(instance, secret_value="must-never-be-schema-shaped")
+                with self.assertRaises(SchemaValidationError):
+                    validate_json_schema(hostile, path)
+
+    def test_v1_credential_lease_schema_required_sets_match_runtime_specs(self) -> None:
+        """Catches schema/runtime field-set drift for every credential lease record kind."""
+        schema_names = {
+            "credential_lease_granted": "credential-lease-granted-record.schema.json",
+            "credential_lease_consumed": "credential-lease-consumed-record.schema.json",
+            "credential_lease_revoked": "credential-lease-revoked-record.schema.json",
+        }
+        for kind, name in schema_names.items():
+            with self.subTest(kind=kind):
+                schema = json.loads((V1_SCHEMA_DIR / name).read_text(encoding="utf-8"))
+                self.assertEqual(set(schema["required"]), _SPECS[kind][1])
+
     def test_dependency_free_schema_helper_selects_then_and_else_branches(self) -> None:
         """Catches the stdlib helper ignoring a selected conditional branch inside allOf."""
         schema = {
@@ -916,6 +996,91 @@ class SchemaContractTests(unittest.TestCase):
             with self.assertRaises(SchemaValidationError):
                 validate_json_schema("unsafe\ntext", floati_schema)
             validate_json_schema("unsafe\ntext", legacy_schema)
+
+    def test_schema_helper_executes_any_of_and_contains_cardinality(self) -> None:
+        """Catches the dependency-free validator skipping run-manifest branches."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            schema_path = Path(directory) / "contains.schema.json"
+            schema_path.write_text(
+                json.dumps(
+                    {
+                        "anyOf": [
+                            {"type": "null"},
+                            {
+                                "type": "array",
+                                "contains": {"const": "observed"},
+                                "minContains": 1,
+                                "maxContains": 1,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            validate_json_schema(None, schema_path)
+            validate_json_schema(["observed"], schema_path)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema([], schema_path)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema(["observed", "observed"], schema_path)
+
+    def test_schema_helper_executes_floati_sorted_unique_arrays(self) -> None:
+        """Catches canonical collection order becoming runtime-only testimony."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            floati_schema = root / "floati-sorted.schema.json"
+            floati_schema.write_text(
+                json.dumps(
+                    {
+                        "type": "array",
+                        "x-floati-sorted-unique": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            legacy_schema = root / "legacy-sorted.schema.json"
+            legacy_schema.write_text(
+                json.dumps(
+                    {
+                        "type": "array",
+                        "x-slipway-sorted-unique": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            validate_json_schema(["alpha", "zeta"], floati_schema)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema(["zeta", "alpha"], floati_schema)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema(["alpha", "alpha"], floati_schema)
+            validate_json_schema(["zeta", "alpha"], legacy_schema)
+
+    def test_schema_helper_executes_floati_sorted_unique_object_keys(self) -> None:
+        """Catches MCP tool rows being accepted out of canonical name order."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            schema_path = Path(directory) / "sorted-key.schema.json"
+            schema_path.write_text(
+                json.dumps(
+                    {
+                        "type": "array",
+                        "x-floati-sorted-unique-key": "name",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            validate_json_schema([{"name": "alpha"}, {"name": "zeta"}], schema_path)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema([{"name": "zeta"}, {"name": "alpha"}], schema_path)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema([{"name": "alpha"}, {"name": "alpha"}], schema_path)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema([{"not_name": "alpha"}], schema_path)
 
     def test_v1_harness_binding_schema_selects_root_and_transition_shapes(self) -> None:
         """Catches a v1 schema that permits a root predecessor or a predecessorless transition."""
@@ -1623,7 +1788,7 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIsNotNone(
             re.fullmatch(
                 workspace["pattern"],
-                "\x2fprivate/tmp/floati-work/work-018f0f23abcd71238000000000000000",
+                str(worker_workspace_root() / "work-018f0f23abcd71238000000000000000"),
             )
         )
         self.assertIsNone(re.fullmatch(workspace["pattern"], "\x2ftmp/inferred"))
@@ -1651,7 +1816,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
+            "workspace": str(worker_workspace_root() / item_id),
         }
 
         def runtime_accepts(candidate: dict[str, object]) -> bool:
@@ -1667,7 +1832,7 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (str(worker_workspace_root() / item_id), True),
             (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
@@ -1686,7 +1851,7 @@ class SchemaContractTests(unittest.TestCase):
             "title": "rebaseline frozen workspace",
             "owner": public_ids.worker('alpha'),
             "artifact_bindings": [],
-            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
+            "workspace": str(worker_workspace_root() / item_id),
         }
         schema_path = SCHEMA_DIR / "work-item-record.schema.json"
 
@@ -1698,7 +1863,7 @@ class SchemaContractTests(unittest.TestCase):
             return True
 
         for workspace, expected in (
-            (f"\x2fprivate/tmp/floati-work/{item_id}", True),
+            (str(worker_workspace_root() / item_id), True),
             (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):

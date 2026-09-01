@@ -18,11 +18,8 @@ class HM3IContractTests(unittest.TestCase):
             )
             self.assertIn("never the reasoning framework", text)
 
-    def test_item_ten_and_item_eleven_docs_state_local_coordinates_without_publication_claims(self) -> None:
-        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
-
+    def test_item_ten_and_item_eleven_public_spec_states_local_coordinates_without_publication_claims(self) -> None:
         spec = Path("docs/SPEC-DRAFT.md").read_text()
-        checklist = Path("docs/PUBLICATION-CHECKLIST.md").read_text()
         for literal in (
             "runs/events.jsonl",
             "FLOATI.toml",
@@ -40,6 +37,11 @@ class HM3IContractTests(unittest.TestCase):
             self.assertIn(literal, spec)
         self.assertIn("does not publish, install,", spec)
         self.assertIn("deploy, or activate", spec)
+
+    def test_item_ten_and_item_eleven_private_checklist_states_local_coordinates_without_publication_claims(self) -> None:
+        require_private_artifact(self, "docs/PUBLICATION-CHECKLIST.md")
+
+        checklist = Path("docs/PUBLICATION-CHECKLIST.md").read_text()
         self.assertIn("HM3I_BRIEF.md", checklist)
         self.assertIn("exact-candidate local evidence", checklist)
         self.assertIn("does not publish, install, deploy, activate", checklist)

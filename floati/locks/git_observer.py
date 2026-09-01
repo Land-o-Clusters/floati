@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Iterable, Mapping, Optional
 
 from ..errors import ProtocolRefusal
+from ..git_process import require_complete_history_for_reachability
 from .contracts import validate_full_ref, validate_witness
 
 
@@ -163,6 +164,7 @@ class GitObserver:
         worktree = resolved
         if self.common_git_dir(worktree) != self.identity.common_git_dir:
             raise ProtocolRefusal("worktree_repository_mismatch", "worktree belongs to another Git common directory")
+        require_complete_history_for_reachability(worktree)
         head = self._text_output(
             self._run(worktree, "rev-parse", "--verify", "HEAD^{commit}"),
             "worktree head",

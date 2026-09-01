@@ -9,6 +9,7 @@ import select
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -269,6 +270,45 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.assertTrue(diagnostic["session_is_pid"])
         self.assertEqual(errno.EBADF, diagnostic["leak_errno"])
         self.assertEqual([0, 1, 2, 3], diagnostic["open_fds"])
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS descriptor surface")
+    def test_observer_closes_inherited_fd_omitted_by_dev_fd(self) -> None:
+        """Catches Darwin /dev/fd omissions becoming inherited authority."""
+        leaked_read, leaked_write = os.pipe()
+        proof_read, proof_write = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(proof_read)
+            try:
+                with mock.patch.object(
+                    self.observer().os,
+                    "listdir",
+                    return_value=["0", "1", "2", str(proof_write)],
+                ):
+                    self.observer()._close_unruled_descriptors(
+                        {0, 1, 2, proof_write},
+                    )
+                try:
+                    os.fstat(leaked_read)
+                except OSError as exc:
+                    outcome = b"closed" if exc.errno == errno.EBADF else b"error"
+                else:
+                    outcome = b"open"
+                os.write(proof_write, outcome)
+                os._exit(0)
+            except BaseException:
+                os._exit(97)
+        os.close(proof_write)
+        try:
+            outcome = os.read(proof_read, 16)
+            waited, status = os.waitpid(pid, 0)
+            self.assertEqual(pid, waited)
+            self.assertEqual(0, os.waitstatus_to_exitcode(status))
+            self.assertEqual(b"closed", outcome)
+        finally:
+            os.close(proof_read)
+            self._safe_close(leaked_read)
+            self._safe_close(leaked_write)
 
     def test_observer_never_inherits_ledger_or_tenant_write_authority(self) -> None:
         """Catches readable ledger or tenant-write descriptors surviving pre-request closure."""

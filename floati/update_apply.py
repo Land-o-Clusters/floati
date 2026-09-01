@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -12,6 +11,7 @@ from typing import Dict, Sequence
 
 from .deploy import DeploymentWriter
 from .errors import IntegrityFailure, ProtocolRefusal
+from .fleet_update import _explicit_executable
 from .ids import uuid7_hex
 from .manifest import verify_manifest
 from .update_check import (
@@ -36,6 +36,39 @@ from .update_ownership import (
 
 
 _BUNDLE_MAX_BYTES = 64 * 1024 * 1024
+_GIT_CANDIDATES = ("/usr/bin/git", "/bin/git")
+
+
+def _select_git_executable(explicit: str | Path | None = None) -> str:
+    code = "update_git_unavailable"
+    if explicit is not None:
+        try:
+            return _explicit_executable(explicit, code)
+        except ProtocolRefusal as exc:
+            raise ProtocolRefusal(
+                code,
+                _draft(
+                    f"Git executable is unavailable at operator-declared path: {explicit}"
+                ),
+            ) from exc
+    for candidate in _GIT_CANDIDATES:
+        path = Path(candidate)
+        if not path.exists() and not path.is_symlink():
+            continue
+        try:
+            return _explicit_executable(candidate, code)
+        except ProtocolRefusal as exc:
+            raise ProtocolRefusal(
+                code,
+                _draft(f"Git executable candidate is not usable: {candidate}"),
+            ) from exc
+    raise ProtocolRefusal(
+        code,
+        _draft(
+            "Git executable is absent from fixed candidates: "
+            + ", ".join(_GIT_CANDIDATES)
+        ),
+    )
 
 
 def _same_identity(path: Path, expected: tuple[int, int]) -> bool:
@@ -141,13 +174,10 @@ def _require_git_success(
         raise ProtocolRefusal(code, _draft(detail))
 
 
-def _stage_bundle(bundle: bytes, source_sha: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
-    git = shutil.which("git")
-    if git is None:
-        raise ProtocolRefusal(
-            "update_bundle_invalid",
-            _draft("Git is required to verify and stage an update bundle"),
-        )
+def _stage_bundle(
+    bundle: bytes, source_sha: str, *, git_executable: str
+) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    git = git_executable
     temporary = tempfile.TemporaryDirectory(prefix="floati-update-apply-")
     root = Path(temporary.name).resolve(strict=True)
     bundle_path = root / "release.bundle"
@@ -210,6 +240,7 @@ def apply_update(
     entrypoint: Path,
     version: str,
     idempotency_key: str,
+    git_executable: str | Path | None = None,
 ) -> Dict[str, object]:
     """Apply or roll back through the same retained-index and bundle checks."""
 
@@ -281,6 +312,8 @@ def apply_update(
                 _draft(f"signed release index does not contain version {version}"),
             )
 
+        selected_git = _select_git_executable(git_executable)
+
         # The transport module remains unreachable until ownership, consent,
         # retained signature evidence, and the requested release all verify.
         from . import update_transport
@@ -308,7 +341,11 @@ def apply_update(
                 _draft("downloaded bundle digest does not equal the signed bundle digest"),
             )
 
-        temporary, staged = _stage_bundle(bundle, str(release["source_sha"]))
+        temporary, staged = _stage_bundle(
+            bundle,
+            str(release["source_sha"]),
+            git_executable=selected_git,
+        )
         try:
             try:
                 current_consent = consent_ledger.require_active(selected_channel)
@@ -344,14 +381,8 @@ def apply_update(
                     _draft("update destination identity changed after bundle download"),
                 )
 
-            git = shutil.which("git")
-            if git is None:
-                raise ProtocolRefusal(
-                    "update_bundle_invalid",
-                    _draft("Git became unavailable before the destination write"),
-                )
             installer_path = os.pathsep.join(
-                (str(selected / "scripts"), str(Path(git).resolve().parent))
+                (str(selected / "scripts"), str(Path(selected_git).parent))
             )
             outcome = DeploymentWriter(
                 staged,
@@ -360,7 +391,7 @@ def apply_update(
                 ref="HEAD",
                 committed_tree=True,
                 installer_path=installer_path,
-                git_executable=git,
+                git_executable=selected_git,
             ).run()
             receipt: Dict[str, object] = {
                 "schema_version": 0,

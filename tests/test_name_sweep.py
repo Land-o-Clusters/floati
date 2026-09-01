@@ -33,7 +33,7 @@ APPROVED_HERO_LOOP = """<p align="center">
   <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay" width="1400">
 </p>"""
 
-LIVING_PUBLIC_DOCS = (
+PUBLIC_LIVING_DOCS = (
     "README.md",
     "CONTRIBUTING.md",
     "docs/CONFLUENCE-v0.md",
@@ -42,16 +42,18 @@ LIVING_PUBLIC_DOCS = (
     "docs/DESIGN.md",
     "docs/FINDINGS.md",
     "docs/FLEET.md",
-    "docs/PUBLICATION-CHECKLIST.md",
     "docs/SPEC-DRAFT.md",
     "bundle/c7.1/README.md",
     "bundle/c7.2/README.md",
 )
 
-ACCOUNT_NEUTRAL_PUBLIC_FILES = (
-    "docs/demo/corpus.v0.jsonl",
+PRIVATE_LIVING_DOCS = ("docs/PUBLICATION-CHECKLIST.md",)
+
+PUBLIC_ACCOUNT_NEUTRAL_FILES = (
     "docs/evidence/DEMO-UAT-CAPTURE-GIF-CANDIDATES.md",
 )
+
+PRIVATE_ACCOUNT_NEUTRAL_FILES = ("docs/demo/corpus.v0.jsonl",)
 
 
 def _operator_account_name() -> str:
@@ -175,21 +177,26 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
 
         self.assertEqual([], missing)
 
-    def test_living_public_docs_teach_floati_not_the_retired_name(self) -> None:
-        """Catches living product prose or public command examples left behind."""
-        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
-
-        for relative in LIVING_PUBLIC_DOCS:
+    def assert_docs_teach_floati_not_the_retired_name(
+        self, relatives: tuple[str, ...]
+    ) -> None:
+        for relative in relatives:
             with self.subTest(relative=relative):
                 text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
                 self.assertNotIn("scripts/slip", text)
                 self.assertIsNone(RETIRED_PRODUCT_NAME.search(text))
 
-    def test_living_public_docs_are_tenant_neutral(self) -> None:
-        """Catches an owner path, host identity, or private fleet in public copy."""
-        require_private_artifact(self, 'docs/PUBLICATION-CHECKLIST.md')
+    def test_public_living_docs_teach_floati_not_the_retired_name(self) -> None:
+        """Catches living public prose or command examples left behind."""
+        self.assert_docs_teach_floati_not_the_retired_name(PUBLIC_LIVING_DOCS)
 
-        for relative in LIVING_PUBLIC_DOCS:
+    def test_private_publication_checklist_teaches_floati_not_the_retired_name(self) -> None:
+        """Catches retired prose in the harbor-only publication checklist."""
+        require_private_artifact(self, "docs/PUBLICATION-CHECKLIST.md")
+        self.assert_docs_teach_floati_not_the_retired_name(PRIVATE_LIVING_DOCS)
+
+    def assert_docs_are_tenant_neutral(self, relatives: tuple[str, ...]) -> None:
+        for relative in relatives:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             if relative == "README.md":
                 text = text.replace(
@@ -204,15 +211,36 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
                 with self.subTest(relative=relative, pattern=pattern.pattern):
                     self.assertIsNone(pattern.search(text))
 
-    def test_public_capture_artifacts_do_not_expose_an_operator_account(self) -> None:
-        """Catches real macOS home paths without embedding an account literal."""
-        require_private_artifact(self, 'docs/demo/corpus.v0.jsonl')
+    def test_public_living_docs_are_tenant_neutral(self) -> None:
+        """Catches an owner path, host identity, or private fleet in public copy."""
+        self.assert_docs_are_tenant_neutral(PUBLIC_LIVING_DOCS)
 
-        for relative in ACCOUNT_NEUTRAL_PUBLIC_FILES:
+    def test_private_publication_checklist_is_tenant_neutral(self) -> None:
+        """Catches tenant coordinates outside the checklist's ruled exception."""
+        require_private_artifact(self, "docs/PUBLICATION-CHECKLIST.md")
+        self.assert_docs_are_tenant_neutral(PRIVATE_LIVING_DOCS)
+
+    def assert_files_do_not_expose_an_operator_account(
+        self, relatives: tuple[str, ...]
+    ) -> None:
+        for relative in relatives:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             for pattern in PRIVATE_ACCOUNT_PATTERNS:
                 with self.subTest(relative=relative, pattern=pattern.pattern):
                     self.assertIsNone(pattern.search(text))
+
+    def test_public_capture_evidence_does_not_expose_an_operator_account(self) -> None:
+        """Catches real account coordinates in exported capture evidence."""
+        self.assert_files_do_not_expose_an_operator_account(
+            PUBLIC_ACCOUNT_NEUTRAL_FILES
+        )
+
+    def test_private_capture_corpus_does_not_expose_an_operator_account(self) -> None:
+        """Catches real account coordinates in the harbor-only capture corpus."""
+        require_private_artifact(self, "docs/demo/corpus.v0.jsonl")
+        self.assert_files_do_not_expose_an_operator_account(
+            PRIVATE_ACCOUNT_NEUTRAL_FILES
+        )
 
     def test_demo_uses_neutral_floati_lane(self) -> None:
         """Catches synthetic public frames that expose the retired lane name."""

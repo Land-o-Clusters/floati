@@ -10,7 +10,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
@@ -219,7 +219,11 @@ def validate_release_index(payload: bytes) -> Dict[str, object]:
 
 
 def verify_release_index(
-    destination: Path, index: bytes, signature: bytes
+    destination: Path,
+    index: bytes,
+    signature: bytes,
+    *,
+    minisign_executable: Optional[Path] = None,
 ) -> Dict[str, object]:
     selected = canonical_destination(destination)
     parsed = validate_release_index(index)
@@ -242,6 +246,7 @@ def verify_release_index(
                 signature_name,
                 key_name,
                 version=str(parsed["index_version"]),
+                minisign_executable=minisign_executable,
             )
     except ProtocolRefusal:
         raise
@@ -419,6 +424,7 @@ def check_for_updates(
     channel: str,
     entrypoint: Path,
     idempotency_key: str,
+    minisign_executable: Optional[Path] = None,
 ) -> Dict[str, object]:
     selected = canonical_destination(destination)
     selected_channel = validate_update_channel(channel)
@@ -466,7 +472,12 @@ def check_for_updates(
             selected_channel, max_bytes=ENVELOPE_MAX_BYTES
         )
         index_bytes, signature_bytes = decode_release_index_envelope(envelope)
-        verified = verify_release_index(selected, index_bytes, signature_bytes)
+        verified = verify_release_index(
+            selected,
+            index_bytes,
+            signature_bytes,
+            minisign_executable=minisign_executable,
+        )
         # Consent is checked again before durable observation of network-derived bytes.
         current_consent = consent_ledger.require_active(selected_channel)
         if current_consent["id"] != consent["id"]:

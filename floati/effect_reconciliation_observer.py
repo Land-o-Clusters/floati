@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
 import errno
 import hashlib
 import json
 import os
 import re
+import resource
 import selectors
 import signal
 import stat
@@ -32,6 +34,7 @@ _MAX_GIT_OUTPUT_BYTES = 4096
 _MAX_GIT_OUTPUT_LINES = 64
 _MAX_REMOTE_ENV_BYTES = 4096
 _IO_TIMEOUT_SECONDS = 5.0
+_DESCRIPTOR_CLOSE_FLOOR = 256
 _FULL_OBJECT_ID = re.compile(r"[0-9a-f]{64}\Z")
 _REF_TEXT = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,510}\Z")
 _BIDI_CONTROLS = frozenset({
@@ -66,6 +69,50 @@ _GIT_PREFIX = (
 )
 
 
+def _descriptor_close_end() -> int:
+    soft_limit = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+    if soft_limit == resource.RLIM_INFINITY:
+        soft_limit = os.sysconf("SC_OPEN_MAX")
+    close_end = max(_DESCRIPTOR_CLOSE_FLOOR, int(soft_limit))
+    if sys.platform == "darwin":
+        close_end = min(close_end, _darwin_maxfilesperproc())
+    return close_end
+
+
+def _darwin_maxfilesperproc() -> int:
+    """Read Darwin's process descriptor ceiling without spawning a child."""
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        sysctlbyname = libc.sysctlbyname
+        sysctlbyname.argtypes = (
+            ctypes.c_char_p,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.c_void_p,
+            ctypes.c_size_t,
+        )
+        sysctlbyname.restype = ctypes.c_int
+        value = ctypes.c_int()
+        value_size = ctypes.c_size_t(ctypes.sizeof(value))
+        result = sysctlbyname(
+            b"kern.maxfilesperproc",
+            ctypes.byref(value),
+            ctypes.byref(value_size),
+            None,
+            0,
+        )
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        raise RuntimeError("darwin descriptor ceiling unavailable") from exc
+    if (
+        result != 0
+        or value_size.value != ctypes.sizeof(value)
+        or value.value <= 0
+    ):
+        raise RuntimeError("darwin descriptor ceiling unavailable")
+    return value.value
+
+
 def _descriptor_directory() -> str:
     return "/proc/self/fd" if sys.platform.startswith("linux") else "/dev/fd"
 
@@ -95,6 +142,14 @@ def _open_descriptors() -> set[int]:
 def _close_unruled_descriptors(allowed: set[int]) -> None:
     if type(allowed) is not set or any(type(fd) is not int or fd < 0 for fd in allowed):
         raise ValueError("invalid descriptor allowlist")
+    if sys.platform == "darwin":
+        # Hosted Darwin can omit real inherited descriptors from /dev/fd.
+        close_end = _descriptor_close_end()
+        start = 0
+        for descriptor in sorted(fd for fd in allowed if fd < close_end):
+            os.closerange(start, descriptor)
+            start = descriptor + 1
+        os.closerange(start, close_end)
     unruled = _open_descriptors() - allowed
     for _round in range(8):
         for descriptor in sorted(unruled):

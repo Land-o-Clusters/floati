@@ -143,6 +143,48 @@ def _validate(
         if matches != 1:
             raise SchemaValidationError(f"{location}: oneOf matched {matches} branches")
 
+    if "anyOf" in schema:
+        matches = 0
+        for choice in schema["anyOf"]:
+            try:
+                _validate(instance, choice, document, schema_path, location, cache)
+            except SchemaValidationError:
+                continue
+            matches += 1
+        if matches == 0:
+            raise SchemaValidationError(f"{location}: anyOf matched no branches")
+
+    contains = schema.get("contains")
+    if isinstance(contains, dict):
+        if not isinstance(instance, list):
+            raise SchemaValidationError(f"{location}: contains requires an array")
+        matches = 0
+        for index, value in enumerate(instance):
+            try:
+                _validate(
+                    value,
+                    contains,
+                    document,
+                    schema_path,
+                    f"{location}[{index}]",
+                    cache,
+                )
+            except SchemaValidationError:
+                continue
+            matches += 1
+        minimum = schema.get("minContains", 1)
+        maximum = schema.get("maxContains")
+        if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 0:
+            raise SchemaValidationError(f"{location}: invalid minContains")
+        if matches < minimum or (
+            isinstance(maximum, int)
+            and not isinstance(maximum, bool)
+            and matches > maximum
+        ):
+            raise SchemaValidationError(
+                f"{location}: contains matched {matches} items"
+            )
+
     if "not" in schema:
         try:
             _validate(instance, schema["not"], document, schema_path, location, cache)
@@ -183,6 +225,28 @@ def _validate(
                     )
 
     if isinstance(instance, list):
+        sorted_key = schema.get("x-floati-sorted-unique-key")
+        if isinstance(sorted_key, str):
+            keys = [
+                item.get(sorted_key) for item in instance if isinstance(item, dict)
+            ]
+            if (
+                len(keys) != len(instance)
+                or any(not isinstance(key, str) for key in keys)
+                or keys != sorted(set(keys))
+            ):
+                raise SchemaValidationError(
+                    f"{location}: object rows are not sorted and unique by {sorted_key}"
+                )
+        if schema.get("x-floati-sorted-unique"):
+            encoded = [
+                json.dumps(item, sort_keys=True, separators=(",", ":"))
+                for item in instance
+            ]
+            if encoded != sorted(set(encoded)):
+                raise SchemaValidationError(
+                    f"{location}: array items are not sorted and unique"
+                )
         if schema.get("x-floati-sorted-unique-budget"):
             keys = [item.get("budget_id") for item in instance if isinstance(item, dict)]
             if len(keys) != len(instance) or keys != sorted(set(keys)):

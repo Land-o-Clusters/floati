@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -179,6 +180,21 @@ class SupportBundleTests(unittest.TestCase):
                     scrubbed = archive.extractfile("collectors/identity.json").read()
                 self.assertEqual({"path": "<temp>/fleet"}, json.loads(scrubbed))
 
+    def test_finished_bundle_derives_every_member_into_identity_gate(self) -> None:
+        """Catches an archive member bypassing the shared identity fence."""
+
+        from floati.support_bundle import identity_gate
+
+        self.create()
+        with tarfile.open(self.out, "r:gz") as archive:
+            members = [member for member in archive.getmembers() if member.isfile()]
+            self.assertGreaterEqual(len(members), 2)
+            for member in members:
+                extracted = archive.extractfile(member)
+                self.assertIsNotNone(extracted)
+                with self.subTest(member=member.name):
+                    identity_gate(extracted.read())
+
     def test_opaque_member_is_excluded_as_typed_unavailable(self) -> None:
         from PIL import Image, ImageDraw
 
@@ -195,9 +211,258 @@ class SupportBundleTests(unittest.TestCase):
         )
         section = json.loads(self.members()["collectors/image.json"])
         self.assertEqual(
-            {"status": "unavailable", "reason_code": "snapshot_opaque_member"},
+            {
+                "status": "unavailable",
+                "reason_code": "snapshot_opaque_member",
+                "opaque_format": "bytes",
+                "key_path": "$.capture",
+            },
             section,
         )
+
+    def test_base64_encoded_image_is_excluded_as_typed_unavailable(self) -> None:
+        """Catches opaque raster bytes bypassing sanitization as JSON text."""
+
+        from PIL import Image
+
+        rendered = io.BytesIO()
+        Image.new("RGB", (2, 2), "navy").save(rendered, format="GIF")
+        encoded = base64.b64encode(rendered.getvalue()).decode("ascii")
+
+        self.create(collectors=(("image", lambda: {"capture": encoded}),))
+        section = json.loads(self.members()["collectors/image.json"])
+        self.assertEqual(
+            {
+                "status": "unavailable",
+                "reason_code": "snapshot_opaque_member",
+                "opaque_format": "gif",
+                "key_path": "$.capture",
+            },
+            section,
+        )
+
+    def test_closed_raster_signature_set_is_classified(self) -> None:
+        """Catches a ruled raster format falling out of the closed enumeration."""
+
+        signatures = {
+            "png": b"\x89PNG\r\n\x1a\n",
+            "gif": b"GIF89a",
+            "jpeg": b"\xff\xd8\xff",
+            "webp": b"RIFF\x04\x00\x00\x00WEBP",
+            "bmp": (
+                b"BM"
+                + (78).to_bytes(4, "little")
+                + b"\x00" * 4
+                + (14).to_bytes(4, "little")
+            ),
+            "tiff": b"II*\x00",
+        }
+        for image_format, signature in signatures.items():
+            with self.subTest(image_format=image_format):
+                destination = self.base / f"{image_format}.tar.gz"
+                encoded = base64.b64encode(signature + b"\x00" * 64).decode("ascii")
+                self.create(
+                    out=destination,
+                    collectors=(("image", lambda encoded=encoded: {"capture": encoded}),),
+                )
+                with tarfile.open(destination, "r:gz") as archive:
+                    section = json.loads(
+                        archive.extractfile("collectors/image.json").read()
+                    )
+                self.assertEqual(image_format, section["opaque_format"])
+                self.assertEqual("$.capture", section["key_path"])
+
+    def test_closed_opaque_binary_signature_set_is_classified(self) -> None:
+        """Catches a ruled opaque binary format bypassing the JSON-text fence."""
+
+        cases = (
+            ("pdf", "pdf", b"%PDF-2.0\n%\xe2\xe3\xcf\xd3\n"),
+            ("zip-local", "zip", b"PK\x03\x04" + b"\x00" * 26),
+            ("zip-empty", "zip", b"PK\x05\x06" + b"\x00" * 18),
+            ("zip-spanned", "zip", b"PK\x07\x08" + b"\x00" * 12),
+            ("gzip", "gzip", b"\x1f\x8b\x08\x00" + b"\x00" * 6),
+            ("mach-o-32-be", "mach-o", b"\xfe\xed\xfa\xce" + b"\x00" * 24),
+            ("mach-o-32-le", "mach-o", b"\xce\xfa\xed\xfe" + b"\x00" * 24),
+            ("mach-o-64-be", "mach-o", b"\xfe\xed\xfa\xcf" + b"\x00" * 28),
+            ("mach-o-64-le", "mach-o", b"\xcf\xfa\xed\xfe" + b"\x00" * 28),
+            ("mach-o-fat-be", "mach-o", b"\xca\xfe\xba\xbe" + b"\x00" * 4),
+            ("mach-o-fat-le", "mach-o", b"\xbe\xba\xfe\xca" + b"\x00" * 4),
+            ("mach-o-fat64-be", "mach-o", b"\xca\xfe\xba\xbf" + b"\x00" * 4),
+            ("mach-o-fat64-le", "mach-o", b"\xbf\xba\xfe\xca" + b"\x00" * 4),
+            ("elf", "elf", b"\x7fELF\x02\x01\x01" + b"\x00" * 9),
+        )
+        for case_name, opaque_format, payload in cases:
+            with self.subTest(case_name=case_name):
+                destination = self.base / f"opaque-{case_name}.tar.gz"
+                encoded = base64.b64encode(payload).decode("ascii")
+                self.create(
+                    out=destination,
+                    collectors=(("opaque", lambda encoded=encoded: {"value": encoded}),),
+                )
+                with tarfile.open(destination, "r:gz") as archive:
+                    section = json.loads(
+                        archive.extractfile("collectors/opaque.json").read()
+                    )
+                self.assertEqual(
+                    {
+                        "status": "unavailable",
+                        "reason_code": "snapshot_opaque_member",
+                        "opaque_format": opaque_format,
+                        "key_path": "$.value",
+                    },
+                    section,
+                )
+
+    def test_data_uri_media_type_does_not_override_opaque_payload_signature(self) -> None:
+        """Catches non-image data-URI carriers bypassing payload classification."""
+
+        cases = (
+            ("application/pdf", "pdf", b"%PDF-2.0\n"),
+            ("text/plain", "elf", b"\x7fELF\x02\x01\x01" + b"\x00" * 9),
+        )
+        for media_type, opaque_format, payload in cases:
+            with self.subTest(media_type=media_type):
+                destination = self.base / f"data-uri-{opaque_format}.tar.gz"
+                encoded = base64.b64encode(payload).decode("ascii")
+                value = f"data:{media_type};base64,{encoded}"
+                self.create(
+                    out=destination,
+                    collectors=(("opaque", lambda value=value: {"value": value}),),
+                )
+                with tarfile.open(destination, "r:gz") as archive:
+                    section = json.loads(
+                        archive.extractfile("collectors/opaque.json").read()
+                    )
+                self.assertEqual(
+                    {
+                        "status": "unavailable",
+                        "reason_code": "snapshot_opaque_member",
+                        "opaque_format": opaque_format,
+                        "key_path": "$.value",
+                    },
+                    section,
+                )
+
+    def test_data_uri_with_ordinary_base64_remains_json_text(self) -> None:
+        """Catches carrier normalization broadening into a media-type fence."""
+
+        encoded = base64.b64encode(b"ordinary support text").decode("ascii")
+        value = f"data:application/octet-stream;base64,{encoded}"
+
+        self.create(collectors=(("text", lambda: {"value": value}),))
+        section = json.loads(self.members()["collectors/text.json"])
+        self.assertEqual({"value": value}, section)
+
+    def test_data_uri_and_mime_wrapping_are_normalized_before_image_fence(self) -> None:
+        """Catches the common inline-image carrier bypassing strict base64 decode."""
+
+        from PIL import Image
+
+        rendered = io.BytesIO()
+        Image.new("RGB", (2, 2), "navy").save(rendered, format="GIF")
+        encoded = base64.b64encode(rendered.getvalue()).decode("ascii")
+        wrapped = "\r\n".join(
+            encoded[index : index + 12] for index in range(0, len(encoded), 12)
+        ) + "\n"
+
+        self.create(
+            collectors=(
+                (
+                    "image",
+                    lambda: {
+                        "nested": [{"capture": f"data:image/gif;base64,{wrapped}"}]
+                    },
+                ),
+            )
+        )
+        section = json.loads(self.members()["collectors/image.json"])
+        self.assertEqual(
+            {
+                "status": "unavailable",
+                "reason_code": "snapshot_opaque_member",
+                "opaque_format": "gif",
+                "key_path": "$.nested[0].capture",
+            },
+            section,
+        )
+
+    def test_bmp_signature_requires_declared_size_to_match_payload(self) -> None:
+        """Catches random BM-prefixed data being discarded as a BMP image."""
+
+        false_positive = b"BM" + (70).to_bytes(4, "little") + b"\x00" * 32
+        encoded = base64.b64encode(false_positive).decode("ascii")
+
+        self.create(collectors=(("text", lambda: {"value": encoded}),))
+        section = json.loads(self.members()["collectors/text.json"])
+        self.assertEqual({"value": encoded}, section)
+
+    def test_bmp_signature_requires_plausible_reserved_bytes_and_pixel_offset(self) -> None:
+        """Catches BM-prefixed payloads without a plausible bitmap file header."""
+
+        malformed_headers = {
+            "reserved": b"BM"
+            + (70).to_bytes(4, "little")
+            + b"\x01\x00\x00\x00"
+            + (14).to_bytes(4, "little")
+            + b"\x00" * 56,
+            "pixel-offset": b"BM"
+            + (70).to_bytes(4, "little")
+            + b"\x00" * 4
+            + (70).to_bytes(4, "little")
+            + b"\x00" * 56,
+        }
+        for name, payload in malformed_headers.items():
+            with self.subTest(name=name):
+                destination = self.base / f"bmp-{name}.tar.gz"
+                encoded = base64.b64encode(payload).decode("ascii")
+                self.create(
+                    out=destination,
+                    collectors=(("text", lambda encoded=encoded: {"value": encoded}),),
+                )
+                with tarfile.open(destination, "r:gz") as archive:
+                    section = json.loads(
+                        archive.extractfile("collectors/text.json").read()
+                    )
+                self.assertEqual({"value": encoded}, section)
+
+    def test_non_base64_character_after_signature_prefix_prevents_classification(self) -> None:
+        """Catches bounded signature decoding without whole-string alphabet evidence."""
+
+        encoded = base64.b64encode(b"GIF89a" + b"\x00" * 64).decode("ascii") + "!"
+
+        self.create(collectors=(("text", lambda: {"value": encoded}),))
+        section = json.loads(self.members()["collectors/text.json"])
+        self.assertEqual({"value": encoded}, section)
+
+    def test_truncated_image_base64_is_classified_from_bounded_prefix(self) -> None:
+        """Catches an incomplete opaque payload bypassing whole-string validation."""
+
+        from PIL import Image
+
+        rendered = io.BytesIO()
+        Image.new("RGB", (2, 2), "navy").save(rendered, format="GIF")
+        encoded = base64.b64encode(rendered.getvalue()).decode("ascii")[:-3]
+
+        self.create(collectors=(("image", lambda: {"capture": encoded}),))
+        section = json.loads(self.members()["collectors/image.json"])
+        self.assertEqual(
+            {
+                "status": "unavailable",
+                "reason_code": "snapshot_opaque_member",
+                "opaque_format": "gif",
+                "key_path": "$.capture",
+            },
+            section,
+        )
+
+    def test_base64_encoded_text_remains_json_text(self) -> None:
+        """Catches the image fence broadening into a generic base64 heuristic."""
+
+        encoded = base64.b64encode(b"ordinary support text").decode("ascii")
+
+        self.create(collectors=(("text", lambda: {"value": encoded}),))
+        section = json.loads(self.members()["collectors/text.json"])
+        self.assertEqual({"value": encoded}, section)
 
     def test_installed_tree_imports_shared_fence_without_scripts_on_sys_path(self) -> None:
         from floati.manifest import _deployable_paths
