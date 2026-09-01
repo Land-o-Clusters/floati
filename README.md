@@ -19,7 +19,7 @@
 You're already running a fleet. An agent in Codex, two in Claude,
 one in OpenCode, something experimental in Cursor — each in its own
 terminal, each with its own dialect, none of them aware the others
-exist. You are the bus, the scheduler, and the guy who checks
+exist. You are the bus, the scheduler, and the one who checks
 whether anything died.
 
 Floati takes those jobs. Register your agents as nodes — whatever
@@ -38,7 +38,32 @@ reconstructed from receipts, in order, on demand. Nothing here is
 animated by the demo; it is played back from the fleet's own
 records.
 
-<sub>Every moving image in this README is a real capture of a real fleet.</sub>
+<sub>Every moving image in this README is a real capture from a real ledger — nothing is mocked, staged, or hand-animated.</sub>
+
+## Get it
+
+Floati is one Python package with no dependencies. Clone it, then let it
+install itself from the release tag — the installer deploys exactly the
+files the release manifest names and nothing else, into a directory you
+choose.
+
+```bash
+git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
+cd /absolute/floati
+python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.1.0
+```
+
+`/absolute/install/scripts/floati` is the command; add that `scripts`
+directory to your `PATH` or call it by path. Tested on Python 3.9 and
+3.12; macOS today. Later, the doctor tells you whether what is on disk
+still matches the release, file by file:
+
+```bash
+floati doctor --root /absolute/fleet --source /absolute/floati --ref v0.1.0
+```
+
+Every command above was run from a fresh public clone before it was
+written here.
 
 ## What it runs with
 
@@ -172,7 +197,7 @@ your request.
 
 "The lane went quiet" is not a diagnosis. The doctor states per-node
 undelivered counts, oldest-message age, and last drain even when
-everything is green, and `doctor --probe` sends a self-addressed
+everything is green, and the doctor's `--probe` flag sends a self-addressed
 envelope through a node's own delivery path to prove it can still
 hear — without touching anyone else's mail.
 
@@ -234,20 +259,28 @@ agent does.
 ## Why it doesn't fall over
 
 Every harness already writes a session log. Those are per-harness,
-mutable, uncorrelated, and they can't answer a fleet question. Under
-floati, everything above runs on one append-only, typed ledger —
-the board, the chart, the doctor, the replay are all projections of
+mutable, uncorrelated, and they can't answer a fleet question.
+
+Under floati, everything above runs on one append-only, typed ledger.
+The board, the chart, the doctor, the replay are all projections of
 it, and if a projection ever disagrees with the receipts, the
-receipts win. Kill a worker, kill the sequencer, reboot the machine: nothing is
-lost and nothing lies — the ledger survives every fault, the whole
+receipts win.
+
+Kill a worker, kill the sequencer, reboot the machine: nothing is
+lost and nothing lies. The ledger survives every fault, the whole
 run replays on demand, and floati refuses to continue past what it
 cannot prove, telling you exactly why in a typed exit code.
 Ambiguous identity, expired authority, malformed envelopes — same
 answer: refusal with a reason, never a guess.
 
-No telemetry. Nothing leaves this machine — measured, not promised:
-the only network-class socket in the product dials loopback on your
-own machine, behind explicit consent, and cannot listen.
+No telemetry, ever. Nothing leaves this machine without a consent
+receipt — measured, not promised. Floati's own sockets are local pipes
+between its own processes. The exceptions are counted, and there are
+three: two client-only loopback dials, for the herdr and t3 adapters,
+and one HTTPS fetch for updates. Each runs only behind your explicit
+consent, each to a channel you named yourself, and nothing in the
+product can listen — a test refuses any `bind` or `listen` outside a
+local pipe.
 
 The full promise — and precisely what floati refuses to guess — is
 written down: **[Truth Guarantees](docs/TRUTH-GUARANTEES.md)**. If a

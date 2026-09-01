@@ -16,6 +16,7 @@ from unittest import mock
 from floati.contracts import TaskContract, contract_digest
 from floati.approvals import ApprovalLedger
 from floati.errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
+from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.jsonl import read_records
 from floati.planes import AuthorityGrantStore
@@ -182,7 +183,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             "requested_scope": "repo:slipway",
             "resume_mode": "checkpoint_restart",
             "provider_session_or_thread_id": None,
-            "workspace": f"\x2fprivate/tmp/floati-work/{state['item_id']}",
+            "workspace": str(worker_workspace_root() / state["item_id"]),
             "workspace_checkpoint": {
                 "repo": "owner/slipway",
                 "sha": "c" * 40,
@@ -370,7 +371,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             for record in records
             if isinstance(record.get("item_id"), str)
             and record.get("workspace")
-            == f"\x2fprivate/tmp/floati-work/{record['item_id']}"
+            == str(worker_workspace_root() / record["item_id"])
         ]
         self.assertTrue(
             positive_workspaces,
@@ -660,7 +661,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             ("exact_action_digest", "d" * 64),
             ("requested_scope", "repo:other"),
             ("resume_mode", "unsupported"),
-            ("workspace", f"\x2fprivate/tmp/floati-work/work-{uuid7_hex()}"),
+            ("workspace", str(worker_workspace_root() / f"work-{uuid7_hex()}")),
             ("workspace_checkpoint", {"repo": "owner/slipway", "sha": "d" * 40, "doc": "other.md"}),
             ("resume_authority_subject", "other-subject"),
             ("resume_authority_epoch", suspension["authority_epoch_at_request"]),
@@ -712,7 +713,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             dict(suspension, exact_action_digest="A" * 64),
             dict(suspension, requested_scope="repo:slipway\n"),
             dict(suspension, authority_epoch_at_request=True),
-            dict(suspension, workspace="\x2fprivate/tmp/floati-work/not-a-work-id"),
+            dict(suspension, workspace=str(worker_workspace_root() / "not-a-work-id")),
             dict(suspension, workspace_checkpoint={"repo": "owner/slipway", "sha": "c" * 39, "doc": "x"}),
             dict(suspension, resume_mode="native", provider_session_or_thread_id=None),
             dict(suspension, extra=True),

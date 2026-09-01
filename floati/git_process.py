@@ -86,3 +86,15 @@ def is_shallow_repository(
     if value not in {"true", "false"}:
         raise ProtocolRefusal("git_shallow_state_unavailable", "git returned an invalid shallow-state value")
     return value == "true"
+
+
+def require_complete_history_for_reachability(
+    repository: Path, *, git_executable: str = "/usr/bin/git"
+) -> None:
+    """Refuse reachability arithmetic when commit history is truncated."""
+
+    if is_shallow_repository(repository, git_executable=git_executable):
+        raise ProtocolRefusal(
+            "git_reachability_shallow_repository",
+            "reachability cannot be determined from a shallow repository",
+        )

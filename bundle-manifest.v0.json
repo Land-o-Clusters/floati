@@ -19,7 +19,7 @@
     },
     {
       "path": "bundle/c7.1/schema-catalog.json",
-      "sha256": "4080aca59c02c514efff8c16fb6defceff751e89e8ef681571394c7b79f139a7"
+      "sha256": "a1619f39ba13bd989e28a4b0cf6d1e8bb38aebc80e7764b7b495df2889f9ef39"
     },
     {
       "path": "bundle/c7.1/schemas/c7-read-bundle.schema.json",
@@ -43,7 +43,7 @@
     },
     {
       "path": "bundle/c7.2/schema-catalog.json",
-      "sha256": "d75cd246798def2a0355e065a510564da850167a21218ced4bee40569125f18f"
+      "sha256": "671ec615ff79634e11b0134dd1e6b1b94e3ec7ba9b621799920e7d7f7947ff3b"
     },
     {
       "path": "bundle/c7.2/schemas/c7-read-bundle.schema.json",
@@ -87,7 +87,7 @@
     },
     {
       "path": "floati/adapters/codex_live.py",
-      "sha256": "c4d48f947f51b557cfebde97ec63326e42c8c0a018937e4d2a760fcc20acf370"
+      "sha256": "eb27be77fc30b65b0f6d2cc1c59f889b7000c5c2d1b763cbee458a4606ca3fbf"
     },
     {
       "path": "floati/adapters/cursor.py",
@@ -151,7 +151,7 @@
     },
     {
       "path": "floati/admin_cli.py",
-      "sha256": "0a78fffec9548652ca1327f62a68f6fd1f132d48f0ad98346c2bde55a00f3422"
+      "sha256": "194d45892b9fba0a1eaf57be015738af2f0766fd456cc601a1cf46da3c0c5739"
     },
     {
       "path": "floati/admin_registry.py",
@@ -199,11 +199,11 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "25c50f289ec311ec2c121d5056a3c60931862d3f4c983f466e26ebbf0a8b9db3"
+      "sha256": "14d3ec1f1cbb5cf7ec2b67c0e2bb20f7cafe20bf2c073cfce78f0e65b7bcaf1f"
     },
     {
       "path": "floati/codex_hook_install.py",
-      "sha256": "60f7b2f9e8dcdf25fd35d798ede004aef910218e0c3cc222a3d090db5334b94d"
+      "sha256": "e409e2da59827af350971d53cb261c7d8ec9cbdcde381172e05a06fb4a482229"
     },
     {
       "path": "floati/codex_hook_trust.py",
@@ -219,7 +219,7 @@
     },
     {
       "path": "floati/command_contract.py",
-      "sha256": "28d5bedf16334518dff5fbc82f259a77ec9639f00d6ed22d0549e9f22dc2761e"
+      "sha256": "588c0f7859d75cf6de6977bc388f6c8fb7b32e76eb46d2c466e5e11e11fa4537"
     },
     {
       "path": "floati/command_scope.py",
@@ -255,7 +255,11 @@
     },
     {
       "path": "floati/copy.py",
-      "sha256": "f93eaef5b05ec2e63c61117d47ffe7b4dcaee3aa09492054d3e7bc0d7400246f"
+      "sha256": "420e0f9bb24b2a532cc50785c6f9b8f1294f2325b602a81c1982ae2a5bd59076"
+    },
+    {
+      "path": "floati/credential_leases.py",
+      "sha256": "1c7b340aa6324f43186f164f4b92cee9682e9a6189d31d0496adec96bf396743"
     },
     {
       "path": "floati/cursor.py",
@@ -275,11 +279,11 @@
     },
     {
       "path": "floati/deploy.py",
-      "sha256": "641b0f23e833c0fe7cec3b1e860eb3a869383903d84f1b0f9a211bb2a3ee843b"
+      "sha256": "8589029878e432f018fe3c81f9b615a270c88835838643ee6024ed399cbee941"
     },
     {
       "path": "floati/doctor.py",
-      "sha256": "f523665b60201e6e96adf191384819343a93b3ab9568a8d7840e9c5d8a60635b"
+      "sha256": "6057750a1d47d7c78f0e4d7242826fdae9e48ea87dc7b05f89fda5d41a6b287e"
     },
     {
       "path": "floati/doctor_probe.py",
@@ -287,15 +291,15 @@
     },
     {
       "path": "floati/effect_reconciliation_exec.py",
-      "sha256": "7064269be58a5ab8605ecd3418f5b0a4cdb71457e9a2d173302af156705903e5"
+      "sha256": "b18ef8ad755c9dc271ec8d1e7a73f454e370129f9f0782cb59769dfc58fc3c02"
     },
     {
       "path": "floati/effect_reconciliation_observer.py",
-      "sha256": "b5b4df5a09c405ddb70bf27cfe227fdb3c3a0b99d06c30d4e0fd54182c815da9"
+      "sha256": "1270e4ea20280bd557fe9e69e6eb0bfd6eefef8927a5095f887c664d71ebe579"
     },
     {
       "path": "floati/effect_reconciliation_protocol.py",
-      "sha256": "48010805afb691cc1061cc8bcfdf5cedd4907483e3c7d5ddf432d71c77815aaf"
+      "sha256": "21997a0b7902db894187e7f177bf940d11b0ee72edd1ad805082d56f83e908b8"
     },
     {
       "path": "floati/effects.py",
@@ -312,6 +316,10 @@
     {
       "path": "floati/events.py",
       "sha256": "b1f5a219d7ed7ccacda70ff6838896c21ab8922901c517c4d148945c94baeceb"
+    },
+    {
+      "path": "floati/fcd20_conformance.py",
+      "sha256": "be47a06770256b211ff112e14e2e13f5e7cc65217babccb483c81686681d4265"
     },
     {
       "path": "floati/fixture_ids.py",
@@ -342,12 +350,16 @@
       "sha256": "6c8295348e77b2feebe2cd765f52e72c29a7b22504505a07ceee1bee65680761"
     },
     {
+      "path": "floati/gh_process.py",
+      "sha256": "99b4fd401bab262e2f92accdaa7dd1793ea8f7e4e84ef39ce2c705a0213b6625"
+    },
+    {
       "path": "floati/git_process.py",
-      "sha256": "8556316f3307d4b420beb8ee6763f339069007aef7f9657fa62181e84f54aec8"
+      "sha256": "b3805aa57b02ad18c42d4bf52f16d3652f5d2ee82cb5ba706204810fd1093de6"
     },
     {
       "path": "floati/grants.py",
-      "sha256": "5da55d3c02db763154872f7bfd86f2f6d892111fdd2e3aaaa9fd41e627705767"
+      "sha256": "7cee835f1b68f601f96ae1ec705b8d8d0715340ee2ee3eb398e79ddae53d717d"
     },
     {
       "path": "floati/graph.py",
@@ -359,11 +371,15 @@
     },
     {
       "path": "floati/helptext.py",
-      "sha256": "eeec9a9305f2569e686b589f7bae7ea3d5613c9a4f181cd88835196c49f12d6e"
+      "sha256": "ef8e427c5c5e10a26ad7f91abc4efa0bf0a0123079a95d7dee97dad692e3e637"
     },
     {
       "path": "floati/host_facts.py",
       "sha256": "6b8d33ef062b6c6c1a43803541b4b9ffd8c1fd56f6ba39976131bfb6bb9f9baa"
+    },
+    {
+      "path": "floati/host_paths.py",
+      "sha256": "854f98e67f02e232a6bcd7aeed18007b59802d872abaed3b1fc1336d5b72f311"
     },
     {
       "path": "floati/identity_fence.py",
@@ -376,6 +392,10 @@
     {
       "path": "floati/installer_shadow.py",
       "sha256": "04b103f4fa83d03c63ce5a3dd848dc5ae9ca4c6c3dc12d20e7c19c60eb41afaf"
+    },
+    {
+      "path": "floati/intake.py",
+      "sha256": "498cdbf0ad6c8f75de1fef54fe2444b62312db9ce8f9141a918847cb8d7875cc"
     },
     {
       "path": "floati/journal_chain.py",
@@ -410,6 +430,10 @@
       "sha256": "7cf708ecad07304ff8899e48c87c029f27cfdba10b24de7e72134c851e40c1ce"
     },
     {
+      "path": "floati/mcp_pin.py",
+      "sha256": "11e57af7efdcbe60781a4adb80f51ddbff1b923a8f50b83faa7d58cb1d4eb839"
+    },
+    {
       "path": "floati/multi_bus_chart.py",
       "sha256": "707089d653c3a659203b5ef327a4ee71d0cb13edb2db11fd912f741c8b5bfb40"
     },
@@ -430,12 +454,20 @@
       "sha256": "d24d0e56e06ad7599833278f3793888fd73fae5a4eff27644e434c59a71dd3fd"
     },
     {
+      "path": "floati/overlap_radar.py",
+      "sha256": "d3e025e85494016919acdc557663664820aa727131f7f46777cf5fc4c0cf3c2d"
+    },
+    {
       "path": "floati/planes.py",
       "sha256": "40408a2a81ced0fdd9d844ba6722372e8144735e8e200f7b245885ff7d591be4"
     },
     {
       "path": "floati/policy.py",
-      "sha256": "1c990229765a56716a86f93ccd15809ec02fc342c22132bfbb3c38ccff7667b9"
+      "sha256": "edd9bf1dc793e211604d2325f5049c7a25809342800a22d6c6385430cb665b46"
+    },
+    {
+      "path": "floati/presence.py",
+      "sha256": "e59fdce981fc4124cdfd0021da8fd01b0a0d78405ad94f85c6abfc2b974d03aa"
     },
     {
       "path": "floati/projection.py",
@@ -459,7 +491,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "a4c0ba1c7881f4a0433b94d0bddbd149af5bcf1fe2ce34ec59ec2a1ce3b63a03"
+      "sha256": "15681631e0a096f08f5df5df63caee5394a580e4eedd3828bf33944c3fdb6705"
     },
     {
       "path": "floati/registry.py",
@@ -494,12 +526,24 @@
       "sha256": "aea8fd48953045b135fe26b5a0dce484af50d49a594f6acd5bb2b69a3f10e4a9"
     },
     {
+      "path": "floati/run_manifest.py",
+      "sha256": "28deb2512a60cfb462149f4b7fb236c9d05625c47f1184b698d52f6310f49b2b"
+    },
+    {
       "path": "floati/run_segments.py",
       "sha256": "b8048a6fadf3512285c02cedbe3282e7c82fbed84ba64dc92c981c7f0f825d3f"
     },
     {
       "path": "floati/runtruth.py",
-      "sha256": "4ec03de71dff2e118bc2a5f8b057b0479e1c947d19b92a741471525d7316b02e"
+      "sha256": "fed4f595f09a24fa8b85828a34956321e0d6ec75677d94e1261097c549d062e4"
+    },
+    {
+      "path": "floati/sandbox_probe.py",
+      "sha256": "07b04e399d09099952eeed270251d31632ba6a5844ab2ea7d919d29da57b3f61"
+    },
+    {
+      "path": "floati/sandbox_remedy.py",
+      "sha256": "1ebafea52bab7d4a94766f0435d9563275e0535192066e500f93fd0f15a1edd8"
     },
     {
       "path": "floati/scheduler.py",
@@ -535,7 +579,7 @@
     },
     {
       "path": "floati/signing.py",
-      "sha256": "d4b649992eefffb6e907604ced3021f4988130cae744ca6810f6f33fb510a14a"
+      "sha256": "4e45204f32066234d1f6977992c0d6c37dee14d784467291440854fc56b08e66"
     },
     {
       "path": "floati/snapshot.py",
@@ -547,7 +591,7 @@
     },
     {
       "path": "floati/spawn_groups.py",
-      "sha256": "c56b44add7ca1abcea749576cf6daedf2384d31044dcf5250a7bd46518ae5413"
+      "sha256": "eb1910047cea18ad75f0a04871919570ae65e314a71bd9e8b0161a8329730f52"
     },
     {
       "path": "floati/state_receipts.py",
@@ -563,11 +607,11 @@
     },
     {
       "path": "floati/support_bundle.py",
-      "sha256": "675bb6946139d1d1da0385d99adf8cd01928fb42aea99694fbc5a239fb351bfb"
+      "sha256": "edb74fd34eb9bf68c2b6c772fe144daa1f8da34fed2e19ff3817a972ea0e56f7"
     },
     {
       "path": "floati/suspension.py",
-      "sha256": "1f9c5f063c1c91a1782af76904eb8f0cd6a9c41e2b7617bd252b133b84f30db5"
+      "sha256": "56500aa35b166a254bc514460cf2858a50e5717ce54091ee799a2caf47761802"
     },
     {
       "path": "floati/thread_observations.py",
@@ -639,15 +683,15 @@
     },
     {
       "path": "floati/update_apply.py",
-      "sha256": "0e02e73191a6f2c98711f5a6cb2090d04dc4eaa46e7f9653795c6c47fee16158"
+      "sha256": "3bb64e49becf9e229231c2bcd3929fdb89eeeb6cad60dc85c857d7f3d8164d91"
     },
     {
       "path": "floati/update_check.py",
-      "sha256": "db1ddea0dc4789f1f986a5082b47e247bb7260fb8b220e8daf5ca15a21404aee"
+      "sha256": "bc5e75ff3dbe187ad59e6825b46a8e73e88e6834a7a9a5ac547c40e211428fb6"
     },
     {
       "path": "floati/update_consent.py",
-      "sha256": "787939cc8a87e98d2f5195e90ee4932a091149508c1b8f0f59d8968d536d9d6d"
+      "sha256": "093c610aac17e590200d9543162780cd37d3e62cb8c9201bfe21b44f7cc6539b"
     },
     {
       "path": "floati/update_ownership.py",
@@ -698,6 +742,10 @@
       "sha256": "5ea79afb1b448b28239750c14ab178a7c1afa9be95c422cad83a0d6768ae3210"
     },
     {
+      "path": "floati/wake_daemon_systemd.py",
+      "sha256": "83fa9748834ae3a4e42ceccb88484de7dbdf529d190a0afe8bd89e6751dc52de"
+    },
+    {
       "path": "floati/wake_exit.py",
       "sha256": "27f11d11cc88b2228647e6a6c3d01deb632cdc8ec687ed4a5d849634bfa5d1e7"
     },
@@ -711,7 +759,7 @@
     },
     {
       "path": "floati/wake_timeout_forensics.py",
-      "sha256": "4f7c1e2067d58ac4e324825edd18ea0b53d4f9949f8360d3202082ba9fa3b33e"
+      "sha256": "5b510409796223bd73a2afbb9b2ccd68068addc1a6e9342ba1e22adc8fcdddaf"
     },
     {
       "path": "floati/wiring_journal.py",
@@ -719,7 +767,7 @@
     },
     {
       "path": "floati/work.py",
-      "sha256": "db277d23287de6c391828e9cd6548257f7ea26a45958b727001894a885a6d58f"
+      "sha256": "fb1e8919e20df1ec360597eae4cb6f6e897e26ca8b89b731a352cb46a6041192"
     },
     {
       "path": "floati/worker_adapter_runtime.py",
@@ -727,7 +775,7 @@
     },
     {
       "path": "floati/worker_bootstrap.py",
-      "sha256": "f087dd27885eb53cf1a52e21fc63ca713ce8f5754de91ae29d357db9f3339ab4"
+      "sha256": "a822c57077376c1771104959eca19e340598d01d8c56ffb5dc4de0f9d578fe6d"
     },
     {
       "path": "floati/worker_bootstrap_protocol.py",
@@ -755,7 +803,7 @@
     },
     {
       "path": "floati/worktree_safety.py",
-      "sha256": "c074114feb102307812ff17cd4f27f88abf5be484aa537a83d51e912578f194e"
+      "sha256": "44a4105398131b36bb0a5cfab7d77e8d12cd328c99cd96ab094dd52f68e86015"
     },
     {
       "path": "roles/shipped/architect.json",
@@ -942,6 +990,10 @@
       "sha256": "0057838657f513b060edd8320151f72888cd86ee06366915cc7cdf4041d03f8b"
     },
     {
+      "path": "schemas/v0/intake-snapshot-record.schema.json",
+      "sha256": "d46ec1bd9ed0e8440c52a5ae490a7d186f8c03763d38879ba0e64783fa77c6ff"
+    },
+    {
       "path": "schemas/v0/liveness-presence-record.schema.json",
       "sha256": "b4f332ebee08e62f40b82283b56c7a73a10ad48b4b0fa30bb57a5f652e4a8c99"
     },
@@ -1103,7 +1155,7 @@
     },
     {
       "path": "schemas/v0/work-item-record.schema.json",
-      "sha256": "be26a743b9706811e9859247a45157f7159fb5d32d6221f1a9be32b70f8ef96d"
+      "sha256": "9fba00d4a18cf82adf956aa78757e3af26ca7af8aa595ece14c24a0ccba05822"
     },
     {
       "path": "schemas/v0/work-transition-record.schema.json",
@@ -1123,7 +1175,7 @@
     },
     {
       "path": "schemas/v1/approval-consumed-for-resume-record.schema.json",
-      "sha256": "cf917b16bc9f35027ed0b5f0b22f1f9f3ed88a6cf7cb91dd3fbd588e29ec4bef"
+      "sha256": "fe99393499fce784ded819894ae1f77ddda157bb09f873b757bf0b2c59a6af94"
     },
     {
       "path": "schemas/v1/approval-decision-record.schema.json",
@@ -1147,7 +1199,7 @@
     },
     {
       "path": "schemas/v1/attempt-suspended-for-approval-record.schema.json",
-      "sha256": "679ad990538399c1faef12a0a81108022d212b693d7cc6501d004de36dc49265"
+      "sha256": "81187a65d7bb73a4334494b54691ab4059de2c729bbeeb7f5302915ac749f4e8"
     },
     {
       "path": "schemas/v1/bus-epoch-roll-receipt.schema.json",
@@ -1167,7 +1219,7 @@
     },
     {
       "path": "schemas/v1/child-admitted-record.schema.json",
-      "sha256": "a055dd6e5f28ae46f81e35151b68dae67cb88bc743c2e1eebaf948c4ff1b1bba"
+      "sha256": "b7c48a0ea77105e7df7934bbacc6b30d988688d11dc5998b4e20ee7f1a89fdf7"
     },
     {
       "path": "schemas/v1/child-rejected-record.schema.json",
@@ -1194,12 +1246,24 @@
       "sha256": "50c5de4c430ca966227e9772813978d75c657177b7e7ce2dbba27a7428c9ea63"
     },
     {
+      "path": "schemas/v1/credential-lease-consumed-record.schema.json",
+      "sha256": "2b62394122c0df05b38b9c842354655ebbcf057d96e567dcfe04bb59a9e4bf46"
+    },
+    {
+      "path": "schemas/v1/credential-lease-granted-record.schema.json",
+      "sha256": "d62f48d6c1e32dabf085179ff46394a72d9d42698e93bd36dc836d249ccc9718"
+    },
+    {
+      "path": "schemas/v1/credential-lease-revoked-record.schema.json",
+      "sha256": "61f8b24c43f63bc65868ce86e9977e39b9c81eb309b9f8a224e475acffc5593d"
+    },
+    {
       "path": "schemas/v1/descendant-observation-closed-record.schema.json",
       "sha256": "c9716fac817038820055c9ae3044c165e30858c62c543f25acd4514acada3282"
     },
     {
       "path": "schemas/v1/doctor-artifact.schema.json",
-      "sha256": "8c266a5f5873c096e125f5c54ebad874d644ef5e7d5fb00b3413e7b206fd5058"
+      "sha256": "1186c447fa4c36366bb0dead2a6c012a9c460834e645f27ab6d9817b81ad02ea"
     },
     {
       "path": "schemas/v1/effect-acknowledged-record.schema.json",
@@ -1258,12 +1322,24 @@
       "sha256": "cfe1735ca1a1371ff656481d4f59f85be0b690bc229f13622422e569f09ad591"
     },
     {
+      "path": "schemas/v1/mcp-integration-pin.schema.json",
+      "sha256": "998572325759edec81211cf3bf5d57d85ac06f99163330dafa4eec46e0f454e5"
+    },
+    {
+      "path": "schemas/v1/overlap-report-fact.schema.json",
+      "sha256": "1aed84ded8a2954b0b5c94939814d1b73f18422ea34ef2f83f19d23d1aa9ef64"
+    },
+    {
       "path": "schemas/v1/run-admission-bound-record.schema.json",
       "sha256": "249bcce953d5aee57c4e8cf07640b95394605b9c363408e727eb36356036c519"
     },
     {
       "path": "schemas/v1/run-dispatch-decision-record.schema.json",
       "sha256": "ee21b6baed46a4f08b45aff08689e9bc1d8130495f2b0f145a485b91c6163815"
+    },
+    {
+      "path": "schemas/v1/run-manifest-fact.schema.json",
+      "sha256": "69e034becb1b56ffa1288c3215154d64e83c9f44ce99b49ab9a6c3e1333687e4"
     },
     {
       "path": "schemas/v1/run-result-accepted-record.schema.json",
@@ -1387,7 +1463,7 @@
     },
     {
       "path": "scripts/floati-codex-wait",
-      "sha256": "d3f19bf1d8d8a6f973a34879e68fa172d49c1d6712570e6f752276f92911ef3e"
+      "sha256": "1d0d116f18880df885b99d7aeae5f82a25abd600d06e577c2ec30b656067d06b"
     },
     {
       "path": "scripts/floati-quota-statusline",

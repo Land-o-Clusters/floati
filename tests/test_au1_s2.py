@@ -44,6 +44,9 @@ class AU1S2Tests(unittest.TestCase):
         self.git = shutil.which("git")
         self.assertIsNotNone(self.git)
         self.git_directory = Path(str(self.git)).resolve().parent
+        selected = shutil.which("minisign")
+        self.assertIsNotNone(selected, "AU1-S2 requires a real minisign binary")
+        self.minisign = Path(selected).resolve(strict=True)
         self._git("init", "--quiet", "--initial-branch=lane/hm0")
         self._git("config", "user.name", "Floati AU-1 Fixture")
         self._git("config", "user.email", "floati-au1@example.invalid")
@@ -245,6 +248,7 @@ class AU1S2Tests(unittest.TestCase):
             signature,
             secret_key=(MINISIGN_FIXTURES / "fixture.key").resolve(),
             version=str(index["index_version"]),
+            minisign_executable=self.minisign,
         )
         signature_bytes = root.resolve_relative(signature).read_bytes()
         return json.dumps(
@@ -271,6 +275,7 @@ class AU1S2Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="s2-check-one",
+                minisign_executable=self.minisign,
             )
 
     def _run_apply(
@@ -472,8 +477,8 @@ class AU1S2Tests(unittest.TestCase):
         self.assertEqual(sha_c, applied["source_sha"])
         self.assertFalse(marker.exists())
 
-    def test_s2_05b_destination_writer_uses_the_resolved_git_executable(self) -> None:
-        """Catches post-verification deployment resolving Git through ambient PATH."""
+    def test_s2_05b_update_apply_ignores_a_git_decoy_earlier_on_path(self) -> None:
+        """Catches either update-path Git lookup selecting an ambient PATH decoy."""
 
         self._require_apply()
         self._observe()
@@ -490,14 +495,42 @@ class AU1S2Tests(unittest.TestCase):
         )
         attacker_git.chmod(0o755)
 
-        with mock.patch("floati.update_apply.shutil.which", return_value=self.git):
-            applied = self._run_apply(
-                self.bundle_b,
-                idempotency_key="s2-apply-git-path",
-            )
+        applied = self._run_apply(
+            self.bundle_b,
+            idempotency_key="s2-apply-git-path",
+        )
 
         self.assertEqual(self.sha_b, applied["source_sha"])
         self.assertFalse(marker.exists())
+
+    def test_s2_05c_git_absence_names_the_fixed_host_candidates(self) -> None:
+        """Catches Git absence being collapsed into bundle-invalid evidence."""
+
+        from floati import update_apply
+
+        candidates = ("/missing/usr/bin/git", "/missing/bin/git")
+        with mock.patch.object(update_apply, "_GIT_CANDIDATES", candidates):
+            with self.assertRaises(ProtocolRefusal) as caught:
+                update_apply._select_git_executable()
+
+        self.assertEqual("update_git_unavailable", caught.exception.code)
+        self.assertIn("/missing/usr/bin/git", caught.exception.detail)
+        self.assertIn("/missing/bin/git", caught.exception.detail)
+
+    def test_s2_05d_operator_git_seam_uses_the_shared_explicit_path_policy(self) -> None:
+        """Catches the operator seam bypassing fleet_update's path predicate."""
+
+        from floati import update_apply
+
+        self.assertEqual(
+            str(Path(str(self.git))),
+            update_apply._select_git_executable(str(self.git)),
+        )
+        relative = Path(str(self.git)).name
+        with self.assertRaises(ProtocolRefusal) as caught:
+            update_apply._select_git_executable(relative)
+        self.assertEqual("update_git_unavailable", caught.exception.code)
+        self.assertIn(str(relative), caught.exception.detail)
 
     def test_s2_06_consent_change_after_download_refuses_before_destination_write(self) -> None:
         """Catches revoked download authority being treated as apply authority."""

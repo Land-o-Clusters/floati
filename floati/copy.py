@@ -62,6 +62,11 @@ DOCTOR_LIVE_DIRS_EXPECTED_ABSENT_DETAIL = register(
     "live directories absent, as the bus-only profile expects",
     "Doctor finding row",
 )
+GH_AUTHENTICATION_REMEDY = register(
+    "intake.github.authentication_absent",
+    "Floati does not read gh auth login credentials; export GH_TOKEN or GITHUB_TOKEN.",
+    "GitHub intake refusal and help",
+)
 
 WAKE_DAEMON_INACTIVE_DISPLAY = register(
     "wake.daemon.inactive",

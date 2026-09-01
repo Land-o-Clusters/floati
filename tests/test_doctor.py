@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -93,6 +94,23 @@ class DoctorContractTests(unittest.TestCase):
         )
         self._path_patch.start()
         self.addCleanup(self._path_patch.stop)
+        # Keep unrelated Doctor contracts independent of the host interpreter;
+        # the two interpreter-trust contracts disable this fixture locally.
+        self._interpreter_trust_projection_patch = patch(
+            "floati.doctor.project_effect_reconciliation_interpreter_trust",
+            return_value={
+                "code": "effect_reconciliation_interpreter_trust",
+                "severity": "ok",
+                "subject": "test-fixture:trusted-interpreter",
+                "detail": (
+                    "Reconciliation can run here. Floati trusts this Python "
+                    "and every directory above it."
+                ),
+                "remediation": None,
+            },
+        )
+        self._interpreter_trust_projection_patch.start()
+        self.addCleanup(self._interpreter_trust_projection_patch.stop)
 
     def _git(self, *args: str) -> str:
         return subprocess.run(
@@ -130,6 +148,7 @@ class DoctorContractTests(unittest.TestCase):
         codex_hooks: Path | None = None,
         codex_config: Path | None = None,
         codex_gateway_host: Path | None = None,
+        no_sandbox: bool = False,
     ):
         self.assertIsNotNone(Doctor, "typed doctor implementation must exist")
         return Doctor(
@@ -142,7 +161,83 @@ class DoctorContractTests(unittest.TestCase):
             codex_hooks=codex_hooks,
             codex_config=codex_config,
             codex_gateway_host=codex_gateway_host,
+            no_sandbox=no_sandbox,
         )
+
+    @staticmethod
+    def _interpreter_trust_finding(artifact: dict) -> dict:
+        return next(
+            row
+            for row in artifact["findings"]
+            if row["code"] == "effect_reconciliation_interpreter_trust"
+        )
+
+    def test_doctor_reports_trusted_reconciliation_interpreter(self) -> None:
+        """Catches a runnable reconciliation host remaining absent from preflight."""
+        import floati.effect_reconciliation_exec as reconciliation_exec
+
+        interpreter = "/test-fixture/python3"
+        self._interpreter_trust_projection_patch.stop()
+        with mock.patch.object(sys, "executable", interpreter):
+            with mock.patch.object(
+                reconciliation_exec,
+                "_freeze_trusted_interpreter",
+                return_value=Path(interpreter),
+            ):
+                artifact, _ = self.doctor(no_sandbox=True).artifact()
+
+        finding = self._interpreter_trust_finding(artifact)
+
+        self.assertEqual("ok", finding["severity"])
+        self.assertEqual(interpreter, finding["subject"])
+        self.assertEqual(
+            "Reconciliation can run here. Floati trusts this Python and every directory above it.",
+            finding["detail"],
+        )
+        self.assertIsNone(finding["remediation"])
+        self.assertNotIn("interpreter_trust", finding)
+
+    def test_doctor_names_untrusted_reconciliation_interpreter_component(self) -> None:
+        """Catches a permanent interpreter refusal remaining component-free."""
+        self._interpreter_trust_projection_patch.stop()
+        directory = self.base / "untrusted-python"
+        directory.mkdir()
+        interpreter = directory / "python3"
+        interpreter.write_bytes(b"#!/bin/sh\nexit 0\n")
+        interpreter.chmod(0o700)
+        canonical = Path(os.path.realpath(interpreter))
+        failing_component = canonical.parent
+        metadata = os.lstat(failing_component)
+        expected_observation = {
+            "component_mode": metadata.st_mode,
+            "component_uid": metadata.st_uid,
+            "failing_component": str(failing_component),
+            "interpreter_path": str(canonical),
+        }
+
+        with mock.patch.object(sys, "executable", str(interpreter)):
+            artifact, rc = self.doctor(no_sandbox=True).artifact()
+
+        finding = self._interpreter_trust_finding(artifact)
+        self.assertEqual(35, rc)
+        self.assertEqual("warning", finding["severity"])
+        self.assertEqual(str(canonical), finding["subject"])
+        self.assertEqual(
+            (
+                "Reconciliation cannot run, so every effect stays unknown. "
+                f"Floati will not trust {failing_component}."
+            ),
+            finding["detail"],
+        )
+        self.assertEqual(
+            (
+                "Every directory above the Python must be a real directory owned by root "
+                "and writable by nobody else. Run Floati with a root-owned Python; on "
+                "macOS that is /usr/bin/python3."
+            ),
+            finding["remediation"],
+        )
+        self.assertEqual(expected_observation, finding["interpreter_trust"])
 
     def _vendor_codex_gateway(self, content: bytes) -> None:
         vendored = self.source / "tools/codex/codex-fleet-bus.py"
@@ -715,6 +810,39 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual("ok", finding["severity"])
         self.assertIn("typed", finding["detail"].lower() + finding["subject"].lower() + "typed absence")
 
+    def test_installed_bridge_without_repository_source_is_unnameable(self) -> None:
+        """A present bridge must not be mislabeled as uninstalled or healthy."""
+
+        import floati.doctor as doctor_module
+
+        hooks = self.base / "installed-hooks-without-source"
+        hooks.mkdir()
+        bridge = hooks / "stop-hook-bridge.py"
+        bridge.write_bytes(b"installed bridge\n")
+        sidecar = hooks / "stop-hook-bridge.sha256"
+        sidecar.write_text(
+            hashlib.sha256(bridge.read_bytes()).hexdigest() + "\n",
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(
+            doctor_module,
+            "installed_bridge_paths",
+            return_value=(bridge, sidecar),
+        ):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(35, rc)
+        finding = next(
+            row
+            for row in artifact["findings"]
+            if row["code"] == "wake_bridge_repository_source_unnameable"
+        )
+        self.assertEqual("warning", finding["severity"])
+        self.assertIn(
+            "complete Floati source", str(finding["remediation"])
+        )
+
     def _write_zcode_binding(self, session_id: str = "worker-zcode-session") -> None:
         """A zcode binding cannot pass DaemonCoordinate at this tree (the
         adapter lives on the kit lane), so the record is written by hand in
@@ -1003,12 +1131,18 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(
             [
                 "root_valid",
+                "effect_reconciliation_interpreter_trust",
                 "registry_live_dirs_match",
                 "wake_namespace_registry_subset",
                 "wake_daemon_health",
                 "wake_bridge_uninstalled",
                 "delivery_health",
                 "wake_health",
+                "sandbox_write",
+                "sandbox_write",
+                "sandbox_write",
+                "sandbox_write",
+                "sandbox_write",
                 "manifest_exact_set",
                 "deploy_currency_current",
                 "bus_watch_uninstalled",
@@ -1022,9 +1156,13 @@ class DoctorContractTests(unittest.TestCase):
         self.assertTrue(all(
             finding["severity"] == "ok"
             for finding in artifact["findings"]
-            if finding["code"] != "installer_shadow"
+            if finding["code"] not in {"installer_shadow", "sandbox_write"}
         ))
-        self.assertTrue(all(finding["remediation"] is None for finding in artifact["findings"]))
+        self.assertTrue(all(
+            finding["remediation"] is None
+            for finding in artifact["findings"]
+            if finding["code"] != "sandbox_write"
+        ))
         shadow = next(row for row in artifact["findings"] if row["code"] == "installer_shadow")
         self.assertEqual("warning", shadow["severity"])
         self.assertEqual("found", shadow["installer_shadow"]["outcome"])

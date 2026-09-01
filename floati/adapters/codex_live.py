@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, IO, Dict, Optional, Sequence
 
+from ..host_paths import worker_workspace_root
 from ..storage_identity import EVIDENCE_DIRECTORY, refuse_legacy_workspace_artifacts
 from ..workers import WorkerAdapterFailure
 
@@ -23,7 +24,7 @@ _APPROVAL_DENIALS = {
     "item/fileChange/requestApproval": {"decision": "cancel"},
     "item/permissions/requestApproval": {"permissions": {}, "scope": "turn"},
 }
-_WORKSPACE_PARENT = Path("\x2fprivate/tmp/floati-work")
+_WORKSPACE_PARENT = worker_workspace_root()
 _DEFAULT_COMMAND = ("/opt/homebrew/bin/codex", "app-server", "--stdio")
 _SAFE_GIT_OPTIONS = (
     "-c",

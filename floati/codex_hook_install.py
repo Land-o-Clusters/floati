@@ -56,6 +56,17 @@ _DARWIN_AT_FDCWD = -2
 _LINUX_AT_FDCWD = -100
 _RENAME_EXCL = 0x00000004
 _RENAME_NOREPLACE = 0x00000001
+_CODEX_WAIT_INTERPRETER = Path("/usr/bin/python3")
+
+
+def _require_codex_wait_interpreter() -> None:
+    """Refuse the permanent host condition before validating hook shape."""
+
+    if not _CODEX_WAIT_INTERPRETER.exists():
+        raise ProtocolRefusal(
+            "codex_wait_host_interpreter_absent",
+            f"required Codex Stop-hook interpreter is absent: {_CODEX_WAIT_INTERPRETER}",
+        )
 
 
 def _digest_bytes(value: bytes) -> str:
@@ -282,6 +293,7 @@ def _array_value_spans(text: str, start: int, end: int) -> list[tuple[int, int]]
 def plan_waiter_rebind(hooks_path: Path, store: Path, target_digest: str) -> Dict[str, object]:
     """Plan one surgical Floati Stop-hook launcher replacement without writing."""
 
+    _require_codex_wait_interpreter()
     hooks_path, store = Path(hooks_path), Path(store)
     if (
         not hooks_path.is_absolute()
@@ -707,6 +719,7 @@ class CodexHookInstaller:
         wait_deadline_seconds: int,
         session_id: Optional[str] = None,
     ) -> Dict[str, object]:
+        _require_codex_wait_interpreter()
         workspace = Path(workspace).expanduser()
         if not workspace.is_absolute() or workspace.is_symlink() or not workspace.is_dir():
             raise ProtocolRefusal("codex_wait_workspace_invalid", "workspace must be an existing absolute directory")

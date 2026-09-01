@@ -7,13 +7,25 @@ worth reporting.
 
 ## Nothing leaves this machine
 
-Floati sends no telemetry and phones no home. Measured (2026-08-28, source
-audit of `floati/`): every socket in the product is a local AF_UNIX pipe
-between floati's own processes, with one exception — the herdr adapter's
-consent-gated, client-only loopback connection, which dials literal
-`127.0.0.1`/`::1` on your machine, performs zero name resolution, and
-contains zero `listen`/`bind` calls (the five ratified loopback conditions,
-verified in code: `docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md`).
+Floati sends no telemetry and phones no home. Measured (re-measured
+2026-09-01, source audit of `floati/`): every socket in the product is a
+local AF_UNIX pipe between floati's own processes, with three counted
+exceptions, each consent-gated and each client-only:
+
+- the herdr adapter's loopback connection and the t3 adapter's loopback
+  connection, which dial literal `127.0.0.1`/`::1` on your machine, perform
+  zero name resolution, and contain zero `listen`/`bind` calls (the five
+  ratified loopback conditions, verified in code:
+  `docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md`,
+  `docs/design/loopback-client-ruling-2026-08-28.md`);
+- the update fetch, one HTTPS connection to the exact channel you consented
+  to (`floati/update_transport.py`), refused without an active consent
+  receipt for that channel (`floati/update_apply.py`, `UpdateConsentLedger`).
+
+Nothing in the product can listen: `tests/test_no_listener_fence.py` pins
+every `bind`/`listen` to the AF_UNIX sequencer and confines network imports
+to the one update module. *(Am.1, 2026-09-01: this page previously said "one
+exception"; the t3 adapter and the update fetch were live and unlisted.)*
 The installed child harnesses own their normal provider traffic; floati reads
 no credential and adds no traffic of its own.
 

@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from floati.events import EventLog
+from floati.host_paths import worker_workspace_root
 from floati.planes import AuthorityGrantStore
 from floati.registry import Registry
 from floati.root import FloatiRoot
@@ -345,7 +346,7 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         item = self.artifact(result)["evidence"]
         self.assertEqual(
-            f"\x2fprivate/tmp/floati-work/{item['id']}",
+            str(worker_workspace_root() / item["id"]),
             item["workspace"],
         )
 

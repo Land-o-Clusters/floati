@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -25,6 +26,8 @@ from .manifest import verify_manifest
 from .registry import REGISTRY_KINDS
 from .root import FloatiRoot
 from .git_process import is_shallow_repository
+from .sandbox_probe import probe_write_set
+from .sandbox_remedy import remedy_for
 from .storage_identity import INSTALL_METADATA_DIRECTORY
 from .update_status import project_update_findings
 
@@ -35,6 +38,17 @@ CODEX_GATEWAY_DIGEST = Path("tools/codex/codex-fleet-bus.sha256.json")
 CODEX_GATEWAY_HOST = Path.home() / ".codex/bin/codex-fleet-bus"
 BUS_WATCH_SOURCE = Path("scripts/bus-watch/floati-bus-watch.ts")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_INTERPRETER_TRUST_OK_DETAIL = (
+    "Reconciliation can run here. Floati trusts this Python and every directory above it."
+)
+_INTERPRETER_TRUST_WARNING_DETAIL = (
+    "Reconciliation cannot run, so every effect stays unknown. "
+    "Floati will not trust {failing_component}."
+)
+_INTERPRETER_TRUST_REMEDIATION = (
+    "Every directory above the Python must be a real directory owned by root and writable "
+    "by nobody else. Run Floati with a root-owned Python; on macOS that is /usr/bin/python3."
+)
 
 
 def _finding(
@@ -108,6 +122,38 @@ def _fold_shadow_exit(current: int, shadow: int) -> int:
     return shadow
 
 
+def project_effect_reconciliation_interpreter_trust() -> Dict[str, object]:
+    """Project the launcher's unchanged interpreter fence before work needs it."""
+
+    from .effect_reconciliation_exec import (
+        _InterpreterTrustFailure,
+        _freeze_trusted_interpreter,
+    )
+
+    interpreter_path = os.path.realpath(sys.executable)
+    try:
+        _freeze_trusted_interpreter(interpreter_path)
+    except _InterpreterTrustFailure as exc:
+        observation = dict(exc.observation)
+        finding = _finding(
+            "effect_reconciliation_interpreter_trust",
+            "warning",
+            interpreter_path,
+            _INTERPRETER_TRUST_WARNING_DETAIL.format(
+                failing_component=observation["failing_component"],
+            ),
+            _INTERPRETER_TRUST_REMEDIATION,
+        )
+        finding["interpreter_trust"] = observation
+        return finding
+    return _finding(
+        "effect_reconciliation_interpreter_trust",
+        "ok",
+        interpreter_path,
+        _INTERPRETER_TRUST_OK_DETAIL,
+    )
+
+
 def installed_bridge_paths() -> Optional[tuple[Path, Path]]:
     """HT-R6: the Am.2-ruled installed bridge path and its source-SHA sidecar.
     A deployed copy must carry the coordinate it was deployed from, or its
@@ -149,10 +195,14 @@ def project_installed_bridge_currency(
     )
     if repository_sha is None:
         return _finding(
-            "wake_bridge_uninstalled",
-            "ok",
-            str(bridge),
-            "installed wake bridge present but the repository names no hooks/stop-hook-bridge.py to compare against",
+            "wake_bridge_repository_source_unnameable",
+            "warning",
+            str(repository_bridge),
+            "repository wake-bridge source cannot be named for comparison",
+            (
+                "rerun Doctor with a complete Floati source containing "
+                "hooks/stop-hook-bridge.py before claiming deployed-source currency"
+            ),
         )
     if installed_sha == repository_sha:
         return _finding(
@@ -649,6 +699,7 @@ class Doctor:
         codex_hooks: Path | str | None = None,
         codex_config: Path | str | None = None,
         codex_gateway_host: Path | str | None = None,
+        no_sandbox: bool = False,
     ) -> None:
         if profile is not None and profile not in RULED_PROFILES:
             raise ProtocolRefusal("doctor_profile_invalid", DOCTOR_PROFILE_INVALID_DETAIL)
@@ -667,6 +718,7 @@ class Doctor:
             if codex_gateway_host is None
             else Path(codex_gateway_host).expanduser()
         )
+        self.no_sandbox = no_sandbox
 
     def _currency(self) -> tuple[Dict[str, object], bool]:
         source = self.source_arg
@@ -776,6 +828,11 @@ class Doctor:
                     findings.append(finding)
 
         currency_finding, currency_current = self._currency()
+
+        interpreter_trust_finding = project_effect_reconciliation_interpreter_trust()
+        findings.append(interpreter_trust_finding)
+        if interpreter_trust_finding["severity"] == "warning" and rc == 0:
+            rc = 35
 
         if self.gateway_config_arg is not None:
             try:
@@ -959,6 +1016,53 @@ class Doctor:
                     rc = 35
             except IntegrityFailure as exc:
                 findings.append(_finding("delivery_health_unavailable", "error", "events.jsonl", exc.detail))
+                if rc != 20:
+                    rc = 33
+
+        if root is not None and not self.no_sandbox:
+            try:
+                registry_rows = read_records_snapshot(
+                    root, "registry/entries.jsonl", allowed_kinds=set(REGISTRY_KINDS)
+                )
+                latest_registry: Dict[str, dict] = {}
+                for row in registry_rows:
+                    if row["kind"] == "registry_entry":
+                        latest_registry[str(row["node_id"])] = row
+                for node_id, row in sorted(latest_registry.items()):
+                    if row.get("state") != "active":
+                        continue
+                    harness = str(row.get("role", ""))
+                    for fact in probe_write_set(root, node_id, repository=self.source_arg):
+                        residue = fact["residue_path"]
+                        if fact["verdict"] == "refused":
+                            severity = "error"
+                        elif fact["verdict"] == "unknown":
+                            severity = "warning"
+                        elif residue is not None:
+                            severity = "warning"
+                        else:
+                            severity = "ok"
+                        detail = (
+                            f"{fact['verdict']} path={fact['path'] or '(underivable)'} "
+                            f"reason={fact['reason_code']}"
+                        )
+                        if residue is not None:
+                            detail += f" residue_path={residue}"
+                        findings.append(
+                            _finding(
+                                "sandbox_write",
+                                severity,
+                                fact["coordinate"],
+                                detail,
+                                None
+                                if severity == "ok"
+                                else remedy_for(harness, [fact["path"]] if fact["path"] else []),
+                            )
+                        )
+                        if fact["verdict"] == "refused" and rc not in (20, 33):
+                            rc = 36
+            except IntegrityFailure as exc:
+                findings.append(_finding(exc.code, "error", "registry/entries.jsonl", exc.detail))
                 if rc != 20:
                     rc = 33
 
@@ -1159,6 +1263,7 @@ class Doctor:
             22: "cannot_speak",
             33: "malformed_evidence",
             35: "degraded",
+            36: "sandbox_refused",
         }.get(rc, "degraded")
         return (
             {

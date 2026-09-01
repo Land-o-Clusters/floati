@@ -8,13 +8,15 @@ from pathlib import Path
 from floati.deploy import DeploymentWriter
 from floati.doctor import Doctor
 from floati.errors import ProtocolRefusal
+from floati.locks.git_observer import GitObserver
+from floati.worktree_safety import require_worktree_commits_referenced
 
 
 class ShallowRepositoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.seed = self.base / "seed"
         self.seed.mkdir()
         self._git(self.seed, "init", "--quiet", "--initial-branch=main")
@@ -59,6 +61,20 @@ class ShallowRepositoryTests(unittest.TestCase):
         finding = next(row for row in artifact["findings"] if row["code"] == "shallow_repository")
         self.assertEqual("warning", finding["severity"])
         self.assertIn(return_code, {33, 35})
+
+    def test_worktree_safety_refuses_shallow_reachability(self) -> None:
+        with self.assertRaises(ProtocolRefusal) as caught:
+            require_worktree_commits_referenced(self.shallow)
+        self.assertEqual("git_reachability_shallow_repository", caught.exception.code)
+
+    def test_git_observer_refuses_shallow_reachability(self) -> None:
+        with self.assertRaises(ProtocolRefusal) as caught:
+            GitObserver(self.shallow).unique_reachable_commits(self.shallow)
+        self.assertEqual("git_reachability_shallow_repository", caught.exception.code)
+
+    def test_full_clone_reachability_surfaces_remain_available(self) -> None:
+        require_worktree_commits_referenced(self.seed)
+        self.assertEqual((), GitObserver(self.seed).unique_reachable_commits(self.seed))
 
 
 if __name__ == "__main__":

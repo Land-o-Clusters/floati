@@ -322,6 +322,11 @@ def _signature_sign(args: argparse.Namespace) -> HandlerResult:
         version=args.version,
         journal_id=args.journal_id,
         through_seq=args.through_seq,
+        minisign_executable=(
+            Path(args.minisign_executable)
+            if args.minisign_executable is not None
+            else None
+        ),
     )
     return "ok", evidence, OK
 
@@ -337,6 +342,11 @@ def _signature_verify(args: argparse.Namespace) -> HandlerResult:
         version=args.version,
         journal_id=args.journal_id,
         through_seq=args.through_seq,
+        minisign_executable=(
+            Path(args.minisign_executable)
+            if args.minisign_executable is not None
+            else None
+        ),
     )
     if evidence["state"] == "signature_unverified":
         return "no_result", evidence, NO_RESULT
@@ -710,6 +720,7 @@ def _doctor(args: argparse.Namespace) -> HandlerResult:
         profile=args.profile,
         codex_hooks=args.codex_hooks,
         codex_config=args.codex_config,
+        no_sandbox=getattr(args, "no_sandbox", False),
     )
     artifact, return_code = doctor.artifact()
     if getattr(args, "probe", False):
@@ -720,13 +731,37 @@ def _doctor(args: argparse.Namespace) -> HandlerResult:
         if probe_rc != 0 and return_code == 0:
             return_code = 35
         artifact["state"] = {0: "healthy", 20: "refused", 33: "malformed_evidence",
-                             35: "degraded"}.get(return_code, "degraded")
+                             35: "degraded", 36: "sandbox_refused"}.get(return_code, "degraded")
     return str(artifact["state"]), artifact, return_code
 
 
 def _supervise(args: argparse.Namespace) -> HandlerResult:
     snapshot = Supervisor(_root(args.root)).snapshot(_current_time())
     return "ok", snapshot, OK
+
+
+def _presence_report(args: argparse.Namespace) -> HandlerResult:
+    from .presence import PresenceService
+
+    report = PresenceService(_root(args.root)).report_self(
+        args.actor,
+        ttl_seconds=args.ttl_seconds,
+        now=_current_time(),
+    )
+    return "ok", report, OK
+
+
+def _presence_show(args: argparse.Namespace) -> HandlerResult:
+    from .presence import PresenceService
+
+    current = _current_time()
+    reports = PresenceService(_root(args.root)).reports(current)
+    return "ok", {
+        "observed_at": current.isoformat(timespec="milliseconds").replace(
+            "+00:00", "Z"
+        ),
+        "reports": reports,
+    }, OK
 
 
 def _receipts(args: argparse.Namespace) -> HandlerResult:
@@ -847,6 +882,158 @@ def _work_show(args: argparse.Namespace) -> HandlerResult:
     return "ok", evidence, OK
 
 
+def _intake_scan(args: argparse.Namespace) -> HandlerResult:
+    from .intake import scan_directory
+
+    root = _root(args.root)
+    directory = Path(args.directory)
+    return "ok", {
+        "root": str(root.path),
+        "directory": str(directory),
+        "verdicts": scan_directory(directory),
+    }, OK
+
+
+def _intake_show(args: argparse.Namespace) -> HandlerResult:
+    from .intake import show_snapshots
+
+    root = _root(args.root)
+    snapshots = show_snapshots(root, args.snapshot_id)
+    if not snapshots:
+        return "no_result", {"snapshots": []}, NO_RESULT
+    return "ok", {"snapshots": snapshots}, OK
+
+
+def _intake_adopt(args: argparse.Namespace) -> HandlerResult:
+    from .intake import adopt_github, adopt_local
+
+    current = _parse_time(args.now) if args.now is not None else None
+    root = _root(args.root)
+    if args.source == "local":
+        if args.directory is None or args.relative_path is None:
+            raise ProtocolRefusal(
+                "arguments_invalid", "local intake adopt requires --from and --path"
+            )
+        if any(value is not None for value in (args.repository, args.issue, args.gh_executable)):
+            raise ProtocolRefusal(
+                "arguments_invalid", "local intake adopt does not accept GitHub coordinates"
+            )
+        result = adopt_local(
+            root, Path(args.directory), args.relative_path,
+            owner=args.owner, now=current,
+        )
+    else:
+        if args.repository is None or args.issue is None or args.gh_executable is None:
+            raise ProtocolRefusal(
+                "arguments_invalid", "GitHub intake adopt requires --repo, --issue, and --gh"
+            )
+        if args.directory is not None or args.relative_path is not None:
+            raise ProtocolRefusal(
+                "arguments_invalid", "GitHub intake adopt does not accept local path coordinates"
+            )
+        coordinates = args.repository.split("/")
+        if len(coordinates) != 2 or not all(coordinates):
+            raise ProtocolRefusal(
+                "github_repository_invalid", "GitHub repository must use owner/repository coordinates"
+            )
+        result = adopt_github(
+            root, coordinates[0], coordinates[1], args.issue, args.gh_executable,
+            owner=args.owner, now=current,
+        )
+    return "ok", result, OK
+
+
+def _intake_outbound_request(args: argparse.Namespace) -> Dict[str, object]:
+    operation = args.operation
+    body = getattr(args, "body", None)
+    body_file = getattr(args, "body_file", None)
+    labels = getattr(args, "labels", None)
+    reason = getattr(args, "reason", None)
+    pull_request = getattr(args, "pull_request", None)
+    supplied_groups = {
+        "comment": body is not None or body_file is not None,
+        "label": labels is not None,
+        "close": reason is not None,
+        "pr_link": pull_request is not None,
+    }
+    allowed_group = {
+        "comment": "comment",
+        "label_add": "label",
+        "label_remove": "label",
+        "close": "close",
+        "pr_link": "pr_link",
+    }[operation]
+    if any(present for group, present in supplied_groups.items() if group != allowed_group):
+        raise ProtocolRefusal(
+            "intake_request_invalid",
+            "intake request flags must match exactly the selected operation",
+        )
+    if operation == "comment":
+        if body is not None and body_file is not None:
+            raise ProtocolRefusal(
+                "intake_request_body_ambiguous",
+                "comment accepts exactly one of --body or --body-file",
+            )
+        if body_file is not None:
+            try:
+                with Path(body_file).open("r", encoding="utf-8") as stream:
+                    body = stream.read(65_537)
+            except (OSError, UnicodeError) as exc:
+                raise ProtocolRefusal(
+                    "intake_request_invalid",
+                    "comment body file must be one readable UTF-8 path",
+                ) from exc
+        return {"body": "" if body is None else body}
+    if operation == "label_add":
+        return {"labels": [] if labels is None else labels}
+    if operation == "label_remove":
+        if labels is None or len(labels) != 1:
+            raise ProtocolRefusal(
+                "intake_label_invalid", "label_remove requires exactly one --label"
+            )
+        return {"label": labels[0]}
+    if operation == "close":
+        return {"state": "closed", "state_reason": reason}
+    if pull_request is None:
+        return {"body": ""}
+    value = str(pull_request)
+    if value.isdecimal() and 1 <= len(value) <= 10 and int(value) > 0:
+        return {"body": f"Linked pull request: #{value}"}
+    return {"body": f"Linked pull request: {value}"}
+
+
+def _intake_preview(args: argparse.Namespace) -> HandlerResult:
+    from .intake import preview_github_mutation
+
+    preview = preview_github_mutation(
+        _root(args.root),
+        args.snapshot_id,
+        args.operation,
+        _intake_outbound_request(args),
+    )
+    return "ok", preview, OK
+
+
+def _intake_dispatch(args: argparse.Namespace) -> HandlerResult:
+    from .intake import dispatch_github_mutation
+
+    intent = dispatch_github_mutation(
+        _root(args.root),
+        args.snapshot_id,
+        args.operation,
+        _intake_outbound_request(args),
+        confirm_digest=args.confirm_digest,
+        run_id=args.run_id,
+        item_id=args.item_id,
+        attempt_id=args.attempt_id,
+        fence_token=args.fence_token,
+        approval_request_id=args.approval_request_id,
+        approval_decision_id=args.approval_decision_id,
+        approval_consumption_id=args.approval_consumption_id,
+    )
+    return "ok", intent, OK
+
+
 def _worker_run(args: argparse.Namespace) -> HandlerResult:
     result = WorkerRunner(
         _root(args.root), {
@@ -944,6 +1131,11 @@ def _update(args: argparse.Namespace) -> HandlerResult:
             channel=args.channel,
             entrypoint=destination / "scripts" / "floati",
             idempotency_key=args.idempotency_key,
+            minisign_executable=(
+                Path(args.minisign_executable)
+                if args.minisign_executable is not None
+                else None
+            ),
         )
         return "ok", evidence, OK
     if action == "apply":
@@ -1003,6 +1195,8 @@ def _add_update_action_arguments(
     parser.add_argument("--epoch", type=int)
     parser.add_argument("--idempotency-key")
     parser.add_argument("--version")
+    if action == "check":
+        parser.add_argument("--minisign-executable")
     parser.add_argument("--json", action="store_true")
     parser.set_defaults(handler=_update, update_action=action)
 
@@ -1356,6 +1550,7 @@ def _parser() -> _ArtifactParser:
     signature_sign.add_argument("--version", required=True)
     signature_sign.add_argument("--journal-id")
     signature_sign.add_argument("--through-seq", type=int)
+    signature_sign.add_argument("--minisign-executable")
     signature_sign.add_argument("--json", action="store_true")
     signature_sign.set_defaults(handler=_signature_sign)
 
@@ -1367,6 +1562,7 @@ def _parser() -> _ArtifactParser:
     signature_verify.add_argument("--version", required=True)
     signature_verify.add_argument("--journal-id")
     signature_verify.add_argument("--through-seq", type=int)
+    signature_verify.add_argument("--minisign-executable")
     signature_verify.add_argument("--json", action="store_true")
     signature_verify.set_defaults(handler=_signature_verify)
 
@@ -1526,6 +1722,10 @@ def _parser() -> _ArtifactParser:
     doctor.add_argument("--gateway-config")
     doctor.add_argument("--profile")
     doctor.add_argument(
+        "--no-sandbox", action="store_true",
+        help="skip the default sandbox write-set checks",
+    )
+    doctor.add_argument(
         "--probe", action="store_true",
         help="H3: send a loopback envelope to every registered node and "
              "verify each drains it within the budget (appends probe mail; "
@@ -1561,6 +1761,19 @@ def _parser() -> _ArtifactParser:
     supervise = commands.add_parser("supervise")
     supervise.add_argument("--root")
     supervise.set_defaults(handler=_supervise)
+
+    presence = commands.add_parser("presence")
+    presence_commands = presence.add_subparsers(
+        dest="presence_command", required=True
+    )
+    presence_report = presence_commands.add_parser("report")
+    presence_report.add_argument("--root")
+    presence_report.add_argument("--as", dest="actor", required=True)
+    presence_report.add_argument("--ttl-seconds", type=int, required=True)
+    presence_report.set_defaults(handler=_presence_report)
+    presence_show = presence_commands.add_parser("show")
+    presence_show.add_argument("--root")
+    presence_show.set_defaults(handler=_presence_show)
 
     board = commands.add_parser("board")
     board_root = board.add_mutually_exclusive_group()
@@ -1641,6 +1854,65 @@ def _parser() -> _ArtifactParser:
     work_show.add_argument("--root")
     work_show.add_argument("--id", dest="item_id")
     work_show.set_defaults(handler=_work_show)
+
+    intake = commands.add_parser("intake")
+    intake_commands = intake.add_subparsers(dest="intake_command", required=True)
+
+    intake_scan = intake_commands.add_parser("scan", floati_mcp_exposure="read")
+    intake_scan.add_argument("--root", required=True)
+    intake_scan.add_argument("--from", dest="directory", required=True)
+    intake_scan.set_defaults(handler=_intake_scan)
+
+    intake_show = intake_commands.add_parser("show", floati_mcp_exposure="read")
+    intake_show.add_argument("--root", required=True)
+    intake_show.add_argument("--id", dest="snapshot_id")
+    intake_show.set_defaults(handler=_intake_show)
+
+    intake_adopt = intake_commands.add_parser("adopt")
+    intake_adopt.add_argument("--root", required=True)
+    intake_adopt.add_argument("--source", choices=("local", "github"), required=True)
+    intake_adopt.add_argument("--from", dest="directory")
+    intake_adopt.add_argument("--path", dest="relative_path")
+    intake_adopt.add_argument("--repo", dest="repository")
+    intake_adopt.add_argument("--issue", type=int)
+    intake_adopt.add_argument("--gh", dest="gh_executable")
+    intake_adopt.add_argument("--owner")
+    intake_adopt.add_argument("--now")
+    intake_adopt.set_defaults(handler=_intake_adopt)
+
+    def add_intake_request_arguments(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--operation",
+            choices=("comment", "label_add", "label_remove", "close", "pr_link"),
+            required=True,
+        )
+        command.add_argument("--body")
+        command.add_argument("--body-file")
+        command.add_argument("--label", dest="labels", action="append")
+        command.add_argument("--reason", choices=("completed", "not_planned"))
+        command.add_argument("--pr", dest="pull_request")
+
+    intake_preview = intake_commands.add_parser(
+        "preview", floati_mcp_exposure="read", floati_mcp_omit=("body_file",)
+    )
+    intake_preview.add_argument("--root", required=True)
+    intake_preview.add_argument("--snapshot", dest="snapshot_id", required=True)
+    add_intake_request_arguments(intake_preview)
+    intake_preview.set_defaults(handler=_intake_preview)
+
+    intake_dispatch = intake_commands.add_parser("dispatch")
+    intake_dispatch.add_argument("--root", required=True)
+    intake_dispatch.add_argument("--snapshot", dest="snapshot_id", required=True)
+    add_intake_request_arguments(intake_dispatch)
+    intake_dispatch.add_argument("--confirm-digest", required=True)
+    intake_dispatch.add_argument("--run-id", required=True)
+    intake_dispatch.add_argument("--item-id", required=True)
+    intake_dispatch.add_argument("--attempt-id", required=True)
+    intake_dispatch.add_argument("--fence-token", required=True)
+    intake_dispatch.add_argument("--approval-request", dest="approval_request_id")
+    intake_dispatch.add_argument("--approval-decision", dest="approval_decision_id")
+    intake_dispatch.add_argument("--approval-consumption", dest="approval_consumption_id")
+    intake_dispatch.set_defaults(handler=_intake_dispatch)
 
     worker = commands.add_parser("worker")
     worker_commands = worker.add_subparsers(dest="worker_command", required=True)

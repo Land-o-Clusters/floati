@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ctypes
 import errno
 import multiprocessing.util
 import os
 import shutil
 import signal
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -412,6 +414,8 @@ class WorkerBootstrapTests(unittest.TestCase):
             with mock.patch(
                 "floati.worker_bootstrap.os.listdir",
                 return_value=[str(read_descriptor), str(write_descriptor)],
+            ), mock.patch(
+                "floati.worker_bootstrap.os.closerange",
             ):
                 close_all_descriptors_except({0, 1, 2, read_descriptor})
             with self.assertRaises(OSError) as caught:
@@ -424,6 +428,118 @@ class WorkerBootstrapTests(unittest.TestCase):
                 except OSError:
                     pass
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS descriptor surface")
+    def test_descriptor_closure_does_not_trust_incomplete_dev_fd(self) -> None:
+        """Catches Darwin /dev/fd omissions leaving inherited descriptors open."""
+        leaked_read, leaked_write = os.pipe()
+        proof_read, proof_write = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(proof_read)
+            try:
+                with mock.patch(
+                    "floati.worker_bootstrap.os.listdir",
+                    return_value=["0", "1", "2", str(proof_write)],
+                ):
+                    close_all_descriptors_except({0, 1, 2, proof_write})
+                try:
+                    os.fstat(leaked_read)
+                except OSError as exc:
+                    outcome = b"closed" if exc.errno == errno.EBADF else b"error"
+                else:
+                    outcome = b"open"
+                os.write(proof_write, outcome)
+                os._exit(0)
+            except BaseException:
+                os._exit(97)
+        os.close(proof_write)
+        try:
+            outcome = os.read(proof_read, 16)
+            waited, status = os.waitpid(pid, 0)
+            self.assertEqual(pid, waited)
+            self.assertEqual(0, os.waitstatus_to_exitcode(status))
+            self.assertEqual(b"closed", outcome)
+        finally:
+            os.close(proof_read)
+            for descriptor in (leaked_read, leaked_write):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def test_darwin_close_end_is_derived_at_use_and_clamped(self) -> None:
+        """Catches import-time derivation or closure above maxfilesperproc."""
+        from floati import effect_reconciliation_observer as observer
+        from floati import worker_bootstrap as bootstrap
+
+        modules_and_closers = (
+            (observer, observer._close_unruled_descriptors),
+            (bootstrap, bootstrap.close_all_descriptors_except),
+        )
+        cases = ((64, 256), (4096, 4096), (200_000, 122_880))
+        for module, closer in modules_and_closers:
+            for soft_limit, expected in cases:
+                with self.subTest(module=module.__name__, soft_limit=soft_limit):
+                    ranges: list[tuple[int, int]] = []
+                    with mock.patch.object(
+                        module.sys,
+                        "platform",
+                        "darwin",
+                    ), mock.patch.object(
+                        module.resource,
+                        "getrlimit",
+                        return_value=(soft_limit, soft_limit),
+                    ), mock.patch.object(
+                        module,
+                        "_darwin_maxfilesperproc",
+                        return_value=122_880,
+                        create=True,
+                    ), mock.patch.object(
+                        module,
+                        "_open_descriptors",
+                        return_value=set(),
+                    ), mock.patch.object(
+                        module.os,
+                        "closerange",
+                        side_effect=lambda start, end: ranges.append((start, end)),
+                    ):
+                        closer({0, 1, 2})
+
+                    self.assertEqual((3, expected), ranges[-1])
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS descriptor surface")
+    def test_darwin_maxfilesperproc_uses_inprocess_sysctlbyname(self) -> None:
+        """Catches a subprocess or hard-coded Darwin descriptor ceiling."""
+        from floati import effect_reconciliation_observer as observer
+        from floati import worker_bootstrap as bootstrap
+
+        class FakeSysctl:
+            argtypes = None
+            restype = None
+
+            def __init__(self) -> None:
+                self.names: list[bytes] = []
+
+            def __call__(self, name, output, output_size, replacement, replacement_size):
+                self.names.append(name)
+                ctypes.cast(output, ctypes.POINTER(ctypes.c_int))[0] = 777
+                ctypes.cast(output_size, ctypes.POINTER(ctypes.c_size_t))[0] = 4
+                return 0
+
+        for module in (observer, bootstrap):
+            with self.subTest(module=module.__name__):
+                sysctl = FakeSysctl()
+                libc = types.SimpleNamespace(sysctlbyname=sysctl)
+                with mock.patch.object(
+                    module.ctypes,
+                    "CDLL",
+                    return_value=libc,
+                ) as load_libc:
+                    self.assertEqual(777, module._darwin_maxfilesperproc())
+
+                load_libc.assert_called_once_with(None, use_errno=True)
+                self.assertEqual([b"kern.maxfilesperproc"], sysctl.names)
+
     def test_descriptor_enumeration_failure_sends_typed_unavailable_result(self) -> None:
         """Catches descriptor-directory failure becoming silent bootstrap death."""
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -433,6 +549,8 @@ class WorkerBootstrapTests(unittest.TestCase):
             "floati.worker_bootstrap.os.chdir",
         ), mock.patch(
             "floati.worker_bootstrap.os.listdir", side_effect=OSError("unavailable"),
+        ), mock.patch(
+            "floati.worker_bootstrap.os.closerange",
         ):
             result = bootstrap_main(child.fileno())
         child.close()

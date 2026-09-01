@@ -40,6 +40,9 @@ class AU1S0Tests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
+        selected = shutil.which("minisign")
+        self.assertIsNotNone(selected, "AU1-S0 requires a real minisign binary")
+        self.minisign = Path(selected).resolve(strict=True)
         self.staging = self.base / "staging"
         self.staging.mkdir()
         self._copy_minisign_fixture(
@@ -165,6 +168,7 @@ class AU1S0Tests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
+            minisign_executable=self.minisign,
         )
 
         self.assertEqual("signature_verified", fact["state"])
@@ -212,6 +216,8 @@ class AU1S0Tests(unittest.TestCase):
             "fixture-journal",
             "--through-seq",
             "7",
+            "--minisign-executable",
+            str(self.minisign),
         ]
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         plain = subprocess.run(

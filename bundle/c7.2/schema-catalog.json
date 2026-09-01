@@ -96,7 +96,7 @@
           "id": "https://landoclusters.com/floati/schemas/v0/work-item-record.schema.json",
           "version": 0,
           "file": "schemas/v0/work-item-record.schema.json",
-          "sha256": "be26a743b9706811e9859247a45157f7159fb5d32d6221f1a9be32b70f8ef96d",
+          "sha256": "9fba00d4a18cf82adf956aa78757e3af26ca7af8aa595ece14c24a0ccba05822",
           "ledger": "work/items.jsonl",
           "state_role": "context_only_no_causal_merge",
           "pointers": [

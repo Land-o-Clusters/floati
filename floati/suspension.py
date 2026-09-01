@@ -8,6 +8,7 @@ from typing import Dict, Optional
 
 from .approvals import ApprovalLedger
 from .errors import ProtocolRefusal
+from .host_paths import worker_workspace_root
 from .ids import uuid7_hex
 from .jsonl import read_records
 from .planes import AuthorityGrantStore
@@ -173,7 +174,7 @@ class ApprovalSuspensionController:
             "requested_scope": request["scope"],
             "resume_mode": resume_mode,
             "provider_session_or_thread_id": provider_session_or_thread_id,
-            "workspace": f"\x2fprivate/tmp/floati-work/{item_id}",
+            "workspace": str(worker_workspace_root() / item_id),
             "workspace_checkpoint": checkpoint,
             "execution_authority_subject": execution_authority_subject,
             "execution_authority_holder": execution_authority_holder,

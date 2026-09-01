@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from .errors import IntegrityFailure, ProtocolRefusal
+from .host_paths import worker_workspace_root
 from .consumption import ConsumptionLedger
 from .ids import uuid7_hex
 from .jsonl import read_records, read_records_snapshot, transact
@@ -71,7 +72,7 @@ class WorkLog:
         if needs:
             record["needs"] = list(needs)
         if provision_workspace:
-            record["workspace"] = f"\x2fprivate/tmp/floati-work/{item_id}"
+            record["workspace"] = str(worker_workspace_root() / item_id)
         validate_record(record, self.root.tenant_id, frozenset({"work_item"}), integrity=False)
 
         def decide(records: List[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:

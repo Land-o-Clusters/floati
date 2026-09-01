@@ -90,7 +90,7 @@ def _git(
 
 
 def _manifest_entries(
-    source: Path, *, git_executable: str = "git"
+    source: Path, *, git_executable: str = "/usr/bin/git"
 ) -> List[Dict[str, str]]:
     errors = verify_manifest(source, git_executable=git_executable)
     if errors:
@@ -298,7 +298,7 @@ class DeploymentWriter:
         committed_tree: bool = False,
         installation_owner: Optional[Dict[str, object]] = None,
         installer_path: Optional[str] = None,
-        git_executable: str = "git",
+        git_executable: str = "/usr/bin/git",
         join_id: Optional[str] = None,
         planned_intents: Optional[Sequence[Dict[str, str]]] = None,
         fault_hook: Optional[Callable[[str], None]] = None,

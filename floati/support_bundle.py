@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import io
 import json
@@ -38,9 +40,45 @@ MAX_BUNDLE_BYTES = 32 * 1024 * 1024
 _COLLECTOR_NAME = re.compile(r"[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?\Z")
 Collector = Tuple[str, Callable[[], Mapping[str, object]]]
 
+_BASE64_IMAGE_PREFIX_CHARS = 64
+_BASE64_WHITESPACE = re.compile(r"[\t\n\r\f\v ]+")
+_BASE64_ALPHABET = re.compile(r"\A[A-Za-z0-9+/]*={0,2}\Z")
+_DATA_BASE64_PREFIX = re.compile(
+    r"\Adata:[^,;\s]+/[^,;\s]+;base64,",
+    re.IGNORECASE,
+)
+_RASTER_PREFIXES = (
+    ("png", b"\x89PNG\r\n\x1a\n"),
+    ("gif", b"GIF87a"),
+    ("gif", b"GIF89a"),
+    ("jpeg", b"\xff\xd8\xff"),
+    ("bmp", b"BM"),
+    ("tiff", b"II*\x00"),
+    ("tiff", b"MM\x00*"),
+)
+_OPAQUE_BINARY_PREFIXES = (
+    ("pdf", b"%PDF-"),
+    ("zip", b"PK\x03\x04"),
+    ("zip", b"PK\x05\x06"),
+    ("zip", b"PK\x07\x08"),
+    ("gzip", b"\x1f\x8b\x08"),
+    ("mach-o", b"\xfe\xed\xfa\xce"),
+    ("mach-o", b"\xce\xfa\xed\xfe"),
+    ("mach-o", b"\xfe\xed\xfa\xcf"),
+    ("mach-o", b"\xcf\xfa\xed\xfe"),
+    ("mach-o", b"\xca\xfe\xba\xbe"),
+    ("mach-o", b"\xbe\xba\xfe\xca"),
+    ("mach-o", b"\xca\xfe\xba\xbf"),
+    ("mach-o", b"\xbf\xba\xfe\xca"),
+    ("elf", b"\x7fELF"),
+)
+
 
 class _OpaqueMember(Exception):
-    pass
+    def __init__(self, opaque_format: str, key_path: str) -> None:
+        super().__init__(f"{opaque_format} at {key_path}")
+        self.opaque_format = opaque_format
+        self.key_path = key_path
 
 
 def _scrub_string(value: str) -> str:
@@ -49,17 +87,88 @@ def _scrub_string(value: str) -> str:
     return scrubbed.replace(OWNER_USERNAME, "<operator>")
 
 
-def _sanitize(value: object) -> object:
+def _encoded_opaque_format(value: str) -> Optional[str]:
+    prefix = _DATA_BASE64_PREFIX.match(value)
+    payload = value[prefix.end() :] if prefix is not None else value
+    compact = _BASE64_WHITESPACE.sub("", payload)
+    if _BASE64_ALPHABET.fullmatch(compact) is None:
+        return None
+    padding = len(compact) - len(compact.rstrip("="))
+    if padding:
+        if len(compact) % 4:
+            return None
+        decoded_length: Optional[int] = (len(compact) // 4) * 3 - padding
+    else:
+        quartets, remainder = divmod(len(compact), 4)
+        decoded_length = (
+            None if remainder == 1 else quartets * 3 + max(0, remainder - 1)
+        )
+    sample_length = min(len(compact), _BASE64_IMAGE_PREFIX_CHARS)
+    sample_length -= sample_length % 4
+    if sample_length < 4:
+        return None
+    try:
+        encoded = compact[:sample_length].encode("ascii")
+        decoded = base64.b64decode(encoded, validate=True)
+    except (UnicodeEncodeError, binascii.Error, ValueError):
+        return None
+    if base64.b64encode(decoded) != encoded:
+        return None
+    for image_format, signature in _RASTER_PREFIXES:
+        if decoded.startswith(signature):
+            if image_format == "bmp":
+                if len(decoded) < 14:
+                    return None
+                declared_size = int.from_bytes(decoded[2:6], "little")
+                if decoded_length is None or declared_size != decoded_length:
+                    return None
+                if decoded[6:10] != b"\x00" * 4:
+                    return None
+                pixel_offset = int.from_bytes(decoded[10:14], "little")
+                if not 14 <= pixel_offset < declared_size:
+                    return None
+            return image_format
+    if (
+        len(decoded) >= 12
+        and decoded.startswith(b"RIFF")
+        and decoded[8:12] == b"WEBP"
+    ):
+        return "webp"
+    for opaque_format, signature in _OPAQUE_BINARY_PREFIXES:
+        if decoded.startswith(signature):
+            return opaque_format
+    return None
+
+
+def _key_path(components: Tuple[object, ...]) -> str:
+    rendered = "$"
+    for component in components:
+        if isinstance(component, int):
+            rendered += f"[{component}]"
+        elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", str(component)):
+            rendered += f".{component}"
+        else:
+            rendered += f"[{json.dumps(str(component), ensure_ascii=True)}]"
+    return rendered
+
+
+def _sanitize(value: object, path: Tuple[object, ...] = ()) -> object:
     if isinstance(value, (bytes, bytearray, memoryview)):
-        raise _OpaqueMember
+        raise _OpaqueMember("bytes", _key_path(path))
     if isinstance(value, str):
+        opaque_format = _encoded_opaque_format(value)
+        if opaque_format is not None:
+            raise _OpaqueMember(opaque_format, _key_path(path))
         return _scrub_string(value)
     if value is None or isinstance(value, (bool, int, float)):
         return value
     if isinstance(value, Mapping):
-        return {str(key): _sanitize(item) for key, item in value.items()}
+        return {
+            str(key): _sanitize(item, (*path, str(key)))
+            for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
-        return [_sanitize(item) for item in value]
+        return [_sanitize(item, (*path, index)) for index, item in enumerate(value)]
     raise TypeError("collector result is not JSON-safe")
 
 
@@ -179,10 +288,12 @@ def _collect(collectors: Sequence[Collector]) -> Dict[str, bytes]:
             if not isinstance(raw, Mapping):
                 raise TypeError("collector result must be an object")
             sanitized = _sanitize(raw)
-        except _OpaqueMember:
+        except _OpaqueMember as exc:
             sanitized = {
                 "status": "unavailable",
                 "reason_code": "snapshot_opaque_member",
+                "opaque_format": exc.opaque_format,
+                "key_path": exc.key_path,
             }
         except Exception:
             sanitized = {

@@ -3071,7 +3071,12 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         self.assertEqual(controls_before, {path: self._identity(path) for path in controls})
 
     def _doctor_recover(self, root: FloatiRoot) -> tuple[dict[str, object], int]:
-        artifact, return_code = Doctor(REPOSITORY_ROOT, root.path, ref="HEAD").artifact()
+        # This helper proves epoch recovery is an exact filesystem no-op after
+        # reconciliation.  The separate sandbox bank exercises Doctor's
+        # default-on transient write probes; disable them for this invariant.
+        artifact, return_code = Doctor(
+            REPOSITORY_ROOT, root.path, ref="HEAD", no_sandbox=True
+        ).artifact()
         validate_json_schema(artifact, Path("schemas/v1/doctor-artifact.schema.json"))
         self.assertEqual(str(root.path), artifact["root"])
         self.assertEqual(

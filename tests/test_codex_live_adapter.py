@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -163,7 +164,7 @@ class CodexAppServerSessionTests(unittest.TestCase):
 class CodexAppServerAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.work_id = "work-" + uuid7_hex()
-        self.workspace = Path("\x2fprivate/tmp/floati-work") / self.work_id
+        self.workspace = worker_workspace_root() / self.work_id
         self.addCleanup(shutil.rmtree, self.workspace, True)
 
     def command(self, mode: str) -> tuple[str, ...]:

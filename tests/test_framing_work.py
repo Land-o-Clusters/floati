@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from floati.errors import IntegrityFailure, ProtocolRefusal
+from floati.host_paths import worker_workspace_root
 from floati.planes import AuthorityGrantStore
 from floati.registry import Registry
 from floati.root import FloatiRoot
@@ -191,7 +192,7 @@ class WorkLogTests(unittest.TestCase):
 
         self.assertNotIn("workspace", legacy)
         self.assertEqual(
-            f"\x2fprivate/tmp/floati-work/{live['id']}",
+            str(worker_workspace_root() / live["id"]),
             live["workspace"],
         )
         projected = {item["id"]: item for item in work.show()}

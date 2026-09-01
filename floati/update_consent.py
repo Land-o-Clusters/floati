@@ -54,13 +54,12 @@ def canonical_destination(destination: Path) -> Path:
             not selected.is_absolute()
             or selected.is_symlink()
             or not selected.is_dir()
-            or selected.resolve(strict=True) != selected
         ):
-            raise OSError("not one canonical ordinary directory")
+            raise OSError("not one ordinary directory")
     except OSError as exc:
         raise ProtocolRefusal(
             "update_destination_invalid",
-            _draft("update destination must be one canonical absolute directory"),
+            _draft("update destination must be one ordinary absolute directory"),
         ) from exc
     metadata = selected / INSTALL_DIRECTORY
     if metadata.is_symlink() or not metadata.is_dir():
@@ -313,12 +312,8 @@ def load_update_trust(destination: Path) -> Dict[str, object]:
         )
     public_key = trust / filename
     try:
-        if (
-            public_key.is_symlink()
-            or not public_key.is_file()
-            or public_key.resolve(strict=True) != public_key
-        ):
-            raise OSError("not one canonical ordinary file")
+        if public_key.is_symlink() or not public_key.is_file():
+            raise OSError("not one ordinary file")
         digest = hashlib.sha256(public_key.read_bytes()).hexdigest()
     except OSError as exc:
         raise ProtocolRefusal(

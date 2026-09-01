@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import shutil
@@ -126,6 +127,20 @@ class DeploymentWriterTests(unittest.TestCase):
             for path in root.rglob("*")
             if path.is_file()
         }
+
+    def test_deployment_git_defaults_are_fixed_absolute_vectors(self) -> None:
+        self.assertEqual(
+            "/usr/bin/git",
+            inspect.signature(deploy._manifest_entries)
+            .parameters["git_executable"]
+            .default,
+        )
+        self.assertEqual(
+            "/usr/bin/git",
+            inspect.signature(DeploymentWriter.__init__)
+            .parameters["git_executable"]
+            .default,
+        )
 
     def _advance_source_without_the_schema(self) -> None:
         (self.source / "schemas/v0/example.json").unlink()

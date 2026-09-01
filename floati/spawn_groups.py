@@ -13,6 +13,7 @@ from typing import Dict, Optional, Sequence
 
 from .admission import AdmissionEvaluator, AdmissionPlan
 from .errors import ProtocolRefusal
+from .host_paths import worker_workspace_root
 from .ids import uuid7_hex
 from .policy import RepositoryPolicy, validate_repository_policy_integrity
 from .records import validate_record
@@ -1055,7 +1056,7 @@ class SpawnGroupController:
             <= set(parent_policy["child_capability_ceiling"])
         ):
             _refuse("spawn_child_binding_invalid", "child no longer matches durable admission ceilings")
-        workspace = f"\x2fprivate/tmp/floati-work/{child_item_id}"
+        workspace = str(worker_workspace_root() / child_item_id)
         record: Dict[str, object] = {
             "schema_version": 1,
             "id": "child-admitted-" + _semantic_uuid(

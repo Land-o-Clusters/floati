@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/run-manifest-fact.schema.json",
+  "title": "Floati Run Manifest Fact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "attempt_id",
+    "run_id",
+    "item_id",
+    "adapter",
+    "harness_version",
+    "model_observed",
+    "provider_observed",
+    "capability_set_bound_id",
+    "task_contract_id",
+    "task_contract_digest",
+    "policy_digest",
+    "tool_set",
+    "workspace_base_commit",
+    "toolchain_fingerprint",
+    "budget_allocation",
+    "approvals_consumed",
+    "verification_commands",
+    "operator_interventions",
+    "terminal_outcome",
+    "unknown_fields",
+    "self_reported_fields"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^run-manifest-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "run_manifest_fact"},
+    "attempt_id": {"$ref": "#/$defs/attempt_id"},
+    "run_id": {"$ref": "#/$defs/run_id"},
+    "item_id": {"$ref": "#/$defs/item_id"},
+    "adapter": {"enum": ["claude", "codex", "pi"]},
+    "harness_version": {"$ref": "#/$defs/nullable_observation"},
+    "model_observed": {"$ref": "#/$defs/nullable_observation"},
+    "provider_observed": {"$ref": "#/$defs/nullable_observation"},
+    "capability_set_bound_id": {"type": "string", "pattern": "^capability-set-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "task_contract_id": {"type": "string", "pattern": "^task-contract-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "task_contract_digest": {"$ref": "#/$defs/sha256"},
+    "policy_digest": {"$ref": "#/$defs/sha256"},
+    "tool_set": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$", "minLength": 1, "maxLength": 128}
+    },
+    "workspace_base_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+    "toolchain_fingerprint": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "budget_allocation": {"$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"},
+    "approvals_consumed": {
+      "type": "array",
+      "maxItems": 1024,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"type": "string", "pattern": "^(?:approval-request|approval-decision|approval-consumed-resume)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+    },
+    "verification_commands": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["argv", "exit_code", "self_reported"],
+        "properties": {
+          "argv": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"type": "string", "minLength": 1, "maxLength": 4096, "x-floati-terminal-unsafe": true}},
+          "exit_code": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+          "self_reported": {"type": "boolean"}
+        }
+      }
+    },
+    "operator_interventions": {
+      "type": "array",
+      "maxItems": 1024,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,126}-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+    },
+    "terminal_outcome": {"enum": ["succeeded", "failed", "cancelled", "skipped", "needs_operator", "uncertain"]},
+    "unknown_fields": {
+      "type": "array",
+      "maxItems": 5,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"enum": ["harness_version", "model_observed", "provider_observed", "toolchain_fingerprint", "workspace_base_commit"]}
+    },
+    "self_reported_fields": {
+      "type": "array",
+      "maxItems": 21,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {
+        "enum": [
+          "adapter", "approvals_consumed", "attempt_id", "budget_allocation",
+          "capability_set_bound_id", "harness_version", "item_id", "model_observed",
+          "operator_interventions", "policy_digest", "provider_observed", "run_id",
+          "self_reported_fields", "task_contract_digest", "task_contract_id",
+          "terminal_outcome", "tool_set", "toolchain_fingerprint", "unknown_fields",
+          "verification_commands", "workspace_base_commit"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"harness_version": {"type": "null"}}, "required": ["harness_version"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "harness_version"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "harness_version"}}}}}
+    },
+    {
+      "if": {"properties": {"model_observed": {"type": "null"}}, "required": ["model_observed"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "model_observed"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "model_observed"}}}}}
+    },
+    {
+      "if": {"properties": {"provider_observed": {"type": "null"}}, "required": ["provider_observed"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "provider_observed"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "provider_observed"}}}}}
+    },
+    {
+      "if": {"properties": {"toolchain_fingerprint": {"type": "null"}}, "required": ["toolchain_fingerprint"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "toolchain_fingerprint"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "toolchain_fingerprint"}}}}}
+    },
+    {
+      "if": {"properties": {"workspace_base_commit": {"type": "null"}}, "required": ["workspace_base_commit"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "workspace_base_commit"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "workspace_base_commit"}}}}}
+    }
+  ],
+  "$defs": {
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullable_observation": {"type": ["string", "null"], "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true}
+  }
+}

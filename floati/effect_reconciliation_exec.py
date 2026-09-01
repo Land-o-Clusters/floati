@@ -153,8 +153,16 @@ class _ObserverCleanupFailure(RuntimeError):
     pass
 
 
+class _InterpreterTrustFailure(OSError):
+    def __init__(self, observation: dict[str, object]) -> None:
+        super().__init__("reconciliation interpreter component is not root-trusted")
+        self.observation = observation
+
+
 class _InterpreterUntrusted(RuntimeError):
-    pass
+    def __init__(self, observation: Optional[dict[str, object]] = None) -> None:
+        super().__init__("reconciliation interpreter is not root-trusted")
+        self.observation = observation
 
 
 def _source_paths() -> Tuple[Path, Path]:
@@ -243,6 +251,17 @@ def _snapshot_interpreter(path: Path) -> _TrustedInterpreter:
         os.close(descriptor)
 
 
+def _interpreter_trust_observation(
+    interpreter_path: Path, component: Path, metadata: os.stat_result,
+) -> dict[str, object]:
+    return {
+        "interpreter_path": str(interpreter_path),
+        "failing_component": str(component),
+        "component_uid": metadata.st_uid,
+        "component_mode": metadata.st_mode,
+    }
+
+
 def _root_trusted_interpreter_path(path: Path) -> None:
     current = path.parent
     while True:
@@ -253,7 +272,9 @@ def _root_trusted_interpreter_path(path: Path) -> None:
             or metadata.st_uid != 0
             or metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
         ):
-            raise OSError("reconciliation interpreter ancestor is not root-trusted")
+            raise _InterpreterTrustFailure(
+                _interpreter_trust_observation(path, current, metadata),
+            )
         if current.parent == current:
             return
         current = current.parent
@@ -271,7 +292,9 @@ def _freeze_trusted_interpreter(value: object) -> _TrustedInterpreter:
         trusted.uid != 0
         or trusted.mode & (stat.S_IWGRP | stat.S_IWOTH)
     ):
-        raise OSError("reconciliation interpreter is not root-trusted")
+        raise _InterpreterTrustFailure(
+            _interpreter_trust_observation(path, path, os.lstat(path)),
+        )
     return trusted
 
 
@@ -283,7 +306,11 @@ def _revalidate_trusted_interpreter(trusted: _TrustedInterpreter) -> Path:
         raise OSError("reconciliation interpreter identity changed")
     _root_trusted_interpreter_path(trusted.path)
     if current.uid != 0 or current.mode & (stat.S_IWGRP | stat.S_IWOTH):
-        raise OSError("reconciliation interpreter is no longer root-trusted")
+        raise _InterpreterTrustFailure(
+            _interpreter_trust_observation(
+                trusted.path, trusted.path, os.lstat(trusted.path),
+            ),
+        )
     return trusted.path
 
 
@@ -299,6 +326,8 @@ def _trusted_interpreter() -> _TrustedInterpreter:
                     _TRUSTED_INTERPRETER = _freeze_trusted_interpreter(
                         os.path.realpath(sys.executable),
                     )
+                except _InterpreterTrustFailure as exc:
+                    raise _InterpreterUntrusted(exc.observation) from exc
                 except OSError as exc:
                     raise _InterpreterUntrusted from exc
     assert _TRUSTED_INTERPRETER is not None
@@ -869,6 +898,8 @@ def _spawn_observer(
         )
         try:
             interpreter_path = _revalidate_trusted_interpreter(_trusted_interpreter())
+        except _InterpreterTrustFailure as exc:
+            raise _InterpreterUntrusted(exc.observation) from exc
         except OSError as exc:
             raise _InterpreterUntrusted from exc
         interpreter = str(interpreter_path)
@@ -945,8 +976,12 @@ def observe_effect_reconciliation(
     deadline = time.monotonic() + float(timeout_seconds)
     try:
         process, channel = _spawn_observer(selected_request)
-    except _InterpreterUntrusted:
-        return _failure(selected_request, "effect_reconciliation_interpreter_untrusted")
+    except _InterpreterUntrusted as exc:
+        return _failure(
+            selected_request,
+            "effect_reconciliation_interpreter_untrusted",
+            exc.observation,
+        )
     except _ObserverCleanupFailure:
         return _failure(selected_request, "observer_cleanup_failed")
     except Exception as exc:

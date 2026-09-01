@@ -29,6 +29,13 @@ _DECISION_REPOSITORY_SEGMENT = re.compile(
 )
 _CAPABILITY = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$")
 _GIT_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+_INTAKE_SOURCE_ID = re.compile(
+    r"^(?:file:[A-Za-z0-9._][A-Za-z0-9._/-]{0,255}|"
+    r"github:[A-Za-z0-9._-]{1,100}/[A-Za-z0-9._-]{1,100}#[1-9][0-9]{0,9})$"
+)
+_INTAKE_PAYLOAD_PATH = re.compile(
+    r"^intake/v0/intake-snapshot-[0-9a-f]{32}\.json$"
+)
 _DECISION_SOURCE_PATTERNS = (
     re.compile(r"^run:run-" + _UUID7 + r"$"),
     re.compile(r"^attempt:attempt-" + _UUID7 + r"$"),
@@ -266,11 +273,36 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     ),
     "wake_cause": ("wake-", _COMMON | {"node_id", "cause", "context_bytes", "wake_count"}),
     "work_item": ("work-", _COMMON | {"title", "owner", "artifact_bindings"}),
+    "intake_snapshot": (
+        "intake-snapshot-",
+        _COMMON
+        | {
+            "source_kind", "source_id", "retrieved_at_testimony",
+            "content_digest", "metadata_digest", "payload_path",
+            "title", "work_item_id", "idempotency_key",
+        },
+    ),
     "work_transition": ("transition-", _COMMON | {"work_item_id", "action", "actor", "authority_subject", "authority_epoch", "artifact_bindings"}),
     "capability": ("capability-", _COMMON | {"node_id", "capability", "mode", "scope", "observed_at", "expires_at"}),
     "capability_grant": ("capability-grant-", _COMMON | {"worker_id", "capability_name", "policy_digest", "approval_request_id", "approval_decision_id", "authority_subject", "authority_epoch", "expires_at", "grant_digest"}),
     "capability_revoked": ("capability-revoked-", _COMMON | {"grant_id", "reason_code", "replacement_policy_digest"}),
     "confluence_grant": ("confluence-grant-", _COMMON | {"consumer", "state", "predecessor_receipt_id", "idempotency_key"}),
+    "credential_lease_granted": (
+        "credential-lease-",
+        _COMMON | {
+            "attempt_id", "principal", "capability", "secret_alias",
+            "ttl_seconds", "expires_at", "authority_epoch",
+            "authority_record_id", "capability_set_bound_id",
+        },
+    ),
+    "credential_lease_consumed": (
+        "credential-lease-consumed-",
+        _COMMON | {"lease_id", "delivery_mode", "consumed_at_testimony"},
+    ),
+    "credential_lease_revoked": (
+        "credential-lease-revoked-",
+        _COMMON | {"lease_id", "authority_epoch", "revoked_at_testimony"},
+    ),
     "approval_request": ("approval-request-", _COMMON | {"requester", "capability", "scope", "requested_ttl_seconds", "requested_at", "expires_at", "authority_subject", "authority_epoch"}),
     "approval_decision": ("approval-decision-", _COMMON | {"request_id", "decider", "decision", "granted_scope", "granted_ttl_seconds", "reason_code", "decided_at", "expires_at", "authority_subject", "authority_epoch"}),
     "worker_receipt": ("worker-receipt-", _COMMON | {"session_id", "work_item_id", "node_id", "adapter", "transition", "outcome_code", "authority_subject", "authority_epoch", "artifact_bindings"}),
@@ -294,6 +326,27 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "spawn_group_created": ("spawn-group-created-", _COMMON | {"run_id", "parent_item_id", "parent_attempt_id", "parent_fence_token", "parent_spawn_policy_id", "group_key", "max_children", "max_depth", "child_capability_ceiling", "aggregate_budget", "workspace_policy", "deadline", "join_mode", "required_count", "on_late_result", "on_child_failure", "cancel_remaining_after_success"}),
     "spawn_group_aborted": ("spawn-group-aborted-", _COMMON | {"run_id", "spawn_group_id", "parent_attempt_id", "parent_fence_token", "reason_code", "cancel_scope_resolved_id", "operator_id", "authority_subject", "authority_epoch", "capability_record_id", "aborted_at_testimony"}),
     "child_admitted": ("child-admitted-", _COMMON | {"run_id", "spawn_group_id", "plan_amendment_id", "parent_attempt_id", "child_item_id", "child_depth", "task_contract_id", "task_contract_digest", "admission_digest", "capability_ceiling", "budget_allocation", "workspace_policy", "workspace", "admitted_at_testimony"}),
+    "run_manifest_fact": (
+        "run-manifest-",
+        _COMMON | {
+            "attempt_id", "run_id", "item_id", "adapter", "harness_version",
+            "model_observed", "provider_observed", "capability_set_bound_id",
+            "task_contract_id", "task_contract_digest", "policy_digest",
+            "tool_set", "workspace_base_commit", "toolchain_fingerprint",
+            "budget_allocation", "approvals_consumed", "verification_commands",
+            "operator_interventions", "terminal_outcome", "unknown_fields",
+            "self_reported_fields",
+        },
+    ),
+    "mcp_integration_pin": (
+        "mcp-integration-pin-",
+        _COMMON | {
+            "integration_id", "server_command", "server_executable_digest",
+            "server_config_digest", "transport", "declared_capabilities",
+            "tools", "network_posture", "first_seen", "last_verified",
+            "pin_state", "unknown_fields",
+        },
+    ),
     "child_rejected": ("child-rejected-", _COMMON | {"run_id", "spawn_group_id", "plan_amendment_id", "parent_attempt_id", "child_item_id", "reason_code", "evaluated_at_testimony"}),
     "spawn_group_closed": ("spawn-group-closed-", _COMMON | {"run_id", "spawn_group_id", "plan_amendment_id", "parent_attempt_id", "member_item_ids", "accepted_item_ids", "terminal_item_ids", "rejected_item_ids", "join_mode", "required_count", "outcome", "close_reason", "cancel_scope_resolved_id", "closed_at_testimony"}),
     "untracked_descendant": ("untracked-descendant-", _COMMON | {"run_id", "parent_item_id", "parent_attempt_id", "adapter", "provider_descendant_id", "state", "adopted_item_id", "reason_code", "observed_at_testimony"}),
@@ -336,6 +389,8 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     **_EFFECT_SPECS,
 }
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
+    "run_manifest_fact": _SPECS["run_manifest_fact"][1],
+    "mcp_integration_pin": _SPECS["mcp_integration_pin"][1],
     "bus_epoch_roll_receipt": _SPECS["bus_epoch_roll_receipt"][1],
     "tide_policy_record": _SPECS["tide_policy_record"][1],
     "tide_receipt": _SPECS["tide_receipt"][1],
@@ -348,6 +403,9 @@ _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
     },
     "approval_request": _SPECS["approval_request"][1] | {"exact_action_digest"},
     "approval_decision": _SPECS["approval_decision"][1] | {"exact_action_digest"},
+    "credential_lease_granted": _SPECS["credential_lease_granted"][1],
+    "credential_lease_consumed": _SPECS["credential_lease_consumed"][1],
+    "credential_lease_revoked": _SPECS["credential_lease_revoked"][1],
     "plan_amendment": _COMMON | {"run_id", "spawn_group_id", "parent_item_id", "parent_attempt_id", "parent_spawn_policy_id", "previous_plan_digest", "previous_admission_digest", "policy_digest", "children", "dependency_edges", "plan_digest", "admission_digest"},
     "cancel_requested": _COMMON | {"run_id", "scope", "item_id", "item_ids", "spawn_group_id", "requested_by"},
     "cancel_scope_resolved": _COMMON | {"run_id", "cancel_request_id", "scope", "item_id", "item_ids", "attempt_ids"},
@@ -551,6 +609,10 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             integer_fields.append("granted_ttl_seconds")
         elif kind == "result_accepted":
             integer_fields.append("effect_ledger_high_watermark")
+        elif kind == "credential_lease_granted":
+            integer_fields.extend(("ttl_seconds", "authority_epoch"))
+        elif kind == "credential_lease_revoked":
+            integer_fields.append("authority_epoch")
         for field in integer_fields:
             integer_value = _json_integer(record[field])
             if integer_value is not None:
@@ -574,6 +636,13 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         for field in ("aggregate_budget", "spawn_budget_ceiling", "budget_allocation"):
             if field in normalized and isinstance(normalized[field], list):
                 normalized[field] = _normalized_budget_rows(normalized[field])
+        record = normalized
+    if kind == "run_manifest_fact" and normalized_version == 1:
+        normalized = deepcopy(dict(record, schema_version=1))
+        if isinstance(normalized.get("budget_allocation"), list):
+            normalized["budget_allocation"] = _normalized_budget_rows(
+                normalized["budget_allocation"]
+            )
         record = normalized
     if kind == "plan_amendment" and normalized_version == 1:
         normalized = deepcopy(dict(record, schema_version=1))
@@ -616,7 +685,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             epoch=normalized_epoch,
         )
     is_v1_record = (
-        kind in ({"ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "confluence_grant", "dispatch_decision", "result_accepted", "run_admission_bound", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        kind in ({"ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "dispatch_decision", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
         and isinstance(record["schema_version"], int)
         and not isinstance(record["schema_version"], bool)
         and record["schema_version"] == 1
@@ -629,8 +698,17 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         record["schema_version"] != 1 or isinstance(record["schema_version"], bool)
     ):
         refuse("schema_version_invalid", f"{kind} must use integer version one")
+    if kind == "run_manifest_fact" and normalized_version != 1:
+        refuse("schema_version_invalid", "run manifests require schema version 1")
+    if kind == "mcp_integration_pin" and normalized_version != 1:
+        refuse("schema_version_invalid", "MCP integration pins require schema version 1")
     if kind in {"attempt_suspended_for_approval", "approval_consumed_for_resume"} and normalized_version != 1:
         refuse("schema_version_invalid", f"{kind} must use integer version one")
+    if kind in {
+        "credential_lease_granted", "credential_lease_consumed",
+        "credential_lease_revoked",
+    } and normalized_version != 1:
+        refuse("schema_version_invalid", "credential lease records require schema version 1")
     if kind in SPAWN_GROUP_KINDS and normalized_version != 1:
         refuse("schema_version_invalid", f"{kind} must use integer version one")
     if kind in TASK3_CANCELLATION_KINDS and normalized_version != 1:
@@ -711,6 +789,37 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 "previous_epoch_record_id",
                 refuse,
             )
+    elif kind == "credential_lease_granted":
+        _attempt_id(record["attempt_id"], "attempt_id", refuse)
+        ident("principal")
+        _capability(record["capability"], refuse)
+        ident("secret_alias")
+        integer("ttl_seconds", 1, 2**31 - 1)
+        expires_at = _timestamp_value(record["expires_at"], "expires_at", refuse)
+        if expires_at <= _timestamp_value(record["timestamp"], "timestamp", refuse):
+            refuse("credential_lease_time_invalid", "lease expiry must follow its grant time")
+        integer("authority_epoch", 1, 2**63 - 1)
+        _record_ref(record["authority_record_id"], "authority-", "authority_record_id", refuse)
+        _record_ref(
+            record["capability_set_bound_id"],
+            "capability-set-bound-", "capability_set_bound_id", refuse,
+        )
+    elif kind == "credential_lease_consumed":
+        _record_ref(record["lease_id"], "credential-lease-", "lease_id", refuse)
+        _enum(
+            record["delivery_mode"],
+            {"inherited_fd", "helper_response"},
+            "delivery_mode", refuse,
+        )
+        _timestamp_value(
+            record["consumed_at_testimony"], "consumed_at_testimony", refuse
+        )
+    elif kind == "credential_lease_revoked":
+        _record_ref(record["lease_id"], "credential-lease-", "lease_id", refuse)
+        integer("authority_epoch", 1, 2**63 - 1)
+        _timestamp_value(
+            record["revoked_at_testimony"], "revoked_at_testimony", refuse
+        )
     elif kind == "segment_opened":
         integer("segment_number", 0, 2**63 - 1)
         integer("first_global_ordinal", 1, 2**63 - 1)
@@ -1893,12 +2002,42 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             seen_needs.add(dependency)
         if "workspace" in record:
             workspace = record["workspace"]
-            expected = f"\x2fprivate/tmp/floati-work/{record['id']}"
-            if workspace is not None and workspace != expected:
+            if workspace is not None and (
+                not _worker_workspace_shape(workspace)
+                or workspace.rsplit("/", 1)[-1] != record["id"]
+            ):
                 refuse(
                     "workspace_invalid",
                     "workspace must be the ruled absolute path derived from the work id",
                 )
+    elif kind == "intake_snapshot":
+        source_kind = record["source_kind"]
+        _enum(source_kind, {"local_markdown", "github_issue"}, "source_kind", refuse)
+        source_id = record["source_id"]
+        if not isinstance(source_id, str) or _INTAKE_SOURCE_ID.fullmatch(source_id) is None:
+            refuse("source_id_invalid", "source_id must use the ruled local-file or GitHub issue shape")
+        if (
+            source_kind == "local_markdown" and not source_id.startswith("file:")
+        ) or (
+            source_kind == "github_issue" and not source_id.startswith("github:")
+        ):
+            refuse("source_id_invalid", "source_id prefix must match source_kind")
+        if source_id.startswith("file:"):
+            relative = source_id[5:]
+            if relative.startswith("/") or any(part in {"", ".", ".."} for part in relative.split("/")):
+                refuse("source_id_invalid", "local source_id must be a relative path without dot components")
+        _timestamp_value(record["retrieved_at_testimony"], "retrieved_at_testimony", refuse)
+        _sha256(record["content_digest"], "content_digest", refuse)
+        _sha256(record["metadata_digest"], "metadata_digest", refuse)
+        if (
+            not isinstance(record["payload_path"], str)
+            or _INTAKE_PAYLOAD_PATH.fullmatch(record["payload_path"]) is None
+            or record["payload_path"] != f"intake/v0/{record['id']}.json"
+        ):
+            refuse("payload_path_invalid", "payload_path must be the root-relative intake snapshot path")
+        _bounded_string(record["title"], 1, 256, "title", refuse)
+        _run_item_id(record["work_item_id"], "work_item_id", refuse)
+        _sha256(record["idempotency_key"], "idempotency_key", refuse)
     elif kind == "work_transition":
         if not isinstance(record["work_item_id"], str) or re.fullmatch("work-" + _UUID7, record["work_item_id"]) is None:
             refuse("work_item_id_invalid", "work_item_id must use the work UUIDv7 prefix")
@@ -2199,6 +2338,258 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             integer("authority_epoch", 1, 2**63 - 1)
             _record_ref(record["capability_record_id"], "capability-", "capability_record_id", refuse)
         _timestamp_value(record["aborted_at_testimony"], "aborted_at_testimony", refuse)
+    elif kind == "mcp_integration_pin":
+        if (
+            not isinstance(record["integration_id"], str)
+            or not 1 <= len(record["integration_id"]) <= 256
+            or re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._-]*", record["integration_id"]
+            ) is None
+        ):
+            refuse(
+                "integration_id_invalid",
+                "integration_id must be a bounded MCP integration identifier",
+            )
+
+        command = record["server_command"]
+        if (
+            not isinstance(command, list)
+            or not 1 <= len(command) <= 128
+            or any(
+                not isinstance(argument, str)
+                or not 1 <= len(argument) <= 4096
+                or _terminal_unsafe(argument)
+                for argument in command
+            )
+            or not Path(command[0]).is_absolute()
+        ):
+            refuse(
+                "server_command_invalid",
+                "server_command must be bounded ordered argv with an absolute executable",
+            )
+
+        nullable_fields = frozenset({
+            "server_executable_digest", "server_config_digest",
+        })
+        for field in nullable_fields:
+            if record[field] is not None:
+                _sha256(record[field], field, refuse)
+        _enum(record["transport"], {"stdio", "local_socket"}, "transport", refuse)
+        _capability_set(
+            record["declared_capabilities"], "declared_capabilities", refuse
+        )
+
+        tools = record["tools"]
+        if not isinstance(tools, list) or len(tools) > 256:
+            refuse("tools_invalid", "tools must be a bounded sorted unique table")
+        names = []
+        for tool in tools:
+            if not isinstance(tool, dict) or set(tool) != {
+                "name", "schema_digest", "description_digest"
+            }:
+                refuse("tools_invalid", "tool pins require the exact closed fields")
+            name = tool["name"]
+            if (
+                not isinstance(name, str)
+                or not 1 <= len(name) <= 256
+                or _terminal_unsafe(name)
+            ):
+                refuse("tools_invalid", "tool names must be bounded safe strings")
+            for field in ("schema_digest", "description_digest"):
+                if (
+                    not isinstance(tool[field], str)
+                    or re.fullmatch(r"[0-9a-f]{64}", tool[field]) is None
+                ):
+                    refuse("tools_invalid", "tool pin digests must be lowercase SHA-256")
+            names.append(name)
+        if names != sorted(set(names)):
+            refuse("tools_invalid", "tool pins must be sorted and unique by name")
+
+        _enum(
+            record["network_posture"],
+            {"none", "pinned_server_only"},
+            "network_posture",
+            refuse,
+        )
+        _timestamp_value(record["first_seen"], "first_seen", refuse)
+        _timestamp_value(record["last_verified"], "last_verified", refuse)
+        _enum(record["pin_state"], {"pinned"}, "pin_state", refuse)
+
+        unknown = record["unknown_fields"]
+        if (
+            not isinstance(unknown, list)
+            or any(
+                not isinstance(field, str) or field not in nullable_fields
+                for field in unknown
+            )
+            or unknown != sorted(set(unknown))
+        ):
+            refuse(
+                "unknown_fields_invalid",
+                "unknown_fields must be a sorted unique subset of nullable pin fields",
+            )
+        for field in nullable_fields:
+            if record[field] is None and field not in unknown:
+                refuse(
+                    "mcp_pin_unknown_unnamed",
+                    f"null {field} must be named in unknown_fields",
+                )
+            if field in unknown and record[field] is not None:
+                refuse(
+                    "mcp_pin_unknown_contradicted",
+                    f"unknown field {field} must be null",
+                )
+    elif kind == "run_manifest_fact":
+        _attempt_id(record["attempt_id"], "attempt_id", refuse)
+        _run_id(record["run_id"], refuse)
+        _run_item_id(record["item_id"], "item_id", refuse)
+        _enum(record["adapter"], {"claude", "codex", "pi"}, "adapter", refuse)
+        nullable_fields = frozenset({
+            "harness_version", "model_observed", "provider_observed",
+            "workspace_base_commit", "toolchain_fingerprint",
+        })
+        for field in ("harness_version", "model_observed", "provider_observed"):
+            if record[field] is not None:
+                _bounded_string(record[field], 1, 512, field, refuse)
+        _record_ref(
+            record["capability_set_bound_id"],
+            "capability-set-bound-",
+            "capability_set_bound_id",
+            refuse,
+        )
+        _record_ref(
+            record["task_contract_id"], "task-contract-", "task_contract_id", refuse
+        )
+        _sha256(record["task_contract_digest"], "task_contract_digest", refuse)
+        _sha256(record["policy_digest"], "policy_digest", refuse)
+        _capability_set(record["tool_set"], "tool_set", refuse)
+        if record["workspace_base_commit"] is not None and (
+            not isinstance(record["workspace_base_commit"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", record["workspace_base_commit"])
+            is None
+        ):
+            refuse(
+                "workspace_base_commit_invalid",
+                "workspace_base_commit must be null or a 40-character lowercase Git object id",
+            )
+        if record["toolchain_fingerprint"] is not None:
+            _sha256(
+                record["toolchain_fingerprint"],
+                "toolchain_fingerprint",
+                refuse,
+            )
+        _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
+
+        approvals = record["approvals_consumed"]
+        if not isinstance(approvals, list) or len(approvals) > 1024:
+            refuse(
+                "approvals_consumed_invalid",
+                "approvals_consumed must be a bounded sorted record-id set",
+            )
+        approval_pattern = re.compile(
+            r"(?:approval-request|approval-decision|approval-consumed-resume)-" + _UUID7
+        )
+        if any(
+            not isinstance(value, str) or approval_pattern.fullmatch(value) is None
+            for value in approvals
+        ) or approvals != sorted(set(approvals)):
+            refuse(
+                "approvals_consumed_invalid",
+                "approvals_consumed must be a bounded sorted approval record-id set",
+            )
+
+        commands = record["verification_commands"]
+        if not isinstance(commands, list) or len(commands) > 256:
+            refuse(
+                "verification_commands_invalid",
+                "verification_commands must be a bounded command testimony list",
+            )
+        for command in commands:
+            if not isinstance(command, dict) or set(command) != {
+                "argv", "exit_code", "self_reported"
+            }:
+                refuse(
+                    "verification_commands_invalid",
+                    "verification commands require exactly argv, exit_code, and self_reported",
+                )
+            argv = command["argv"]
+            if (
+                not isinstance(argv, list)
+                or not 1 <= len(argv) <= 128
+                or any(
+                    not isinstance(argument, str)
+                    or not 1 <= len(argument) <= 4096
+                    or _terminal_unsafe(argument)
+                    for argument in argv
+                )
+                or not isinstance(command["exit_code"], int)
+                or isinstance(command["exit_code"], bool)
+                or not -(2**31) <= command["exit_code"] <= 2**31 - 1
+                or not isinstance(command["self_reported"], bool)
+            ):
+                refuse(
+                    "verification_commands_invalid",
+                    "verification command testimony violates its bounded closed shape",
+                )
+
+        interventions = record["operator_interventions"]
+        generic_record_pattern = re.compile(
+            r"[a-z][a-z0-9-]{0,126}-" + _UUID7
+        )
+        if (
+            not isinstance(interventions, list)
+            or len(interventions) > 1024
+            or any(
+                not isinstance(value, str)
+                or generic_record_pattern.fullmatch(value) is None
+                for value in interventions
+            )
+            or interventions != sorted(set(interventions))
+        ):
+            refuse(
+                "operator_interventions_invalid",
+                "operator_interventions must be a bounded sorted record-id set",
+            )
+        _enum(
+            record["terminal_outcome"],
+            {"succeeded", "failed", "cancelled", "skipped", "needs_operator", "uncertain"},
+            "terminal_outcome",
+            refuse,
+        )
+
+        unknown = record["unknown_fields"]
+        if (
+            not isinstance(unknown, list)
+            or any(field not in nullable_fields for field in unknown)
+            or unknown != sorted(set(unknown))
+        ):
+            refuse(
+                "unknown_fields_invalid",
+                "unknown_fields must be a sorted unique subset of nullable manifest fields",
+            )
+        for field in nullable_fields:
+            if record[field] is None and field not in unknown:
+                refuse(
+                    "run_manifest_unknown_unnamed",
+                    f"null {field} must be named in unknown_fields",
+                )
+            if field in unknown and record[field] is not None:
+                refuse(
+                    "run_manifest_unknown_contradicted",
+                    f"unknown field {field} must be null",
+                )
+
+        self_reported = record["self_reported_fields"]
+        reportable = _SPECS["run_manifest_fact"][1] - _COMMON
+        if (
+            not isinstance(self_reported, list)
+            or any(field not in reportable for field in self_reported)
+            or self_reported != sorted(set(self_reported))
+        ):
+            refuse(
+                "self_reported_fields_invalid",
+                "self_reported_fields must be a sorted unique subset of manifest fields",
+            )
     elif kind == "child_admitted":
         _run_id(record["run_id"], refuse)
         _record_ref(record["spawn_group_id"], "spawn-group-created-", "spawn_group_id", refuse)
@@ -2212,7 +2603,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _capability_set(record["capability_ceiling"], "capability_ceiling", refuse)
         _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
         _enum(record["workspace_policy"], {"patch_only", "isolated_worktree"}, "workspace_policy", refuse)
-        if not isinstance(record["workspace"], str) or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, record["workspace"]) is None:
+        if not _worker_workspace_shape(record["workspace"]):
             refuse("workspace_invalid", "child workspace must use the closed reservation path")
         _timestamp_value(record["admitted_at_testimony"], "admitted_at_testimony", refuse)
     elif kind == "child_rejected":
@@ -3527,10 +3918,7 @@ def _resume_binding(
 
 
 def _suspension_workspace(value: object, refuse: Any) -> None:
-    if (
-        not isinstance(value, str)
-        or re.fullmatch(r"\x2fprivate/tmp/floati-work/work-" + _UUID7, value) is None
-    ):
+    if not _worker_workspace_shape(value):
         refuse(
             "workspace_invalid",
             "workspace must use the closed orchestrator reservation path",
@@ -3801,6 +4189,19 @@ def _terminal_unsafe(value: str) -> bool:
         or unicodedata.category(character) == "Cs"
         or unicodedata.bidirectional(character) in _BIDI_CONTROLS
         for character in value
+    )
+
+
+def _worker_workspace_shape(value: object) -> bool:
+    if not isinstance(value, str) or _terminal_unsafe(value) or not value.startswith("/"):
+        return False
+    components = value.split("/")
+    if any(component in ("", ".", "..") for component in components[1:]):
+        return False
+    return (
+        len(components) >= 3
+        and components[-2] == "floati-work"
+        and re.fullmatch("work-" + _UUID7, components[-1]) is not None
     )
 
 

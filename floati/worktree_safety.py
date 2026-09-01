@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from .errors import ProtocolRefusal
+from .git_process import require_complete_history_for_reachability
 
 _MAX_REFS = 4096
 _SANDBOX_ENV = {
@@ -139,6 +140,7 @@ def require_worktree_commits_referenced(
             "worktree_repository_mismatch",
             "worktree belongs to another Git common directory",
         )
+    require_complete_history_for_reachability(worktree)
     head = _text_output(
         _run(worktree, "rev-parse", "--verify", "HEAD^{commit}"),
         "worktree head",
