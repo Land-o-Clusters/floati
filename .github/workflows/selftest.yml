@@ -1,7 +1,12 @@
 name: selftest
 
+# 2026-09-02 (org incident): the [ubuntu, macos] matrix on every push to every
+# branch burned the enterprise's whole monthly Actions pool in two days (macOS
+# minutes bill at 10x). macOS runners are BANNED in this org: the org push
+# ruleset blocks workflow edits, and this file runs Linux only, on PRs and main.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -12,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]  # macOS BANNED (org incident 2026-09-02)
     runs-on: ${{ matrix.os }}
     steps:
       # The selftest installs the repository into a destination through the
