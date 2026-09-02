@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import fcntl
+import inspect
 import multiprocessing.util
 import os
 import shutil
@@ -66,6 +68,119 @@ HOST_ISOLATION_BACKEND_PREFIX = (
 BOOTSTRAP = (Path(__file__).parents[1] / "floati" / "worker_bootstrap.py").resolve()
 PYTHON = str(Path(sys.executable).resolve())
 SESSION_ID = "worker-018f7e9b3c117abc8def0123456789ab"
+
+# CI-GREEN-22 (family F9). The descriptor probe below used to assert that a
+# bare fd NUMBER chosen by the parent's own allocator was no longer `fstat`-able
+# inside the child. That number is not the test's to choose, and the launcher
+# re-binds a fixed low range of it: `spawn_effect_worker` dup2s the bootstrap
+# channel onto `bootstrap_main`'s descriptor and the four prelude sources onto
+# the numbers `_PRELUDE_SOURCES` declares. When the parent's next free
+# descriptor landed inside that range the child's `fstat` succeeded against the
+# CHANNEL, the probe called it a surviving tenant descriptor, and the bootstrap
+# exited 1 — measured on ubuntu-latest, run 33593224194: the parent planted the
+# probe on 3 and the child's 3 was a socket with a different (device, inode)
+# while its whole open set was exactly the ruled {0,1,2,3}.
+#
+# ⇒ A PROBE ON A DESCRIPTOR NUMBER MEASURES THE HOST'S ALLOCATOR, NOT THE CODE.
+#   The same commit was RED on ubuntu-latest and GREEN on macos-latest.
+#
+# So the probe is planted CLEAR of the re-bound numbers and judged by the
+# object's identity, and the child reports its whole open set so the closure
+# claim is never gated behind the aliasing one.
+_DESCRIPTOR_SCAN_END = 64
+
+
+def _descriptor_identities(end: int = _DESCRIPTOR_SCAN_END) -> str:
+    """Render this process's open descriptors as `number:dev:inode` tokens.
+
+    A fixed low range rather than the product's `/proc/self/fd` ÷ `/dev/fd`
+    enumeration on purpose: this is a diagnostic that must never under-report,
+    and darwin's `/dev/fd` is allowed to omit entries — the product carries its
+    own test for exactly that omission. A range scan can only be short at the
+    top, never wrong below its end, so what it cannot see is stated instead of
+    hidden: a descriptor at or above `end`.
+    """
+
+    rows = []
+    for number in range(end):
+        try:
+            status = os.fstat(number)
+        except OSError:
+            continue
+        rows.append("%d:%d:%d" % (number, status.st_dev, status.st_ino))
+    return " ".join(rows)
+
+
+def _launcher_rebound_descriptors() -> frozenset:
+    """The descriptor numbers the launcher re-binds inside the bootstrap child.
+
+    Derived from the product's own declarations rather than written down: the
+    channel is `bootstrap_main`'s own default parameter and the prelude targets
+    are the third field of every `_PRELUDE_SOURCES` record. A probe planted on
+    one of these is overwritten by `posix_spawn`'s dup2 before the closure loop
+    runs, so it can witness nothing; a literal copy of the set here would go
+    stale silently the day the launcher gains a fifth prelude source.
+    """
+
+    from floati.worker_exec import _PRELUDE_SOURCES
+
+    channel = inspect.signature(bootstrap_main).parameters["descriptor"].default
+    return frozenset({channel, *(record[2] for record in _PRELUDE_SOURCES)})
+
+
+def _parse_child_descriptor_report(text: str) -> dict:
+    """Read the `key=value` report the stub isolation writes inside the child."""
+
+    fields = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            fields[key] = value
+    return fields
+
+
+# The stub `apply_worker_isolation` body used by every descriptor probe below.
+# It classifies the probed number into exactly three typed verdicts and writes
+# both of them out before acting, so a failure names what the child saw:
+#   closed   — EBADF: the closure loop closed the descriptor. The claim.
+#   rebound  — live, but a DIFFERENT object: the number was re-bound by the
+#              launcher and this run witnessed nothing. Not a pass.
+#   survived — live, and the parent's own object: a real inherited leak.
+_CHILD_DESCRIPTOR_PROBE = (
+    "import os\n"
+    "leak = int(os.environ['FLOATI_TEST_LEAK_FD'])\n"
+    "expected = os.environ['FLOATI_TEST_LEAK_IDENTITY']\n"
+    "scan_end = max(leak, 63) + 1\n"
+    "rows = []\n"
+    "for number in range(scan_end):\n"
+    "    try:\n"
+    "        status = os.fstat(number)\n"
+    "    except OSError:\n"
+    "        continue\n"
+    "    rows.append('%d:%d:%d' % (number, status.st_dev, status.st_ino))\n"
+    "try:\n"
+    "    leak_status = os.fstat(leak)\n"
+    "except OSError as error:\n"
+    "    verdict, observed = 'closed', 'errno=%d' % (error.errno,)\n"
+    "else:\n"
+    "    observed = '%d:%d' % (leak_status.st_dev, leak_status.st_ino)\n"
+    "    verdict = 'survived' if observed == expected else 'rebound'\n"
+    "report = (\n"
+    "    'verdict=%s' % verdict,\n"
+    "    'leak_fd=%d' % leak,\n"
+    "    'leak_expected=%s' % expected,\n"
+    "    'leak_observed=%s' % observed,\n"
+    "    'scan_end=%d' % scan_end,\n"
+    "    'open_fds=%s' % ' '.join(rows),\n"
+    ")\n"
+    "Path(os.environ['FLOATI_TEST_CHILD_REPORT']).write_text(\n"
+    "    '\\n'.join(report) + '\\n', encoding='utf-8')\n"
+    "Path(os.environ['FLOATI_BOOTSTRAP_TRACE']).write_text(\n"
+    "    verdict + '\\n', encoding='utf-8')\n"
+    "if verdict == 'survived':\n"
+    "    raise RuntimeError('descriptor survived')\n"
+    "return 'macos-sandbox'"
+)
 
 
 class _AfterForkSentinel:
@@ -402,45 +517,195 @@ class WorkerBootstrapTests(unittest.TestCase):
             self.assertFalse(proof.exists())
             self.assertEqual("isolation_ready", frames[0][0])
 
+    @staticmethod
+    def _descriptor_identity(descriptor: int) -> str:
+        """Name the OBJECT a descriptor currently points at, never the number."""
+
+        status = os.fstat(descriptor)
+        return "%d:%d" % (status.st_dev, status.st_ino)
+
+    def _run_descriptor_probe(
+        self,
+        root: Path,
+        *,
+        inherited: tuple,
+        probe_descriptor: int,
+        probe_identity: str,
+    ) -> dict:
+        """Spawn one bootstrap child that classifies `probe_descriptor` for us."""
+
+        policy = self._policy(root / "policy")
+        trace = root / "trace"
+        child_report = root / "child-descriptor-report"
+        bootstrap = self._instrumented_package(
+            root / "instrumented",
+            isolation_source=self._stub_isolation(_CHILD_DESCRIPTOR_PROBE),
+            adapter_source=self._stub_adapter(),
+        )
+        environment = dict(os.environ)
+        environment.update({
+            "FLOATI_TEST_LEAK_FD": str(probe_descriptor),
+            "FLOATI_TEST_LEAK_IDENTITY": probe_identity,
+            "FLOATI_BOOTSTRAP_TRACE": str(trace),
+            "FLOATI_TEST_CHILD_REPORT": str(child_report),
+        })
+        parent_open_fds = _descriptor_identities()
+        pid, channel = self._spawn(
+            bootstrap, self._launch_payload(policy), environment=environment,
+            inherited_descriptors=inherited,
+        )
+        self.addCleanup(channel.close)
+        frames = self._receive_until_eof(channel)
+        exit_code = self._wait(pid)
+        fields = (
+            _parse_child_descriptor_report(child_report.read_text(encoding="utf-8"))
+            if child_report.exists()
+            else {}
+        )
+        return {
+            "probe_descriptor": probe_descriptor,
+            "probe_identity": probe_identity,
+            "parent_open_fds": parent_open_fds,
+            "fields": fields,
+            "open_fds": sorted(
+                int(token.split(":")[0])
+                for token in fields.get("open_fds", "").split()
+            ),
+            "trace": trace.read_text(encoding="utf-8") if trace.exists() else None,
+            "frames": frames,
+            "exit_code": exit_code,
+        }
+
+    @staticmethod
+    def _probe_report(observation: dict) -> str:
+        """Carry both descriptor tables into the failure message that needs them."""
+
+        return (
+            "\nprobe fd=%(probe_descriptor)d identity=%(probe_identity)s"
+            "\nparent open_fds=[%(parent_open_fds)s]"
+            "\nchild %(fields)r"
+            "\nchild open_fds=%(open_fds)r"
+            "\ntrace=%(trace)r"
+            "\nframes=%(frames)r"
+            "\nexit_code=%(exit_code)r" % observation
+        )
+
     def test_bootstrap_closes_every_unruled_inherited_descriptor_before_apply(self) -> None:
         """Catches inherited tenant descriptors surviving until policy activation."""
         with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             root = Path(temporary)
-            policy = self._policy(root / "policy")
-            trace = root / "trace"
+            leaked_path = root / "inherited"
+            leaked_path.touch()
+            rebound = _launcher_rebound_descriptors()
+            opened = os.open(leaked_path, os.O_RDONLY)
+            try:
+                # Plant the probe CLEAR of every number the launcher re-binds,
+                # so what the child reports is the closure loop's work and not
+                # the parent allocator's luck. F_DUPFD takes the lowest free
+                # descriptor at or above the floor, so an occupied number is
+                # stepped over rather than clobbered.
+                leaked = fcntl.fcntl(opened, fcntl.F_DUPFD, max(rebound) + 1)
+            finally:
+                os.close(opened)
+            self.addCleanup(os.close, leaked)
+            self.assertNotIn(leaked, rebound)
+
+            observation = self._run_descriptor_probe(
+                root,
+                inherited=(leaked,),
+                probe_descriptor=leaked,
+                probe_identity=self._descriptor_identity(leaked),
+            )
+            report = self._probe_report(observation)
+
+            self.assertEqual(0, observation["exit_code"], report)
+            # The closure claim FIRST, so it is never gated behind the aliasing
+            # one: the child's whole open set is the ruled set and nothing else.
+            self.assertEqual([0, 1, 2, 3], observation["open_fds"], report)
+            self.assertEqual("closed", observation["fields"].get("verdict"), report)
+            self.assertEqual(
+                errno.EBADF,
+                int(observation["fields"]["leak_observed"].split("=")[1]),
+                report,
+            )
+            self.assertEqual("closed", observation["trace"].splitlines()[0], report)
+            self.assertEqual("isolation_ready", observation["frames"][0][0], report)
+
+    def test_descriptor_probe_calls_a_relaunched_number_rebound_and_not_closed(
+        self,
+    ) -> None:
+        """Controls the probe: the object decides the verdict, never the number."""
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary)
             leaked_path = root / "inherited"
             leaked_path.touch()
             leaked = os.open(leaked_path, os.O_RDONLY)
             self.addCleanup(os.close, leaked)
-            bootstrap = self._instrumented_package(
-                root / "instrumented",
-                isolation_source=self._stub_isolation(
-                    "import os\n"
-                    "try:\n"
-                    "    os.fstat(int(os.environ['FLOATI_TEST_LEAK_FD']))\n"
-                    "except OSError:\n"
-                    "    Path(os.environ['FLOATI_BOOTSTRAP_TRACE']).write_text('closed\\n', encoding='utf-8')\n"
-                    "else:\n"
-                    "    raise RuntimeError('descriptor survived')\n"
-                    "return 'macos-sandbox'"
-                ),
-                adapter_source=self._stub_adapter(),
+            channel_descriptor = (
+                inspect.signature(bootstrap_main).parameters["descriptor"].default
             )
-            environment = dict(os.environ)
-            environment.update({
-                "FLOATI_TEST_LEAK_FD": str(leaked),
-                "FLOATI_BOOTSTRAP_TRACE": str(trace),
-            })
-            pid, channel = self._spawn(
-                bootstrap, self._launch_payload(policy), environment=environment,
-                inherited_descriptors=(leaked,),
-            )
-            self.addCleanup(channel.close)
-            frames = self._receive_until_eof(channel)
+            self.assertIn(channel_descriptor, _launcher_rebound_descriptors())
 
-            self.assertEqual(0, self._wait(pid))
-            self.assertEqual("closed", trace.read_text(encoding="utf-8").splitlines()[0])
-            self.assertEqual("isolation_ready", frames[0][0])
+            # The CI condition, staged without touching this process's own
+            # descriptor table: aim the probe at a number the launcher re-binds
+            # while the parent's object lives somewhere else. Before CI-GREEN-22
+            # this exact state exited 1 on ubuntu-latest and passed on
+            # macos-latest at one commit; now it is neither pass nor leak but a
+            # third, named outcome.
+            observation = self._run_descriptor_probe(
+                root,
+                inherited=(leaked,),
+                probe_descriptor=channel_descriptor,
+                probe_identity=self._descriptor_identity(leaked),
+            )
+            report = self._probe_report(observation)
+
+            self.assertEqual(0, observation["exit_code"], report)
+            self.assertEqual("rebound", observation["fields"].get("verdict"), report)
+            self.assertNotEqual(
+                observation["fields"]["leak_expected"],
+                observation["fields"]["leak_observed"],
+                report,
+            )
+            self.assertEqual([0, 1, 2, 3], observation["open_fds"], report)
+            self.assertEqual("isolation_ready", observation["frames"][0][0], report)
+
+    def test_descriptor_probe_still_fails_when_a_descriptor_genuinely_survives(
+        self,
+    ) -> None:
+        """Controls the probe the other way: a real survivor must still exit 1."""
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary)
+            # Standard error is the one descriptor the bootstrap child both
+            # keeps by design AND inherits unchanged, so it is the only way to
+            # stage a genuine survival without breaking the product. If the
+            # comparison ever degraded from the object back to "the number is
+            # live", this case would go green and the probe would be blind to a
+            # real inherited leak.
+            observation = self._run_descriptor_probe(
+                root,
+                inherited=(),
+                probe_descriptor=2,
+                probe_identity=self._descriptor_identity(2),
+            )
+            report = self._probe_report(observation)
+
+            self.assertEqual("survived", observation["fields"].get("verdict"), report)
+            self.assertEqual(
+                observation["fields"]["leak_expected"],
+                observation["fields"]["leak_observed"],
+                report,
+            )
+            # The exit path CI-GREEN-22 had to determine, now pinned by a test:
+            # the RuntimeError is raised inside apply_worker_isolation, i.e.
+            # before `ready`, so the frame is the typed isolation failure and
+            # the status is 1 rather than a SystemExit code.
+            self.assertEqual(1, observation["exit_code"], report)
+            self.assertEqual(
+                [("failure", "effect_worker_isolation_unavailable")],
+                observation["frames"],
+                report,
+            )
 
     def test_descriptor_closure_ignores_resource_limit_and_verifies_real_open_set(
         self,

@@ -12,6 +12,7 @@ from typing import Callable, Mapping, Optional
 
 from .codex_wait_contract import CodexWaitParticipant
 from .errors import IntegrityFailure, ProtocolRefusal
+from .fleet_update import _explicit_executable
 from .root import FloatiRoot
 from .wake_control import validate_session_id
 from .wake_daemon_contract import (
@@ -66,6 +67,40 @@ def _codex_executable_absent() -> ProtocolRefusal:
         f"the fixed Codex queue executable is absent at {path}",
         remedy=f"restore the reviewed Codex queue executable at {path}",
     )
+
+
+def _zcode_node_interpreter(declared: object = None) -> Path:
+    """Resolve the zcode node interpreter: an operator declaration, else the default.
+
+    HB-1: `/opt/homebrew/bin/node` is a DEFAULT, not a policy. Undeclared, the
+    fixed path is still strictly resolved and its absence is still the typed
+    `wake_daemon_zcode_node_absent` — HB-1 R3's behaviour, unchanged. Declared,
+    the path is validated by the house policy validator (Policy A, five checks,
+    imported not re-written); PATH is never consulted either way.
+    """
+
+    if declared is not None:
+        try:
+            return Path(_explicit_executable(declared, "wake_daemon_zcode_node_invalid"))
+        except ProtocolRefusal as exc:
+            raise ProtocolRefusal(
+                exc.code,
+                exc.detail,
+                remedy=(
+                    "declare one absolute canonical zcode node interpreter path"
+                ),
+            ) from exc
+    try:
+        return ZCODE_NODE.resolve(strict=True)
+    except OSError as exc:
+        raise ProtocolRefusal(
+            "wake_daemon_zcode_node_absent",
+            f"the fixed zcode node interpreter is absent at {ZCODE_NODE}",
+            remedy=(
+                "declare the zcode node interpreter, or restore the reviewed "
+                f"zcode node interpreter at {ZCODE_NODE}"
+            ),
+        ) from exc
 
 
 def resume_probe_class(harness: str) -> str:
@@ -493,21 +528,33 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
 
     harness = "zcode"
 
+    def __init__(
+        self,
+        coordinate: DaemonCoordinate,
+        *,
+        runner: Optional[Runner] = None,
+        node_executable: object = None,
+    ) -> None:
+        """`node_executable` is the operator's interpreter declaration (HB-1).
+
+        Undeclared, the adapter keeps the fixed default and its typed absence.
+        The declaration is validated here, at construction, so a bad path
+        refuses before any wake is attempted.
+        """
+
+        super().__init__(coordinate, runner=runner)
+        self._node_executable: Optional[Path] = (
+            None if node_executable is None else _zcode_node_interpreter(node_executable)
+        )
+
     @staticmethod
     def resume_argv(
-        executable: Path, session_id: str, reason: str
+        executable: Path,
+        session_id: str,
+        reason: str,
+        node_executable: object = None,
     ) -> tuple[str, ...]:
-        try:
-            node = ZCODE_NODE.resolve(strict=True)
-        except OSError as exc:
-            raise ProtocolRefusal(
-                "wake_daemon_zcode_node_absent",
-                f"the fixed zcode node interpreter is absent at {ZCODE_NODE}",
-                remedy=(
-                    "restore the reviewed zcode node interpreter at "
-                    f"{ZCODE_NODE}"
-                ),
-            ) from exc
+        node = _zcode_node_interpreter(node_executable)
         return (
             str(node),
             str(executable),
@@ -537,8 +584,28 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
             )
         wake_reason = _reason(reason)
         deadline = _deadline(deadline_seconds)
-        argv = self.resume_argv(current.executable, current.session_id, wake_reason)
+        argv = self.resume_argv(
+            current.executable,
+            current.session_id,
+            wake_reason,
+            node_executable=self._node_executable,
+        )
         return self._run(argv, current.workspace, deadline, current.session_id)
+
+    def probe_resume(
+        self,
+        executable: Path,
+        workspace: Path,
+        session_id: str,
+        reason: str,
+        deadline: int,
+    ) -> WakeAdapterResult:
+        """The base probe, carrying this adapter's interpreter declaration."""
+
+        argv = self.resume_argv(
+            executable, session_id, reason, node_executable=self._node_executable
+        )
+        return self._run(argv, workspace, deadline, session_id)
 
     def _successful_result(
         self,

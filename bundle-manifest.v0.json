@@ -735,7 +735,7 @@
     },
     {
       "path": "floati/wake_daemon_adapters.py",
-      "sha256": "10b2d8a89707497271257fbd4f8d6e172b15474a965a3067379c168e6ec0ac41"
+      "sha256": "2db4b24ae75bb1b5f8678823dcba6aa297db0fec5da6367c614a7a66eb2283a8"
     },
     {
       "path": "floati/wake_daemon_contract.py",
