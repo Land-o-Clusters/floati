@@ -33,6 +33,37 @@ three different outcomes. The v0 artifact exit codes are:
 | 33 | the adapter returned malformed evidence |
 | 34 | the deployed bundle manifest did not match |
 
+## The launcher's interpreter
+
+`scripts/floati` is the shipped entry point, and it **never resolves its
+interpreter through `PATH`** - the discovery the executable-provenance policy
+forbids (`docs/rulings/2026-09-01-three-policies-for-finding-an-executable.md`;
+`shutil.which` is banned under the same rule). It takes the system-binary
+shape: a fixed ordered candidate list, `/usr/bin/python3` then
+`/bin/python3`, first present and executable wins.
+
+An operator overrides that with one environment variable:
+
+| Variable | Meaning |
+| --- | --- |
+| `FLOATI_PYTHON` | one absolute canonical interpreter path; a symlink is refused, so name the resolved target |
+| `FLOATI_LAUNCHER_INTERPRETER` | set BY the launcher to the path it selected, so `doctor` can report the choice; not an operator input |
+
+With neither a declaration nor a candidate present the launcher refuses,
+typed, at **exit 20** - the refusal code above. There is no `PATH` fallback:
+a `PATH` an attacker can prepend to would choose the Python that runs the
+whole product, and being unable to start is a safe state in a way that
+starting the wrong interpreter is not.
+
+`floati doctor` reports the result as the `launcher_interpreter` finding. Its
+detail opens with the source it derived - `declared:` (the operator named it),
+`candidate:` (the fixed list), `absent:` (this process was not started through
+the launcher, so no launcher choice belongs to it), or `unruled:` (a selection
+claiming to be the launcher's that is in neither ruled set, which degrades the
+artifact). The finding names the selected path **and** the interpreter actually
+running, because the two are not always the same file: `/usr/bin/python3` on
+macOS is a shim onto a framework build.
+
 HM-0.5 also provides a structurally throwaway reference-core smoke:
 
 ```bash

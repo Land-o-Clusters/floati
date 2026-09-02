@@ -5,4 +5,40 @@ if [ -L "$0" ]; then
 fi
 SCRIPT_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P) || exit 1
 cd "$SCRIPT_DIR/.." || exit 1
-exec python3 -m floati "$@"
+# EXECUTABLE PROVENANCE. The interpreter is never resolved through PATH: an
+# attacker who can prepend one directory would choose the Python that runs the
+# whole product. An operator declares one absolute canonical interpreter in
+# FLOATI_PYTHON (a symlink is refused, so name the resolved target); with no
+# declaration the fixed candidate list below is walked in order, first hit wins.
+# Neither present is a typed refusal, exit 20, never a PATH fallback.
+# See docs/rulings/2026-09-01-three-policies-for-finding-an-executable.md
+# Am.1 section 2: a fixed set of absolute candidates is not PATH resolution.
+# The selected path is exported so "floati doctor" can report the choice.
+FLOATI_LAUNCHER_INTERPRETER=''
+if [ -n "${FLOATI_PYTHON:-}" ]; then
+  case "$FLOATI_PYTHON" in
+    /*) ;;
+    *)
+      printf '%s\n' 'floati: refused: FLOATI_PYTHON must name one absolute path' >&2
+      exit 20
+      ;;
+  esac
+  if [ -L "$FLOATI_PYTHON" ] || [ ! -f "$FLOATI_PYTHON" ] || [ ! -x "$FLOATI_PYTHON" ]; then
+    printf '%s\n' "floati: refused: FLOATI_PYTHON is not an executable file: $FLOATI_PYTHON - name one absolute canonical interpreter path; a symlink is refused, so name the resolved target" >&2
+    exit 20
+  fi
+  FLOATI_LAUNCHER_INTERPRETER=$FLOATI_PYTHON
+else
+  for candidate in /usr/bin/python3 /bin/python3; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+      FLOATI_LAUNCHER_INTERPRETER=$candidate
+      break
+    fi
+  done
+fi
+if [ -z "$FLOATI_LAUNCHER_INTERPRETER" ]; then
+  printf '%s\n' 'floati: refused: no interpreter at /usr/bin/python3 or /bin/python3 - declare one absolute canonical interpreter path in FLOATI_PYTHON; PATH is never consulted' >&2
+  exit 20
+fi
+export FLOATI_LAUNCHER_INTERPRETER
+exec "$FLOATI_LAUNCHER_INTERPRETER" -m floati "$@"

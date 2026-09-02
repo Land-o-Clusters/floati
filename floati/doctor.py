@@ -50,6 +50,20 @@ _INTERPRETER_TRUST_REMEDIATION = (
     "by nobody else. Run Floati with a root-owned Python; on macOS that is /usr/bin/python3."
 )
 
+# LAUNCH-1. scripts/floati never resolves its interpreter through PATH. It reads
+# an operator declaration from LAUNCHER_INTERPRETER_DECLARATION, else walks this
+# fixed candidate list in order, else refuses. The chosen path arrives here in
+# LAUNCHER_INTERPRETER_SELECTION and doctor reports which of the two ruled
+# sources it came from. The list is repeated in scripts/floati because a shell
+# script cannot import it; test_doctor pins the two copies equal.
+LAUNCHER_INTERPRETER_CANDIDATES = ("/usr/bin/python3", "/bin/python3")
+LAUNCHER_INTERPRETER_DECLARATION = "FLOATI_PYTHON"
+LAUNCHER_INTERPRETER_SELECTION = "FLOATI_LAUNCHER_INTERPRETER"
+_LAUNCHER_INTERPRETER_UNRULED_REMEDIATION = (
+    "Start Floati through <destination>/scripts/floati, or declare one absolute canonical "
+    "interpreter path in {declaration}. PATH is never consulted."
+)
+
 
 def _finding(
     code: str,
@@ -166,6 +180,58 @@ def _fold_shadow_exit(current: int, shadow: int) -> int:
     if current in {20, 33, 35}:
         return current
     return shadow
+
+
+def project_launcher_interpreter() -> Dict[str, object]:
+    """Report which interpreter scripts/floati chose for this process, and why.
+
+    LAUNCH-1. The launcher exports the path it selected; this reads that claim
+    back and classifies it against the two ruled sources it could have come
+    from - the operator's declaration, or the fixed candidate list. A claim
+    outside both is reported as unruled rather than accepted, and the running
+    interpreter is named beside it because the two are not always the same file
+    (/usr/bin/python3 on macOS is a shim onto a framework build).
+    """
+
+    running = os.path.realpath(sys.executable)
+    selected = os.environ.get(LAUNCHER_INTERPRETER_SELECTION)
+    declared = os.environ.get(LAUNCHER_INTERPRETER_DECLARATION)
+    candidates = ", ".join(LAUNCHER_INTERPRETER_CANDIDATES)
+    if not selected:
+        return _finding(
+            "launcher_interpreter",
+            "ok",
+            running,
+            f"absent: this process was not started by scripts/floati, so no launcher "
+            f"interpreter choice belongs to it. It is running {running}.",
+        )
+    if declared and selected == declared:
+        return _finding(
+            "launcher_interpreter",
+            "ok",
+            selected,
+            f"declared: scripts/floati ran {selected} because the operator named it in "
+            f"{LAUNCHER_INTERPRETER_DECLARATION}. It is running {running}.",
+        )
+    if selected in LAUNCHER_INTERPRETER_CANDIDATES:
+        return _finding(
+            "launcher_interpreter",
+            "ok",
+            selected,
+            f"candidate: scripts/floati ran {selected}, the first present entry of the fixed "
+            f"list {candidates}. PATH was never consulted. It is running {running}.",
+        )
+    return _finding(
+        "launcher_interpreter",
+        "warning",
+        selected,
+        f"unruled: {selected} is neither the path declared in "
+        f"{LAUNCHER_INTERPRETER_DECLARATION} nor one of the fixed candidates {candidates}. "
+        f"It is running {running}.",
+        _LAUNCHER_INTERPRETER_UNRULED_REMEDIATION.format(
+            declaration=LAUNCHER_INTERPRETER_DECLARATION,
+        ),
+    )
 
 
 def project_effect_reconciliation_interpreter_trust() -> Dict[str, object]:
@@ -879,6 +945,11 @@ class Doctor:
                     findings.append(finding)
 
         currency_finding, currency_current = self._currency()
+
+        launcher_interpreter_finding = project_launcher_interpreter()
+        findings.append(launcher_interpreter_finding)
+        if launcher_interpreter_finding["severity"] == "warning" and rc == 0:
+            rc = 35
 
         interpreter_trust_finding = project_effect_reconciliation_interpreter_trust()
         findings.append(interpreter_trust_finding)
