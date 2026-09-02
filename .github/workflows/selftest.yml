@@ -1,3 +1,10 @@
+# THIS FILE IS AUTHORED ON THE HARBOR AND EXPORTED VERBATIM TO THE PUBLIC
+# REPOSITORY. A pull request against it on the public repository will be
+# OVERWRITTEN by the next export - change it on the harbor instead.
+#
+# It must NEVER name a self-hosted or macOS runner: the public repository
+# accepts fork pull requests, so a runner named here is a runner a stranger
+# can aim code at.
 name: selftest
 
 # 2026-09-02 (org incident): the [ubuntu, macos] matrix on every push to every
@@ -14,6 +21,7 @@ permissions:
 
 jobs:
   full-selftest:
+    if: github.repository == 'Land-o-Clusters/floati'
     strategy:
       fail-fast: false
       matrix:
