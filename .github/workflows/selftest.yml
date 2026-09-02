@@ -15,7 +15,24 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # The selftest installs the repository into a destination through the
+      # product's own committed-tree writer, and that writer REFUSES a shallow
+      # source (`deployment_shallow_repository`) because a truncated history
+      # cannot answer "is this working tree current with its commit". A default
+      # actions/checkout is depth 1, so the runner handed the product exactly
+      # the repository shape it is built to refuse. Fetch the whole history;
+      # the refusal is correct and stays.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # CI-GREEN-18: a branch run checks out that branch only - the landing
+      # classifier (tests/test_landing_classify.py) diffs this tree against
+      # refs/remotes/origin/main, which a branch checkout never carries, so
+      # the suite died in ExportRefusal on every non-main run. Fetch main
+      # explicitly; the classifier's refusal is correct once main is here.
+      - name: Fetch origin/main for the landing classifier
+        shell: bash
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.9"
