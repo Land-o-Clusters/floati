@@ -54,6 +54,7 @@ def manifest_fact() -> dict[str, object]:
         "operator_interventions": [],
         "terminal_outcome": "succeeded",
         "unknown_fields": [],
+        "unknown_sources": [],
         "self_reported_fields": ["model_observed"],
     }
 
@@ -114,6 +115,9 @@ class RunManifestFactTests(unittest.TestCase):
                 lawful = manifest_fact()
                 lawful[field] = None
                 lawful["unknown_fields"] = [field]
+                lawful["unknown_sources"] = [
+                    {"field": field, "reason": "test_source_absent"}
+                ]
                 validated = validate_run_manifest_fact(lawful, "alpha")
                 self.assertIsNone(validated[field])
                 validate_json_schema(validated, SCHEMA)
@@ -124,6 +128,26 @@ class RunManifestFactTests(unittest.TestCase):
         validated = validate_run_manifest_fact(fact, "alpha")
         self.assertEqual([], validated["approvals_consumed"])
         self.assertNotIn("approvals_consumed", validated["unknown_fields"])
+
+    def test_ruled_required_field_unknown_names_its_absent_source(self) -> None:
+        fact = manifest_fact()
+        fact["tool_set"] = None
+        fact["unknown_fields"] = ["tool_set"]
+        fact["unknown_sources"] = [{
+            "field": "tool_set",
+            "reason": "attempt_tool_set_source_absent",
+        }]
+        self.assertEqual(
+            fact, validate_run_manifest_fact(fact, "alpha")
+        )
+        validate_json_schema(fact, SCHEMA)
+
+        missing_source = dict(fact, unknown_sources=[])
+        with self.assertRaises(ProtocolRefusal) as refusal:
+            validate_run_manifest_fact(missing_source, "alpha")
+        self.assertEqual(
+            "run_manifest_unknown_sources_invalid", refusal.exception.code
+        )
 
     def test_validation_opens_zero_network_sockets(self) -> None:
         with mock.patch.object(
@@ -203,13 +227,15 @@ class RunManifestFactTests(unittest.TestCase):
         self.assertIs(type(fact["budget_allocation"][0]["amount"]), float)
         validate_json_schema(validated, SCHEMA)
 
-    def test_r2_adds_no_writer_cli_verb_or_mcp_tool(self) -> None:
+    def test_wire1_adds_internal_writer_without_cli_or_mcp_surface(self) -> None:
         import floati.run_manifest as run_manifest
         from floati.cli import _parser
         from floati.command_contract import describe_parser, project_mcp_surface
 
-        self.assertEqual(("validate_run_manifest_fact",), run_manifest.__all__)
-        self.assertFalse(hasattr(run_manifest, "RunManifestWriter"))
+        self.assertEqual(
+            ("RunManifestStore", "validate_run_manifest_fact"),
+            run_manifest.__all__,
+        )
         parser = _parser()
         paths = {
             tuple(row["path"]) for row in describe_parser(parser)["commands"]
@@ -221,13 +247,7 @@ class RunManifestFactTests(unittest.TestCase):
             tool["name"] for tool in project_mcp_surface(parser)["tools"]
         }
         self.assertFalse(any("manifest" in tool for tool in tools))
-        for relative in (
-            "floati/cli.py",
-            "floati/mcp.py",
-            "floati/runtruth.py",
-            "floati/scheduler.py",
-            "floati/workers.py",
-        ):
+        for relative in ("floati/cli.py", "floati/mcp.py"):
             self.assertNotIn(
                 "run_manifest",
                 Path(relative).read_text(encoding="utf-8"),

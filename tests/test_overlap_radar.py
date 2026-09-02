@@ -64,6 +64,22 @@ class OverlapRadarSurfaceTests(unittest.TestCase):
         )
         self.assertNotIn("overlap-radar", command_action.choices)
 
+    def test_overlap_report_verb_is_the_product_consumer_and_stays_out_of_mcp(self) -> None:
+        """WIRE-2 closes only when a real verb emits the existing bounded fact."""
+
+        from floati.cli import _parser
+
+        command_action = next(
+            action for action in _parser()._actions if action.dest == "command"
+        )
+        self.assertIn("overlap", command_action.choices)
+        overlap = command_action.choices["overlap"]
+        subcommands = next(
+            action for action in overlap._actions if action.dest == "overlap_command"
+        )
+        report = subcommands.choices["report"]
+        self.assertEqual("never", report.floati_mcp_exposure)
+
     def test_fabricated_signal_stamp_refuses(self) -> None:
         """Accepting an unruled stamp lets heuristic evidence impersonate fact."""
 
@@ -223,6 +239,75 @@ class OverlapRadarDerivationTests(unittest.TestCase):
         self.assertEqual([], report["warnings"])
         self.assertEqual(
             str(self.repository), report["inputs"]["repository_root"]
+        )
+
+    def test_overlap_report_verb_emits_the_existing_fact_without_mutation(self) -> None:
+        """The WIRE-2 verb must be a read-only caller, not a second derivation."""
+
+        base = self._base(
+            "def shared():\n    return 'base'\n\ndef stable():\n    return True\n",
+            with_schema=True,
+        )
+        _write(
+            self.repository,
+            "package/service.py",
+            "def shared():\n    return 'left'\n\ndef stable():\n    return True\n",
+        )
+        left = _commit(self.repository, "left")
+        _git(self.repository, "reset", "--hard", base)
+        _write(
+            self.repository,
+            "package/service.py",
+            "def shared():\n    return 'right'\n\ndef stable():\n    return True\n",
+        )
+        right = _commit(self.repository, "right")
+        before = {
+            path.relative_to(self.repository): path.read_bytes()
+            for path in self.repository.rglob("*")
+            if path.is_file()
+        }
+
+        completed = subprocess.run(
+            [
+                "python3",
+                "-m",
+                "floati",
+                "overlap",
+                "report",
+                "--repository",
+                str(self.repository),
+                "--base-ref",
+                base,
+                "--left-ref",
+                left,
+                "--right-ref",
+                right,
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("", completed.stderr)
+        self.assertEqual(1, len(completed.stdout.splitlines()))
+        artifact = json.loads(completed.stdout)
+        self.assertEqual("overlap", artifact["command"])
+        self.assertEqual("ok", artifact["status"])
+        self.assertEqual(1, artifact["evidence"]["schema_version"])
+        self.assertEqual("absent_predispatch", artifact["evidence"]["attempt_binding"])
+        self.assertEqual(
+            ["package/service.py:shared"],
+            [signal["coordinate"] for signal in artifact["evidence"]["signals"]],
+        )
+        self.assertEqual(
+            before,
+            {
+                path.relative_to(self.repository): path.read_bytes()
+                for path in self.repository.rglob("*")
+                if path.is_file()
+            },
         )
 
 

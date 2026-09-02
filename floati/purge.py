@@ -1,4 +1,4 @@
-"""Explicit preserved-root sanitation through macOS Trash only.
+"""Explicit preserved-root sanitation through the host's Trash only.
 
 This module is deliberately separate from :mod:`floati.uninstall`.  Uninstall
 owns manifest-exact tool bytes; purge owns only the user roots named by the
@@ -17,6 +17,8 @@ import os
 import pwd
 import re
 import stat
+import sys
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,8 +30,28 @@ from .errors import DurabilityFailure, ProtocolRefusal
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 _TRASH_PREFIX = "floati-"
 _SAFE_STAMP = re.compile(r"^[A-Za-z0-9._-]+$")
-_AT_FDCWD = -2
-_RENAME_EXCL = 0x00000004
+
+# The exclusive-rename primitive is a PAIRED (function, dirfd sentinel, flag)
+# tuple bound per platform and never a reused constant: the same small integers
+# name different operations on each host.  0x4 is RENAME_EXCL on macOS and
+# RENAME_WHITEOUT on Linux; 0x1 is RENAME_NOREPLACE on Linux and RENAME_SECLUDE
+# on macOS.  A mis-paired constant is not an error, it is a different syscall
+# that succeeds.  (docs/evidence/ci-rt-1b-gate-2026-08-30.md section 2.)
+_DARWIN_AT_FDCWD = -2  # MacOSX.sdk/usr/include/sys/fcntl.h
+_LINUX_AT_FDCWD = -100  # Linux include/uapi/linux/fcntl.h, glibc io/fcntl.h
+_RENAME_EXCL = 0x00000004  # MacOSX.sdk/usr/include/sys/stdio.h
+_RENAME_NOREPLACE = 0x00000001  # Linux include/uapi/linux/fs.h
+
+_DARWIN_TRASH_NAME = ".Trash"
+_XDG_DEFAULT_DATA_HOME = (".local", "share")
+_XDG_TRASH_NAME = "Trash"
+_XDG_TRASH_FILES = "files"
+_XDG_TRASH_INFO = "info"
+_TRASHINFO_SUFFIX = ".trashinfo"
+_TRASHINFO_HEADER = "[Trash Info]"
+_TRASHINFO_PATH_FIELD = "Path"
+_TRASHINFO_DATE_FIELD = "DeletionDate"
+_TRASHINFO_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 class _PurgeRecoveryFailure(DurabilityFailure):
@@ -51,6 +73,38 @@ if _RENAMEATX_NP is not None:
         ctypes.c_uint,
     ]
     _RENAMEATX_NP.restype = ctypes.c_int
+_RENAMEAT2 = getattr(_LIBC, "renameat2", None)
+if _RENAMEAT2 is not None:
+    _RENAMEAT2.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    _RENAMEAT2.restype = ctypes.c_int
+
+
+def _exclusive_rename_primitive() -> Tuple[Any, int, int]:
+    """Bind the exclusive-rename primitive for the DECLARED host platform.
+
+    Selection is by ``sys.platform`` and never by probing which symbol happens
+    to resolve: a host that exports the other platform's symbol must not be
+    handed the other platform's flag.  The three values are returned as one
+    tuple so a call site cannot mix a function from one platform with a flag
+    from the other.
+    """
+
+    if sys.platform == "darwin":
+        function, directory, flag = _RENAMEATX_NP, _DARWIN_AT_FDCWD, _RENAME_EXCL
+    else:
+        function, directory, flag = _RENAMEAT2, _LINUX_AT_FDCWD, _RENAME_NOREPLACE
+    if function is None:
+        raise OSError(
+            errno.ENOTSUP,
+            "the host has no exclusive rename primitive",
+        )
+    return function, directory, flag
 
 
 def _timestamp() -> str:
@@ -64,19 +118,14 @@ def _lexists(path: Path) -> bool:
 def _rename_exclusive(source: os.PathLike[str], destination: os.PathLike[str]) -> None:
     """Atomically rename without replacing a filesystem-equivalent target."""
 
-    if _RENAMEATX_NP is None:
-        raise OSError(
-            errno.ENOTSUP,
-            "the host has no exclusive rename primitive",
-            str(destination),
-        )
+    function, directory, flag = _exclusive_rename_primitive()
     ctypes.set_errno(0)
-    result = _RENAMEATX_NP(
-        _AT_FDCWD,
+    result = function(
+        directory,
         os.fsencode(source),
-        _AT_FDCWD,
+        directory,
         os.fsencode(destination),
-        _RENAME_EXCL,
+        flag,
     )
     if result != 0:
         error = ctypes.get_errno() or errno.EIO
@@ -91,19 +140,14 @@ def _rename_exclusive_at(
 ) -> None:
     """Atomically rename relative to held source and destination directories."""
 
-    if _RENAMEATX_NP is None:
-        raise OSError(
-            errno.ENOTSUP,
-            "the host has no exclusive rename primitive",
-            destination_name,
-        )
+    function, _, flag = _exclusive_rename_primitive()
     ctypes.set_errno(0)
-    result = _RENAMEATX_NP(
+    result = function(
         source_dir_fd,
         os.fsencode(source_name),
         destination_dir_fd,
         os.fsencode(destination_name),
-        _RENAME_EXCL,
+        flag,
     )
     if result != 0:
         error = ctypes.get_errno() or errno.EIO
@@ -281,14 +325,118 @@ def _account_home() -> Path:
         ) from exc
 
 
+def _xdg_data_home(home: Path) -> Path:
+    """The freedesktop data home, bounded by the account home.
+
+    ``$XDG_DATA_HOME`` is honoured only when it is absolute and lies inside the
+    account home.  The fixed-Trash authority is the reason: purge's destination
+    may not be steered outside the account by the caller's environment, and an
+    unbounded read of this variable would reintroduce exactly the redirection
+    the fixed authority exists to refuse.  Anything else falls back to the
+    spec's own default, ``$HOME/.local/share``.
+    """
+
+    default = home.joinpath(*_XDG_DEFAULT_DATA_HOME)
+    declared = os.environ.get("XDG_DATA_HOME")
+    if not declared:
+        return default
+    candidate = Path(declared)
+    if not candidate.is_absolute() or ".." in candidate.parts:
+        return default
+    if candidate != home and not candidate.is_relative_to(home):
+        return default
+    return candidate
+
+
 def _trash_dir() -> Path:
-    trash = _account_home() / ".Trash"
-    if trash.is_symlink() or not trash.is_dir():
+    """The directory Trashed roots are moved into, bound by declared platform.
+
+    macOS keeps ``~/.Trash``.  Every other host is the freedesktop Trash:
+    ``$XDG_DATA_HOME/Trash`` with its ``files/`` and ``info/`` halves, default
+    ``~/.local/share/Trash``.  An absent Trash is the typed refusal
+    ``purge_trash_unavailable`` carrying the exact directory to create — never
+    a delete in place, never a silent no-op.
+    """
+
+    home = _account_home()
+    if sys.platform == "darwin":
+        trash = home / _DARWIN_TRASH_NAME
+        if trash.is_symlink() or not trash.is_dir():
+            raise ProtocolRefusal(
+                "purge_trash_unavailable",
+                f"fixed Trash directory is unavailable: {trash}",
+                f"create the Trash directory: {trash}",
+            )
+        return trash.resolve()
+
+    root = _xdg_data_home(home) / _XDG_TRASH_NAME
+    files = root / _XDG_TRASH_FILES
+    info = root / _XDG_TRASH_INFO
+    missing = [
+        half
+        for half in (files, info)
+        if half.is_symlink() or not half.is_dir()
+    ]
+    if missing:
         raise ProtocolRefusal(
             "purge_trash_unavailable",
-            f"fixed Trash directory is unavailable: {trash}",
+            "fixed Trash directory is unavailable: "
+            + ", ".join(str(half) for half in missing),
+            "create the freedesktop Trash directories: "
+            + " ".join(str(half) for half in (files, info)),
         )
-    return trash.resolve()
+    return files.resolve()
+
+
+def _trash_info_dir(files: Path) -> Optional[Path]:
+    """The freedesktop ``info/`` half for a resolved ``files/`` half.
+
+    ``None`` on macOS, whose Trash has no info half.  ``None`` also when the
+    resolved destination is not a freedesktop ``files/`` directory — a state
+    :func:`_trash_dir` cannot produce, since it validates both halves together,
+    and which therefore only arises when a caller has replaced the resolver.
+    """
+
+    if sys.platform == "darwin" or files.name != _XDG_TRASH_FILES:
+        return None
+    info = files.parent / _XDG_TRASH_INFO
+    if info.is_symlink() or not info.is_dir():
+        return None
+    return info.resolve()
+
+
+def _trashinfo_payload(original: Path, deleted_at: datetime) -> bytes:
+    """One freedesktop trashinfo record: origin path and deletion time."""
+
+    quoted = urllib.parse.quote(str(original), safe="/")
+    stamp = deleted_at.strftime(_TRASHINFO_DATE_FORMAT)
+    return (
+        f"{_TRASHINFO_HEADER}\n"
+        f"{_TRASHINFO_PATH_FIELD}={quoted}\n"
+        f"{_TRASHINFO_DATE_FIELD}={stamp}\n"
+    ).encode("utf-8")
+
+
+def _write_trashinfo(
+    info_dir_fd: int,
+    name: str,
+    original: Path,
+    deleted_at: datetime,
+) -> None:
+    """Record one trashinfo beside the moved root, exclusively by name."""
+
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    handle = os.open(name, flags, 0o600, dir_fd=info_dir_fd)
+    try:
+        os.write(handle, _trashinfo_payload(original, deleted_at))
+    finally:
+        os.close(handle)
 
 
 def _absolute_path(value: os.PathLike[str] | str, *, label: str) -> Path:
@@ -683,10 +831,18 @@ def _target_for(
     timestamp: str,
     reserved: set[Path],
 ) -> Path:
+    info = _trash_info_dir(trash)
     base = trash / f"{_TRASH_PREFIX}{root.name}-{timestamp}"
     target = base
     counter = 1
-    while _lexists(target) or target in reserved:
+    while (
+        _lexists(target)
+        or target in reserved
+        or (
+            info is not None
+            and _lexists(info / f"{target.name}{_TRASHINFO_SUFFIX}")
+        )
+    ):
         target = trash / f"{base.name}-{counter}"
         counter += 1
     reserved.add(target)
@@ -1068,6 +1224,7 @@ class PurgeWriter:
 
     def execute(self, plan: PurgePlan) -> Dict[str, Any]:
         trash_fd: Optional[int] = None
+        info_fd: Optional[int] = None
         bindings: List[_MoveBinding] = []
         moved: List[_MoveBinding] = []
         try:
@@ -1088,6 +1245,17 @@ class PurgeWriter:
                     "purge_trash_changed",
                     "the fixed Trash directory changed before the transaction",
                 )
+
+            info_dir = _trash_info_dir(plan.trash_dir)
+            if info_dir is not None:
+                try:
+                    info_fd = os.open(info_dir, _directory_flags())
+                except OSError as exc:
+                    raise ProtocolRefusal(
+                        "purge_trash_unavailable",
+                        f"Trash info directory could not be held: {info_dir}",
+                        f"create the freedesktop Trash info directory: {info_dir}",
+                    ) from exc
 
             expected_by_root: Dict[Path, List[_PlannedFile]] = {
                 root.path: [] for root in plan.roots
@@ -1139,6 +1307,13 @@ class PurgeWriter:
                         "purge_trash_changed",
                         "the fixed Trash directory changed during the transaction",
                     )
+                if info_fd is not None:
+                    _write_trashinfo(
+                        info_fd,
+                        f"{root.trash.name}{_TRASHINFO_SUFFIX}",
+                        root.path,
+                        datetime.now(),
+                    )
         except (OSError, ProtocolRefusal) as exc:
             if moved and trash_fd is not None:
                 restored, stranded = self._rollback(moved, trash_fd)
@@ -1179,6 +1354,8 @@ class PurgeWriter:
                 binding.close()
             if trash_fd is not None:
                 os.close(trash_fd)
+            if info_fd is not None:
+                os.close(info_fd)
         return plan.evidence(dry_run=False, status="trashed")
 
     def run(self) -> Dict[str, Any]:

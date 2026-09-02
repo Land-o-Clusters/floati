@@ -215,7 +215,7 @@ def render_compact(dataset: dict) -> str:
             + " · ".join(deep)
             + " — receipt-linked notes rather than grid columns, so one harness's "
             + "head start does not read as everyone else's gap. The full "
-            + "19-surface grid, every cell receipt-linked, lives in "
+            + "{0}-surface grid, every cell receipt-linked, lives in ".format(len(rows))
             + "[docs/capability-matrix.md](docs/capability-matrix.md)."
         )
 

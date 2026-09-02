@@ -314,13 +314,31 @@ def build_text_frames() -> dict[str, list[str]]:
 
 
 ANSI_COLOR = re.compile(r"\x1b\[([0-9;]*)m")
-FONT = Path("/System/Library/Fonts/SFNSMono.ttf")
-LAMP_FONT = Path("/System/Library/Fonts/Menlo.ttc")
+FONT = Path("/System/Library/Fonts/Menlo.ttc")
+LAMP_FONT = FONT
 BACKGROUND = "#12161c"
 FOREGROUND = "#d8dee9"
 DIM = "#9aa6b2"
 ACCENTS = ("#ff9f43", "#f08b35", "#ffb26b")
 LIT_LAMP = "#F5C518"
+ANSI_PALETTE = {
+    "38;5;240": "#585858",
+    "38;5;252": "#d0d0d0",
+    "38;5;245": DIM,
+    "38;5;37": "#00afaf",
+    "38;5;214": "#ffaf00",
+    "38;5;196": "#ff0000",
+    "38;5;45": "#00d7ff",
+    "38;5;42": "#00d787",
+    "90": "#585858",
+    "97": "#d0d0d0",
+    "37": DIM,
+    "36": "#00afaf",
+    "33": "#ffaf00",
+    "31": "#ff0000",
+    "96": "#00d7ff",
+    "32": "#00d787",
+}
 SEMANTIC_ACCENT = (
     "DRIVING",
     "DEGRADED",
@@ -339,10 +357,10 @@ def _line_runs(line: str, accent: str) -> list[tuple[str, str]]:
         if match.start() > cursor:
             runs.append((line[cursor : match.start()], color))
         code = match.group(1)
-        if code == "38;5;208":
+        if code in {"38;5;208", "93"}:
             color = accent
-        elif code == "38;5;245":
-            color = DIM
+        elif code in ANSI_PALETTE:
+            color = ANSI_PALETTE[code]
         elif code in {"", "0"}:
             color = FOREGROUND
         cursor = match.end()

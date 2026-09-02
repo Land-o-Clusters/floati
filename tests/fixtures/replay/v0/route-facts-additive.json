@@ -1,0 +1,38 @@
+{
+  "legacy": {
+    "replay_schema_version": 0,
+    "duration_ms": 0,
+    "sources": ["work/items.jsonl"],
+    "counts": {"claim": 1, "turn": 0, "degradation": 0, "denial": 0, "completion": 0},
+    "events": [
+      {
+        "sequence": 1,
+        "elapsed_ms": 0,
+        "event_class": "claim",
+        "record_kind": "work_transition",
+        "node_id": "builder-a",
+        "transition": "claim"
+      }
+    ]
+  },
+  "additive": {
+    "replay_schema_version": 0,
+    "duration_ms": 0,
+    "sources": ["work/items.jsonl"],
+    "counts": {"claim": 1, "turn": 0, "degradation": 0, "denial": 0, "completion": 0},
+    "events": [
+      {
+        "sequence": 1,
+        "elapsed_ms": 0,
+        "event_class": "claim",
+        "record_kind": "work_transition",
+        "node_id": "builder-a",
+        "transition": "claim",
+        "source_bus": "fleet-a",
+        "sender": "builder-a",
+        "target_bus": "fleet-a",
+        "recipient": "builder-a"
+      }
+    ]
+  }
+}

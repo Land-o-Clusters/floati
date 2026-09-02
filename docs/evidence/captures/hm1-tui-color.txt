@@ -1,30 +1,30 @@
-⊙ FLOATI // HARBOR BOARD
-OBSERVED 2026-07-31T12:00:10.000Z
-[38;5;208m! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core[0m
-[38;5;208m! STALE AUTHORITY app-build holder:builder-app[0m
-[38;5;208m! STALE MUTEX builder-review-workspace holder:builder-review[0m
+[38;5;252m[38;5;208m⊙[0m[38;5;252m FLOATI [38;5;208m//[0m[38;5;252m HARBOR BOARD[0m
+[38;5;37m~ ≈ ~[0m
 
-NODE               LIVE       AUTH       MUTEX      INBOX  LAST
-[38;5;208m>[0m builder-review     [38;5;208mEXPIRED[0m    NONE       [38;5;208mEXPIRED[0m        0  12:00:06.000
-  builder-app        [38;5;208mSILENT[0m     [38;5;208mEXPIRED[0m    ACTIVE         0  11:59:40.000
-  builder-core       PRESENT    ACTIVE     NONE           1  12:00:09.000
+[38;5;240m╭ NODE ────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;5;240m│[0m[38;5;245mOBSERVED 2026-07-31T12:00:10.000Z                                                                 [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m[38;5;214m! DENIAL[0m[38;5;252m IDEMPOTENCY_CONFLICT builder-review → builder-core                                       [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m[38;5;214m! STALE[0m[38;5;252m AUTHORITY app-build holder:builder-app                                                    [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m[38;5;214m! STALE[0m[38;5;252m MUTEX builder-review-workspace holder:builder-review                                      [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m                                                                                                  [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252mNODE               LIVE       AUTH       MUTEX      INBOX  LAST                                   [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m> builder-review         [38;5;245m○[0m[38;5;252m          [38;5;245m○[0m[38;5;252m          [38;5;245m○[0m[38;5;252m          0  12:00:06.000                         [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  builder-app            [38;5;245m○[0m[38;5;252m          [38;5;245m○[0m[38;5;252m          [38;5;42m●[0m[38;5;252m          0  11:59:40.000                         [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  builder-core           [38;5;42m●[0m[38;5;252m          [38;5;42m●[0m[38;5;252m          [38;5;245m○[0m[38;5;252m          [38;5;45m1[0m[38;5;252m  12:00:09.000                         [0m[38;5;240m│[0m
+[38;5;240m╰──────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
 
-WORK DAG  [[38;5;208m▓[0m[38;5;208m▓[0m░░░░░░░░]  20%
-  READY     review provisional copy  holder:-
-  CLAIMED   polish harbor board  holder:builder-core
-  DONE      verify protocol gate  holder:builder-core
-  CLAIMED   claim worker item  holder:builder-core
-  CLAIMED   drive worker item  holder:builder-core
+[38;5;240m╭ WORKERS ─────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;5;240m│[0m[38;5;252m  [38;5;214mDEGRADED[0m[38;5;252m  [38;5;196mx PROCESS DIED[0m[38;5;252m · demo-[38;5;245mworker-receipt-4[0m[38;5;252m builder-core codex demo-work-2                 [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  [38;5;42mCOMPLETE[0m[38;5;252m builder-core acp demo-work-3                                                           [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  CLAIM    builder-core codex demo-work-4                                                         [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  [38;5;45mDRIVING[0m[38;5;252m  builder-core codex demo-work-5                                                         [0m[38;5;240m│[0m
+[38;5;240m╰──────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
 
-CONSUMPTION  WORK AVAILABLE
-  coordinate: work/items.jsonl
-
-WORKERS
-[38;5;208m  DEGRADED  builder-core codex demo-work-2 PROCESS DIED[0m
-  COMPLETE  builder-core acp demo-work-3
-  CLAIM     builder-core codex demo-work-4
-[38;5;208m  DRIVING   builder-core codex demo-work-5[0m
-
-RECEIPTS
-  DELIVERY 1 ITEM
-↑/k ↓/j select  enter detail  a ack  q quit
+[38;5;240m╭ WORK DAG ────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[38;5;240m│[0m[38;5;252m[[38;5;196m▰[0m[38;5;252m[38;5;196m▰[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m[38;5;196m▱[0m[38;5;252m]  20%                                                                                 [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  READY     review provisional copy  holder:-                                                     [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  CLAIMED   polish harbor board  holder:builder-core                                              [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  DONE      verify protocol gate  holder:builder-core                                             [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  CLAIMED   claim worker item  holder:builder-core                                                [0m[38;5;240m│[0m
+[38;5;240m│[0m[38;5;252m  CLAIMED   drive worker item  holder:builder-core                                                [0m[38;5;240m│[0m
+[38;5;252m↑/k ↓/j select  enter detail  a ack  q quit[0m

@@ -715,6 +715,18 @@ class WorkerRunner:
             run_id=run_id, item_id=item_id,
             attempt_id=attempt_id, claimed_work_item_id=str(item["id"]),
         )
+        if (
+            run_id is not None and item_id is not None and attempt_id is not None
+            and adapter_name in {"claude", "codex", "pi"}
+        ):
+            from .run_manifest import RunManifestStore
+
+            RunManifestStore(self.root).observe_worker_environment(
+                run_id=run_id, item_id=item_id, attempt_id=attempt_id,
+                adapter_name=adapter_name,
+                adapter=adapter if adapter is not None else adapter_spec,
+                workspace=item.get("workspace"), now=launch_observed,
+            )
         spawn_descendant_application: Optional[
             tuple[object, str, str, object, object, object]
         ] = None

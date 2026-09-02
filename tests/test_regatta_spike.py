@@ -82,12 +82,12 @@ class RegattaTerminalProtocolTests(unittest.TestCase):
         from floati.tui_render import HarborBoardModel, node_row_positions
 
         model = HarborBoardModel.from_projection(SNAPSHOT, WORK, RECEIPTS)
-        rows = node_row_positions(model, width=100, height=8)
+        rows = node_row_positions(model, width=100, height=11)
         controller = BoardController(model)
 
-        self.assertEqual((7,), rows)
+        self.assertEqual((10,), rows)
         action = controller.handle_mouse(
-            MouseEvent(button=0, column=12, row=8, pressed=True),
+            MouseEvent(button=0, column=12, row=11, pressed=True),
             node_rows=rows,
             viewport_width=100,
         )

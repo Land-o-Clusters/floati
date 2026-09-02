@@ -644,10 +644,10 @@ class DeploymentWriterTests(unittest.TestCase):
         )
         self.assertFalse(destination.exists())
 
-    def test_first_install_refuses_unknown_path_before_destination_creation(self) -> None:
-        """An unenumerable PATH entry must not become a clean preflight result."""
+    def test_first_install_skips_and_reports_nonexistent_path_entry(self) -> None:
+        """A stale shell coordinate must not block a first install after the readable scan clears."""
         destination = self.base / "destination"
-        missing = self.base / "unreadable-path-entry"
+        missing = self.base / "stale-path-entry"
         path = os.pathsep.join((
             str(self.source / "scripts"),
             str(missing),
@@ -655,13 +655,38 @@ class DeploymentWriterTests(unittest.TestCase):
         ))
 
         with patch.dict(os.environ, {"PATH": path}, clear=False):
-            with self.assertRaises(ProtocolRefusal) as raised:
-                self._writer(destination, committed_tree=True).run()
+            result = self._writer(destination, committed_tree=True).run()
+
+        self.assertTrue((destination / "scripts" / "floati").is_file())
+        self.assertEqual([str(missing)], result["installer_shadow"]["skipped_entries"])
+
+    def test_first_install_refuses_existing_unreadable_path_with_coordinate_and_remedy(self) -> None:
+        """The product caller must preserve the exact blocked entry and operator remedy."""
+        destination = self.base / "destination"
+        unreadable = self.base / "unreadable-path-entry"
+        unreadable.mkdir()
+        path = os.pathsep.join((
+            str(self.source / "scripts"),
+            str(unreadable),
+            str(self.git_directory),
+        ))
+        original_lstat = Path.lstat
+
+        def refuse_exact_entry(candidate: Path) -> os.stat_result:
+            if candidate == unreadable:
+                raise PermissionError("fixture denies this existing PATH entry")
+            return original_lstat(candidate)
+
+        with patch.dict(os.environ, {"PATH": path}, clear=False):
+            with patch.object(Path, "lstat", autospec=True, side_effect=refuse_exact_entry):
+                with self.assertRaises(ProtocolRefusal) as raised:
+                    self._writer(destination, committed_tree=True).run()
 
         self.assertEqual("deployment_shadow_unknown", raised.exception.code)
+        self.assertIn(str(unreadable), raised.exception.detail)
         self.assertEqual(
-            "Some PATH entries could not be read; shadow state unknown.",
-            raised.exception.detail,
+            f"Fix or drop PATH entry {unreadable}, or pass a clean PATH.",
+            raised.exception.remedy,
         )
         self.assertFalse(destination.exists())
 
@@ -716,13 +741,14 @@ class DeploymentWriterTests(unittest.TestCase):
         self.assertEqual("deployment_shadow_found", raised.exception.code)
         self.assertEqual(before, self._tree_bytes(destination))
 
-    def test_update_refuses_partial_path_before_mutating_an_existing_destination(self) -> None:
-        """An unenumerable exact PATH entry must protect an existing installation too."""
+    def test_update_skips_nonexistent_path_without_mutating_unowned_files(self) -> None:
+        """A stale PATH entry does not block update or broaden its owned-file mutation set."""
         destination = self.base / "destination"
         self._writer(destination, committed_tree=True).run()
         self._advance_source_without_the_schema()
-        before = self._tree_bytes(destination)
-        missing = self.base / "unreadable-path-entry"
+        foreign = destination / "foreign.txt"
+        foreign.write_bytes(b"foreign\n")
+        missing = self.base / "stale-path-entry"
         path = os.pathsep.join((
             str(self.source / "scripts"),
             str(missing),
@@ -731,13 +757,12 @@ class DeploymentWriterTests(unittest.TestCase):
         ))
 
         with patch.dict(os.environ, {"PATH": path}, clear=False):
-            with self.assertRaises(ProtocolRefusal) as raised:
-                DeploymentWriter(
-                    self.source, destination, "update", ref="HEAD", committed_tree=True
-                ).run()
+            result = DeploymentWriter(
+                self.source, destination, "update", ref="HEAD", committed_tree=True
+            ).run()
 
-        self.assertEqual("deployment_shadow_unknown", raised.exception.code)
-        self.assertEqual(before, self._tree_bytes(destination))
+        self.assertEqual([str(missing)], result["installer_shadow"]["skipped_entries"])
+        self.assertEqual(b"foreign\n", foreign.read_bytes())
 
     def test_update_removes_only_owned_unchanged_stale_files(self) -> None:
         destination = self.base / "destination"

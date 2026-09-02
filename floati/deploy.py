@@ -919,7 +919,17 @@ class DeploymentWriter:
         if outcome != "affirmative_none":
             raise ProtocolRefusal(
                 "deployment_shadow_unknown",
-                str(installer_shadow["reason"]),
+                (
+                    f'{installer_shadow["reason"]} Blocked PATH entry: '
+                    f'{installer_shadow["blocked_entry"]}.'
+                    if "remedy" in installer_shadow
+                    else str(installer_shadow["reason"])
+                ),
+                (
+                    str(installer_shadow["remedy"])
+                    if "remedy" in installer_shadow
+                    else None
+                ),
             )
 
         journal_candidate = wiring_journal.journal_path(destination)

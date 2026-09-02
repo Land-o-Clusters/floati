@@ -210,7 +210,7 @@ def _text(state: str, mode: str) -> str:
 
 
 _SEMANTIC_TOKEN = re.compile(
-    r"(▓+|◆|DRIVING|DEGRADED|EXPIRED|SILENT|⊙|│|╱|───|╲|~+|^>)"
+    r"(! DENIAL|! STALE|UNSATISFIED WAKE|▓+|◆|DRIVING|DEGRADED|EXPIRED|SILENT|⊙|│|╱|───|╲|~+|^>)"
 )
 
 

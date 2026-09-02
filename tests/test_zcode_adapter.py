@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 from floati.adapters.headless_template import HeadlessProfileAdapter
+from tests import harness_declaration
 from tests.test_roster_adapters import ROSTER
 
 
@@ -99,9 +100,23 @@ class ZcodeAdapterDeclarationTests(unittest.TestCase):
 
     def test_pinned_binaries_are_present_files(self) -> None:
         """Filesystem facts only — no argument spelling is invented here
-        (even --version is unexercised on this harness, so it is not run)."""
-        self.assertTrue(NODE_BINARY.is_file(), f"missing {NODE_BINARY}")
-        self.assertTrue(ENTRY_SCRIPT.is_file(), f"missing {ENTRY_SCRIPT}")
+        (even --version is unexercised on this harness, so it is not run).
+
+        THIS ROW PINS TWO ARTIFACTS, not one: the node binary and the entry
+        script. Both are operator-declared, and either one being absent or
+        undeclared is a typed absence — a declaration covering only the binary
+        would leave the .app path hard-coded and this suite still host-bound.
+        """
+        node = harness_declaration.live_executable_or_typed_absence(
+            self, "zcode-node"
+        )
+        entry = harness_declaration.live_executable_or_typed_absence(
+            self, "zcode-entry"
+        )
+        if node is None or entry is None:
+            return
+        self.assertTrue(node.is_file(), f"missing {node}")
+        self.assertTrue(entry.is_file(), f"missing {entry}")
 
 
 if __name__ == "__main__":

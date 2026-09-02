@@ -246,6 +246,13 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.addCleanup(self._safe_close, leaked_write)
         os.set_inheritable(leaked_read, True)
         os.set_inheritable(leaked_write, True)
+        # The observer is *required* to hold its channel on descriptor 3, so a
+        # bare number surviving into the child witnesses nothing: if the
+        # parent's pipe happened to land on 3, the child's fstat succeeds
+        # against the channel and the probe reports a leak that did not happen.
+        # Probe descriptor IDENTITY instead — the parent's (device, inode).
+        leaked_identity = self._fstat_identity(leaked_read)
+        self.assertIsNone(leaked_identity["errno"])
 
         proof = self.base / "observer-fd-proof.json"
 
@@ -254,7 +261,7 @@ class ReconciliationObserverTests(unittest.TestCase):
                 "cwd": os.getcwd(),
                 "session_is_pid": os.getsid(0) == os.getpid(),
                 "open_fds": sorted(self.observer()._open_descriptors()),
-                "leak_errno": self._fstat_errno(leaked_read),
+                "leak": self._fstat_identity(leaked_read),
             }), encoding="utf-8")
             return self.observer().build_result(
                 request, outcome="unknown", reason_code="reconciliation_inconclusive",
@@ -268,8 +275,70 @@ class ReconciliationObserverTests(unittest.TestCase):
         diagnostic = json.loads(proof.read_text(encoding="utf-8"))
         self.assertEqual("/", diagnostic["cwd"])
         self.assertTrue(diagnostic["session_is_pid"])
-        self.assertEqual(errno.EBADF, diagnostic["leak_errno"])
+        # The closure claim is asserted first, so it is never gated behind the
+        # aliasing one.
         self.assertEqual([0, 1, 2, 3], diagnostic["open_fds"])
+        self.assertDescriptorNotInherited(diagnostic["leak"], leaked_identity)
+
+    def test_fd_identity_probe_distinguishes_an_inherited_pipe_from_the_channel(
+        self,
+    ) -> None:
+        """Controls the identity probe: the object decides, never the number."""
+        leaked_read, leaked_write = os.pipe()
+        self.addCleanup(self._safe_close, leaked_read)
+        self.addCleanup(self._safe_close, leaked_write)
+        os.set_inheritable(leaked_read, True)
+        leaked_identity = self._fstat_identity(leaked_read)
+        self.assertIsNone(leaked_identity["errno"])
+
+        proof_read, proof_write = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            try:
+                os.close(proof_read)
+                # A child that genuinely keeps the parent's pipe, and keeps it
+                # on the very number the observer must re-bind its channel to.
+                os.dup2(leaked_read, 3)
+                self._safe_close(leaked_write)
+                payload = json.dumps({
+                    "inherited": self._fstat_identity(3),
+                    "unrelated": self._fstat_identity(proof_write),
+                    "closed": self._fstat_identity(leaked_write),
+                }).encode("utf-8")
+                os.write(proof_write, payload)
+                os._exit(0)
+            except BaseException:
+                os._exit(97)
+        os.close(proof_write)
+        try:
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(proof_read, 65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            waited, status = os.waitpid(pid, 0)
+            self.assertEqual(pid, waited)
+            self.assertEqual(0, os.waitstatus_to_exitcode(status))
+        finally:
+            os.close(proof_read)
+        observed = json.loads(b"".join(chunks).decode("utf-8"))
+
+        # A genuinely inherited descriptor still presents the parent's
+        # identity, on any number: this is what gives the probe its teeth.
+        self.assertEqual(
+            (leaked_identity["device"], leaked_identity["inode"]),
+            (observed["inherited"]["device"], observed["inherited"]["inode"]),
+        )
+        with self.assertRaises(self.failureException):
+            self.assertDescriptorNotInherited(
+                observed["inherited"], leaked_identity,
+            )
+        # A different object living on a probed number is not a leak, and the
+        # closed case still reads EBADF.
+        self.assertDescriptorNotInherited(observed["unrelated"], leaked_identity)
+        self.assertDescriptorNotInherited(observed["closed"], leaked_identity)
+        self.assertEqual(errno.EBADF, observed["closed"]["errno"])
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS descriptor surface")
     def test_observer_closes_inherited_fd_omitted_by_dev_fd(self) -> None:
@@ -323,13 +392,23 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.addCleanup(self._safe_close, tenant)
         os.set_inheritable(ledger, True)
         os.set_inheritable(tenant, True)
+        # Same defect as the fd probe above, and the public CI caught it on the
+        # same runners: the child MUST hold its channel on 3 and its repository
+        # on 6, so a bare parent fd number surviving into it witnesses nothing.
+        # Identity decides. (These two are named files, and the observer opens
+        # neither under the "none" adapter, so no legitimate re-open can alias
+        # them.)
+        ledger_identity = self._fstat_identity(ledger)
+        tenant_identity = self._fstat_identity(tenant)
+        self.assertIsNone(ledger_identity["errno"])
+        self.assertIsNone(tenant_identity["errno"])
 
         proof = self.base / "observer-authority-proof.json"
 
         def inspect(request, repository_fd):
             proof.write_text(json.dumps({
-                "ledger_errno": self._fstat_errno(ledger),
-                "tenant_errno": self._fstat_errno(tenant),
+                "ledger": self._fstat_identity(ledger),
+                "tenant": self._fstat_identity(tenant),
             }), encoding="utf-8")
             return self.observer().build_result(
                 request, outcome="unknown", reason_code="reconciliation_inconclusive",
@@ -341,8 +420,8 @@ class ReconciliationObserverTests(unittest.TestCase):
             patch_observer=inspect,
         )
         diagnostic = json.loads(proof.read_text(encoding="utf-8"))
-        self.assertEqual(errno.EBADF, diagnostic["ledger_errno"])
-        self.assertEqual(errno.EBADF, diagnostic["tenant_errno"])
+        self.assertDescriptorNotInherited(diagnostic["ledger"], ledger_identity)
+        self.assertDescriptorNotInherited(diagnostic["tenant"], tenant_identity)
         self.assertNotIn(str(ledger_path).encode(), raw)
         self.assertNotIn(str(tenant_path).encode(), raw)
         self.assertNotIn(secret.encode(), raw)
@@ -873,6 +952,30 @@ class ReconciliationObserverTests(unittest.TestCase):
         except OSError as exc:
             return exc.errno
         return None
+
+    @staticmethod
+    def _fstat_identity(descriptor: int) -> dict:
+        """Identify whatever object a descriptor number currently names."""
+
+        try:
+            metadata = os.fstat(descriptor)
+        except OSError as exc:
+            return {"errno": exc.errno, "device": None, "inode": None}
+        return {"errno": None, "device": metadata.st_dev, "inode": metadata.st_ino}
+
+    def assertDescriptorNotInherited(self, observed: dict, expected: dict) -> None:
+        """Fail only if a probed number still names the parent's own object."""
+
+        if observed["errno"] is not None:
+            self.assertEqual(errno.EBADF, observed["errno"])
+            return
+        # The number is live, which on its own says nothing: the child is
+        # required to re-bind low descriptors. Only the object identifies a leak.
+        self.assertNotEqual(
+            (expected["device"], expected["inode"]),
+            (observed["device"], observed["inode"]),
+            "the parent's descriptor survived into the child",
+        )
 
 
 if __name__ == "__main__":

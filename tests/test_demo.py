@@ -91,7 +91,7 @@ class DemoTests(unittest.TestCase):
             monochrome = capture_demo(color=False)
 
         self.assertEqual(
-            "f082eaa33d4b892912b6408266f21819d268715b6ccd6f5ca82f1c9a212f0078",
+            "3f66217becf2dad76d3556195ed2e16370eeb018b8456c091beb9b5405bcaecd",
             hashlib.sha256(color.encode("utf-8")).hexdigest(),
         )
         self.assertIn("\x1b[38;5;208m", color)

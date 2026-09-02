@@ -214,6 +214,26 @@ class DemoCaptureAssetTests(unittest.TestCase):
         self.assertEqual("#F5C518", capture.LIT_LAMP)
         self.assertGreater(yellow_pixels, 0)
 
+    def test_board_palette_and_semantic_glyphs_survive_rasterization(self) -> None:
+        """Catches the GIF pipeline flattening the dressed Board back to one accent."""
+        capture = load_capture_module()
+        runs = capture._line_runs(
+            "\x1b[38;5;214mwarning\x1b[0m "
+            "\x1b[38;5;196mviolation\x1b[0m "
+            "\x1b[38;5;45mactivity\x1b[0m "
+            "\x1b[38;5;42mhealthy\x1b[0m",
+            capture.ACCENTS[0],
+        )
+
+        self.assertIn(("warning", "#ffaf00"), runs)
+        self.assertIn(("violation", "#ff0000"), runs)
+        self.assertIn(("activity", "#00d7ff"), runs)
+        self.assertIn(("healthy", "#00d787"), runs)
+        font = capture.ImageFont.truetype(str(capture.FONT), 40)
+        for glyph in "▰▱●◐○":
+            with self.subTest(glyph=glyph):
+                self.assertIsNotNone(font.getmask(glyph).getbbox())
+
     def test_palette_reservation_does_not_rewrite_frames_without_a_lamp(self) -> None:
         capture = load_capture_module()
         frame = Image.new("RGB", (32, 32))

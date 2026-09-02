@@ -15,6 +15,8 @@ operable BY agents; it does not contain one.
 -m unittest discover` — system python3, plain shell. This repository has no
 pytest and no `.venv` by design; a harness's managed pytest gateway demanding
 one is the wrong instrument, and its refusal is not a gate on this work.
+`pyproject.toml` is the package-metadata authority: Python 3.9 or newer,
+with zero dependencies.
 
 ```
 git clone <this repository> /absolute/path/floati-src
@@ -27,7 +29,9 @@ emits SHA-256 receipts. `floati update` refreshes the same destination the
 same way; `floati uninstall --destination PATH [--dry-run]` removes only
 unchanged manifest-owned tool files and always retains bus roots, ledgers,
 and foreign files. Run the binary as `<destination>/scripts/floati` (or
-`python3 -m floati` from a source checkout).
+`python3 -m floati` from a source checkout). `doctor`'s installer-shadow
+check reads the installed destination from the `FLOATI_INSTALL_DESTINATION`
+environment variable when `--destination` is not passed.
 
 **Relaunch quirk (measured):** a harness session that was already running
 when a wake hook was installed will never run it — harnesses snapshot or
@@ -76,7 +80,7 @@ Every command prints exactly one JSON artifact:
 ```
 
 `status` is `ok`, `refused`, `cannot_speak`, `intentional_silence`,
-`no_result`, `malformed_evidence`, or `degraded`. On refusal, `evidence.code`
+`no_result`, `malformed_evidence`, `orchestration_deadline`, or `degraded`. On refusal, `evidence.code`
 is a stable machine-readable reason and `evidence.detail` says what to fix.
 `status --json` and `graph --json` are the stable version-zero machine
 contract (`docs/CONFLUENCE-v0.md`).
@@ -85,13 +89,14 @@ contract (`docs/CONFLUENCE-v0.md`).
 
 | exit | meaning | remedy |
 |---:|---|---|
-| 0 | done; artifact holds the result | proceed |
+| 0 | done (`ok`); artifact holds the result | proceed |
 | 20 | refused before any mutation (`status: refused`) | the request is wrong, not the system — fix the argument, identity, or missing consent named in `evidence.code`/`detail`; do not retry unchanged |
-| 22 | result exists but cannot be rendered safely for this terminal | re-run with `--json` |
-| 31 | intentional silence (nothing to say; e.g. a waiter with no participant) | clean no-op; do not treat as failure |
-| 32 | query ran, nothing matched | treat as an empty set |
-| 33 | durable evidence is malformed or inconsistent | stop; do not retry; report the named ledger for investigation |
-| 35 | a filesystem failure interrupted durable access | check disk, permissions, and the root path; retry once conditions change |
+| 22 | `cannot_speak`: result exists but cannot be rendered safely for this terminal | re-run with `--json` |
+| 31 | `intentional_silence` (nothing to say; e.g. a waiter with no participant) | clean no-op; do not treat as failure |
+| 32 | `no_result`: query ran, nothing matched | treat as an empty set |
+| 33 | `malformed_evidence`: durable evidence is malformed or inconsistent | stop; do not retry; report the named ledger for investigation |
+| 34 | `orchestration_deadline`: the orchestrated run exceeded its deadline | re-run with a larger `--deadline` |
+| 35 | `degraded`: the run completed but at least one check could not speak | read the artifact's findings; each names the check that degraded |
 
 ## Verbs
 
@@ -113,6 +118,8 @@ contract for each.
   `log` (`--replay` reconstructs from the
   ledger) · `effects` / `effect` · `threads` / `thread` · `graph` · `plan` ·
   `receipts` · `board` (TUI).
+- **Overlap evidence:** `overlap report --repository REPOSITORY --base-ref REF
+  --left-ref REF --right-ref REF` emits one read-only, local schema-v1 overlap fact.
 - **Repair:** `repair quarantine` preserves one exact selected event frame beneath
   the tenant, atomically replaces the ledger, and receipts follower invalidation.
 - **Health:** `doctor` (per-node delivery scoreboard; `--probe` loopback
@@ -183,7 +190,7 @@ floati work claim --root /var/tmp/fleet --id work-000000000000700080000000000000
 floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --subject work-claims --epoch 1
 ```
 
-- **Health check:** `doctor --root R` → chase every red with the receipt it
+- **Health check:** `doctor --root R --source S` → chase every red with the receipt it
   names → `doctor --probe` for suspected deafness.
 - **Map the estate:** declare roots in a file → `chart --declared-roots F` →
   `survey` when you suspect a bus you did not create.

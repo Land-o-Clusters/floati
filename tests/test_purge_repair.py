@@ -5,6 +5,7 @@ import errno
 import inspect
 import os
 import pwd
+import sys
 import tempfile
 import unittest
 import unicodedata
@@ -69,16 +70,48 @@ class PurgeSevenFindingRepairTests(unittest.TestCase):
         self.assertFalse((self.base / "attacker").exists())
 
     def test_fixed_trash_authority_ignores_caller_home_environment(self) -> None:
+        # The claim is the fixed authority: the caller's HOME (and XDG_DATA_HOME)
+        # may not steer the Trash.  WHICH directory the account's Trash is, is
+        # the platform's answer -- macOS ~/.Trash, elsewhere the freedesktop
+        # files/ half -- so the expectation is parametrised by platform and the
+        # claim is asserted on BOTH answers, including the refusal.
+        account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
         alternate_home = self.base / "alternate-home"
-        alternate_trash = alternate_home / ".Trash"
-        alternate_trash.mkdir(parents=True)
-        account_trash = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".Trash"
+        (alternate_home / ".Trash").mkdir(parents=True)
+        (alternate_home / ".local" / "share" / "Trash" / "files").mkdir(parents=True)
+        (alternate_home / ".local" / "share" / "Trash" / "info").mkdir(parents=True)
 
+        if sys.platform == "darwin":
+            expected = account_home / ".Trash"
+            refused = alternate_home / ".Trash"
+        else:
+            expected = account_home / ".local" / "share" / "Trash" / "files"
+            refused = alternate_home / ".local" / "share" / "Trash" / "files"
+
+        raised = None
+        resolved = None
         with patch.dict(os.environ, {"HOME": str(alternate_home)}):
-            resolved = _REAL_TRASH_DIR()
+            os.environ.pop("XDG_DATA_HOME", None)
+            if expected.is_dir():
+                resolved = _REAL_TRASH_DIR()
+            else:
+                with self.assertRaises(ProtocolRefusal) as capture:
+                    _REAL_TRASH_DIR()
+                raised = capture.exception
 
-        self.assertEqual(account_trash.resolve(), resolved)
-        self.assertNotEqual(alternate_trash.resolve(), resolved)
+        if resolved is not None:
+            self.assertEqual(expected.resolve(), resolved)
+            self.assertNotEqual(refused.resolve(), resolved)
+            return
+
+        # This host has no Trash of its own.  The answer is still the account's
+        # directory -- named in a typed refusal with an actionable remedy, and
+        # never the caller's.
+        self.assertEqual("purge_trash_unavailable", raised.code)
+        self.assertIsNotNone(raised.remedy)
+        self.assertIn(str(expected), raised.remedy)
+        self.assertNotIn(str(alternate_home), raised.detail)
+        self.assertNotIn(str(alternate_home), raised.remedy)
 
     def test_tilde_root_is_not_expanded_through_caller_environment(self) -> None:
         alternate_home = self.base / "alternate-home"
@@ -517,6 +550,30 @@ class PurgeSevenFindingRepairTests(unittest.TestCase):
         self.assertEqual("intruder\n", record.read_text(encoding="utf-8"))
         self.assertEqual([], list(self.trash.iterdir()))
 
+    def _exclusive_rename_primitive_is_present(self, exclusive_move) -> bool:
+        """Measure whether THIS host gives the product an exclusive rename.
+
+        Measured, never assumed: floati/purge.py answers ENOTSUP — "the host
+        has no exclusive rename primitive" — where it has none, and that typed
+        absence is the product's own answer, not a fallback that replaces the
+        target. Asking by moving a directory nothing else owns keeps this
+        reading correct for whatever primitive a host acquires later, where
+        naming the platform or a libc symbol would go stale silently.
+        """
+
+        probe = self.base / "exclusive-rename-probe"
+        moved = self.base / "exclusive-rename-probe-moved"
+        probe.mkdir()
+        try:
+            exclusive_move(probe, moved)
+        except OSError as exc:
+            if exc.errno == errno.ENOTSUP:
+                probe.rmdir()
+                return False
+            raise
+        moved.rmdir()
+        return True
+
     def test_exclusive_move_refuses_filesystem_equivalent_occupied_target(self) -> None:
         source = self.root("source")
         occupied = self.trash / unicodedata.normalize("NFC", "floati-Résumé")
@@ -524,16 +581,53 @@ class PurgeSevenFindingRepairTests(unittest.TestCase):
         protected = occupied / "protected.txt"
         protected.write_text("keep\n", encoding="utf-8")
         equivalent = self.trash / unicodedata.normalize("NFD", "FLOATI-RÉSUMÉ")
-        self.assertTrue(equivalent.exists(), "host filesystem did not expose equivalence")
 
         exclusive_move = getattr(purge, "_rename_exclusive", None)
         self.assertTrue(callable(exclusive_move), "exclusive rename seam is absent")
-        with self.assertRaises(OSError) as raised:
-            exclusive_move(source, equivalent)
 
-        self.assertEqual(errno.EEXIST, raised.exception.errno)
+        # APFS and HFS+ fold case AND Unicode normalisation, so `equivalent` is
+        # a second spelling of the SAME directory entry and the exclusive move
+        # must refuse it. ext4 has neither property, so on the ubuntu runner
+        # that spelling names nothing and the old fixture failed at its own
+        # precondition — `host filesystem did not expose equivalence` — before
+        # the product was ever asked anything.
+        #
+        # ⇒ A PRECONDITION THAT ONLY ONE HOST SATISFIES IS NOT A SKIP TO ADD,
+        # IT IS A SECOND TYPED ANSWER TO WRITE.
+        #
+        # So the host fact is OBSERVED and the question survives either way:
+        # where the host folds names, the guarded target is the folded
+        # spelling; where it does not, the folded spelling is asserted ABSENT
+        # (that is the typed absence) and the guarded target is the occupant's
+        # own spelling. Both hosts assert the same law — the exclusive move
+        # never replaces an occupied target — and the occupant is read back
+        # intact on both.
+        host_folds_names = equivalent.exists()
+        if host_folds_names:
+            self.assertTrue(equivalent.is_dir())
+            self.assertEqual(
+                (occupied.stat().st_dev, occupied.stat().st_ino),
+                (equivalent.stat().st_dev, equivalent.stat().st_ino),
+                "the equivalent spelling must be the same directory entry",
+            )
+            target = equivalent
+        else:
+            self.assertFalse(os.path.lexists(str(equivalent)))
+            self.assertEqual([occupied.name], [entry.name for entry in self.trash.iterdir()])
+            target = occupied
+
+        expected = (
+            errno.EEXIST
+            if self._exclusive_rename_primitive_is_present(exclusive_move)
+            else errno.ENOTSUP
+        )
+        with self.assertRaises(OSError) as raised:
+            exclusive_move(source, target)
+
+        self.assertEqual(expected, raised.exception.errno)
         self.assertTrue(source.is_dir())
         self.assertEqual("keep\n", protected.read_text(encoding="utf-8"))
+        self.assertTrue(occupied.is_dir())
 
     def test_unreadable_subtree_cannot_be_omitted_from_complete_inventory(self) -> None:
         root = self.root("records")

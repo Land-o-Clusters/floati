@@ -28,11 +28,11 @@ _GOVERNED_PROTOCOL_ASSET_ROOTS = (
     "schemas/v0",
     "schemas/v1",
 )
-_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 156
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 157
 _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # Versioned schemas may evolve in place, but their reviewed membership is
     # fixed. Content bytes deliberately do not participate in this pin.
-    "20e0c4b7f26f4061cc41f8e86b300c95de262634b9a7d73681aae74eaa692ff9"
+    "93c88b117e973f18f8a162af6eb55a95908b59b85e8ad85fe81c7d91c3a6a544"
 )
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (

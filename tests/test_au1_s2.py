@@ -522,11 +522,48 @@ class AU1S2Tests(unittest.TestCase):
 
         from floati import update_apply
 
-        self.assertEqual(
-            str(Path(str(self.git))),
-            update_apply._select_git_executable(str(self.git)),
-        )
-        relative = Path(str(self.git)).name
+        # `shutil.which` returns whatever PATH names first, which on a Homebrew
+        # Mac is /opt/homebrew/bin/git - a symlink into the Cellar, and exactly
+        # what this policy exists NOT to select. The product is right (R-C):
+        # the positive case must be fed a path that already satisfies the house
+        # predicate, so it is derived from the product's OWN candidate list
+        # rather than from PATH.
+        canonical = None
+        for candidate in update_apply._GIT_CANDIDATES:
+            path = Path(candidate)
+            try:
+                if (
+                    not path.is_symlink()
+                    and path.is_file()
+                    and path.resolve(strict=True) == path
+                    and os.access(path, os.X_OK)
+                ):
+                    canonical = candidate
+                    break
+            except OSError:
+                continue
+
+        if canonical is None:
+            # A host where no candidate qualifies is a TYPED ABSENCE, not a
+            # skip: the seam must still refuse, in its own vocabulary.
+            with self.assertRaises(ProtocolRefusal) as absent:
+                update_apply._select_git_executable()
+            self.assertEqual("update_git_unavailable", absent.exception.code)
+            self.assertTrue(
+                any(
+                    name in absent.exception.detail
+                    for name in update_apply._GIT_CANDIDATES
+                ),
+                absent.exception.detail,
+            )
+        else:
+            self.assertEqual(
+                canonical, update_apply._select_git_executable(canonical),
+            )
+
+        # The negative half is unchanged, and equally PATH-free: a bare
+        # relative name must still refuse.
+        relative = Path(update_apply._GIT_CANDIDATES[0]).name
         with self.assertRaises(ProtocolRefusal) as caught:
             update_apply._select_git_executable(relative)
         self.assertEqual("update_git_unavailable", caught.exception.code)

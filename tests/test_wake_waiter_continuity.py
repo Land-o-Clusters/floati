@@ -80,7 +80,8 @@ class WakeWaiterContinuityTests(unittest.TestCase):
         digest = hashlib.sha256(b"session-one").hexdigest()
         receipts = []
         for reason in (
-            "exhausted", "paused", "not_claimant", "breaker", "integrity_failure"
+            "exhausted", "paused", "not_claimant", "consent_withdrawn",
+            "breaker", "integrity_failure",
         ):
             with self.subTest(reason=reason):
                 receipt = WakeExitLedger(root).record(
@@ -103,8 +104,8 @@ class WakeWaiterContinuityTests(unittest.TestCase):
                     receipt, Path("schemas/v1/wake-waiter-exit-receipt.schema.json")
                 )
                 receipts.append(receipt)
-        self.assertEqual(5, len(self.rows(root)))
-        self.assertEqual(5, len({str(row["id"]) for row in receipts}))
+        self.assertEqual(6, len(self.rows(root)))
+        self.assertEqual(6, len({str(row["id"]) for row in receipts}))
 
     def test_waiter_records_all_five_terminal_declines(self) -> None:
         from floati.codex_wait import run_stop_waiter

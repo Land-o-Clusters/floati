@@ -2245,6 +2245,12 @@ class WorkerEffectPipeTests(unittest.TestCase):
             run_id=case.run.run_id, item_id=case.run.parent,
             attempt_id=case.run.opened["attempt_id"],
         )
+        from floati.run_manifest import RunManifestStore
+
+        observations = RunManifestStore(case.root).observations()
+        self.assertEqual(1, len(observations))
+        self.assertEqual(case.run.opened["attempt_id"], observations[0]["attempt_id"])
+        self.assertEqual("codex", observations[0]["adapter"])
 
         if result.get("outcome_code") == "effect_worker_isolation_unavailable":
             self.assertEqual("degrade", result["transition"])

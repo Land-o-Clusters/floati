@@ -59,6 +59,8 @@ def _normalize(
     transition = record.get("transition", record.get("action"))
     if record["kind"] in {"worker_refusal", "denial_receipt"}:
         transition = "refused" if record["kind"] == "worker_refusal" else "denied"
+    sender = record.get("claimed_sender", record.get("node_id", record.get("actor")))
+    recipient = record.get("claimed_recipient", sender)
     return {
         "timestamp": record["timestamp"],
         "record_id": record["id"],
@@ -74,6 +76,10 @@ def _normalize(
         "reason_code": record.get("reason_code"),
         "claimed_sender": record.get("claimed_sender"),
         "claimed_recipient": record.get("claimed_recipient"),
+        "source_bus": record["tenant_id"],
+        "sender": sender,
+        "target_bus": record["tenant_id"],
+        "recipient": recipient,
         "process_id": None,
     }
 

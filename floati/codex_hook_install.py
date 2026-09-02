@@ -749,6 +749,7 @@ class CodexHookInstaller:
         }
         before = self.hooks_path.read_bytes()
         state, after = self._plan_hook_rewrite(before, block)
+        prior_trust_rows = observe_codex_waiter_hooks(self.hooks_path)
 
         bundle_digest, target, installed_digest = self._install_bundle()
         if bundle_digest != planned_bundle_digest or target != planned_target:
@@ -807,6 +808,11 @@ class CodexHookInstaller:
             "consent_receipt_id": consent["id"],
             "installed_path": str(target),
             "command": command,
+            "hook_trust_invalidated_by_install": (
+                state == "replaced"
+                and any(row.get("hook_armed") is True for row in prior_trust_rows)
+                and trust["hook_armed"] is False
+            ),
             **trust,
         }
         if session is not None:

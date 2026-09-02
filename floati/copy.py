@@ -67,6 +67,21 @@ GH_AUTHENTICATION_REMEDY = register(
     "Floati does not read gh auth login credentials; export GH_TOKEN or GITHUB_TOKEN.",
     "GitHub intake refusal and help",
 )
+BOARD_EVENT_ROOT_UNAVAILABLE_DETAIL = register(
+    "tui.event.root_unavailable",
+    "Board event root must be one existing absolute directory",
+    "Live Board refusal",
+)
+BOARD_EVENT_SOURCE_UNSUPPORTED_DETAIL = register(
+    "tui.event.source_unsupported",
+    "live Board requires kqueue or inotify filesystem events",
+    "Live Board refusal",
+)
+BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL = register(
+    "tui.event.watch_unavailable",
+    "live Board could not establish complete durable-root event coverage",
+    "Live Board refusal",
+)
 
 WAKE_DAEMON_INACTIVE_DISPLAY = register(
     "wake.daemon.inactive",

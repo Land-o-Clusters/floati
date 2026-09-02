@@ -74,9 +74,10 @@ class RefusalRemedyTests(unittest.TestCase):
                     artifact["evidence"]["remedy"],
                 )
 
-    def test_absent_remedy_is_explicit_json_null_on_real_cli_refusals(self) -> None:
+    def test_unnamed_remedy_is_typed_none_on_real_cli_refusals(self) -> None:
         """Catches omission being confused with typed absence at the CLI boundary."""
 
+        unnamed = {"kind": "none", "why": "no action was named for this refusal"}
         for arguments, expected_exit, expected_status, expected_evidence in (
             (
                 ("status",),
@@ -85,7 +86,7 @@ class RefusalRemedyTests(unittest.TestCase):
                 {
                     "code": "cannot_speak",
                     "detail": "no command root was resolved from --root or FLOATI_BUS_ROOT",
-                    "remedy": None,
+                    "remedy": unnamed,
                 },
             ),
             (
@@ -95,7 +96,7 @@ class RefusalRemedyTests(unittest.TestCase):
                 {
                     "code": "root_not_absolute",
                     "detail": "the root path must be absolute",
-                    "remedy": None,
+                    "remedy": unnamed,
                 },
             ),
         ):
@@ -107,7 +108,7 @@ class RefusalRemedyTests(unittest.TestCase):
                 self.assertEqual(expected_status, artifact["status"])
                 self.assertEqual(expected_evidence, artifact["evidence"])
 
-    def test_empty_remedy_serializes_as_null_never_an_empty_claim(self) -> None:
+    def test_empty_remedy_serializes_as_typed_none_never_an_empty_claim(self) -> None:
         """Catches an empty remedy escaping as user-visible guidance."""
 
         try:
@@ -117,8 +118,10 @@ class RefusalRemedyTests(unittest.TestCase):
 
         _, artifact = self.artifact_for(refusal)
 
-        self.assertIn("remedy", artifact["evidence"])
-        self.assertIsNone(artifact["evidence"]["remedy"])
+        self.assertEqual(
+            {"kind": "none", "why": "no action was named for this refusal"},
+            artifact["evidence"]["remedy"],
+        )
 
 
 if __name__ == "__main__":

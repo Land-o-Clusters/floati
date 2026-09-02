@@ -152,7 +152,16 @@ def build_demo_model(root: FloatiRoot) -> HarborBoardModel:
         }
         for worker in model.workers
     )
-    return replace(model, nodes=nodes, workers=workers)
+    worker_receipts = tuple(
+        {**receipt, "id": f"demo-worker-receipt-{index}"}
+        for index, receipt in enumerate(model.worker_receipts, start=1)
+    )
+    return replace(
+        model,
+        nodes=nodes,
+        workers=workers,
+        worker_receipts=worker_receipts,
+    )
 
 
 def demo_model_loader(root: FloatiRoot) -> Callable[[], HarborBoardModel]:
@@ -451,7 +460,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     with tempfile.TemporaryDirectory(prefix="floati-demo-") as temporary:
         root = seed_demo(Path(temporary) / "synthetic-fleet")
-        return run_board(model_loader=demo_model_loader(root))
+        return run_board(
+            model_loader=demo_model_loader(root),
+            model_root=root.tenant_home,
+        )
 
 
 if __name__ == "__main__":

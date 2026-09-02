@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 import unittest
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -490,6 +491,23 @@ def _run_created_candidate(tenant_id: str) -> dict[str, object]:
     }
 
 
+def _forked_writer_failure(exc: BaseException) -> str:
+    """Carry the caught exception out of the child, repr and traceback intact.
+
+    A forked writer that fails in CI and nowhere else is only ever diagnosed by
+    what it says on the way out. `f"{type(exc).__name__}:{exc}"` drops the
+    repr's arguments and every frame, and the assertion that consumed it
+    printed only the STATUS SET - so a red run named neither the exception nor
+    the line. Diagnostics only: nothing here changes what is caught, what is
+    put on the queue as a status, or what any assertion accepts.
+    """
+
+    trace = "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__)
+    ).strip()
+    return f"{repr(exc)}\n{trace}"
+
+
 def _run_created_hammer(base: str, start: object, results: object) -> None:
     ledger = RunLedger(FloatiRoot.open_direct_home(Path(base), create=False))
     start.wait()
@@ -499,7 +517,7 @@ def _run_created_hammer(base: str, start: object, results: object) -> None:
         )
         results.put(("ok", record["id"]))
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc)))
 
 
 def _run_trace_hammer(base: str, start: object, results: object) -> None:
@@ -526,7 +544,7 @@ def _run_trace_hammer(base: str, start: object, results: object) -> None:
             )
         )
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc)))
 
 
 def _run_full_trace_family_hammer(
@@ -649,6 +667,16 @@ def _wake_ordered_action(
 
 
 class ConcurrentWriterGauntletTests(unittest.TestCase):
+    @staticmethod
+    def _hammer_failures(results: list[tuple[str, object]]) -> str:
+        """Render every non-ok payload, so a red run names its own cause."""
+
+        return "\n".join(
+            f"[{index}] {status}: {value}"
+            for index, (status, value) in enumerate(results)
+            if status != "ok"
+        ) or "no non-ok payload was returned"
+
     def run_hammer(
         self,
         target: object,
@@ -922,7 +950,11 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 _run_trace_hammer,
                 lambda _index, start, queue: (str(root.path), start, queue),
             )
-            self.assertEqual({"ok"}, {status for status, _ in results})
+            self.assertEqual(
+                {"ok"},
+                {status for status, _ in results},
+                self._hammer_failures(results),
+            )
             payloads = [value for _, value in results]
             run_ids = [value[0] for value in payloads]
             self.assertEqual(HAMMER_PROCESSES, len(set(run_ids)))
@@ -996,7 +1028,11 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                     str(root.path), index, start, queue
                 ),
             )
-            self.assertEqual({"ok"}, {status for status, _ in results})
+            self.assertEqual(
+                {"ok"},
+                {status for status, _ in results},
+                self._hammer_failures(results),
+            )
             created = [value for _, value in results if isinstance(value, str)]
             traces = [value for _, value in results if not isinstance(value, str)]
             self.assertEqual(

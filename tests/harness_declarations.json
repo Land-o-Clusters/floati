@@ -1,0 +1,8 @@
+{
+  "agy": "~/.local/bin/agy",
+  "devin": "/opt/homebrew/Caskroom/devin-cli/3000.2.17/bin/devin",
+  "herdr": "/opt/homebrew/Cellar/herdr/0.8.2/bin/herdr",
+  "t3": "/opt/homebrew/lib/node_modules/t3/dist/bin.mjs",
+  "zcode-entry": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
+  "zcode-node": "/opt/homebrew/Cellar/node/26.4.0/bin/node"
+}

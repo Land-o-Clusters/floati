@@ -642,5 +642,89 @@ class OrchestrationCliOutcomeTests(unittest.TestCase):
         self.assertIn("TURN FAILED", degraded_frames)
 
 
+class SendUnbankedShaFenceTests(unittest.TestCase):
+    """RB-1: `send` refuses a `--sha` reachable from no remote ref (Am.1 §2)."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "fence-fleet"
+        self.root = FloatiRoot.open_direct_home(self.home, create=True)
+        Registry(self.root).register("sender-a", "Codex")
+        Registry(self.root).register("receiver-b", "Codex")
+        self.checkout = Path(self.temp.name) / "checkout"
+        self.checkout.mkdir()
+        self._git("init", "--quiet", "--initial-branch=main")
+        self._git("config", "user.name", "Fence Fixture")
+        self._git("config", "user.email", "fence-fixture@example.invalid")
+        (self.checkout / "docs").mkdir()
+        (self.checkout / "docs" / "note.md").write_text("work\n", encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "--quiet", "-m", "base work")
+        (self.checkout / "docs" / "note.md").write_text("more work\n", encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "--quiet", "-m", "local work")
+        self.parent_sha = self._git("rev-parse", "HEAD~1")
+        self.local_sha = self._git("rev-parse", "HEAD")
+
+    def _git(self, *args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=str(self.checkout), check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+
+    def run_send(self, sha: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable, "-m", "floati", "send",
+                "--root", str(self.home),
+                "--from", "sender-a", "--to", "receiver-b",
+                "--repo", "fixture-repo",
+                "--sha", sha,
+                "--doc", "docs/note.md",
+                "--note", "fence fixture",
+            ],
+            cwd=str(self.checkout),
+            check=False, capture_output=True, text=True,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(REPOSITORY_ROOT),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
+        )
+
+    def test_send_refuses_a_sha_reachable_from_no_remote_ref(self) -> None:
+        result = self.run_send(self.local_sha)
+        self.assertEqual(20, result.returncode, result.stdout)
+        evidence = json.loads(result.stderr)["evidence"]
+        self.assertEqual("sha_unbanked", evidence["code"])
+        self.assertIn(str(self.checkout), evidence["detail"])
+        self.assertIn("refs/remotes", evidence["detail"])
+
+    def test_send_refusal_names_the_remote_ref_set_it_checked(self) -> None:
+        self._git("update-ref", "refs/remotes/origin/other", self.parent_sha)
+        result = self.run_send(self.local_sha)
+        self.assertEqual(20, result.returncode, result.stdout)
+        evidence = json.loads(result.stderr)["evidence"]
+        self.assertEqual("sha_unbanked", evidence["code"])
+        self.assertIn("refs/remotes/origin/other", evidence["detail"])
+
+    def test_send_passes_a_sha_absent_from_the_checkout_to_the_verify_fence(self) -> None:
+        """The send-side fence owns the committed-but-unpushed incident only."""
+        absent = "b" * 40
+        self._git("update-ref", "refs/remotes/origin/main", self.local_sha)
+        result = self.run_send(absent)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("ok", json.loads(result.stdout)["status"])
+
+    def test_send_still_accepts_a_sha_reachable_from_a_remote_ref(self) -> None:
+        self._git("update-ref", "refs/remotes/origin/main", self.local_sha)
+        result = self.run_send(self.local_sha)
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = json.loads(result.stdout)["evidence"]
+        self.assertEqual("ok", json.loads(result.stdout)["status"])
+        self.assertEqual(self.local_sha, evidence["message"]["sha"])
+
+
 if __name__ == "__main__":
     unittest.main()

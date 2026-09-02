@@ -85,6 +85,42 @@ class WakeDaemonCliTests(unittest.TestCase):
             "--harness", harness,
         ]
 
+    # Where each supervisor keeps its verb, what it answers when the unit is
+    # not running, and the verb sequence one full lifecycle speaks. `--user`
+    # sits at systemctl's argv[1], which is exactly where launchctl keeps its
+    # verb: a stub keyed on that POSITION answers 0 — "running" — to the
+    # `is-active` that follows a stop.
+    SUPERVISOR_BACKENDS = {
+        "LaunchAgentManager": {
+            "verb_index": 1,
+            "status_verb": "print",
+            "stopped_returncode": 113,
+            "sequence": ["bootstrap", "kickstart", "print", "bootout", "print"],
+        },
+        "SystemdUserUnitManager": {
+            "verb_index": 2,
+            "status_verb": "is-active",
+            "stopped_returncode": 3,
+            "sequence": ["daemon-reload", "start", "is-active", "stop", "is-active"],
+        },
+    }
+
+    def supervisor_backend(self, harness: str = "cursor") -> dict:
+        """Ask the PRODUCT which supervisor it selects, and stub that one.
+
+        The fixture must not carry one platform's argv shape: it asks
+        `admin_cli._wake_daemon_manager` — the same selection the CLI itself
+        makes — and keys the stub on the manager that comes back. Gating by
+        skip would delete the ubuntu runner's coverage of this CLI instead.
+        """
+        from floati import admin_cli
+
+        coordinate = DaemonCoordinate(self.root, "builder-a", harness)
+        with mock.patch.dict(os.environ, {"HOME": str(self.home)}, clear=False):
+            selected = type(admin_cli._wake_daemon_manager(coordinate)).__name__
+        self.assertIn(selected, self.SUPERVISOR_BACKENDS, selected)
+        return self.SUPERVISOR_BACKENDS[selected]
+
     def bind(self) -> tuple[int, dict]:
         return self.run_cli(
             *self.identity("bind"),
@@ -275,15 +311,19 @@ class WakeDaemonCliTests(unittest.TestCase):
         install_status, installed = self.run_cli(
             *self.identity("install", "grok-build")
         )
-        launchctl_calls: list[tuple[str, ...]] = []
+        backend = self.supervisor_backend("grok-build")
+        supervisor_calls: list[tuple[str, ...]] = []
 
-        def launchctl(argv, **_kwargs):
+        def supervisor(argv, **_kwargs):
             call = tuple(argv)
-            launchctl_calls.append(call)
-            returncode = 113 if call[1] == "print" else 0
+            supervisor_calls.append(call)
+            verb = call[backend["verb_index"]]
+            returncode = (
+                backend["stopped_returncode"] if verb == backend["status_verb"] else 0
+            )
             return subprocess.CompletedProcess(call, returncode, "", "")
 
-        with mock.patch("subprocess.run", side_effect=launchctl):
+        with mock.patch("subprocess.run", side_effect=supervisor):
             start_status, started = self.run_cli(
                 *self.identity("start", "grok-build")
             )
@@ -322,8 +362,8 @@ class WakeDaemonCliTests(unittest.TestCase):
         self.assertEqual(0, final_status)
         self.assertEqual("inactive", inactive["evidence"]["state"])
         self.assertEqual(
-            ["bootstrap", "kickstart", "print", "bootout", "print"],
-            [call[1] for call in launchctl_calls],
+            backend["sequence"],
+            [call[backend["verb_index"]] for call in supervisor_calls],
         )
 
     def test_consent_and_install_do_not_invoke_launchctl(self) -> None:

@@ -7,6 +7,8 @@ import re
 import subprocess
 import unittest
 from pathlib import Path
+
+from floati.identity_fence import HOME_PREFIX, OWNER_USERNAME
 from tests.private_artifacts import require_private_artifact
 
 
@@ -56,13 +58,33 @@ PUBLIC_ACCOUNT_NEUTRAL_FILES = (
 PRIVATE_ACCOUNT_NEUTRAL_FILES = ("docs/demo/corpus.v0.jsonl",)
 
 
-def _operator_account_name() -> str:
-    return os.environ.get("USER") or os.environ.get("LOGNAME") or Path.home().name
-
-
+# The forbidden operator coordinates are DERIVED and ANCHORED, never taken as
+# a bare account name from the ambient environment.
+#
+# This sweep used to build one pattern out of `$USER` and search for it as a
+# plain substring. On any CI host that account is called `runner`, which is
+# also an ordinary English word, and the sweep duly reported docs/DESIGN.md as
+# leaking an operator identity — on BOTH runners, in prose that names a test
+# runner. The instrument was reporting the English language.
+#
+# ⇒ A BARE ACCOUNT NAME IS A SUBSTRING TEST, NOT AN IDENTITY TEST.
+#
+# So the same coordinates tests/operator_identity.py uses are used here, for
+# the same reasons stated in that module's docstring:
+#
+# * `floati.identity_fence` — the module that owns this vocabulary and builds
+#   every governed token from hex, so neither this file nor the exporter's
+#   literal scanner ever spells one. HOME_PREFIX anchors the home-directory
+#   form; OWNER_USERNAME names the account this repository is written on and
+#   keeps naming it in the public checkout, where a literal would have been
+#   rewritten into the project's public handle.
+# * `Path.home()` — the account RUNNING the sweep, so a contributor who pastes
+#   their own home path is caught too. Its FULL path is used and never its bare
+#   basename: that is precisely the form that reported `runner` as a defect.
 PRIVATE_ACCOUNT_PATTERNS = (
-    re.compile(r"\x2fUsers/[^/\s`<>]+", re.IGNORECASE),
-    re.compile(re.escape(_operator_account_name()), re.IGNORECASE),
+    re.compile(re.escape(HOME_PREFIX) + r"[^/\s`<>]+", re.IGNORECASE),
+    re.compile(re.escape(str(Path.home())), re.IGNORECASE),
+    re.compile(re.escape(OWNER_USERNAME), re.IGNORECASE),
 )
 
 TENANT_PATTERNS = (

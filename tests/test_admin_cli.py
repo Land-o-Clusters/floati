@@ -3,11 +3,14 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import json
+import io
 import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from floati.codex_wait_contract import (
     WORKSPACE_MAP_RELATIVE,
@@ -41,6 +44,51 @@ class AdminCliTests(unittest.TestCase):
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict:
         self.assertEqual("", result.stderr, result.stderr)
         return json.loads(result.stdout)
+
+    def test_chart_live_tty_calls_the_product_harbor_map(self) -> None:
+        """Catches the live flag routing a TTY back through the static text twin."""
+        from floati.admin_cli import _chart
+
+        registered = self.run_cli(
+            "register", "--root", str(self.root), "architect-a", "--harness", "architect"
+        )
+        self.assertEqual(0, registered.returncode, registered.stderr)
+        declarations = self.base / "live-declared.json"
+        declarations.write_text(
+            json.dumps(
+                {
+                    "schema_version": 0,
+                    "roots": [{
+                        "bus_id": "fleet", "root": str(self.root),
+                        "architect_node": "architect-a", "downstream": [],
+                    }],
+                }
+            ) + "\n",
+            encoding="utf-8",
+        )
+
+        class TTY(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        input_stream = TTY()
+        output_stream = TTY()
+        with (
+            patch("floati.admin_cli.sys.stdin", input_stream),
+            patch("floati.admin_cli.sys.stderr", output_stream),
+            patch("floati.tui_chart.run_live_harbor_map", return_value=0) as live,
+        ):
+            status, artifact, code = _chart(
+                SimpleNamespace(
+                    declared_roots=str(declarations), live=True, json=False
+                )
+            )
+
+        self.assertEqual(("ok", 0), (status, code))
+        live.assert_called_once()
+        self.assertIs(input_stream, live.call_args.kwargs["input_stream"])
+        self.assertIs(output_stream, live.call_args.kwargs["output_stream"])
+        self.assertEqual(artifact, live.call_args.kwargs["snapshot_loader"]())
 
     def test_register_and_retire_compose_the_nested_workspace_contract(self) -> None:
         """Catches CLI registration bypassing B2 workspace creation or retention."""
@@ -144,6 +192,10 @@ class AdminCliTests(unittest.TestCase):
         before = ledger.stat()
 
         chart = self.run_cli("chart", "--declared-roots", str(declarations), "--json")
+        chart_plain = self.run_cli("chart", "--declared-roots", str(declarations))
+        chart_live_non_tty = self.run_cli(
+            "chart", "--declared-roots", str(declarations), "--live"
+        )
         survey = self.run_cli(
             "survey", "--declared-roots", str(declarations),
             "--search-path", str(self.base), "--json",
@@ -151,6 +203,14 @@ class AdminCliTests(unittest.TestCase):
 
         self.assertEqual(0, chart.returncode, chart.stderr)
         self.assertEqual("declared_roots_and_ledgers", self.artifact(chart)["evidence"]["source"])
+        self.assertEqual(0, chart_plain.returncode, chart_plain.stderr)
+        self.assertTrue(chart_plain.stderr.startswith("FLOATI // MULTI-BUS HARBOR CHART\n"))
+        self.assertEqual("ok", json.loads(chart_plain.stdout)["status"])
+        self.assertEqual(0, chart_live_non_tty.returncode, chart_live_non_tty.stderr)
+        self.assertTrue(
+            chart_live_non_tty.stderr.startswith("FLOATI // MULTI-BUS HARBOR CHART\n")
+        )
+        self.assertEqual("ok", json.loads(chart_live_non_tty.stdout)["status"])
         self.assertEqual(0, survey.returncode, survey.stderr)
         self.assertEqual("explicit_user_request", self.artifact(survey)["evidence"]["invocation"])
         after = ledger.stat()
@@ -169,6 +229,8 @@ class AdminCliTests(unittest.TestCase):
                 self.assertEqual(0, result.returncode, result.stderr)
                 self.assertIn(phrase, result.stdout)
                 self.assertNotIn("DRAFT -", result.stdout)
+                if arguments == ("chart", "--help"):
+                    self.assertIn("--live", result.stdout)
 
     def test_wake_arm_explicitly_transfers_one_workspace_to_one_session(self) -> None:
         registered = self.run_cli(

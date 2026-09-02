@@ -46,8 +46,38 @@ def _actor(event: Mapping[str, object]) -> Optional[str]:
 def _derived_harbor(
     events: Sequence[Mapping[str, object]],
 ) -> tuple[Tuple[Mapping[str, object], ...], Tuple[Mapping[str, object], ...]]:
-    del events
-    return (), ()
+    nodes_by_bus: dict[str, set[str]] = {}
+    relationships: set[tuple[str, str]] = set()
+    for event in events:
+        source_bus = event.get("source_bus")
+        sender = event.get("sender")
+        target_bus = event.get("target_bus")
+        recipient = event.get("recipient")
+        if not all(
+            isinstance(value, str) and value
+            for value in (source_bus, sender, target_bus, recipient)
+        ):
+            continue
+        nodes_by_bus.setdefault(source_bus, set()).add(sender)
+        nodes_by_bus.setdefault(target_bus, set()).add(recipient)
+        if source_bus != target_bus:
+            relationships.add((source_bus, target_bus))
+    buses = tuple(
+        {
+            "bus_id": bus_id,
+            "architect_node": "",
+            "nodes": tuple(
+                {"id": node_id, "role": None}
+                for node_id in sorted(nodes_by_bus[bus_id])
+            ),
+        }
+        for bus_id in sorted(nodes_by_bus)
+    )
+    edges = tuple(
+        {"source": source, "target": target}
+        for source, target in sorted(relationships)
+    )
+    return buses, edges
 
 
 def _harbor(

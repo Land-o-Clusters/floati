@@ -757,5 +757,222 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertEqual(21, len(state["hits"]))
 
 
+class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
+    """IN-6d — the waiter must follow its consent ledger by PATH, not by one snapshot.
+
+    ``run_stop_waiter`` reads the consent receipt exactly once, before the poll
+    loop, and every later decision rides that one in-memory snapshot: the wait
+    deadline and the ``consent_receipt_id`` written into each session claim.
+    The consent ledger path is never re-stated and its ``(st_dev, st_ino)`` is
+    never observed, so a ledger repair, rotation or restore that replaces the
+    file under a running waiter is invisible to it.
+    """
+
+    CONSENT_RELATIVE = public_ids.compose(
+        "receipts/codex-wait-consent/",
+        public_ids.ledger(public_ids.builder("floati")),
+    )
+    REOPEN_KIND = "codex_wait_reopen_fact"
+    REOPEN_FIELDS = {
+        "schema_version",
+        "kind",
+        "tenant_id",
+        "timestamp",
+        "node_id",
+        "session_digest",
+        "ledger",
+        "before",
+        "after",
+        "waited_seconds",
+        "outcome",
+        "invocation_id",
+    }
+
+    def consent_ledger_path(self) -> Path:
+        return self.root.resolve_relative(self.CONSENT_RELATIVE)
+
+    def reopen_facts_path(self) -> Path:
+        return self.root.resolve_relative(
+            Path("state/codex-wait")
+            / public_ids.builder("floati")
+            / "reopen.jsonl"
+        )
+
+    def reopen_facts(self) -> list[dict]:
+        path = self.reopen_facts_path()
+        if not path.exists():
+            return []
+        return [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line
+        ]
+
+    @staticmethod
+    def identity(path: Path) -> dict[str, int]:
+        status = path.stat()
+        return {"device": status.st_dev, "inode": status.st_ino}
+
+    def replace_ledger(self, path: Path, payload: bytes) -> tuple[dict, dict]:
+        """Repair/rotate/restore exactly as an operator would: a new inode."""
+
+        before = self.identity(path)
+        temporary = path.with_name(path.name + ".repaired")
+        temporary.write_bytes(payload)
+        os.replace(temporary, path)
+        after = self.identity(path)
+        self.assertNotEqual(before, after)
+        return before, after
+
+    def exhaustion_rows(self) -> list[dict]:
+        return read_records_snapshot(
+            self.root,
+            public_ids.compose(
+                "receipts/codex-wait-exhaustion/",
+                public_ids.ledger(public_ids.builder("floati")),
+            ),
+            allowed_kinds={"codex_wait_exhaustion_receipt"},
+        )
+
+    def exit_rows(self) -> list[dict]:
+        relative = public_ids.compose(
+            "receipts/wake-waiter-exit/",
+            public_ids.ledger(public_ids.builder("floati")),
+        )
+        if not self.root.resolve_relative(relative).exists():
+            return []
+        return read_records_snapshot(
+            self.root, relative, allowed_kinds={"wake_waiter_exit_receipt"}
+        )
+
+    def run_with_replacement(self, payload: bytes) -> tuple[io.StringIO, tuple[dict, dict]]:
+        from floati.codex_wait import run_stop_waiter
+
+        consent_path = self.consent_ledger_path()
+        clock = [0.0]
+        swapped: list[tuple[dict, dict]] = []
+
+        def sleep(seconds: float) -> None:
+            clock[0] += seconds
+            if not swapped:
+                swapped.append(self.replace_ledger(consent_path, payload))
+
+        stdout = io.StringIO()
+        status = run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload={
+                "cwd": str(self.workspace),
+                "session_id": "thread-reopen",
+            },
+            stdout=stdout,
+            stderr=io.StringIO(),
+            monotonic=lambda: clock[0],
+            sleep=sleep,
+            poll_interval_seconds=1.0,
+        )
+        self.assertEqual(0, status)
+        self.assertEqual(1, len(swapped), "the consent ledger was never replaced")
+        return stdout, swapped[0]
+
+    def test_repaired_consent_ledger_is_reopened_and_the_wait_continues_in_place(
+        self,
+    ) -> None:
+        """A repair that lengthens the deadline must be adopted from the ORIGINAL start."""
+
+        from floati.codex_wait_contract import CodexWaitConsentLedger
+
+        consent_path = self.consent_ledger_path()
+        original = consent_path.read_bytes()
+        CodexWaitConsentLedger(self.root).arm(
+            self.participant.binding,
+            hook_timeout_seconds=10,
+            wait_deadline_seconds=5,
+            idempotency_key="repaired-consent",
+        )
+        repaired = consent_path.read_bytes()
+        self.assertNotEqual(original, repaired)
+        self.replace_ledger(consent_path, original)
+
+        stdout, (before, after) = self.run_with_replacement(repaired)
+
+        decision = json.loads(stdout.getvalue())
+        self.assertEqual("block", decision["decision"])
+        self.assertIn("deadline exhausted", decision["reason"])
+        rows = self.exhaustion_rows()
+        self.assertEqual(1, len(rows))
+        self.assertEqual(
+            5,
+            rows[0]["waited_seconds"],
+            "the waiter exhausted on the pre-repair deadline it can no longer read",
+        )
+        facts = self.reopen_facts()
+        self.assertEqual(1, len(facts), "no typed reopen record was written")
+        fact = facts[0]
+        self.assertEqual(self.REOPEN_FIELDS, set(fact))
+        self.assertEqual(1, fact["schema_version"])
+        self.assertEqual(self.REOPEN_KIND, fact["kind"])
+        self.assertEqual("demo-fleet", fact["tenant_id"])
+        self.assertEqual(public_ids.builder("floati"), fact["node_id"])
+        self.assertEqual(
+            Path(self.CONSENT_RELATIVE).as_posix(), fact["ledger"]
+        )
+        self.assertEqual(before, fact["before"])
+        self.assertEqual(after, fact["after"])
+        self.assertEqual("rearmed", fact["outcome"])
+        self.assertEqual(
+            1,
+            fact["waited_seconds"],
+            "the reopen must record the position the wait continued from",
+        )
+
+    def test_restored_consent_ledger_without_this_workspace_releases_the_seat(
+        self,
+    ) -> None:
+        """A restore that removes consent must stop the hold, not run to exhaustion."""
+
+        stdout, (before, after) = self.run_with_replacement(b"")
+
+        self.assertEqual(
+            "",
+            stdout.getvalue(),
+            "the waiter kept blocking the turn against a consent receipt that is gone",
+        )
+        self.assertEqual([], self.exhaustion_rows())
+        exits = self.exit_rows()
+        self.assertEqual(1, len(exits))
+        self.assertEqual("consent_withdrawn", exits[0]["reason_code"])
+        self.assertEqual(1, exits[0]["waited_seconds"])
+        facts = self.reopen_facts()
+        self.assertEqual(1, len(facts), "no typed reopen record was written")
+        fact = facts[0]
+        self.assertEqual(self.REOPEN_FIELDS, set(fact))
+        self.assertEqual(self.REOPEN_KIND, fact["kind"])
+        self.assertEqual(before, fact["before"])
+        self.assertEqual(after, fact["after"])
+        self.assertEqual("consent_withdrawn", fact["outcome"])
+        self.assertEqual(1, fact["waited_seconds"])
+
+    def test_an_unreplaced_consent_ledger_records_no_reopen(self) -> None:
+        """The watch must not fire on ordinary in-place appends or a quiet wait."""
+
+        from floati.codex_wait import run_stop_waiter
+
+        clock = [0.0]
+        run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload={"cwd": str(self.workspace), "session_id": "thread-quiet"},
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+            monotonic=lambda: clock[0],
+            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            poll_interval_seconds=1.0,
+        )
+
+        self.assertEqual([], self.reopen_facts())
+        rows = self.exhaustion_rows()
+        self.assertEqual(1, len(rows))
+        self.assertEqual(2, rows[0]["waited_seconds"])
+
+
 if __name__ == "__main__":
     unittest.main()

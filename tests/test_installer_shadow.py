@@ -139,8 +139,8 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
         self.assertNotIn("blocked_entry", artifact)
         self.assertEqual("A floati ahead of the installed copy answered first on PATH.", artifact["reason"])
 
-    def test_partial_path_scan_is_unknown_and_names_the_unreadable_entry(self) -> None:
-        """Treating an unstattable PATH entry as none would manufacture a no-shadow claim."""
+    def test_nonexistent_path_entry_is_skipped_and_named(self) -> None:
+        """Stale shell coordinates are evidence, but they do not make the readable scan partial."""
         first = self.directory("first")
         missing = self.base / "missing"
         destination, _destination_slip = self.bundle("destination")
@@ -151,11 +151,42 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
             os.pathsep.join(str(path) for path in (first, missing, command_root)),
         )
 
-        self.assertEqual("unknown", artifact["outcome"])
-        self.assertEqual([str(first.resolve())], artifact["enumerated_roots"])
+        self.assertEqual("affirmative_none", artifact["outcome"])
+        self.assertEqual(
+            [str(first.resolve()), str(command_root.resolve())],
+            artifact["enumerated_roots"],
+        )
         self.assertEqual([], artifact["found"])
-        self.assertEqual(str(missing), artifact["blocked_entry"])
-        self.assertEqual("Some PATH entries could not be read; shadow state unknown.", artifact["reason"])
+        self.assertEqual([str(missing)], artifact["skipped_entries"])
+        self.assertNotIn("blocked_entry", artifact)
+        self.assertEqual("Every PATH entry was checked; the installed floati answers first.", artifact["reason"])
+
+    def test_existing_unreadable_path_entry_is_unknown_and_names_remedy(self) -> None:
+        """An existing coordinate that cannot be read must remain fail-closed and actionable."""
+        unreadable = self.directory("unreadable")
+        destination, _destination_slip = self.bundle("destination")
+        command_root = destination / "scripts"
+        original_lstat = Path.lstat
+
+        def refuse_exact_entry(candidate: Path) -> os.stat_result:
+            if candidate == unreadable:
+                raise PermissionError("fixture denies this existing PATH entry")
+            return original_lstat(candidate)
+
+        with patch.object(Path, "lstat", autospec=True, side_effect=refuse_exact_entry):
+            artifact = self.observe(
+                destination,
+                os.pathsep.join((str(unreadable), str(command_root))),
+            )
+
+        self.assertEqual("unknown", artifact["outcome"])
+        self.assertEqual([], artifact["enumerated_roots"])
+        self.assertEqual([], artifact["found"])
+        self.assertEqual(str(unreadable), artifact["blocked_entry"])
+        self.assertEqual(
+            f"Fix or drop PATH entry {unreadable}, or pass a clean PATH.",
+            artifact["remedy"],
+        )
 
     def test_named_nonexistent_destination_is_a_valid_first_install_coordinate(self) -> None:
         """A lexical future destination must not make the pre-write safety check impossible."""
@@ -184,11 +215,12 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
             artifact["reason"],
         )
 
-    def test_partial_scans_are_never_promoted_to_affirmative_none(self) -> None:
+    def test_existing_invalid_entries_are_never_promoted_to_affirmative_none(self) -> None:
         """Characterizes the law the operator note must state: an incomplete scan
         never becomes an affirmative all-clear."""
         destination, _destination_slip = self.bundle("destination")
-        unreadable = self.base / "absent"
+        unreadable = self.base / "not-a-directory"
+        unreadable.write_bytes(b"present but unusable\n")
 
         for path in (
             str(unreadable),

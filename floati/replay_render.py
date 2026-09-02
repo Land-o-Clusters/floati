@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from typing import Callable, Mapping, Sequence, TextIO
 
@@ -176,10 +177,12 @@ def play_replay(
     *,
     speed: object,
     stream: TextIO,
+    input_stream: TextIO = sys.stdin,
     plain: bool = False,
     sleeper: Callable[[float], None] = time.sleep,
     term: str | None = None,
     terminal_size: os.terminal_size | None = None,
+    terminal_response: bytes | None = None,
 ) -> None:
     rate = validate_speed(speed)
     interactive = bool(getattr(stream, "isatty", lambda: False)())
@@ -202,31 +205,55 @@ def play_replay(
         color_tier = "256"
     else:
         color_tier = "16"
-    if "CI" in os.environ:
-        frame = render_replay_cinema_frame(
-            artifact,
-            len(events),
-            width=width,
-            height=height,
-            speed=rate,
-            color_tier=color_tier,
+    from .tui_capabilities import probe_terminal_capabilities
+    from .tui_protocol import kitty_keyboard_mode, mouse_tracking
+
+    mouse_enabled = False
+    kitty_keyboard_enabled = False
+    try:
+        capability_receipt, _remainder = probe_terminal_capabilities(
+            input_stream,
+            stream,
+            environment=os.environ,
+            preloaded_response=terminal_response,
         )
-        stream.write("\x1b[?2026h\x1b[H" + frame + "\x1b[J\x1b[?2026l")
+        mouse_enabled = True
+        stream.write(mouse_tracking(True).decode("ascii"))
+        if capability_receipt.enabled("kitty_keyboard"):
+            kitty_keyboard_enabled = True
+            stream.write(kitty_keyboard_mode(True).decode("ascii"))
         stream.flush()
-        return
-    previous_elapsed = 0
-    for visible_count, event in enumerate(events, start=1):
-        elapsed = int(event["elapsed_ms"])
-        if visible_count > 1:
-            sleeper(max(0.0, elapsed - previous_elapsed) / 1000.0 / rate)
-        frame = render_replay_cinema_frame(
-            artifact,
-            visible_count,
-            width=width,
-            height=height,
-            speed=rate,
-            color_tier=color_tier,
-        )
-        stream.write("\x1b[?2026h\x1b[H" + frame + "\x1b[J\x1b[?2026l")
+        if "CI" in os.environ:
+            frame = render_replay_cinema_frame(
+                artifact,
+                len(events),
+                width=width,
+                height=height,
+                speed=rate,
+                color_tier=color_tier,
+            )
+            stream.write("\x1b[?2026h\x1b[H" + frame + "\x1b[J\x1b[?2026l")
+            stream.flush()
+            return
+        previous_elapsed = 0
+        for visible_count, event in enumerate(events, start=1):
+            elapsed = int(event["elapsed_ms"])
+            if visible_count > 1:
+                sleeper(max(0.0, elapsed - previous_elapsed) / 1000.0 / rate)
+            frame = render_replay_cinema_frame(
+                artifact,
+                visible_count,
+                width=width,
+                height=height,
+                speed=rate,
+                color_tier=color_tier,
+            )
+            stream.write("\x1b[?2026h\x1b[H" + frame + "\x1b[J\x1b[?2026l")
+            stream.flush()
+            previous_elapsed = elapsed
+    finally:
+        if kitty_keyboard_enabled:
+            stream.write(kitty_keyboard_mode(False).decode("ascii"))
+        if mouse_enabled:
+            stream.write(mouse_tracking(False).decode("ascii"))
         stream.flush()
-        previous_elapsed = elapsed

@@ -6,7 +6,10 @@ Work-column close is host-composition: host_kind=herdr plus a closed inner
 adapter identity in {codex, claude, pi}. A standalone worker name ``herdr``
 never exists.
 
-Live executable named for this row: /opt/homebrew/bin/herdr
+The live executable for this row is OPERATOR-DECLARED in
+``tests/harness_declarations.json`` and is never searched for. Where it is not
+declared, or the declared path is not one canonical executable on this host,
+the live test still runs and asserts the typed absence instead. It never skips.
 """
 
 from __future__ import annotations
@@ -14,13 +17,10 @@ from __future__ import annotations
 import importlib
 import subprocess
 import unittest
-from pathlib import Path
 
 from floati.adapters.herdr import HERDR_PROTOCOL_VERSION, HerdrClientAdapter
+from tests import harness_declaration
 from tests.test_roster_adapters import ROSTER
-
-
-HERDR_EXECUTABLE = Path("/opt/homebrew/bin/herdr")
 
 
 class ObservationClientFenceTests(unittest.TestCase):
@@ -42,9 +42,13 @@ class LiveExecutableTests(unittest.TestCase):
     """C-row: live executable named and launched."""
 
     def test_named_herdr_binary_reports_version(self) -> None:
-        self.assertTrue(HERDR_EXECUTABLE.is_file(), f"missing {HERDR_EXECUTABLE}")
+        executable = harness_declaration.live_executable_or_typed_absence(
+            self, "herdr"
+        )
+        if executable is None:
+            return
         completed = subprocess.run(
-            [str(HERDR_EXECUTABLE), "--version"],
+            [str(executable), "--version"],
             check=False,
             capture_output=True,
             text=True,

@@ -140,6 +140,25 @@ class RegattaR2MachineTwinTests(unittest.TestCase):
 
 
 class RegattaR2CinemaTests(unittest.TestCase):
+    def test_schema_v0_fixture_accepts_legacy_and_additive_route_facts(self) -> None:
+        """Catches route activation recutting schema v0 or rejecting its legacy shape."""
+        from floati.tui_replay import ReplayCinemaController
+
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures/replay/v0/route-facts-additive.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        legacy = ReplayCinemaController(fixture["legacy"]).state(1)
+        additive = ReplayCinemaController(fixture["additive"]).state(1)
+
+        self.assertEqual(0, fixture["legacy"]["replay_schema_version"])
+        self.assertEqual(0, fixture["additive"]["replay_schema_version"])
+        self.assertEqual((), legacy.buses)
+        self.assertIsNone(legacy.pulse)
+        self.assertEqual(["fleet-a"], [bus["bus_id"] for bus in additive.buses])
+        self.assertEqual(("builder-a", "builder-a"), (additive.pulse.sender, additive.pulse.recipient))
+
     def test_replay_state_keeps_order_routes_and_fault_identity(self) -> None:
         """Catches replay motion or faults being inferred from wall-clock state."""
         from floati.tui_replay import ReplayCinemaController
@@ -289,7 +308,15 @@ class RegattaR2CinemaTests(unittest.TestCase):
                 observed[speed].append(args[1])
                 return render_replay_cinema_frame(*args, **kwargs)
 
-            with patch(
+            # The moving path is the subject here — one frame per event and one
+            # sleep between them. `play_replay` reads `CI` from the ambient
+            # environment and renders a single settled frame when it is set, so
+            # this test read the settled path on every CI host. The environment
+            # is declared, the same way the settled sibling below declares its
+            # own; the product's rule is untouched.
+            with patch.dict(
+                "os.environ", {"TERM": "xterm-256color"}, clear=True
+            ), patch(
                 "floati.replay_render.render_replay_cinema_frame",
                 side_effect=record_frame,
             ):

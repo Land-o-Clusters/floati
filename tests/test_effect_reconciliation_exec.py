@@ -40,6 +40,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         self.protocol_path, self.observer_path = copy_exact_observer_source_package(
             self.base / "trusted" / "floati",
         )
+        # Observed before any test body runs: whether this host can reconcile.
+        self.interpreter_trust_refusal = self.observed_interpreter_trust()
 
     @staticmethod
     def exec_module():
@@ -190,6 +192,80 @@ class EffectReconciliationExecTests(unittest.TestCase):
             return launcher.observe_effect_reconciliation(
                 request, timeout_seconds=timeout_seconds,
             )
+
+    # ── the precondition every launch has, read from the product ──────────────
+    #
+    # CI-RT-2 ruled that the interpreter-trust predicate does not move: the
+    # observer launches only under a root-owned interpreter every one of whose
+    # ancestors is a root-owned real directory writable by nobody else.  A host
+    # that fails it — GitHub's setup-python tool cache, Homebrew — is not a
+    # broken host, and the product's correct answer there is a TYPED REFUSAL.
+    #
+    # Every test below that asks what a LAUNCHED observer returns must therefore
+    # first observe whether a launch is available at all; otherwise it asserts
+    # the outcome of a reconciliation that never ran.  The decision is read from
+    # the launcher's own function.  Nothing here recomputes the predicate.
+
+    _REFUSAL_OBSERVATION_FIELDS = frozenset({
+        "interpreter_path", "failing_component", "component_uid", "component_mode",
+    })
+
+    def observed_interpreter_trust(self) -> Optional[dict]:
+        """The launcher's own decision for this host: None when it trusts this
+        interpreter, otherwise the observation it refuses with."""
+        launcher = self.exec_module()
+        try:
+            launcher._trusted_interpreter()
+        except launcher._InterpreterUntrusted as refusal:
+            return refusal.observation
+        return None
+
+    @staticmethod
+    def forbidden_spawn(*_arguments, **_keywords) -> int:
+        raise AssertionError("untrusted interpreter reached posix_spawn")
+
+    def untrusted_host_refuses_reconciliation(self, request=None) -> bool:
+        """True on a host whose interpreter the product refuses — after asserting
+        that the typed refusal is the whole of what happens here.
+
+        This is not a skip.  The untrusted branch asserts the launcher's reason
+        code, its four observation fields, the absence of any confirmation or
+        measured spend, that the doctor projection reports the SAME observation
+        as a warning naming the component it refuses, and that no child was ever
+        spawned.  A launcher that refused for a different reason, refused with
+        different evidence, disagreed with its own projection, or spawned anyway
+        still REDs.
+        """
+        observation = self.interpreter_trust_refusal
+        if observation is None:
+            return False
+        from floati.doctor import project_effect_reconciliation_interpreter_trust
+
+        self.assertEqual(self._REFUSAL_OBSERVATION_FIELDS, frozenset(observation))
+        finding = project_effect_reconciliation_interpreter_trust()
+        self.assertEqual(
+            ("effect_reconciliation_interpreter_trust", "warning"),
+            (finding["code"], finding["severity"]),
+        )
+        self.assertEqual(observation, finding["interpreter_trust"])
+        # The copy itself is the doctor's own test to pin.  What binds HERE is
+        # that the warning still carries its evidence: comparing it against the
+        # product's own format string would compare the constant with itself.
+        self.assertIn(str(observation["failing_component"]), finding["detail"])
+        self.assertIsNotNone(finding["remediation"])
+        result = self.observe(
+            self.request_none() if request is None else request,
+            spawn=self.forbidden_spawn,
+        )
+        self.assertEqual(
+            ("unknown", "effect_reconciliation_interpreter_untrusted"),
+            (result.outcome, result.reason_code),
+        )
+        self.assertEqual(observation, result.observation)
+        self.assertIsNone(result.confirmation)
+        self.assertIsNone(result.measured_spend)
+        self.assertEqual("unknown", result.spend_status)
+        return True
 
     @staticmethod
     def insert_after_future(source: str, injected: str) -> str:
@@ -350,8 +426,34 @@ class EffectReconciliationExecTests(unittest.TestCase):
             os.fstat(descriptor)
         testcase.assertEqual(errno.EBADF, caught.exception.errno)
 
+    def assert_symlinked_source_never_reaches_spawn(self) -> None:
+        """Source selection is refused before any interpreter is consulted, so
+        this half holds on a host that cannot reconcile as well as one that can."""
+        launcher = self.exec_module()
+        aliases = self.base / "source-aliases"
+        aliases.mkdir()
+        protocol_alias = aliases / self.protocol_path.name
+        observer_alias = aliases / self.observer_path.name
+        installed = Path(__file__).parents[1] / "floati"
+        protocol_alias.symlink_to(installed / protocol_alias.name)
+        observer_alias.symlink_to(installed / observer_alias.name)
+        with mock.patch.object(
+            launcher.protocol_source, "__file__", str(protocol_alias),
+        ), mock.patch.object(
+            launcher.observer_source, "__file__", str(observer_alias),
+        ), mock.patch.object(
+            launcher.os, "posix_spawn",
+            side_effect=AssertionError("symlinked source reached spawn"),
+        ) as forbidden_spawn:
+            refused = launcher.observe_effect_reconciliation(self.request_none())
+        self.assertEqual("observer_launch_failed", refused.reason_code)
+        forbidden_spawn.assert_not_called()
+
     def test_exec_uses_opened_protocol_and_observer_bytes_after_path_replacement(self) -> None:
         """Catches late pathname replacement selecting unhashed project code."""
+        if self.untrusted_host_refuses_reconciliation():
+            self.assert_symlinked_source_never_reaches_spawn()
+            return
         marker = self.base / "replacement-ran"
         replacements = self.base / "replacements"
         replacements.mkdir()
@@ -386,28 +488,15 @@ class EffectReconciliationExecTests(unittest.TestCase):
         }
         self.assertTrue({3, 4, 5}.isdisjoint(closed))
 
-        launcher = self.exec_module()
-        aliases = self.base / "source-aliases"
-        aliases.mkdir()
-        protocol_alias = aliases / self.protocol_path.name
-        observer_alias = aliases / self.observer_path.name
-        installed = Path(__file__).parents[1] / "floati"
-        protocol_alias.symlink_to(installed / protocol_alias.name)
-        observer_alias.symlink_to(installed / observer_alias.name)
-        with mock.patch.object(
-            launcher.protocol_source, "__file__", str(protocol_alias),
-        ), mock.patch.object(
-            launcher.observer_source, "__file__", str(observer_alias),
-        ), mock.patch.object(
-            launcher.os, "posix_spawn",
-            side_effect=AssertionError("symlinked source reached spawn"),
-        ) as forbidden_spawn:
-            refused = launcher.observe_effect_reconciliation(self.request_none())
-        self.assertEqual("observer_launch_failed", refused.reason_code)
-        forbidden_spawn.assert_not_called()
+        self.assert_symlinked_source_never_reaches_spawn()
 
     def test_exec_trusts_only_frozen_root_owned_canonical_interpreter(self) -> None:
         """Catches mutable or noncanonical interpreter selection reaching spawn."""
+        if self.untrusted_host_refuses_reconciliation():
+            # Every _freeze_trusted_interpreter candidate below would raise here
+            # for the ANCESTOR reason, so the negative loop would witness nothing.
+            # The typed refusal asserted above is this host's whole answer.
+            return
         launcher = self.exec_module()
         trusted = launcher._trusted_interpreter()
         expected = Path(os.path.realpath(sys.executable))
@@ -484,6 +573,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
             "effect_reconciliation_protocol.py", "effect_reconciliation_observer.py",
         ):
             with self.subTest(source=selected_name):
+                if self.untrusted_host_refuses_reconciliation():
+                    continue
                 package = self.base / ("mutate-" + selected_name) / "floati"
                 protocol_path, observer_path = copy_exact_observer_source_package(package)
                 marker = package.parent / "project-code-ran"
@@ -519,6 +610,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_loader_uses_no_path_import_or_meta_path_finder(self) -> None:
         """Catches descriptor-loaded sources being resolved by an import finder."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         target_proof = self.base / "target-finder-proof"
         control_proof = self.base / "control-finder-proof"
         control = self.base / "exec_positive_control.py"
@@ -584,6 +677,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_local_repository_is_the_only_optional_child_descriptor(self) -> None:
         """Catches fd 6 crossing exec for any adapter except git_local."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         real_spawn = os.posix_spawn
         target_sets: list[set[int]] = []
 
@@ -609,6 +704,10 @@ class EffectReconciliationExecTests(unittest.TestCase):
     def test_exec_local_repository_refuses_symlinked_ancestor_and_accepts_canonical_path(self) -> None:
         """Catches ancestor symlinks bypassing final-component O_NOFOLLOW."""
         repository, digest = self.make_repository()
+        if self.untrusted_host_refuses_reconciliation(
+            self.request_local(repository, digest),
+        ):
+            return
         canonical = self.observe(self.request_local(repository, digest))
         self.assertEqual(
             ("unknown", "reconciliation_inconclusive"),
@@ -668,6 +767,13 @@ class EffectReconciliationExecTests(unittest.TestCase):
         scenarios = ("success", "malformed", "timeout", "launch_failure")
         for scenario in scenarios:
             with self.subTest(scenario=scenario):
+                before = self.open_descriptors()
+                if self.untrusted_host_refuses_reconciliation():
+                    # The refusal opened both bound sources before it refused, so
+                    # the descriptor claim is live on this host too — it is the
+                    # only one of these four scenarios that can be reached.
+                    self.assertEqual(before, self.open_descriptors())
+                    continue
                 package = self.base / ("cleanup-" + scenario) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
@@ -720,6 +826,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         cases = ("close", "decode", "interaction", "reap", "launch_unwind")
         for case in cases:
             with self.subTest(case=case):
+                if self.untrusted_host_refuses_reconciliation():
+                    continue
                 package = self.base / ("cleanup-failure-" + case) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
@@ -811,6 +919,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_constructor_failure_retains_raw_pid_until_definitive_reap(self) -> None:
         """Catches wrapper construction losing ownership of a live spawned PID."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         launcher = self.exec_module()
         captured_pids: list[int] = []
         real_spawn = os.posix_spawn
@@ -846,6 +956,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_cleanup_failure_precedes_and_chains_pending_base_exception(self) -> None:
         """Catches a pending BaseException masking close or reap cleanup failure."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         launcher = self.exec_module()
 
         class InteractionBase(BaseException):
@@ -917,6 +1029,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_unrelated_descriptors_and_ambient_environment_do_not_cross_exec(self) -> None:
         """Catches ambient descriptors, roots, secrets, or ordinary values reaching child code."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         original = os.open(self.base / "hostile", os.O_WRONLY | os.O_CREAT, 0o600)
         hostile = fcntl.fcntl(original, fcntl.F_DUPFD_CLOEXEC, 20)
         os.close(original)
@@ -1012,6 +1126,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         """Catches acceptance without lawful result, exact PID exit, and EOF."""
         repository, digest = self.make_repository()
         request = self.request_local(repository, digest)
+        if self.untrusted_host_refuses_reconciliation(request):
+            return
         result = self.observe(request)
         self.assertEqual(
             ("unknown", "reconciliation_inconclusive"),
@@ -1056,6 +1172,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         }
         for mode, (suffix, reason) in modes.items():
             with self.subTest(mode=mode):
+                if self.untrusted_host_refuses_reconciliation():
+                    continue
                 package = self.base / ("hostile-" + mode) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
@@ -1105,6 +1223,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
             ),
         ):
             with self.subTest(mode=mode):
+                if self.untrusted_host_refuses_reconciliation():
+                    continue
                 package = self.base / ("hostile-" + mode) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
@@ -1124,6 +1244,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         )
         for mode, body, reason in cases:
             with self.subTest(mode=mode):
+                if self.untrusted_host_refuses_reconciliation():
+                    continue
                 package = self.base / ("lifecycle-" + mode) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
@@ -1142,6 +1264,10 @@ class EffectReconciliationExecTests(unittest.TestCase):
     def test_exec_timeout_reaps_observer_and_kills_term_ignoring_descendant_group(self) -> None:
         """Catches a separately grouped Git descendant surviving parent timeout cleanup."""
         repository, digest = self.make_repository()
+        if self.untrusted_host_refuses_reconciliation(
+            self.request_local(repository, digest),
+        ):
+            return
         descendant_pid = self.base / "term-ignoring-descendant.pid"
         helper = self.base / "hostile-git"
         helper.write_text(
@@ -1235,6 +1361,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
     def test_exec_result_binding_cannot_be_substituted_between_children(self) -> None:
         """Catches a returned PID naming a different child than the channel peer."""
+        if self.untrusted_host_refuses_reconciliation():
+            return
         real_spawn = os.posix_spawn
         actual_children: list[int] = []
 
