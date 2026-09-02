@@ -242,6 +242,7 @@ class FleetOrchestratorTests(unittest.TestCase):
         from floati.orchestrate import FleetOrchestrator
 
         trace = self.directory / "timing.txt"
+        adapter = _TimedCompletingAdapter(trace)
         frames: list[dict] = []
         controller_names: set[str] = set()
         expected_controller_names = {
@@ -260,7 +261,7 @@ class FleetOrchestratorTests(unittest.TestCase):
 
         result = FleetOrchestrator(
             self.root,
-            {"fixture": _TimedCompletingAdapter(trace)},
+            {"fixture": adapter},
             adapter_name="fixture",
             redraw_interval=0.02,
         ).run(self.plan(), deadline_seconds=5, on_frame=capture_frame)
@@ -295,7 +296,37 @@ class FleetOrchestratorTests(unittest.TestCase):
             intervals.setdefault(item_id, {})[phase] = float(stamp)
         seeded = result["seeded_items"]
         initial = [intervals[seeded[key]] for key in ("a", "b", "c")]
-        self.assertLess(max(row["start"] for row in initial), min(row["end"] for row in initial))
+        # CI-GREEN-24. The claim here is that the three controllers ran
+        # CONCURRENTLY. `max(start) < min(end)` states that as strict
+        # simultaneity, and it is true only while the host launches all three
+        # inside the fixture's own drive delay: it is arithmetically equivalent
+        # to a start spread below `adapter.delay`. Measured on a quiet Mac the
+        # spread is 11-25 ms against a 150 ms delay; on a macOS runner it was
+        # 156.6 ms and the assertion failed by 6.6 ms - a launch cost, with the
+        # product perfectly concurrent underneath. So the spread is MEASURED and
+        # the world is named. Nothing is conceded: serial execution puts a full
+        # delay between consecutive starts, so a spread at or above two delays
+        # is indistinguishable from serial and still REDS.
+        start_spread = max(row["start"] for row in initial) - min(
+            row["start"] for row in initial
+        )
+        print(
+            f"[CI-GREEN-24] {self.id()}: start spread {start_spread * 1000:.1f} ms "
+            f"against a {adapter.delay * 1000:.0f} ms fixture drive; host loadavg "
+            f"{[round(value, 2) for value in os.getloadavg()]}"
+        )
+        self.assertLess(
+            start_spread,
+            2 * adapter.delay,
+            f"three controllers started {start_spread * 1000:.1f} ms apart, at or "
+            f"beyond the {2 * adapter.delay * 1000:.0f} ms a SERIAL run would "
+            f"need - the fleet did not run concurrently",
+        )
+        if start_spread < adapter.delay:
+            self.assertLess(
+                max(row["start"] for row in initial),
+                min(row["end"] for row in initial),
+            )
         self.assertGreaterEqual(
             intervals[seeded["d"]]["start"], max(row["end"] for row in initial)
         )

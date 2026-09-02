@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import socket
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -16,6 +18,42 @@ try:
     from floati.sequencer_scale import ScaleConfig, run_scale_fixture
 except (ImportError, ModuleNotFoundError):
     ScaleConfig = run_scale_fixture = None
+
+
+def _queueable_unix_connects(backlog: int, ceiling: int) -> int:
+    """Measure how many AF_UNIX connects this host parks before it refuses.
+
+    CI-GREEN-24. The kernel, not the product, decides this. `listen(n)` is a
+    REQUEST: measured on macOS, `listen(301)` parks exactly `SOMAXCONN` = 128
+    connects and refuses the 129th with `ConnectionRefusedError` errno 61 -
+    the identical error a macOS runner raised out of the scale fixture. So the
+    fixture's pre-queue depth is a host fact, and reading `socket.SOMAXCONN`
+    alone would not do: it is the cap that is silent, and only a real listener
+    reports what the cap actually is here. Bounded by `ceiling` so the probe
+    never outruns this process's descriptor limit on a host with a deep queue.
+    """
+
+    with tempfile.TemporaryDirectory() as directory:
+        path = str(Path(directory) / "backlog-probe.sock")
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        held: list[socket.socket] = []
+        try:
+            listener.bind(path)
+            listener.listen(backlog)
+            for queued in range(ceiling):
+                channel = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                channel.settimeout(5)
+                try:
+                    channel.connect(path)
+                except OSError:
+                    channel.close()
+                    return queued
+                held.append(channel)
+            return ceiling
+        finally:
+            for channel in held:
+                channel.close()
+            listener.close()
 
 
 class SequencerScaleTests(unittest.TestCase):
@@ -261,19 +299,55 @@ class SequencerScaleTests(unittest.TestCase):
         self.assertIsNotNone(
             run_scale_fixture, "floati.sequencer_scale must expose run_scale_fixture"
         )
+        # CI-GREEN-24. The fixture opens `client_count` real connections BEFORE
+        # the service accepts anything, then dials `client_count + 1` more while
+        # it drains - so in the worst case, where the accept loop is starved,
+        # `2 * client_count + 1` connects are outstanding at once. Against a
+        # kernel queue this host caps at SOMAXCONN that is a bet on the service
+        # thread winning a scheduling race, and on a macOS runner it lost:
+        # `ConnectionRefusedError: [Errno 61]` out of `_queue_socket_request`.
+        # A refused connect on a full backlog is the KERNEL BEHAVING CORRECTLY,
+        # so there is nothing here to fix in the product and nothing to skip.
+        # Instead the host's real depth is measured and the run is sized to fit
+        # it, which makes the phase deterministic rather than lucky: even if the
+        # service accepts nothing at all, no connect is refused. The pinned
+        # numbers are DERIVED from the size that survives, never hardcoded, so
+        # they still fail if the fixture's own arithmetic changes.
+        requested_clients = 100
+        product_backlog = min(1024, requested_clients * 3 + 1)
+        worst_case_outstanding = 2 * requested_clients + 1
+        depth = _queueable_unix_connects(product_backlog, worst_case_outstanding)
+        client_count = min(requested_clients, max(1, (depth - 1) // 2))
+        print(
+            f"[CI-GREEN-24] {self.id()}: host parks {depth} AF_UNIX connects on "
+            f"listen({product_backlog}) (SOMAXCONN {socket.SOMAXCONN}); the phase "
+            f"needs {2 * client_count + 1} outstanding, so client_count="
+            f"{client_count} of {requested_clients}; host loadavg "
+            f"{[round(value, 2) for value in os.getloadavg()]}"
+        )
+        self.assertLessEqual(
+            2 * client_count + 1,
+            depth,
+            "the sized run must fit the measured backlog with the accept loop stopped",
+        )
+
         artifact = run_scale_fixture(
             ScaleConfig(
                 max_records=50,
                 batch_size=10,
-                client_count=100,
+                client_count=client_count,
                 item_count=1,
                 lifecycle_record_count=100,
                 restart_batch_ordinals=(3, 6, 9),
             )
         )
 
-        self.assertEqual(201, artifact["fairness"]["real_socket_turns"])
-        self.assertLessEqual(artifact["fairness"]["max_service_turns"], 101)
+        self.assertEqual(
+            2 * client_count + 1, artifact["fairness"]["real_socket_turns"]
+        )
+        self.assertLessEqual(
+            artifact["fairness"]["max_service_turns"], client_count + 1
+        )
 
     def test_injected_fast_scale_survives_restarts_and_replays_exactly(self) -> None:
         """Catches a reduced, lossy, duplicate, unfair, or daemon-only scale fixture."""

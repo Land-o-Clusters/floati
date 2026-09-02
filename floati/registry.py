@@ -54,10 +54,11 @@ class Registry:
                 raise ProtocolRefusal("registry_duplicate", f"node {node} is already registered")
             return record, record
 
-        coordination_lock = self.root.resolve_relative(
-            Path("receipts/wake-coordination") / node / "lane.lock"
-        )
-        with _locked_path(coordination_lock, exclusive=True):
+        coordination_relative = Path("receipts/wake-coordination") / node / "lane.lock"
+        coordination_lock = self.root.resolve_relative(coordination_relative)
+        with _locked_path(
+            coordination_lock, exclusive=True, relative=coordination_relative
+        ):
             pass
         return transact(
             self.root, self.relative_path, decide, allowed_kinds=REGISTRY_KINDS

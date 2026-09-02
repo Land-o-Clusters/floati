@@ -10,7 +10,7 @@ import os
 import sys
 import time
 from contextlib import ExitStack, contextmanager, nullcontext
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from .bus_epoch import LOCK_ORDER_LEDGER, epoch_guard, lock_order_guard
@@ -132,13 +132,69 @@ def _resolve(authority: Authority, relative: Union[Path, str], *, write: bool) -
     raise ProtocolRefusal("root_required", "a validated root or observation is required")
 
 
+def _lock_coordinate(relative: Union[Path, str]) -> str:
+    """Validate and render one lock's ROOT-RELATIVE coordinate.
+
+    A lock refusal's detail is carried in a receipt, and receipts are exported.
+    An ABSOLUTE path there would publish the host's own coordinates — an
+    account home, or one of the governed temporary prefixes — and the
+    exporter's redactor can only remove the prefixes it enumerates, so a shape
+    it has not met survives into the published artifact. A path under the root
+    is a coordinate the PRODUCT owns and may publish.
+
+    ⇒ THE FENCE IS AT CONSTRUCTION, NOT AT EXPORT. An absolute or escaping
+    coordinate is refused here, eagerly, rather than rendered now and trusted
+    to be redacted later.
+    """
+
+    text = relative.as_posix() if isinstance(relative, PurePath) else str(relative)
+    coordinate = PurePosixPath(text)
+    if not text or coordinate.is_absolute() or ".." in coordinate.parts:
+        raise ValueError(
+            "a lock coordinate must be a relative path under the root"
+        )
+    return coordinate.as_posix()
+
+
+def _lock_beside(path: Path, relative: Union[Path, str]) -> Tuple[Path, str]:
+    """The `.lock` beside a ledger, and the coordinate that names it.
+
+    Both halves come from the same pair and by the same rule, so the file a
+    caller locks and the name a refusal prints cannot drift apart.
+    """
+
+    return path.with_name(path.name + ".lock"), _lock_coordinate(relative) + ".lock"
+
+
 @contextmanager
 def _locked_path(
     path: Path, *, exclusive: bool,
+    relative: Optional[Union[Path, str]] = None,
     timeout_seconds: float = LOCK_TIMEOUT_SECONDS,
     order_tracked: bool = True,
 ) -> Iterator[None]:
-    """Take the bounded advisory lock at one already-authorized fixed path."""
+    """Take the bounded advisory lock at one already-authorized fixed path.
+
+    `relative` names the lock the way a receipt must read it — root-relative,
+    never the host path. It is inert with respect to the lock itself; it
+    decides only what a refusal is able to SAY.
+
+    It carries a default, and the default is the very basename ambiguity this
+    argument exists to remove — so the default is not the fence. The fence is
+    `tests/test_lock_refusal_coordinates.py`, which walks the AST of every
+    shipped module and requires that EVERY `_locked_path` call site pass
+    `relative`. That is deliberately stronger than making the parameter
+    required: a signature can only bind direct callers, and several test
+    doubles wrap this function with their own fixed signature and forward
+    positionally, so a required argument would break instruments without
+    making a single production path safer. *An enumeration that can be derived
+    must be derived* — and this one can.
+    """
+
+    # Eagerly, so a caller that hands over an unpublishable coordinate fails
+    # deterministically on every call rather than only under contention — the
+    # one moment when a second, unrelated failure is hardest to read.
+    coordinate = path.name if relative is None else _lock_coordinate(relative)
     order = (
         lock_order_guard(path, LOCK_ORDER_LEDGER, label="ledger")
         if order_tracked
@@ -161,7 +217,7 @@ def _locked_path(
                     if time.monotonic() >= deadline:
                         raise ProtocolRefusal(
                             "ledger_lock_timeout",
-                            f"{path.name} lock remained contended for {timeout_seconds:g} second",
+                            f"{coordinate} lock remained contended for {timeout_seconds:g} second",
                         ) from exc
                     time.sleep(LOCK_POLL_SECONDS)
                 except OSError as exc:
@@ -427,8 +483,9 @@ def append_record(authority: Authority, relative: Union[Path, str], record: Dict
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
     encoded = _encode_record(record, tenant, kinds, max_bytes=max_bytes)
+    lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
-        path.with_name(path.name + ".lock"), exclusive=True
+        lock_path, exclusive=True, relative=lock_relative
     ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         if len(existing) >= MAX_LEDGER_RECORDS:
@@ -441,8 +498,9 @@ def append_record(authority: Authority, relative: Union[Path, str], record: Dict
 def transact(authority: FloatiRoot, relative: Union[Path, str], decide: Callable[[List[Dict[str, Any]]], Tuple[Any, Optional[Dict[str, Any]]]], *, allowed_kinds: Optional[Set[str]] = None, max_bytes: int = MAX_RECORD_BYTES) -> Any:
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
+    lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
-        path.with_name(path.name + ".lock"), exclusive=True
+        lock_path, exclusive=True, relative=lock_relative
     ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         result, record = decide(existing)
@@ -472,8 +530,9 @@ def transact_records(
 
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
+    lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
-        path.with_name(path.name + ".lock"), exclusive=True
+        lock_path, exclusive=True, relative=lock_relative
     ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         result, candidates = decide(existing)
@@ -521,8 +580,9 @@ def transact_exact_frame(
 
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
+    lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
-        path.with_name(path.name + ".lock"), exclusive=True
+        lock_path, exclusive=True, relative=lock_relative
     ):
         existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
         try:
@@ -594,11 +654,12 @@ def _replace_epoch_selected(
             fault(name)
 
     with ExitStack() as stack:
-        for _relative, path, _plane, _identity in sorted(
+        for bound_relative, path, _plane, _identity in sorted(
             bound, key=lambda item: item[0].encode("utf-8")
         ):
+            lock_path, lock_relative = _lock_beside(path, bound_relative)
             stack.enter_context(
-                _locked_path(path.with_name(path.name + ".lock"), exclusive=True)
+                _locked_path(lock_path, exclusive=True, relative=lock_relative)
             )
 
         events_item = next(
@@ -727,8 +788,9 @@ def _transact_wake_hold_records(
         raise ProtocolRefusal("wake_controller_only", "wake hold testimony requires the exact controller transaction")
     path, tenant = _resolve(authority, relative, write=True)
     kinds = frozenset(WAKE_HOLD_KINDS)
+    lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
-        path.with_name(path.name + ".lock"), exclusive=True
+        lock_path, exclusive=True, relative=lock_relative
     ):
         existing = _read_path_records(path, tenant, kinds)
         digest = hashlib.sha256(_WAKE_HOLD_DELIVERY_PREIMAGE)
@@ -791,7 +853,8 @@ def _transact_effect_records(
     kinds = frozenset(EFFECT_KINDS)
     path = authority.resolve_relative(_EFFECT_RECORDS_RELATIVE)
     tenant = authority.tenant_id
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    lock_path, lock_relative = _lock_beside(path, _EFFECT_RECORDS_RELATIVE)
+    with _locked_path(lock_path, exclusive=True, relative=lock_relative):
         existing = _read_path_records(path, tenant, kinds)
         result, record = decide(existing)
         if record is not None:
@@ -847,7 +910,10 @@ def _transact_thread_observation_records(
     kinds = frozenset(THREAD_OBSERVATION_KINDS)
     path = authority.resolve_relative(_THREAD_OBSERVATION_RECORDS_RELATIVE)
     tenant = authority.tenant_id
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=True):
+    lock_path, lock_relative = _lock_beside(
+        path, _THREAD_OBSERVATION_RECORDS_RELATIVE
+    )
+    with _locked_path(lock_path, exclusive=True, relative=lock_relative):
         existing = _read_path_records(path, tenant, kinds)
         result, record = decide(existing)
         if record is not None:
@@ -881,7 +947,8 @@ def read_records(authority: Authority, relative: Union[Path, str], *, allowed_ki
         # appends plus strict final-line validation give a safe snapshot
         # without creating a lock file in the observed tenant.
         return _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
-    with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+    lock_path, lock_relative = _lock_beside(path, relative)
+    with _locked_path(lock_path, exclusive=False, relative=lock_relative):
         return _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
 
 
@@ -934,7 +1001,8 @@ def read_records_compatible(
             path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
         )
     else:
-        with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+        lock_path, lock_relative = _lock_beside(path, relative)
+        with _locked_path(lock_path, exclusive=False, relative=lock_relative):
             records = _read_path_records(
                 path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
             )
@@ -1185,7 +1253,8 @@ class VerifiedLedgerCursor:
             )
         if isinstance(authority, TenantObservation):
             return self._read_locked(path, tenant, kinds, domain, max_bytes)
-        with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+        lock_path, lock_relative = _lock_beside(path, relative)
+        with _locked_path(lock_path, exclusive=False, relative=lock_relative):
             return self._read_locked(path, tenant, kinds, domain, max_bytes)
 
 
@@ -1209,7 +1278,8 @@ def read_records_compatible_with_versions(
             path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
         )
     else:
-        with _locked_path(path.with_name(path.name + ".lock"), exclusive=False):
+        lock_path, lock_relative = _lock_beside(path, relative)
+        with _locked_path(lock_path, exclusive=False, relative=lock_relative):
             records = _read_path_records(
                 path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
             )

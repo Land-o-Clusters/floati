@@ -164,9 +164,16 @@ class SegmentedRunStore:
     def _metadata(self) -> Path:
         return self.root.resolve_relative("runs/segments/events.jsonl")
 
+    # The two segmented-storage locks, each paired with the root-relative
+    # coordinate a refusal must print. Kept beside the paths so the two cannot
+    # drift: once only a basename survives, "runs/events.jsonl.lock" is
+    # indistinguishable from the tenant "events.jsonl.lock".
+    _WRITER_LOCK_RELATIVE = "runs/segments/writer.lock"
+    _TRANSITION_LOCK_RELATIVE = "runs/events.jsonl.lock"
+
     @property
     def _writer_lock(self) -> Path:
-        return self.root.resolve_relative("runs/segments/writer.lock")
+        return self.root.resolve_relative(self._WRITER_LOCK_RELATIVE)
 
     @property
     def _transition_lock(self) -> Path:
@@ -182,11 +189,11 @@ class SegmentedRunStore:
 
     def activate(self, *, now: datetime) -> Dict[str, object]:
         testimony = self._timestamp(now)
-        with _locked_path(self._transition_lock, exclusive=True):
+        with _locked_path(self._transition_lock, exclusive=True, relative=self._TRANSITION_LOCK_RELATIVE):
             legacy = _read_path_records(self._legacy, self.root.tenant_id, self.allowed_kinds)
             _ensure_directory(self._legacy.parent)
             _ensure_directory(self._segments)
-            with _locked_path(self._writer_lock, exclusive=True):
+            with _locked_path(self._writer_lock, exclusive=True, relative=self._WRITER_LOCK_RELATIVE):
                 if self._metadata.exists():
                     raise ProtocolRefusal("segment_already_active", "segmented storage is already active")
                 leftovers = [path for path in self._segments.iterdir() if path.name != "writer.lock"]
@@ -201,16 +208,16 @@ class SegmentedRunStore:
 
     def iter_records(self) -> Iterator[Dict[str, object]]:
         if not self.is_active():
-            with _locked_path(self._transition_lock, exclusive=False):
+            with _locked_path(self._transition_lock, exclusive=False, relative=self._TRANSITION_LOCK_RELATIVE):
                 if self._metadata.exists() or self._segments.exists():
-                    with _locked_path(self._writer_lock, exclusive=False):
+                    with _locked_path(self._writer_lock, exclusive=False, relative=self._WRITER_LOCK_RELATIVE):
                         for item in self._validate_active().located:
                             yield deepcopy(item.record)
                     return
                 for record in _read_path_records(self._legacy, self.root.tenant_id, self.allowed_kinds):
                     yield deepcopy(record)
             return
-        with _locked_path(self._writer_lock, exclusive=False):
+        with _locked_path(self._writer_lock, exclusive=False, relative=self._WRITER_LOCK_RELATIVE):
             for item in self._validate_active().located:
                 yield deepcopy(item.record)
 
@@ -219,13 +226,13 @@ class SegmentedRunStore:
 
     def lookup(self, record_id: str) -> Optional[LocatedRecord]:
         if not self.is_active():
-            with _locked_path(self._transition_lock, exclusive=False):
+            with _locked_path(self._transition_lock, exclusive=False, relative=self._TRANSITION_LOCK_RELATIVE):
                 if self._metadata.exists() or self._segments.exists():
-                    with _locked_path(self._writer_lock, exclusive=False):
+                    with _locked_path(self._writer_lock, exclusive=False, relative=self._WRITER_LOCK_RELATIVE):
                         return self._lookup(self._validate_active().located, record_id)
                 legacy = _read_path_records(self._legacy, self.root.tenant_id, self.allowed_kinds)
                 return self._lookup(self._locate_legacy(legacy), record_id)
-        with _locked_path(self._writer_lock, exclusive=False):
+        with _locked_path(self._writer_lock, exclusive=False, relative=self._WRITER_LOCK_RELATIVE):
             state = self._validate_active()
             located = state.known.get(record_id)
             if located is None:
@@ -237,9 +244,9 @@ class SegmentedRunStore:
         decide: Callable[[RunStoreSnapshot], Tuple[Any, Optional[Dict[str, object]]]],
     ) -> Any:
         if not self.is_active():
-            with _locked_path(self._transition_lock, exclusive=True):
+            with _locked_path(self._transition_lock, exclusive=True, relative=self._TRANSITION_LOCK_RELATIVE):
                 if self._metadata.exists() or self._segments.exists():
-                    with _locked_path(self._writer_lock, exclusive=True):
+                    with _locked_path(self._writer_lock, exclusive=True, relative=self._WRITER_LOCK_RELATIVE):
                         state = self._validate_active()
                         result, candidate = decide(self._active_snapshot(state))
                         if candidate is not None:
@@ -250,7 +257,7 @@ class SegmentedRunStore:
                 if candidate is not None:
                     self._append_legacy_candidates(rows, [candidate])
                 return result
-        with _locked_path(self._writer_lock, exclusive=True):
+        with _locked_path(self._writer_lock, exclusive=True, relative=self._WRITER_LOCK_RELATIVE):
             state = self._validate_active()
             result, candidate = decide(self._active_snapshot(state))
             if candidate is not None:
@@ -269,9 +276,9 @@ class SegmentedRunStore:
         decide: Callable[[RunStoreSnapshot], Tuple[List[Any], List[Dict[str, object]]]],
     ) -> Tuple[List[Any], Tuple[int, str]]:
         if not self.is_active():
-            with _locked_path(self._transition_lock, exclusive=True):
+            with _locked_path(self._transition_lock, exclusive=True, relative=self._TRANSITION_LOCK_RELATIVE):
                 if self._metadata.exists() or self._segments.exists():
-                    with _locked_path(self._writer_lock, exclusive=True):
+                    with _locked_path(self._writer_lock, exclusive=True, relative=self._WRITER_LOCK_RELATIVE):
                         state = self._validate_active()
                         results, candidates = decide(self._active_snapshot(state))
                         if not isinstance(results, list) or not isinstance(candidates, list) or len(results) != len(candidates):
@@ -290,7 +297,7 @@ class SegmentedRunStore:
                 )
                 identity = self._legacy_snapshot(completed, fingerprint=True)
                 return results, (identity.total_records, identity.prefix_digest)
-        with _locked_path(self._writer_lock, exclusive=True):
+        with _locked_path(self._writer_lock, exclusive=True, relative=self._WRITER_LOCK_RELATIVE):
             state = self._validate_active()
             results, candidates = decide(self._active_snapshot(state))
             if not isinstance(results, list) or not isinstance(candidates, list) or len(results) != len(candidates):
