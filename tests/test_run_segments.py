@@ -334,8 +334,12 @@ class SegmentedRunStoreTests(unittest.TestCase):
         events: list[str] = []
 
         @contextmanager
-        def observed_lock(path: Path, *, exclusive: bool):
+        def observed_lock(path: Path, *, exclusive: bool, relative: object = None):
             self.assertFalse(exclusive)
+            # LOCK-1: the double now also witnesses the ROOT-RELATIVE
+            # coordinate the product hands over for its refusal detail. The
+            # locked file and the printed name must name the same thing.
+            self.assertEqual("runs/events.jsonl.lock", relative)
             events.append("enter")
             try:
                 yield

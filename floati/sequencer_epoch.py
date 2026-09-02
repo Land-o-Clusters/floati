@@ -468,8 +468,10 @@ class SequencerEpochLedger:
             _authorize_epoch_operation(owner, "offline_pair")
             testimony = _now(now)
             path = self._path
-            lock_path = path.with_name(path.name + ".lock")
-            with jsonl._locked_path(lock_path, exclusive=True):
+            lock_path, lock_relative = jsonl._lock_beside(path, self.relative_path)
+            with jsonl._locked_path(
+                lock_path, exclusive=True, relative=lock_relative
+            ):
                 records = jsonl._read_path_records(
                     path, self.root.tenant_id, _EPOCH_KINDS
                 )
@@ -567,16 +569,19 @@ class ManagedWriterLease:
         self._registered = False
         self._prior_owner_proof = None
 
+    _OWNER_LOCK_RELATIVE = "sequencer/owner.lock"
+
     @property
     def _owner_path(self) -> Path:
-        return self.root.resolve_relative("sequencer/owner.lock")
+        return self.root.resolve_relative(self._OWNER_LOCK_RELATIVE)
 
     def __enter__(self) -> "ManagedWriterLease":
         _check_creator_process(self)
         if self._owner_context is not None:
             raise ProtocolRefusal("sequencer_lease_reused", "a managed lease may be entered once")
         self._owner_context = jsonl._locked_path(
-            self._owner_path, exclusive=True, order_tracked=False
+            self._owner_path, exclusive=True,
+            relative=self._OWNER_LOCK_RELATIVE, order_tracked=False,
         )
         self._owner_context.__enter__()
         self._owner_held = True
@@ -664,16 +669,19 @@ class DirectWriterLease:
         self._owner_context = None
         self._creator_pid = os.getpid()
 
+    _OWNER_LOCK_RELATIVE = "sequencer/owner.lock"
+
     @property
     def _owner_path(self) -> Path:
-        return self.root.resolve_relative("sequencer/owner.lock")
+        return self.root.resolve_relative(self._OWNER_LOCK_RELATIVE)
 
     def __enter__(self) -> "DirectWriterLease":
         _check_creator_process(self)
         if self._owner_context is not None:
             raise ProtocolRefusal("sequencer_lease_reused", "a direct lease may be entered once")
         self._owner_context = jsonl._locked_path(
-            self._owner_path, exclusive=False, order_tracked=False
+            self._owner_path, exclusive=False,
+            relative=self._OWNER_LOCK_RELATIVE, order_tracked=False,
         )
         self._owner_context.__enter__()
         try:
@@ -702,10 +710,12 @@ class DirectWriterLease:
     ) -> Tuple[Dict[str, object], Dict[str, object]]:
         if not isinstance(root, FloatiRoot):
             raise ProtocolRefusal("root_required", "offline takeover requires a validated FloatiRoot")
-        owner_path = root.resolve_relative("sequencer/owner.lock")
+        owner_relative = "sequencer/owner.lock"
+        owner_path = root.resolve_relative(owner_relative)
         proof = _OfflineExclusiveOwner(root)
         with jsonl._locked_path(
-            owner_path, exclusive=True, order_tracked=False
+            owner_path, exclusive=True, relative=owner_relative,
+            order_tracked=False,
         ):
             proof._owner_held = True
             _register_exclusive_owner(proof)

@@ -262,10 +262,11 @@ def wake_coordination_guard(
         if worker_session_id is not None:
             from .cursor import SparseCursor
             SparseCursor._session_component(worker_session_id)
-        lock = root.resolve_relative(
-            Path("receipts/wake-coordination") / node / "lane.lock"
-        )
-        with _locked_path(lock, exclusive=True, timeout_seconds=5.0):
+        lock_relative = Path("receipts/wake-coordination") / node / "lane.lock"
+        lock = root.resolve_relative(lock_relative)
+        with _locked_path(
+            lock, exclusive=True, relative=lock_relative, timeout_seconds=5.0
+        ):
             yield
 
 

@@ -991,7 +991,32 @@ class WorkerRunner:
                 session_id, str(item["id"]), node_id, adapter_name, "drive", None, [], now=self._observe(now)
             )
             if on_drive is not None:
+                # `on_drive` is the DRILL's gate and nothing else reaches it:
+                # floati/orchestrate.py builds it only from the drill's
+                # reached/release pair, and it blocks for as long as the drill
+                # chooses. That pause used to burn the worker's own process
+                # deadline, so a slow drill made the WORKER report the timeout
+                # — the instrument charging its subject for the instrument's
+                # own round trip.
+                #
+                # The pause is REFUNDED, never re-granted. Two reasons the
+                # deadline is not simply started here instead: the pre-gate
+                # phase (process start, isolation ready, the spawn frame) is
+                # real worker time and must stay bounded, and `effective_deadline`
+                # was already clamped by the GRANT'S WALL-CLOCK EXPIRY — so a
+                # fresh budget would let a drill buy a worker time outside the
+                # authority it holds. The refund therefore moves the deadline
+                # by exactly what the gate held, and no further than the grant.
+                gate_entered = time.monotonic()
                 on_drive()
+                gate_held = time.monotonic() - gate_entered
+                authority_remaining = (
+                    _parse_time(grant["expires_at"]) - self._observe(now)
+                ).total_seconds() - 1.0
+                process_deadline = min(
+                    process_deadline + gate_held,
+                    time.monotonic() + max(authority_remaining, 0.0),
+                )
             status, value = self._receive(
                 parent, process, process_deadline, child_process_groups,
                 spawn_descendant_application, spawn_result_handler,

@@ -14,7 +14,7 @@ from .bus_epoch import shared_epoch_operation
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .framing import FrameError, decode_frames, encode_frame
 from .ids import uuid7_hex
-from .jsonl import MAX_LEDGER_BYTES, _locked_path
+from .jsonl import MAX_LEDGER_BYTES, _lock_beside, _locked_path
 from .records import validate_record
 from .registry import utc_now
 from .root import FloatiRoot
@@ -234,14 +234,14 @@ class LedgerRepair:
         selected_id = _bounded_text(record_id, field="record_id", maximum=256)
         selected_key = _bounded_text(key, field="idempotency_key", maximum=128)
         ledger_path = self.root.resolve_relative(_LEDGER)
-        lock_path = ledger_path.with_name(ledger_path.name + ".lock")
+        lock_path, lock_relative = _lock_beside(ledger_path, _LEDGER)
         if lock_path.is_symlink() or not lock_path.is_file():
             raise ProtocolRefusal(
                 "repair_lock_missing",
                 "repair requires the established ordinary events.jsonl.lock",
             )
 
-        with _locked_path(lock_path, exclusive=True):
+        with _locked_path(lock_path, exclusive=True, relative=lock_relative):
             try:
                 before = ledger_path.stat()
                 if not stat.S_ISREG(before.st_mode):

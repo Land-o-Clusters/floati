@@ -187,13 +187,33 @@ if MODE == "duplicate-root-key":
         + "}\n"
     )
     sys.stdout.flush()
+elif MODE in {"duplicate", "trailing"}:
+    # CI-GREEN-24: ONE write, ONE flush. These two modes used to emit the
+    # lawful response and then, in a SECOND flush, the thing that makes the
+    # stream unlawful. Between the two flushes the observer could read a
+    # complete, well-formed response and correctly return `observed` - the
+    # observer was right and the fixture was racing it. Reproduced by putting
+    # a 60 ms sleep in that gap: 8 of 8 rounds returned
+    # ('observed', 'exact_thread_read') in BOTH modes, and on a runner
+    # ordinary scheduling supplied the gap for `trailing` unaided. Emitting
+    # the unlawful suffix in the same write makes it present the instant the
+    # response is readable, so the mode tests what it names.
+    suffix = (
+        json.dumps(
+            {"id": request.get("id"), "result": result},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+        if MODE == "duplicate"
+        else "trailing-byte"
+    )
+    sys.stdout.write(
+        json.dumps(response, sort_keys=True, separators=(",", ":")) + "\n" + suffix
+    )
+    sys.stdout.flush()
 else:
     emit(response)
-if MODE == "duplicate":
-    emit({"id": request.get("id"), "result": result})
-elif MODE == "trailing":
-    sys.stdout.write("trailing-byte")
-    sys.stdout.flush()
 
 if MODE in {"ignore-term-child", "duplicate", "trailing"}:
     while True:

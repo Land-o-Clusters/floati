@@ -666,6 +666,7 @@ class SequencerEpochTests(unittest.TestCase):
         @contextmanager
         def track_jsonl(
             path, *, exclusive,
+            relative=None,
             timeout_seconds=jsonl.LOCK_TIMEOUT_SECONDS,
             order_tracked=True,
         ):
@@ -673,15 +674,18 @@ class SequencerEpochTests(unittest.TestCase):
             with original_jsonl_lock(
                 path,
                 exclusive=exclusive,
+                relative=relative,
                 timeout_seconds=timeout_seconds,
                 order_tracked=order_tracked,
             ):
                 yield
 
         @contextmanager
-        def track_run(path, *, exclusive):
+        def track_run(path, *, exclusive, relative=None):
             events.append(path.name)
-            with original_run_lock(path, exclusive=exclusive):
+            with original_run_lock(
+                path, exclusive=exclusive, relative=relative,
+            ):
                 yield
 
         candidate = _run_created(self.root.tenant_id)

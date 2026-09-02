@@ -30,7 +30,8 @@ class LockLedger:
             raise ProtocolRefusal("root_required", "Locks ledger requires one exact writable FloatiRoot")
         self.root = root
         self._path = root.resolve_relative(_RECORDS_PATH)
-        self._lock_path = root.resolve_relative(Path("locks/records.lock"))
+        self._lock_relative = Path("locks/records.lock")
+        self._lock_path = root.resolve_relative(self._lock_relative)
 
     def _read_unlocked(self) -> list[dict[str, object]]:
         if not self._path.exists():
@@ -61,11 +62,11 @@ class LockLedger:
         return records
 
     def records(self) -> list[dict[str, object]]:
-        with _locked_path(self._lock_path, exclusive=False):
+        with _locked_path(self._lock_path, exclusive=False, relative=self._lock_relative):
             return deepcopy(self._read_unlocked())
 
     def snapshot(self) -> LockSnapshot:
-        with _locked_path(self._lock_path, exclusive=False):
+        with _locked_path(self._lock_path, exclusive=False, relative=self._lock_relative):
             records = self._read_unlocked()
         return LockProjection.from_records(records, self.root.tenant_id, integrity=True).snapshot()
 
@@ -75,7 +76,7 @@ class LockLedger:
         *,
         before_append: Optional[Callable[[], None]] = None,
     ) -> dict[str, object]:
-        with _locked_path(self._lock_path, exclusive=True):
+        with _locked_path(self._lock_path, exclusive=True, relative=self._lock_relative):
             existing = self._read_unlocked()
             if len(existing) >= MAX_LEDGER_RECORDS:
                 raise ProtocolRefusal("ledger_record_limit", "Locks ledger reached its row bound")

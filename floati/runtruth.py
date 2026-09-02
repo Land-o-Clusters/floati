@@ -100,11 +100,14 @@ def effect_acceptance_guard(root: FloatiRoot, *, exclusive: bool = True):
         )
     from .jsonl import _locked_path
 
-    lock_path = root.resolve_relative(Path("effects/acceptance.lock"))
+    lock_relative = Path("effects/acceptance.lock")
+    lock_path = root.resolve_relative(lock_relative)
     # Complete governed traces briefly serialize several cross-ledger fences.
     # Keep this coordination wait bounded, but do not subject lawful queued
     # fences to the shorter generic single-record ledger lock budget.
-    with _locked_path(lock_path, exclusive=exclusive, timeout_seconds=5.0):
+    with _locked_path(
+        lock_path, exclusive=exclusive, relative=lock_relative, timeout_seconds=5.0
+    ):
         yield
 
 

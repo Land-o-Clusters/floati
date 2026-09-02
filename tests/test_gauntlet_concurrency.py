@@ -209,7 +209,10 @@ def _thread_ordered_action(
     original_lock = jsonl_module._locked_path
 
     @contextmanager
-    def ordered_lock(path, *, exclusive, timeout_seconds=jsonl_module.LOCK_TIMEOUT_SECONDS):
+    def ordered_lock(
+        path, *, exclusive, relative=None,
+        timeout_seconds=jsonl_module.LOCK_TIMEOUT_SECONDS,
+    ):
         is_thread_write = (
             exclusive
             and path.name == "records.jsonl.lock"
@@ -217,7 +220,8 @@ def _thread_ordered_action(
         )
         if not is_thread_write:
             with original_lock(
-                path, exclusive=exclusive, timeout_seconds=timeout_seconds,
+                path, exclusive=exclusive, relative=relative,
+                timeout_seconds=timeout_seconds,
             ):
                 yield
             return
@@ -225,7 +229,8 @@ def _thread_ordered_action(
             first_at_transaction.set()
             try:
                 with original_lock(
-                    path, exclusive=exclusive, timeout_seconds=timeout_seconds,
+                    path, exclusive=exclusive, relative=relative,
+                    timeout_seconds=timeout_seconds,
                 ):
                     yield
             finally:
@@ -234,7 +239,8 @@ def _thread_ordered_action(
         if not first_at_transaction.wait(10) or not first_committed.wait(10):
             raise RuntimeError("ordered thread transaction did not reach its fence")
         with original_lock(
-            path, exclusive=exclusive, timeout_seconds=timeout_seconds,
+            path, exclusive=exclusive, relative=relative,
+            timeout_seconds=timeout_seconds,
         ):
             yield
 

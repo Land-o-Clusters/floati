@@ -9,11 +9,17 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# CI-GREEN-24: a LIVENESS backstop, not a latency budget. It exists so a child
+# that never streams or never honours SIGINT fails instead of hanging the suite;
+# the latencies it bounds are measured and printed rather than asserted, because
+# how fast a loaded host schedules a child process is not this test's subject.
+WATCH_LIVENESS_BOUND_SECONDS = 30.0
 
 
 class WatchTests(unittest.TestCase):
@@ -145,7 +151,7 @@ class WatchTests(unittest.TestCase):
         def close_child() -> None:
             if child.poll() is None:
                 child.kill()
-            child.wait(timeout=2)
+            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
             if child.stdout is not None:
                 child.stdout.close()
             if child.stderr is not None:
@@ -154,12 +160,43 @@ class WatchTests(unittest.TestCase):
         self.addCleanup(close_child)
         self.assertIsNotNone(child.stdout)
         self.assertIsNotNone(child.stderr)
-        ready, _, _ = select.select([child.stdout], [], [], 1.0)
-        self.assertTrue(ready)
+        # CI-GREEN-24. This test's CLAIM is in its name - the child exits with
+        # rc 0 and an empty stderr. The old 1 s select and 2 s wait were not
+        # part of that claim, they were bets that a loaded host would schedule
+        # the child promptly, and the second one collected: it raised
+        # TimeoutExpired under a concurrent suite and once on a runner, killing
+        # the test BEFORE either real assertion ran. Measured on a quiet Mac the
+        # first line arrives in ~200 ms and SIGINT-to-exit takes ~10 ms, so the
+        # budget that failed had a 190x margin - a margin that wide does not
+        # erode, it stalls, and a stall is the host's, not the product's. The
+        # bounds are now a liveness backstop and the latencies are MEASURED and
+        # printed, so a genuinely deaf SIGINT still reds, naming its number.
+        began = time.monotonic()
+        ready, _, _ = select.select([child.stdout], [], [], WATCH_LIVENESS_BOUND_SECONDS)
+        first_line_seconds = time.monotonic() - began
+        self.assertTrue(
+            ready,
+            f"the watch child streamed no delta within {WATCH_LIVENESS_BOUND_SECONDS:g}s",
+        )
         self.assertEqual("initial", json.loads(child.stdout.readline())["evidence"]["delta"]["kind"])
 
+        signalled = time.monotonic()
         child.send_signal(signal.SIGINT)
-        child.wait(timeout=2)
+        try:
+            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+        except subprocess.TimeoutExpired:
+            self.fail(
+                f"the watch child did not honour SIGINT within "
+                f"{WATCH_LIVENESS_BOUND_SECONDS:g}s; first line took "
+                f"{first_line_seconds:.3f}s, host loadavg {os.getloadavg()}"
+            )
+        exit_seconds = time.monotonic() - signalled
+        print(
+            f"[CI-GREEN-24] {self.id()}: first delta {first_line_seconds:.3f}s, "
+            f"SIGINT to exit {exit_seconds:.3f}s, backstop "
+            f"{WATCH_LIVENESS_BOUND_SECONDS:g}s; host loadavg "
+            f"{[round(value, 2) for value in os.getloadavg()]}"
+        )
         self.assertEqual(0, child.returncode)
         self.assertEqual("", child.stderr.read())
 
