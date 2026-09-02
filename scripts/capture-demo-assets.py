@@ -1,10 +1,39 @@
 #!/usr/bin/env python3
-"""Build governed Demo/UAT capture candidates without appending corpus rows."""
+"""Build governed Demo/UAT capture candidates without appending corpus rows.
+
+THE CAPTURE FONT IS OPERATOR-DECLARED OR ABSENT, NEVER PROBED.
+
+The monospace face used to rasterise every frame is chosen by exactly one of
+two mechanisms, in this order:
+
+1. **the operator's declaration** --- ``--font <absolute path>`` on this
+   script, or the ``FLOATI_CAPTURE_FONT`` environment variable. A declared
+   path is validated the way the house validates a declared path: absolute,
+   a regular file, readable. A declaration that fails validation is a
+   ``demo_capture_font_declaration_invalid`` refusal --- it NEVER falls back
+   to the defaults, because silently rendering with a different face than the
+   operator named is the defect this row exists to remove.
+2. **a fixed ordered candidate list** (``FONT_CANDIDATES``), the SYSTEM-binary
+   shape: absolute paths only, first readable hit wins, nothing is searched.
+
+With no declaration and no candidate present, the script emits the typed
+absence ``demo_capture_font_absent`` naming the component and exits
+``FONT_ABSENT_EXIT_CODE`` (3). It does not raise and it does not skip.
+
+⛔ ``ImageFont.truetype(<str path>, ...)`` IS ITSELF A PROBE. On ``OSError``
+Pillow takes the BASENAME of the path and walks the host's font directories
+(``XDG_DATA_HOME``/``XDG_DATA_DIRS``-derived on Linux, ``/Library/Fonts`` and
+``/System/Library/Fonts`` on macOS), so a wrong or absent declared path is
+answered with whatever same-named face the host happens to carry. Every font
+here is therefore loaded from BYTES WE READ OURSELVES, which is the code path
+in which Pillow performs no search at all.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -13,7 +42,7 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
-from typing import NamedTuple, Sequence
+from typing import Mapping, NamedTuple, Sequence
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
@@ -23,6 +52,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from floati.brand import render_buoy_mark  # noqa: E402
 from floati.demo import build_demo_model, seed_demo  # noqa: E402
+from floati.errors import ProtocolRefusal  # noqa: E402
 from floati import fixture_ids  # noqa: E402
 from floati.graph import HarborGraph, HarborTraffic  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
@@ -318,8 +348,23 @@ def build_text_frames() -> dict[str, list[str]]:
 
 
 ANSI_COLOR = re.compile(r"\x1b\[([0-9;]*)m")
-FONT = Path("/System/Library/Fonts/Menlo.ttc")
-LAMP_FONT = FONT
+# THE DECLARATION. One environment variable and one flag name the same thing;
+# neither is a search. The candidate list below is consulted only when the
+# operator declared nothing at all.
+CAPTURE_FONT_VARIABLE = "FLOATI_CAPTURE_FONT"
+CAPTURE_FONT_FLAG = "--font"
+FONT_CANDIDATES: tuple[Path, ...] = (
+    Path("/System/Library/Fonts/Menlo.ttc"),
+    Path("/System/Library/Fonts/SFNSMono.ttf"),
+)
+FONT_COMPONENT = "demo capture monospace font"
+FONT_ABSENT_CODE = "demo_capture_font_absent"
+FONT_DECLARATION_INVALID_CODE = "demo_capture_font_declaration_invalid"
+FONT_ABSENT_EXIT_CODE = 3
+FONT_DECLARATION_REMEDY = (
+    f"declare one absolute, readable font file with {CAPTURE_FONT_FLAG} <path> "
+    f"or {CAPTURE_FONT_VARIABLE}=<path>"
+)
 BACKGROUND = "#12161c"
 FOREGROUND = "#d8dee9"
 DIM = "#9aa6b2"
@@ -381,6 +426,111 @@ def _line_runs(line: str, accent: str) -> list[tuple[str, str]]:
     return runs
 
 
+def _validate_declared_font(path: Path, *, source: str) -> Path:
+    """Absolute · regular file · readable. No PATH, no font-directory search.
+
+    A declaration that fails any clause is refused outright. Falling back to
+    ``FONT_CANDIDATES`` here would render the capture with a face the operator
+    did not name and never say so.
+    """
+
+    if not path.is_absolute():
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name an absolute path, not {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    if not path.is_file():
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name a regular file that exists: {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    if not os.access(path, os.R_OK):
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name a readable file: {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    return path
+
+
+def resolve_capture_font(
+    declared: Path | str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    candidates: Sequence[Path] | None = None,
+) -> Path:
+    """Return the declared font, else the first present fixed candidate.
+
+    Raises the typed absence when the operator declared nothing and no
+    candidate is readable. Nothing on this path consults ``PATH``, the font
+    directories, or any name-based search.
+    """
+
+    environ = os.environ if environ is None else environ
+    candidates = FONT_CANDIDATES if candidates is None else tuple(candidates)
+
+    source = CAPTURE_FONT_FLAG
+    if declared is None:
+        value = environ.get(CAPTURE_FONT_VARIABLE)
+        if value is not None and value.strip():
+            declared = Path(value.strip())
+            source = CAPTURE_FONT_VARIABLE
+    if declared is not None:
+        return _validate_declared_font(Path(declared), source=source)
+
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.R_OK):
+            return candidate
+
+    raise ProtocolRefusal(
+        FONT_ABSENT_CODE,
+        (
+            f"no {FONT_COMPONENT} is declared and none of the fixed candidates "
+            f"is readable on this host: {', '.join(str(c) for c in candidates)}"
+        ),
+        FONT_DECLARATION_REMEDY,
+    )
+
+
+def font_absence_report(refusal: ProtocolRefusal) -> dict[str, object]:
+    """The typed absence this script prints instead of raising at its boundary."""
+
+    return {
+        "condition": refusal.code,
+        "component": FONT_COMPONENT,
+        "detail": refusal.detail,
+        "declaration": {
+            "flag": CAPTURE_FONT_FLAG,
+            "variable": CAPTURE_FONT_VARIABLE,
+        },
+        "candidates": [str(candidate) for candidate in FONT_CANDIDATES],
+        "remedy": refusal.remedy,
+        "exit_code": FONT_ABSENT_EXIT_CODE,
+    }
+
+
+_FONT_BYTES: dict[str, bytes] = {}
+
+
+def load_capture_font(size: int, *, font_path: Path | None = None) -> ImageFont.FreeTypeFont:
+    """Build a face from bytes WE read, so Pillow performs no basename search.
+
+    ``ImageFont.truetype`` given a path STRING falls back, on ``OSError``, to
+    walking the host's font directories for the same basename. Handing it a
+    stream takes the branch that reads the bytes and asks FreeType directly.
+    """
+
+    selected = resolve_capture_font() if font_path is None else Path(font_path)
+    key = str(selected)
+    data = _FONT_BYTES.get(key)
+    if data is None:
+        data = selected.read_bytes()
+        _FONT_BYTES[key] = data
+    return ImageFont.truetype(io.BytesIO(data), size)
+
+
 def _overlay_lit_lamps(
     image: Image.Image,
     text: str,
@@ -388,9 +538,12 @@ def _overlay_lit_lamps(
     source_font: ImageFont.FreeTypeFont,
     source_margin: int,
     source_line_height: int,
+    font_path: Path,
 ) -> None:
     draw = ImageDraw.Draw(image)
-    lamp_font = ImageFont.truetype(str(LAMP_FONT), max(8, round(source_font.size / 2)))
+    lamp_font = load_capture_font(
+        max(8, round(source_font.size / 2)), font_path=font_path
+    )
     source_measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     for index, line in enumerate(text.splitlines()):
         visible = ANSI_COLOR.sub("", line)
@@ -407,14 +560,16 @@ def render_capture_frame(
     *,
     candidate_size: tuple[int, int],
     phase: int,
+    font_path: Path | None = None,
 ) -> Image.Image:
     ensure_capture_text_safe(text)
     width, height = candidate_size
     if width < 80 or height < 48:
         raise ValueError("candidate dimensions are too small")
+    selected_font = resolve_capture_font() if font_path is None else Path(font_path)
     source_size = (width * 2, height * 2)
     font_size = max(7, round(source_size[0] / 82))
-    font = ImageFont.truetype(str(FONT), font_size)
+    font = load_capture_font(font_size, font_path=selected_font)
     margin = max(8, round(source_size[0] * 0.018))
     line_height = max(9, round(font_size * 1.24))
     image = Image.new("RGB", source_size, BACKGROUND)
@@ -438,6 +593,7 @@ def render_capture_frame(
         source_font=font,
         source_margin=margin,
         source_line_height=line_height,
+        font_path=selected_font,
     )
     return rendered
 
@@ -446,9 +602,16 @@ def render_capture_frames(
     text_frames: Sequence[str],
     *,
     candidate_size: tuple[int, int],
+    font_path: Path | None = None,
 ) -> list[Image.Image]:
+    selected_font = resolve_capture_font() if font_path is None else Path(font_path)
     return [
-        render_capture_frame(text, candidate_size=candidate_size, phase=index)
+        render_capture_frame(
+            text,
+            candidate_size=candidate_size,
+            phase=index,
+            font_path=selected_font,
+        )
         for index, text in enumerate(text_frames)
     ]
 
@@ -470,13 +633,17 @@ def _write_master(
     destination: Path,
     text_frames: Sequence[str],
     ffmpeg: Path,
+    *,
+    font_path: Path | None = None,
 ) -> None:
     if not ffmpeg.is_absolute() or not ffmpeg.is_file() or not os.access(ffmpeg, os.X_OK):
         raise ValueError("ffmpeg must be one absolute executable")
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="floati-master-frames-") as temporary:
         frame_root = Path(temporary)
-        rendered = render_capture_frames(text_frames, candidate_size=(3840, 2160))
+        rendered = render_capture_frames(
+            text_frames, candidate_size=(3840, 2160), font_path=font_path
+        )
         for index, frame in enumerate(rendered):
             _master_frame(frame).save(frame_root / f"frame-{index:03d}.png")
         result = subprocess.run(
@@ -517,9 +684,13 @@ def build_candidates(
     *,
     ffmpeg: Path | None,
     candidate_size: tuple[int, int] | None = None,
+    font_path: Path | None = None,
 ) -> list[CaptureArtifact]:
     validate_output_paths(output, master_output)
     source_sha = validate_source_sha(source_sha)
+    # Resolve the face BEFORE any destination write, so an absent font is a
+    # typed absence rather than a half-written candidate directory.
+    selected_font = resolve_capture_font() if font_path is None else Path(font_path)
     text_frames = build_text_frames()
     output.mkdir(parents=True, exist_ok=True)
     durations = {
@@ -535,6 +706,7 @@ def build_candidates(
         frames = render_capture_frames(
             text_frames[spec.name],
             candidate_size=rendered_size,
+            font_path=selected_font,
         )
         write_gif(path, frames, duration_ms=durations[spec.name])
         size = path.stat().st_size
@@ -559,6 +731,7 @@ def build_candidates(
             master_path,
             text_frames["hero-three-fault-replay.gif"],
             ffmpeg,
+            font_path=selected_font,
         )
         artifacts.append(
             CaptureArtifact(
@@ -619,12 +792,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--master-output", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--ffmpeg", type=Path)
+    parser.add_argument(
+        CAPTURE_FONT_FLAG,
+        type=Path,
+        help=(
+            "absolute path to the monospace font to rasterise with; "
+            f"overrides {CAPTURE_FONT_VARIABLE}. Never searched, never resolved."
+        ),
+    )
     args = parser.parse_args(argv)
+    try:
+        selected_font = resolve_capture_font(args.font)
+    except ProtocolRefusal as refusal:
+        if refusal.code not in (FONT_ABSENT_CODE, FONT_DECLARATION_INVALID_CODE):
+            raise
+        print(
+            json.dumps(
+                font_absence_report(refusal), sort_keys=True, separators=(",", ":")
+            ),
+            file=sys.stderr,
+        )
+        return FONT_ABSENT_EXIT_CODE
     artifacts = build_candidates(
         args.output,
         args.master_output,
         args.source_sha,
         ffmpeg=args.ffmpeg,
+        font_path=selected_font,
     )
     report = [
         {

@@ -33,6 +33,18 @@ and foreign files. Run the binary as `<destination>/scripts/floati` (or
 check reads the installed destination from the `FLOATI_INSTALL_DESTINATION`
 environment variable when `--destination` is not passed.
 
+**The launcher never resolves its interpreter through `PATH`.**
+`scripts/floati` walks one fixed candidate list - `/usr/bin/python3`, then
+`/bin/python3` - and takes the first that is present and executable. An
+operator overrides that with `FLOATI_PYTHON`, which must name **one absolute
+canonical interpreter path**; a symlink is refused, so name the resolved
+target. With neither a declaration nor a candidate the launcher refuses,
+typed, **exit 20** - it never falls back to `PATH`, because a `PATH` an
+attacker can prepend to would choose the Python that runs the whole product.
+`floati doctor` reports the outcome as the `launcher_interpreter` finding,
+naming the interpreter and whether it was `declared`, a `candidate`, or
+`absent` (the process was not started through the launcher).
+
 **Relaunch quirk (measured):** a harness session that was already running
 when a wake hook was installed will never run it — harnesses snapshot or
 trust-gate hooks. After installing any wake component: tell the user to

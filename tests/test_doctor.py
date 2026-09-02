@@ -24,6 +24,13 @@ from floati.registry import REGISTRY_KINDS, Registry
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
 
+from floati.doctor import (
+    LAUNCHER_INTERPRETER_CANDIDATES,
+    LAUNCHER_INTERPRETER_DECLARATION,
+    LAUNCHER_INTERPRETER_SELECTION,
+    project_launcher_interpreter,
+)
+
 try:
     from floati.doctor import Doctor
 except (ImportError, ModuleNotFoundError):
@@ -167,6 +174,68 @@ class DoctorContractTests(unittest.TestCase):
             codex_gateway_host=codex_gateway_host,
             no_sandbox=no_sandbox,
         )
+
+    def _assert_typed_launcher_doctor_outcome(self, result) -> dict:
+        """LAUNCH-1: a doctor started through scripts/floati is asserted by TYPE.
+
+        Pinning ``rc == 0`` asserts a property of the runner's Python, not of
+        doctor: on a host whose ruled interpreter fails the root-trust fence the
+        artifact is correct and the exit code is 35. What is ruled is the
+        BICONDITIONAL - the artifact's own interpreter-trust finding decides the
+        outcome, and nothing else on this fixture may. A trust finding that is ok
+        still demands rc 0 and state healthy, so any other check degrading this
+        run is caught exactly as before; a trust warning demands 35 and
+        degraded. No finding may reach severity error either way.
+
+        The launcher's own provenance is asserted unconditionally, because that
+        is this row's property and it does not vary with the host.
+        """
+
+        self.assertIn(
+            result.returncode,
+            (0, 35),
+            f"rc={result.returncode} stderr={result.stderr}",
+        )
+        envelope = json.loads(result.stdout)
+        self.assertEqual("doctor", envelope["command"])
+        evidence = envelope["evidence"]
+        validate_json_schema(evidence, Path("schemas/v1/doctor-artifact.schema.json"))
+
+        launcher = next(
+            row for row in evidence["findings"] if row["code"] == "launcher_interpreter"
+        )
+        self.assertEqual("ok", launcher["severity"], launcher["detail"])
+        self.assertTrue(
+            launcher["detail"].startswith(("declared: ", "candidate: ")),
+            f"the launcher's interpreter came from no ruled source: {launcher['detail']}",
+        )
+        self.assertIn(
+            launcher["subject"],
+            (os.environ.get(LAUNCHER_INTERPRETER_DECLARATION),
+             *LAUNCHER_INTERPRETER_CANDIDATES),
+        )
+
+        self.assertEqual(
+            [],
+            [row["code"] for row in evidence["findings"] if row["severity"] == "error"],
+        )
+        trust = self._interpreter_trust_finding(evidence)
+        if trust["severity"] == "ok":
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("healthy", evidence["state"])
+            return evidence
+
+        self.assertEqual("warning", trust["severity"])
+        self.assertEqual(35, result.returncode, result.stderr)
+        self.assertEqual("degraded", evidence["state"])
+        print(
+            "TYPED HOST FACT launcher-interpreter: the launcher chose "
+            f"{launcher['subject']}, running {trust['subject']}, which this host does "
+            f"not root-trust at {trust['interpreter_trust']['failing_component']} "
+            f"[uid {trust['interpreter_trust']['component_uid']}]",
+            file=sys.stderr,
+        )
+        return evidence
 
     @staticmethod
     def _interpreter_trust_finding(artifact: dict) -> dict:
@@ -555,8 +624,12 @@ class DoctorContractTests(unittest.TestCase):
 
     def test_cli_requires_the_explicit_profile_flag_and_refuses_an_unruled_value(self) -> None:
         self._remove_presence()
+        # LAUNCH-1: the CLI is reached through the launcher. Spelling this
+        # `python3 -m floati` made the test's own argv a bare PATH lookup - the
+        # discovery the executable-provenance policy forbids - so the interpreter
+        # under test was whatever the ambient PATH happened to name.
         base = [
-            "python3", "-m", "floati", "doctor",
+            "scripts/floati", "doctor",
             "--root", str(self.home),
             "--source", str(self.source),
             "--ref", "origin/lane/hm0",
@@ -569,14 +642,11 @@ class DoctorContractTests(unittest.TestCase):
         healthy = subprocess.run(
             [*base, "--profile", "bus-only"], capture_output=True, text=True, check=False
         )
-        self.assertEqual(0, healthy.returncode, healthy.stderr)
-        evidence = json.loads(healthy.stdout)["evidence"]
-        self.assertEqual("healthy", evidence["state"])
+        evidence = self._assert_typed_launcher_doctor_outcome(healthy)
         self.assertIn(
             "registry_live_dirs_expected_absent",
             [row["code"] for row in evidence["findings"]],
         )
-        validate_json_schema(evidence, Path("schemas/v1/doctor-artifact.schema.json"))
 
         refused = subprocess.run(
             [*base, "--profile", "nonsense"], capture_output=True, text=True, check=False
@@ -1196,6 +1266,7 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(
             [
                 "root_valid",
+                "launcher_interpreter",
                 "effect_reconciliation_interpreter_trust",
                 "registry_live_dirs_match",
                 "wake_namespace_registry_subset",
@@ -1293,11 +1364,7 @@ class DoctorContractTests(unittest.TestCase):
             ],
             check=False, capture_output=True, text=True,
         )
-        self.assertEqual(0, result.returncode, result.stderr)
-        envelope = json.loads(result.stdout)
-        self.assertEqual("doctor", envelope["command"])
-        self.assertEqual("healthy", envelope["evidence"]["state"])
-        validate_json_schema(envelope["evidence"], Path("schemas/v1/doctor-artifact.schema.json"))
+        self._assert_typed_launcher_doctor_outcome(result)
 
     def test_explicit_gateway_config_is_checked_without_discovery_or_activation(self) -> None:
         config = self._gateway_config()
@@ -1348,8 +1415,7 @@ class DoctorContractTests(unittest.TestCase):
             text=True,
         )
 
-        self.assertEqual(0, result.returncode, result.stderr)
-        evidence = json.loads(result.stdout)["evidence"]
+        evidence = self._assert_typed_launcher_doctor_outcome(result)
         self.assertIn("gateway_config_valid", [row["code"] for row in evidence["findings"]])
 
     def test_the_health_check_line_printed_in_agents_md_executes_without_refusal(self) -> None:
@@ -1511,6 +1577,161 @@ class DoctorContractTests(unittest.TestCase):
             readme,
             "the probe prose must say a fleet with no waiter armed is DEAF by definition",
         )
+
+
+class LauncherInterpreterProvenanceTests(unittest.TestCase):
+    """LAUNCH-1: scripts/floati locates its interpreter without consulting PATH.
+
+    The decoy case is the control that decides the row. Every other assertion
+    here passes on a host with one python3; only a decoy earlier on PATH
+    separates a fixed candidate list from the bare lookup it replaced.
+    """
+
+    REPOSITORY = Path(__file__).resolve().parents[1]
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.marker = self.base / "decoy-ran"
+        decoy_bin = self.base / "decoy-bin"
+        decoy_bin.mkdir()
+        self.decoy = decoy_bin / "python3"
+        self.decoy.write_text(
+            "#!/bin/sh\n"
+            f"printf 'ran\\n' > {self.marker}\n"
+            "printf 'DECOY-PYTHON3-SELECTED\\n' >&2\n"
+            "exit 3\n",
+            encoding="utf-8",
+        )
+        self.decoy.chmod(0o755)
+        self.decoy_path = os.pathsep.join((str(decoy_bin), os.environ["PATH"]))
+
+    def _launch(self, *arguments: str, **environment: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["scripts/floati", *arguments],
+            cwd=str(self.REPOSITORY),
+            env={**os.environ, "PATH": self.decoy_path, **environment},
+            capture_output=True, text=True, check=False,
+        )
+
+    def assertDecoyNeverRan(self, result: subprocess.CompletedProcess) -> None:
+        self.assertFalse(
+            self.marker.exists(),
+            "the launcher executed a python3 decoy earlier on PATH: " + result.stderr,
+        )
+        self.assertNotIn("DECOY-PYTHON3-SELECTED", result.stderr)
+
+    def test_launcher_never_selects_a_python3_decoy_earlier_on_path(self) -> None:
+        """THE CONTROL: a bare `exec python3` runs the decoy and exits 3."""
+
+        result = self._launch("doctor", "--help")
+
+        self.assertDecoyNeverRan(result)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("floati doctor", result.stdout)
+
+    def test_launcher_execs_the_declared_interpreter_over_a_path_decoy(self) -> None:
+        """The operator's declaration is the only override, and it is obeyed."""
+
+        declared = self.base / "declared-python3"
+        declared.write_text(
+            "#!/bin/sh\nprintf 'DECLARED-INTERPRETER-RAN %s\\n' \"$*\"\nexit 7\n",
+            encoding="utf-8",
+        )
+        declared.chmod(0o755)
+
+        result = self._launch(
+            "doctor", **{LAUNCHER_INTERPRETER_DECLARATION: str(declared)}
+        )
+
+        self.assertDecoyNeverRan(result)
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("DECLARED-INTERPRETER-RAN -m floati doctor", result.stdout)
+
+    def test_an_undeclarable_interpreter_is_refused_and_never_falls_back_to_path(
+        self,
+    ) -> None:
+        """Being unable to start is a safe state; starting the wrong Python is not."""
+
+        for declaration in (str(self.base / "absent-python3"), "python3", str(self.base)):
+            with self.subTest(declaration=declaration):
+                result = self._launch(
+                    "doctor", **{LAUNCHER_INTERPRETER_DECLARATION: declaration}
+                )
+
+                self.assertDecoyNeverRan(result)
+                self.assertEqual(20, result.returncode, result.stdout)
+                self.assertIn("floati: refused:", result.stderr)
+                self.assertIn(LAUNCHER_INTERPRETER_DECLARATION, result.stderr)
+
+    def test_a_declared_symlink_is_refused_so_the_operator_names_the_target(self) -> None:
+        target = self.base / "real-python3"
+        target.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+        target.chmod(0o755)
+        link = self.base / "linked-python3"
+        link.symlink_to(target)
+
+        result = self._launch("doctor", **{LAUNCHER_INTERPRETER_DECLARATION: str(link)})
+
+        self.assertDecoyNeverRan(result)
+        self.assertEqual(20, result.returncode, result.stdout)
+        self.assertIn("symlink is refused", result.stderr)
+
+    def test_the_launcher_and_the_doctor_name_the_same_ruled_vocabulary(self) -> None:
+        """Two copies of one list is two things to keep correct; pin them equal."""
+
+        script = (self.REPOSITORY / "scripts/floati").read_text(encoding="utf-8")
+
+        loop = re.search(r"for candidate in ([^\n;]+); do", script)
+        self.assertIsNotNone(loop, "scripts/floati must walk a fixed candidate list")
+        self.assertEqual(
+            list(LAUNCHER_INTERPRETER_CANDIDATES), loop.group(1).split()
+        )
+        self.assertIn(LAUNCHER_INTERPRETER_DECLARATION, script)
+        self.assertIn(LAUNCHER_INTERPRETER_SELECTION, script)
+        self.assertNotIn(
+            "exec python3",
+            script,
+            "the interpreter must never be resolved through PATH",
+        )
+
+    def test_the_doctor_types_every_source_the_launcher_can_report(self) -> None:
+        candidate = LAUNCHER_INTERPRETER_CANDIDATES[0]
+        declared = str(self.base / "declared-python3")
+        cases = (
+            ({}, "ok", "absent: "),
+            ({LAUNCHER_INTERPRETER_SELECTION: candidate}, "ok", "candidate: "),
+            (
+                {
+                    LAUNCHER_INTERPRETER_SELECTION: declared,
+                    LAUNCHER_INTERPRETER_DECLARATION: declared,
+                },
+                "ok",
+                "declared: ",
+            ),
+            (
+                {LAUNCHER_INTERPRETER_SELECTION: "/opt/elsewhere/bin/python3"},
+                "warning",
+                "unruled: ",
+            ),
+        )
+        for environment, severity, opening in cases:
+            with self.subTest(opening=opening):
+                with mock.patch.dict(os.environ, environment, clear=False):
+                    for key in (
+                        LAUNCHER_INTERPRETER_SELECTION, LAUNCHER_INTERPRETER_DECLARATION
+                    ):
+                        if key not in environment:
+                            os.environ.pop(key, None)
+                    finding = project_launcher_interpreter()
+
+                self.assertEqual("launcher_interpreter", finding["code"])
+                self.assertEqual(severity, finding["severity"])
+                self.assertTrue(finding["detail"].startswith(opening), finding["detail"])
+                self.assertEqual(
+                    severity == "warning", finding["remediation"] is not None
+                )
 
 
 if __name__ == "__main__":

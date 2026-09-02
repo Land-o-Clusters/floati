@@ -399,20 +399,43 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
         from floati.orchestrate import DrillAction, FleetOrchestrator
 
         pid_trace = self.directory / "fault-pids.txt"
+        # CI-GREEN-20. This test flipped on the public runners at commits whose
+        # code had not changed: builder-b came back `process_timeout` instead of
+        # `authority_expired_mid_claim`. It is not the reaper racing the
+        # leaked-process assertion - those clauses held. The worker's process
+        # deadline starts in `WorkerRunner.run` BEFORE the drive gate, and the
+        # `expire_authority` drill's round trip runs inside that window: the
+        # orchestrator has to notice `drive_reached` on its redraw poll, perform
+        # a REAL authority-grant expiry (a locked ledger write, not a flag), and
+        # only then release the worker. All of that is charged against
+        # `worker_timeout`, so a 0.3 s budget against a 0.15 s fixture drive was
+        # a bet on the host's filesystem, and a slow runner collected. The
+        # budget is raised to 1.5 s - ten times the fixture's own drive and far
+        # under the 10 s hang that must still time out - so the outcome map
+        # below stays EXACT. It is deliberately not relaxed to "either outcome":
+        # accepting `process_timeout` here would let a real regression, the
+        # expiry never taking effect, pass as a busy host.
+        began = time.monotonic()
         result = FleetOrchestrator(
             self.root,
             {"fixture": _FaultAdapter(pid_trace)},
             adapter_name="fixture",
             redraw_interval=0.01,
-            worker_timeout=0.3,
+            worker_timeout=1.5,
         ).run(
             self.plan(),
-            deadline_seconds=3,
+            deadline_seconds=6,
             drills=(
                 DrillAction("kill_worker", public_ids.builder('a')),
                 DrillAction("expire_authority", public_ids.builder('b')),
                 DrillAction("hang_child", public_ids.builder('c')),
             ),
+        )
+        print(
+            f"[CI-GREEN-20] {self.id()}: elapsed {time.monotonic() - began:.2f}s "
+            f"against worker_timeout 1.5s / deadline 6s; "
+            f"host loadavg {[round(value, 2) for value in os.getloadavg()]}; "
+            f"drills {[(row['node'], row['outcome'], row['triggered']) for row in result['drills']]}"
         )
 
         self.assertEqual("degraded", result["state"])

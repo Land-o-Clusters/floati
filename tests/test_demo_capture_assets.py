@@ -3,10 +3,15 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 from floati.identity_fence import RETIRED_PRODUCT_NAME
 
+import ast
+import contextlib
 import hashlib
 import importlib.util
+import io
+import json
 import os
 import re
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,8 +42,73 @@ def load_capture_module():
     return module
 
 
+# A TEST MAY LOOK WHERE THE PRODUCT MAY NOT. The script is forbidden to search
+# font directories; these roots exist so a test can DISCOVER one real face and
+# DECLARE it to the script, which is the seam under test. Nothing here is
+# consulted by the script itself.
+HOST_FONT_ROOTS = (
+    Path("/System/Library/Fonts"),
+    Path("/Library/Fonts"),
+    Path("/usr/share/fonts"),
+    Path("/usr/local/share/fonts"),
+)
+FONT_SUFFIXES = (".ttc", ".ttf", ".otf")
+_DISCOVERED_HOST_FONT: list[Path | None] = []
+
+
+def discover_host_font(capture) -> Path | None:
+    """One readable, loadable face on this host, or None. Test-only."""
+
+    if _DISCOVERED_HOST_FONT:
+        return _DISCOVERED_HOST_FONT[0]
+    found = None
+    for root in HOST_FONT_ROOTS:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.suffix.lower() not in FONT_SUFFIXES or not path.is_file():
+                continue
+            if not os.access(path, os.R_OK):
+                continue
+            try:
+                capture.load_capture_font(12, font_path=path)
+            except OSError:
+                continue
+            found = path
+            break
+        if found is not None:
+            break
+    _DISCOVERED_HOST_FONT.append(found)
+    return found
+
+
+def ruled_capture_font(capture) -> Path | None:
+    """The face the SCRIPT resolves here (declaration or fixed candidate), or None.
+
+    None is not a skip: the caller must then assert the typed absence.
+    """
+
+    try:
+        return capture.resolve_capture_font()
+    except capture.ProtocolRefusal as refusal:
+        if refusal.code != capture.FONT_ABSENT_CODE:
+            raise
+        return None
+
+
 @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
 class DemoCaptureAssetTests(unittest.TestCase):
+    def assert_typed_font_absence(self, capture) -> None:
+        """The ruled answer on a host with no declared and no default font."""
+
+        with self.assertRaises(capture.ProtocolRefusal) as caught:
+            capture.resolve_capture_font(environ={}, candidates=())
+        self.assertEqual(capture.FONT_ABSENT_CODE, caught.exception.code)
+        report = capture.font_absence_report(caught.exception)
+        self.assertEqual("demo_capture_font_absent", report["condition"])
+        self.assertEqual(capture.FONT_COMPONENT, report["component"])
+        self.assertEqual(capture.FONT_ABSENT_EXIT_CODE, report["exit_code"])
+        self.assertIn(capture.CAPTURE_FONT_VARIABLE, report["remedy"])
     def test_install_staging_coordinate_is_deterministic_and_exact(self) -> None:
         """Catches random instrument coordinates or generic suffix redaction."""
 
@@ -190,11 +260,22 @@ class DemoCaptureAssetTests(unittest.TestCase):
 
     def test_lit_buoy_lamp_survives_as_ruled_yellow_pixels(self) -> None:
         capture = load_capture_module()
+        self.assertEqual("#F5C518", capture.LIT_LAMP)
+
+        # The lamp assertion needs the RULED face's own glyph coverage, so it
+        # runs only where the declaration or a fixed candidate resolves. On a
+        # host with neither, the ruled answer is the typed absence -- asserted,
+        # never skipped, because a skip buys a green by deleting the question.
+        ruled = ruled_capture_font(capture)
+        if ruled is None:
+            self.assert_typed_font_absence(capture)
+            return
 
         frame = capture.render_capture_frame(
             capture.build_text_frames()["install-moment.gif"][-1],
             candidate_size=(1400, 600),
             phase=6,
+            font_path=ruled,
         )
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "lit-lamp.gif"
@@ -212,7 +293,6 @@ class DemoCaptureAssetTests(unittest.TestCase):
             count for count, color in colors if color == (245, 197, 24)
         )
 
-        self.assertEqual("#F5C518", capture.LIT_LAMP)
         self.assertGreater(yellow_pixels, 0)
 
     def test_board_palette_and_semantic_glyphs_survive_rasterization(self) -> None:
@@ -230,7 +310,14 @@ class DemoCaptureAssetTests(unittest.TestCase):
         self.assertIn(("violation", "#ff0000"), runs)
         self.assertIn(("activity", "#00d7ff"), runs)
         self.assertIn(("healthy", "#00d787"), runs)
-        font = capture.ImageFont.truetype(str(capture.FONT), 40)
+
+        # The ANSI run assertions above are font-independent and always run.
+        # The glyph-coverage assertions below are a property of the RULED face.
+        ruled = ruled_capture_font(capture)
+        if ruled is None:
+            self.assert_typed_font_absence(capture)
+            return
+        font = capture.load_capture_font(40, font_path=ruled)
         for glyph in "▰▱●◐○":
             with self.subTest(glyph=glyph):
                 self.assertIsNotNone(font.getmask(glyph).getbbox())
@@ -360,6 +447,15 @@ class DemoCaptureAssetTests(unittest.TestCase):
             "capture pipeline must build the ruled candidate set",
         )
 
+        # This test asserts the GIF PIPELINE, not glyph coverage, so it runs on
+        # every host: the ruled face where one resolves, otherwise one face the
+        # test itself discovered and DECLARED through the seam under test. Only
+        # a host carrying no face at all takes the typed-absence branch.
+        selected = ruled_capture_font(capture) or discover_host_font(capture)
+        if selected is None:
+            self.assert_typed_font_absence(capture)
+            return
+
         demo_root = ROOT / "docs" / "demo"
         with tempfile.TemporaryDirectory(dir=demo_root) as output_text:
             with tempfile.TemporaryDirectory(
@@ -372,6 +468,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
                     "a" * 40,
                     ffmpeg=None,
                     candidate_size=(280, 168),
+                    font_path=selected,
                 )
 
                 self.assertEqual(
@@ -411,6 +508,228 @@ class DemoCaptureAssetTests(unittest.TestCase):
             with Image.open(first) as image:
                 self.assertEqual(3, image.n_frames)
                 self.assertEqual(0, image.info["loop"])
+
+    # ------------------------------------------------------------------
+    # CI-GREEN-16 controls: the font is declared or absent, never probed.
+    # ------------------------------------------------------------------
+
+    def test_absent_declaration_is_refused_and_no_font_directory_is_searched(
+        self,
+    ) -> None:
+        """The decisive control: a same-named face on the host must not answer.
+
+        ``ImageFont.truetype`` given a path STRING falls back to walking the
+        host's font directories for the path's BASENAME, so before this row an
+        absent declared path was answered with whatever same-named face the host
+        carried. The resolver must refuse instead.
+        """
+
+        capture = load_capture_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            absent = Path(temporary) / "Menlo.ttc"
+            self.assertFalse(absent.exists())
+
+            with self.assertRaises(capture.ProtocolRefusal) as caught:
+                capture.resolve_capture_font(absent)
+            self.assertEqual(
+                capture.FONT_DECLARATION_INVALID_CODE, caught.exception.code
+            )
+            self.assertIn(str(absent), caught.exception.detail)
+
+            # Name the mechanism being defeated, where this host can perform it.
+            try:
+                searched = capture.ImageFont.truetype(str(absent), 12)
+            except OSError:
+                searched = None
+            if searched is not None:
+                self.assertNotEqual(
+                    str(absent),
+                    str(getattr(searched, "path", "")),
+                    "Pillow answered an absent path with a host face; the "
+                    "resolver above is what stops that reaching a capture",
+                )
+
+    def test_invalid_declaration_never_falls_back_to_the_default_candidates(
+        self,
+    ) -> None:
+        """A typo must not silently render with a face the operator did not name."""
+
+        capture = load_capture_module()
+        present = [
+            candidate
+            for candidate in capture.FONT_CANDIDATES
+            if candidate.is_file() and os.access(candidate, os.R_OK)
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            for declared, why in (
+                (Path(temporary) / "missing.ttc", "absent"),
+                (Path("relative/font.ttc"), "not absolute"),
+                (Path(temporary), "a directory, not a regular file"),
+            ):
+                with self.subTest(why=why):
+                    with self.assertRaises(capture.ProtocolRefusal) as caught:
+                        capture.resolve_capture_font(declared)
+                    self.assertEqual(
+                        capture.FONT_DECLARATION_INVALID_CODE,
+                        caught.exception.code,
+                    )
+                    if present:
+                        self.assertNotIn(
+                            str(present[0]), str(caught.exception.detail)
+                        )
+
+    def test_declared_font_is_honoured_through_the_flag_and_the_variable(
+        self,
+    ) -> None:
+        """Control (b): a declaration selects exactly the named file."""
+
+        capture = load_capture_module()
+        host = ruled_capture_font(capture) or discover_host_font(capture)
+        if host is None:
+            self.assert_typed_font_absence(capture)
+            return
+
+        with tempfile.TemporaryDirectory() as temporary:
+            declared = Path(temporary) / f"declared-capture-font{host.suffix}"
+            shutil.copyfile(host, declared)
+
+            self.assertEqual(declared, capture.resolve_capture_font(declared))
+            self.assertEqual(
+                declared,
+                capture.resolve_capture_font(
+                    environ={capture.CAPTURE_FONT_VARIABLE: str(declared)}
+                ),
+            )
+            # The declaration outranks the fixed candidates, and the face it
+            # names is the one the renderer actually rasterises with.
+            frame = capture.render_capture_frame(
+                capture.build_text_frames()["board-glow.gif"][0],
+                candidate_size=(280, 168),
+                phase=0,
+                font_path=declared,
+            )
+            self.assertEqual((280, 168), frame.size)
+
+    def test_undeclared_face_beside_the_candidates_is_never_selected(self) -> None:
+        """Nothing is searched: a real font in an unnamed directory cannot win."""
+
+        capture = load_capture_module()
+        host = ruled_capture_font(capture) or discover_host_font(capture)
+        if host is None:
+            self.assert_typed_font_absence(capture)
+            return
+
+        ruled = ruled_capture_font(capture)
+        with tempfile.TemporaryDirectory() as temporary:
+            # A REAL face, correctly named for a candidate, in a directory the
+            # script was never told about.
+            decoy = Path(temporary) / "Menlo.ttc"
+            shutil.copyfile(host, decoy)
+
+            if ruled is None:
+                # The sharper case: with no candidate on this host, the decoy
+                # must not rescue the absence. A searching resolver would find
+                # it; this one still refuses.
+                with self.assertRaises(capture.ProtocolRefusal) as caught:
+                    capture.resolve_capture_font(environ={})
+                self.assertEqual(capture.FONT_ABSENT_CODE, caught.exception.code)
+                self.assertNotIn(str(decoy), caught.exception.detail)
+                return
+
+            selected = capture.resolve_capture_font(environ={})
+            self.assertNotEqual(decoy, selected)
+            self.assertIn(selected, capture.FONT_CANDIDATES)
+
+    def test_absent_font_is_a_typed_absence_the_cli_exits_on_without_raising(
+        self,
+    ) -> None:
+        """Control (c): undeclared + candidates absent names the component."""
+
+        capture = load_capture_module()
+        self.assert_typed_font_absence(capture)
+
+        with tempfile.TemporaryDirectory(
+            prefix="floati-demo-font-absence-",
+            dir=REAL_TEMP_ROOT,
+        ) as temporary:
+            environment = dict(os.environ)
+            environment.pop(capture.CAPTURE_FONT_VARIABLE, None)
+            stderr = io.StringIO()
+            with mock.patch.object(capture, "FONT_CANDIDATES", ()), mock.patch.dict(
+                os.environ, environment, clear=True
+            ), contextlib.redirect_stderr(stderr):
+                code = capture.main(
+                    [
+                        "--output",
+                        str(Path(temporary) / "candidates"),
+                        "--master-output",
+                        str(Path(temporary) / "master"),
+                        "--source-sha",
+                        "a" * 40,
+                    ]
+                )
+
+        self.assertEqual(capture.FONT_ABSENT_EXIT_CODE, code)
+        self.assertEqual(3, code)
+        report = json.loads(stderr.getvalue())
+        self.assertEqual("demo_capture_font_absent", report["condition"])
+        self.assertEqual(capture.FONT_COMPONENT, report["component"])
+        self.assertEqual(
+            {"flag": "--font", "variable": "FLOATI_CAPTURE_FONT"},
+            report["declaration"],
+        )
+        # The absence exits; it does not write a partial candidate directory.
+        self.assertFalse((Path(temporary) / "candidates").exists())
+
+    def test_capture_font_is_never_located_by_a_search_or_by_path(self) -> None:
+        """The script may name absolute candidates; it may not search for them."""
+
+        source = SCRIPT.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        # Read the CODE, not the prose: the docstring names the Pillow search
+        # this row defeats, so a substring sweep over the file would indict it.
+        body = list(tree.body)
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+        ):
+            body = body[1:]
+        code = ast.unparse(ast.Module(body=body, type_ignores=[]))
+
+        self.assertNotIn("shutil.which", code)
+        self.assertNotIn("XDG_DATA", code)
+        self.assertNotIn("font_dirs", code)
+        self.assertNotIn(".rglob(", code)
+
+        # Every environment name this script reads, and the one it may read
+        # for a font.
+        read_names = {
+            node.args[0].value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        }
+        self.assertEqual(
+            set(),
+            {name for name in read_names if name.startswith("XDG")},
+            "the script must not read the variables Pillow's font search uses",
+        )
+        # The one font variable is read through its named constant, so it is
+        # asserted on the binding rather than on a `.get` argument.
+        self.assertIn('CAPTURE_FONT_VARIABLE = \'FLOATI_CAPTURE_FONT\'', code)
+        self.assertIn("environ.get(CAPTURE_FONT_VARIABLE)", code)
+
+        # Fixed absolute candidates are permitted; a search for them is not.
+        self.assertIn("/System/Library/Fonts/Menlo.ttc", code)
+        # Every face is built from bytes this script read, which is the Pillow
+        # branch that performs no basename search.
+        self.assertIn("ImageFont.truetype(io.BytesIO(data), size)", code)
+        self.assertNotIn("ImageFont.truetype(str(", code)
 
 
 if __name__ == "__main__":

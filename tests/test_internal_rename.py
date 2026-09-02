@@ -287,7 +287,12 @@ class InternalRenameCodeIdentityTests(unittest.TestCase):
             if line.strip() and not line.lstrip().startswith("#")
         ]
         self.assertTrue(executable_lines, "floati launcher must have an executable line")
-        self.assertEqual('exec python3 -m floati "$@"', executable_lines[-1])
+        # LAUNCH-1 moved the interpreter off a bare PATH lookup and onto the
+        # launcher's ruled selection; this row's subject is unchanged - the
+        # launcher still resolves the floati package and no other.
+        self.assertEqual(
+            'exec "$FLOATI_LAUNCHER_INTERPRETER" -m floati "$@"', executable_lines[-1]
+        )
 
     def test_dynamic_runtime_modules_resolve_under_floati(self) -> None:
         floati_root = ROOT / "floati"

@@ -283,7 +283,7 @@
     },
     {
       "path": "floati/doctor.py",
-      "sha256": "99dab4d46e417648015d38f0a166ab7a2580ced71352a45c6a3f7e2755ed71bb"
+      "sha256": "d20fa312f99ebffbf0a1a756bf1ad6fabc44533b2f8ec66da0b7d256e6a4e354"
     },
     {
       "path": "floati/doctor_probe.py",
@@ -1467,7 +1467,7 @@
     },
     {
       "path": "scripts/floati",
-      "sha256": "4686bfaf61ef914ab2bf6b8e45cc6f19a9735d659bca88639bc20b1389624093"
+      "sha256": "40e7b28d065a651a6037e18e60b8442fc58862f65112806b3bfe9f021d55d3f4"
     },
     {
       "path": "scripts/floati-codex-wait",
