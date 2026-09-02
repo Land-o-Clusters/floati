@@ -204,7 +204,7 @@
         },
         "profile": {"$ref": "#/$defs/identifier"},
         "inbox": {"const": ["inbox"]},
-        "ack": {"const": ["ack", "--id"]},
+        "ack": {"const": ["ack", "--id", "--session"]},
         "send": {"const": ["send", "--to", "--sha", "--doc", "--idempotency-key", "--note"]},
         "optional_send": {"const": ["--reply-to"]}
       }

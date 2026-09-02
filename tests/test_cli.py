@@ -80,7 +80,7 @@ class SlipCliTests(unittest.TestCase):
             "--root", str(self.home),
             "--from", "sender",
             "--to", "recipient",
-            "--repo", "slipway",
+            "--repo", "floati",
             "--sha", SHA,
             "--doc", "docs/evidence/checkpoint.md",
             "--note", "HM-0.5 delivered",
@@ -183,7 +183,7 @@ class SlipCliTests(unittest.TestCase):
         receipt = sent["evidence"]
         message = receipt["message"]
         self.assertEqual("send", sent["command"])
-        self.assertEqual("slipway", message["repo"])
+        self.assertEqual("floati", message["repo"])
         self.assertEqual(SHA, message["sha"])
         self.assertEqual("docs/evidence/checkpoint.md", message["doc"])
         self.assertEqual("HM-0.5 delivered", message["note"])
@@ -192,7 +192,7 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("recipient_not_listening", receipt["recipient_readiness"]["state"])
 
         inbox_result = self.run_cli(
-            "inbox", "--root", str(self.home), "--as", "recipient"
+            "inbox", "--root", str(self.home), "--as", "recipient", "--peek"
         )
         self.assertEqual(0, inbox_result.returncode, inbox_result.stderr)
         inbox = self.artifact(inbox_result)
@@ -291,7 +291,7 @@ class SlipCliTests(unittest.TestCase):
             "--root", str(self.home),
             "--from", "recipient",
             "--to", "sender",
-            "--repo", "slipway",
+            "--repo", "floati",
             "--sha", SHA,
             "--doc", "docs/evidence/reply.md",
             "--note", "reply",
@@ -308,7 +308,9 @@ class SlipCliTests(unittest.TestCase):
         self.initialize()
         self.register("recipient")
 
-        result = self.run_cli("inbox", "--root", str(self.home), "--as", "recipient")
+        result = self.run_cli(
+            "inbox", "--root", str(self.home), "--as", "recipient", "--peek"
+        )
 
         self.assertEqual(31, result.returncode)
         artifact = self.artifact(result)
@@ -338,7 +340,7 @@ class SlipCliTests(unittest.TestCase):
     def test_every_non_init_command_without_a_root_cannot_speak_with_exit_22(self) -> None:
         cases = (
             ("register", "sender", "--harness", "Codex"),
-            ("send", "--from", "sender", "--to", "recipient", "--repo", "slipway",
+            ("send", "--from", "sender", "--to", "recipient", "--repo", "floati",
              "--sha", SHA, "--doc", "docs/evidence/checkpoint.md", "--note", "notice"),
             ("inbox", "--as", "recipient"),
             ("ack", "--as", "recipient", "--session", "cli-session", "--id", "msg-" + "0" * 32),
@@ -395,7 +397,7 @@ class SlipCliTests(unittest.TestCase):
 
         result = self.run_cli(
             "send", "--root", str(self.home), "--from", "sender", "--to", "unknown",
-            "--repo", "slipway", "--sha", SHA, "--doc", "docs/evidence/checkpoint.md",
+            "--repo", "floati", "--sha", SHA, "--doc", "docs/evidence/checkpoint.md",
             "--note", "notice",
         )
 
@@ -538,7 +540,7 @@ class SlipCliTests(unittest.TestCase):
     def test_absolute_launcher_anchors_to_checkout_from_outside_cwd(self) -> None:
         self.assertTrue(os.access(LAUNCHER, os.X_OK))
         outside = Path(self.temp.name) / "outside"
-        unrelated = outside / "slip"
+        unrelated = outside / "floati"
         unrelated.mkdir(parents=True)
         (unrelated / "__main__.py").write_text(
             "raise SystemExit(91)\n",
@@ -695,7 +697,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         for index in range(count):
             result = self.run_cli(
                 "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
-                "--repo", "slipway", "--sha", SHA,
+                "--repo", "floati", "--sha", SHA,
                 "--doc", f"docs/evidence/wake-{index}.md", "--note", f"wake {index}",
                 "--idempotency-key", f"message-{index}",
             )
@@ -771,7 +773,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         self.assertEqual(0, first.returncode, first.stderr)
         sent = self.run_cli(
             "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
-            "--repo", "slipway", "--sha", SHA, "--doc", "docs/evidence/mixed.md",
+            "--repo", "floati", "--sha", SHA, "--doc", "docs/evidence/mixed.md",
             "--note", "mixed", "--idempotency-key", "mixed-message",
         )
         self.assertEqual(0, sent.returncode, sent.stderr)

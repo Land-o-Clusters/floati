@@ -8,12 +8,20 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.errors import ProtocolRefusal
 
 try:
     from floati.storage_identity import refuse_legacy_workspace_artifacts
 except (ImportError, ModuleNotFoundError):
     refuse_legacy_workspace_artifacts = None
+
+# The dot-prefixed workspace name the pre-rename product wrote. These fixtures
+# exercise a refusal whose whole mechanism IS this prefix, so the bytes must be
+# exact; it is built from the fence's own governed token rather than spelled,
+# and deliberately NOT imported from floati.storage_identity -- a fixture built
+# from the constant under test moves with it and witnesses nothing.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 
 
 class StorageIdentityTests(unittest.TestCase):
@@ -82,7 +90,7 @@ class StorageIdentityTests(unittest.TestCase):
     def test_one_legacy_artifact_refuses_with_architect_copy_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            legacy = workspace / ".slipway"
+            legacy = workspace / LEGACY_PREFIX
             contents = b"legacy Floati migration sentinel\n"
             legacy.write_bytes(contents)
             identity = self._identity(legacy)
@@ -91,20 +99,20 @@ class StorageIdentityTests(unittest.TestCase):
 
             self.assertEqual("legacy_workspace_artifacts", raised.code)
             self.assertEqual(
-                "workspace refused: legacy artifact '.slipway' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+                f"workspace refused: legacy artifact '{LEGACY_PREFIX}' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
                 raised.detail,
             )
             self._assert_regular_legacy_preserved(
                 legacy, identity=identity, contents=contents,
             )
             self.assertFalse(os.path.lexists(workspace / ".floati"))
-            self.assertEqual([".slipway"], sorted(entry.name for entry in workspace.iterdir()))
+            self.assertEqual([LEGACY_PREFIX], sorted(entry.name for entry in workspace.iterdir()))
 
     def test_multiple_legacy_artifacts_sort_count_and_preserve_architect_copy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
-            first = workspace / ".slipway"
-            other = workspace / ".slipway-snapshots"
+            first = workspace / LEGACY_PREFIX
+            other = workspace / f"{LEGACY_PREFIX}-snapshots"
             first_contents = b"first legacy sentinel\n"
             other_contents = b"second legacy sentinel\n"
             first.write_bytes(first_contents)
@@ -116,7 +124,7 @@ class StorageIdentityTests(unittest.TestCase):
 
             self.assertEqual("legacy_workspace_artifacts", raised.code)
             self.assertEqual(
-                "workspace refused: legacy artifact '.slipway' and 1 more predate the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+                f"workspace refused: legacy artifact '{LEGACY_PREFIX}' and 1 more predate the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
                 raised.detail,
             )
             self._assert_regular_legacy_preserved(
@@ -127,7 +135,7 @@ class StorageIdentityTests(unittest.TestCase):
             )
             self.assertFalse(os.path.lexists(workspace / ".floati"))
             self.assertEqual(
-                [".slipway", ".slipway-snapshots"],
+                [LEGACY_PREFIX, f"{LEGACY_PREFIX}-snapshots"],
                 sorted(entry.name for entry in workspace.iterdir()),
             )
 
@@ -137,7 +145,7 @@ class StorageIdentityTests(unittest.TestCase):
             target = workspace / "legacy-target.txt"
             target_contents = b"symlink target sentinel\n"
             target.write_bytes(target_contents)
-            legacy = workspace / ".slipway-link"
+            legacy = workspace / f"{LEGACY_PREFIX}-link"
             legacy.symlink_to(target.name)
             legacy_identity = self._identity(legacy)
             target_identity = self._identity(target)
@@ -146,7 +154,7 @@ class StorageIdentityTests(unittest.TestCase):
 
             self.assertEqual("legacy_workspace_artifacts", raised.code)
             self.assertEqual(
-                "workspace refused: legacy artifact '.slipway-link' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+                f"workspace refused: legacy artifact '{LEGACY_PREFIX}-link' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
                 raised.detail,
             )
             self.assertTrue(os.path.lexists(legacy))

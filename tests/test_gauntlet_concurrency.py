@@ -269,7 +269,7 @@ def _send_under_contention(base: str, results: object) -> None:
         EventLog(root).send(
             public_ids.worker('alpha'),
             "bob",
-            "slipway",
+            "floati",
             "a" * 40,
             "docs/evidence/hm3h.md",
             "lock contention",
@@ -333,7 +333,7 @@ def _send_hammer(base: str, index: int, start: object, results: object) -> None:
                 lambda key=key: events.send(
                     public_ids.worker('alpha'),
                     "bob",
-                    "slipway",
+                    "floati",
                     "a" * 40,
                     "docs/evidence/hm3h.md",
                     key,
@@ -1591,7 +1591,7 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
         registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root, registry).send(
-            public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md",
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40, "docs/evidence/wake-race.md",
             "wake race", idempotency_key="wake-race-message",
         )
         return root
@@ -1644,7 +1644,7 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
             registry.register("bob", "worker")
             for index, session in enumerate(sessions):
                 EventLog(root, registry).send(
-                    public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+                    public_ids.worker('alpha'), "bob", "floati", "a" * 40,
                     "docs/evidence/wake-race.md", "wake race",
                     idempotency_key=f"session-race-{index}",
                     worker_session_id=session,
@@ -1765,7 +1765,7 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
                 registry = Registry(root)
                 registry.register(public_ids.worker('alpha'), "worker")
                 registry.register("bob", "worker")
-                item = EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/wake-race.md", "wake race", idempotency_key="wake-race-message", worker_session_id=session)
+                item = EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "floati", "a" * 40, "docs/evidence/wake-race.md", "wake race", idempotency_key="wake-race-message", worker_session_id=session)
                 WakeHoldController(root).evaluate("bob", idempotency_key="ordered-seed", worker_session_id=session)
                 other = "retract" if first_action == "evaluate" else "evaluate"
                 observed = self._ordered_race(base, first_action, other, str(item["id"]), session)

@@ -10,9 +10,15 @@ import unittest
 from pathlib import Path
 
 from floati.errors import SnapshotRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.jsonl import append_record
 from floati.root import FloatiRoot
 from floati.snapshot import SnapshotStore, SourceSpec
+
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 
 
 UUIDS = (
@@ -44,7 +50,7 @@ class SnapshotStoreTests(unittest.TestCase):
             "kind": "message_envelope",
             "sender": public_ids.worker('alpha'),
             "recipient": "bob",
-            "repo": "slipway",
+            "repo": "floati",
             "sha": "a" * 40,
             "doc": "docs/evidence/HM3H-GAUNTLET.md",
             "note": f"snapshot {index}",
@@ -72,7 +78,7 @@ class SnapshotStoreTests(unittest.TestCase):
         store.refresh({"count": 1})
 
         self.assertTrue(store.path.is_file())
-        self.assertFalse(os.path.lexists(self.root.tenant_home / ".slipway-snapshots"))
+        self.assertFalse(os.path.lexists(self.root.tenant_home / f"{LEGACY_PREFIX}-snapshots"))
 
     @staticmethod
     def rewrite(path: Path, mutate: object, *, checksum: bool = True) -> None:

@@ -55,7 +55,7 @@ def _message(index: int, timestamp: str) -> dict[str, object]:
         "kind": "message_envelope",
         "sender": public_ids.worker('alpha'),
         "recipient": "bob",
-        "repo": "slipway",
+        "repo": "floati",
         "sha": "a" * 40,
         "doc": "docs/evidence/HM3H-GAUNTLET.md",
         "note": f"time event {index}",

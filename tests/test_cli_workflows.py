@@ -18,11 +18,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from floati.events import EventLog
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.host_paths import worker_workspace_root
 from floati.planes import AuthorityGrantStore
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.work import WorkLog
+
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 from floati.workers import WorkerReceipts
 
 
@@ -148,7 +154,7 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertNotIn("tenant_id", self.artifact(status)["evidence"])
         self.assertNotIn("mode", self.artifact(status)["evidence"])
         self.assertEqual("found", self.artifact(status)["evidence"]["installer_shadow"]["outcome"])
-        self.assertFalse(os.path.lexists(self.home / ".slipway-snapshots"))
+        self.assertFalse(os.path.lexists(self.home / f"{LEGACY_PREFIX}-snapshots"))
         self.assertEqual(before, after)
 
     def test_status_json_is_an_explicit_versioned_read_only_contract(self) -> None:
@@ -177,7 +183,7 @@ class CliWorkflowTests(unittest.TestCase):
         )
         snapshots = list((self.home / ".floati-snapshots" / "v0").glob("status-*.json"))
         self.assertEqual(1, len(snapshots))
-        self.assertFalse(os.path.lexists(self.home / ".slipway-snapshots"))
+        self.assertFalse(os.path.lexists(self.home / f"{LEGACY_PREFIX}-snapshots"))
         self.assertEqual(before, after)
 
     def test_plan_requires_explicit_absolute_inputs_and_has_zero_effect(self) -> None:
@@ -199,7 +205,7 @@ class CliWorkflowTests(unittest.TestCase):
                         "contract": {
                             "objective": "admit bounded work",
                             "non_goals": ["no model authority"],
-                            "areas_to_avoid": [{"path": "slip/graph.py", "region": "all"}],
+                            "areas_to_avoid": [{"path": "floati/graph.py", "region": "all"}],
                             "input_hashes": {"brief": "a" * 64},
                             "acceptance_checks": {"tests.unit": "python3 -m unittest"},
                             "constraints": {"network": "dark"},
@@ -294,7 +300,7 @@ class CliWorkflowTests(unittest.TestCase):
 
     def test_receipts_command_returns_distinct_node_history(self) -> None:
         event = EventLog(self.root).send(
-            public_ids.worker('alpha'), "bravo", "slipway", SHA,
+            public_ids.worker('alpha'), "bravo", "floati", SHA,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="receipt-cli",
         )
         EventLog(self.root).present("bravo")
@@ -310,7 +316,7 @@ class CliWorkflowTests(unittest.TestCase):
     def test_work_add_claim_complete_show_round_trip(self) -> None:
         added_result = self.run_cli(
             "work", "add", "--root", str(self.home), "--title", "build board",
-            "--owner", public_ids.worker('alpha'), "--repo", "slipway", "--sha", SHA,
+            "--owner", public_ids.worker('alpha'), "--repo", "floati", "--sha", SHA,
             "--doc", "docs/evidence/input.md",
         )
         self.assertEqual(0, added_result.returncode, added_result.stderr)
@@ -324,7 +330,7 @@ class CliWorkflowTests(unittest.TestCase):
         )
         completed = self.run_cli(
             "work", "complete", "--root", str(self.home), "--id", item_id,
-            "--as", public_ids.worker('alpha'), "--repo", "slipway", "--sha", "b" * 40,
+            "--as", public_ids.worker('alpha'), "--repo", "floati", "--sha", "b" * 40,
             "--doc", "docs/evidence/output.md", "--now", "2026-07-31T12:00:02.000Z",
         )
         shown = self.run_cli("work", "show", "--root", str(self.home), "--id", item_id)
@@ -405,6 +411,7 @@ class CliWorkflowTests(unittest.TestCase):
                         [
                             "worker", "run", "--root", str(home),
                             "--as", "worker-a", "--adapter", "codex",
+                            "--codex-executable", str(Path(sys.executable).resolve()),
                         ]
                     )
 

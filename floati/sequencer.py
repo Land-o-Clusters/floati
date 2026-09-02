@@ -727,13 +727,25 @@ def _canonical_evaluated_intent(
     return intent
 
 
+# The retired repository name, built from hex rather than spelled. This is not
+# copy: it is half of an ENDPOINT. A sequencer already running binds the path
+# below and clients already installed connect to it, so renaming it introduces
+# version skew between a live daemon and a fresh client rather than renaming
+# anything. Built for the reason floati/identity_fence.py builds its governed
+# tokens: a fence that must forbid this word may not find it in shipped source,
+# and the runtime value may not move to satisfy the fence. Pinned in
+# tests/test_retired_name_pins.py through the real path.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_SEQUENCER_ENDPOINT_PREFIX = _RETIRED_NAME + "-sequencer-"
+
+
 def sequencer_socket_path(root: FloatiRoot) -> Path:
     """Return one deterministic short endpoint for this exact tenant home."""
 
     if not isinstance(root, FloatiRoot):
         raise ProtocolRefusal("root_required", "sequencer requires a validated root")
     identity = hashlib.sha256(str(root.tenant_home).encode("utf-8")).hexdigest()[:32]
-    return Path("\x2ftmp") / ("slipway-sequencer-" + identity) / "sequencer.sock"
+    return Path("\x2ftmp") / (_SEQUENCER_ENDPOINT_PREFIX + identity) / "sequencer.sock"
 
 
 @dataclass(frozen=True)

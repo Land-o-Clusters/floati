@@ -88,7 +88,7 @@
       ]
     },
     "observation_outcome": {"enum": ["observed", "unknown"]},
-    "observation_reason": {"enum": ["exact_thread_read", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+    "observation_reason": {"enum": ["exact_thread_read", "codex_executable_absent", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
     "observation_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$", "x-floati-terminal-unsafe": true},
     "observed_at_testimony": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"}
   },
@@ -106,7 +106,7 @@
       },
       "else": {
         "properties": {
-          "observation_reason": {"enum": ["provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+          "observation_reason": {"enum": ["codex_executable_absent", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
           "provider_status": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
           "active_flags": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
           "provider_updated_at": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},

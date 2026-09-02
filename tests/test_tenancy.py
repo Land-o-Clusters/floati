@@ -102,7 +102,7 @@ class TenancyBoundaryTests(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_launcher_refuses_a_symlinked_invoked_entry_point(self) -> None:
-        link = self.base / "slip-link"
+        link = self.base / "alias-link"
         link.symlink_to(REPOSITORY_ROOT / "scripts" / "floati")
 
         result = subprocess.run(

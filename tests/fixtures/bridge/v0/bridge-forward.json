@@ -11,7 +11,7 @@
   "destination_tenant_id": "beta",
   "sender": "worker-alpha",
   "recipient": "bob",
-  "repo": "slipway",
+  "repo": "floati",
   "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "doc": "docs/evidence/bridge.md",
   "note": "fixture round trip",

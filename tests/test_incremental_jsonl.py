@@ -12,12 +12,17 @@ from unittest import mock
 
 from floati.errors import IntegrityFailure
 from floati.events import EVENT_KINDS, EventLog
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
-DOMAIN = "slipway-wake-hold-events-v1"
+# A hash domain the product carries as a salt, rebuilt here from the fence's
+# own governed token rather than spelled -- and deliberately NOT imported
+# from the module under test, so this stays an independent witness to the
+# bytes rather than a mirror of them.
+DOMAIN = RETIRED_PRODUCT_NAME + "-wake-hold-events-v1"
 
 
 class VerifiedLedgerCursorTests(unittest.TestCase):

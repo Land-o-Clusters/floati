@@ -37,7 +37,7 @@ class FleetProjectionTests(unittest.TestCase):
 
         events = EventLog(self.root)
         self.message = events.send(
-            public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bravo", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="projection-mail",
         )
         events.present("bravo")
@@ -46,7 +46,7 @@ class FleetProjectionTests(unittest.TestCase):
         )
         with self.assertRaises(ProtocolRefusal) as caught:
             events.send(
-                public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
+                public_ids.worker('alpha'), "bravo", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "denied",
                 idempotency_key="projection-mail",
             )

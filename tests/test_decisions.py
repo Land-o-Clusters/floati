@@ -281,7 +281,7 @@ class DecisionRegisterTests(unittest.TestCase):
         valid_contract = "task-contract-" + UUIDS[2]
         valid_scopes = (
             ({"kind": "repository"}, None),
-            ({"kind": "path_prefix", "path_prefix": "slip/decisions.py"}, None),
+            ({"kind": "path_prefix", "path_prefix": "floati/decisions.py"}, None),
             ({"kind": "contract"}, valid_contract),
         )
         for scope, task_contract_id in valid_scopes:
@@ -291,9 +291,9 @@ class DecisionRegisterTests(unittest.TestCase):
 
         invalid_scopes = (
             ({"kind": "path_prefix", "path_prefix": "../escape"}, None, "path_prefix_invalid"),
-            ({"kind": "path_prefix", "path_prefix": "slip//decisions.py"}, None, "path_prefix_invalid"),
-            ({"kind": "path_prefix", "path_prefix": "slip\\decisions.py"}, None, "path_prefix_invalid"),
-            ({"kind": "repository", "path_prefix": "slip"}, None, "decision_scope_invalid"),
+            ({"kind": "path_prefix", "path_prefix": "floati//decisions.py"}, None, "path_prefix_invalid"),
+            ({"kind": "path_prefix", "path_prefix": "floati\\decisions.py"}, None, "path_prefix_invalid"),
+            ({"kind": "repository", "path_prefix": "floati"}, None, "decision_scope_invalid"),
             ({"kind": "unknown"}, None, "decision_scope_invalid"),
             ({"kind": "contract"}, None, "task_contract_required"),
         )
@@ -1007,7 +1007,7 @@ class DecisionBindingIntegrationTests(unittest.TestCase):
         )
         contract = TaskContract.create(
             objective="bind repository evidence", non_goals=["no inference"],
-            areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
             input_hashes={"brief": "a" * 64}, acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"}, risk_class="high",
             retry_policy={"max_attempts": 1, "backoff": {"base_delay_ms": 0, "cap_delay_ms": 0, "strategy": "fixed"}},

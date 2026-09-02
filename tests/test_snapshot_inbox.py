@@ -29,7 +29,7 @@ class InboxSnapshotTests(unittest.TestCase):
         return self.events.send(
             public_ids.worker('alpha'),
             "bob",
-            "slipway",
+            "floati",
             f"{index + 1:x}" * 40,
             "docs/evidence/HM3H-GAUNTLET.md",
             f"snapshot message {index}",

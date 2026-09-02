@@ -118,8 +118,8 @@ class EffectReconciliationExecTests(unittest.TestCase):
         (repository / "README.md").write_text("exec fixture\n", encoding="utf-8")
         git("add", "README.md")
         git(
-            "-c", "user.name=Slipway Tests",
-            "-c", "user.email=tests@slipway.invalid",
+            "-c", "user.name=Floati Tests",
+            "-c", "user.email=tests@floati.invalid",
             "commit", "--quiet", "-m", "fixture",
         )
         return repository, git("rev-parse", "HEAD").stdout.strip()
@@ -1040,7 +1040,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
         environment_proof = self.base / "inherited-environment-proof"
         git_environment_proof = self.base / "git-environment-proof.json"
         hostile_environment_names = (
-            "SLIPWAY_ROOT", "TENANT_ROOT", "SECRET_TOKEN", "ORDINARY_EXEC_VALUE",
+            "FLOATI_ROOT", "TENANT_ROOT", "SECRET_TOKEN", "ORDINARY_EXEC_VALUE",
         )
         injected = (
             "import os as _exec_os, pathlib as _exec_pathlib\n"
@@ -1074,9 +1074,9 @@ class EffectReconciliationExecTests(unittest.TestCase):
             return real_spawn(executable, argv, environment, **kwargs)
 
         safe_remote_environment = {
-            "SSH_AUTH_SOCK": "\x2fprivate/tmp/slipway-agent.sock",
-            "SSL_CERT_FILE": "\x2fprivate/tmp/slipway-ca.pem",
-            "SSL_CERT_DIR": "\x2fprivate/tmp/slipway-certs",
+            "SSH_AUTH_SOCK": "\x2fprivate/tmp/floati-agent.sock",
+            "SSL_CERT_FILE": "\x2fprivate/tmp/floati-ca.pem",
+            "SSL_CERT_DIR": "\x2fprivate/tmp/floati-certs",
             "NO_PROXY": "localhost,127.0.0.1",
             "HTTPS_PROXY": "https://proxy.example.invalid",
             "HTTP_PROXY": "http://proxy.example.invalid",
@@ -1092,7 +1092,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
             "LIBPATH": "/hostile/libpath",
             "SHLIB_PATH": "/hostile/shlib",
             "__PYVENV_LAUNCHER__": "/hostile/python",
-            "SLIPWAY_ROOT": "/hostile/root",
+            "FLOATI_ROOT": "/hostile/root",
             "TENANT_ROOT": "/hostile/tenant",
             "SECRET_TOKEN": "must-not-cross",
             "ORDINARY_EXEC_VALUE": "must-not-cross",

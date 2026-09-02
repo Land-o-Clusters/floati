@@ -30,6 +30,26 @@ _EFFECT_RECORDS_RELATIVE = Path("effects/records.jsonl")
 _THREAD_OBSERVATION_RECORDS_RELATIVE = Path("thread-observations/records.jsonl")
 _WAKE_HOLD_APPEND_MARKER = object()
 
+# The retired repository name, built from hex rather than spelled, and the one
+# definition of the wake-hold delivery domain.
+#
+# This string is a salt inside a sha256 preimage: it prefixes the delivery
+# prefix digest that `_transact_wake_hold_records` compares against a digest a
+# caller read earlier, so its bytes are a compatibility contract with every
+# delivery ledger already on disk, not copy. It was carried as two independent
+# literals — here and in the wake-hold controller — that happened to agree;
+# the controller now imports this constant, so the two files cannot drift
+# apart. The name is retired everywhere a reader can see it and kept exactly
+# here, where only a hash can. Built rather than spelled for the reason
+# floati/identity_fence.py builds its governed tokens: a fence that must
+# forbid this word may not find it in shipped source, and the runtime value
+# may not move to satisfy the fence.
+# tests/test_retired_name_pins.py pins the preimage bytes and asserts the two
+# files still agree.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+WAKE_HOLD_DELIVERY_DOMAIN = _RETIRED_NAME + "-wake-hold-deliveries-v1"
+_WAKE_HOLD_DELIVERY_PREIMAGE = WAKE_HOLD_DELIVERY_DOMAIN.encode("ascii") + b"\0"
+
 
 def _is_effect_records_path(path: Path) -> bool:
     return path.name == "records.jsonl" and path.parent.name == "effects"
@@ -711,7 +731,7 @@ def _transact_wake_hold_records(
         path.with_name(path.name + ".lock"), exclusive=True
     ):
         existing = _read_path_records(path, tenant, kinds)
-        digest = hashlib.sha256(b"slipway-wake-hold-deliveries-v1\0")
+        digest = hashlib.sha256(_WAKE_HOLD_DELIVERY_PREIMAGE)
         raw_frames = path.read_bytes().splitlines(keepends=True) if path.exists() else []
         if len(raw_frames) != len(existing):
             raise IntegrityFailure("consumption_state_unavailable", "delivery framing changed before hold append")

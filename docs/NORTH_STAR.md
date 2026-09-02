@@ -5,8 +5,9 @@ It is the **fleet operating system for local coding agents** — the ledger is i
 its honesty brand, not its ceiling. Every future sprint is measured against this document.
 
 **Naming ruling (architect, 2026-08-27, owner may overrule):** the product and binary are **`floati`**.
-`slip` was never the CLI — Slipway was a charter name and a node id. Nautical vocabulary
-(Harbor Board, harbor chart, buoy) stays as *feature* names. All remaining Slipway residue is
+The short form was never the CLI — the retired name was a charter name and a node id.
+Nautical vocabulary (Harbor Board, harbor chart, buoy) stays as *feature* names. All
+remaining residue of the retired name is
 swept per WS-G of the weekend program (live surfaces rename; frozen evidence keeps its verbatim
 history — a gate doc quoting old output is a fixture and is never edited).
 

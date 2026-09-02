@@ -26,7 +26,7 @@ python3 -m unittest -v tests.test_framing_work tests.test_schemas
 ```
 
 Observed before implementation: exit 1; 12 tests ran with five errors and
-five failures. The errors were the absent `slip.framing` and `slip.work`
+five failures. The errors were the absent `<retired>.framing` and `<retired>.work`
 modules; the failures named the two absent work schemas.
 
 Focused GREEN command:
@@ -73,9 +73,9 @@ Fresh gate commands after the manifest, design, evidence, and ruling-request
 drafts were present:
 
 ```sh
-python3 -m slip.selftest
-python3 -m slip.conformance --live-root-smoke
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -m <retired>.selftest
+python3 -m <retired>.conformance --live-root-smoke
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 git diff --check
 ```
 

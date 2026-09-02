@@ -44,7 +44,7 @@ def _send_worker(base: str, start: object, results: object) -> None:
     start.wait()
     try:
         results.put(("ok", events.send(
-            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             idempotency_key="same-key",
         )["id"]))
@@ -124,7 +124,7 @@ class ProcessAtomicityTests(unittest.TestCase):
         registry.register("bob", "worker")
         events = EventLog(self.root, registry)
         message = events.send(
-            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
         )
         events.present("bob")

@@ -360,6 +360,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             str(foreign_root),
             "--as",
             public_ids.builder("a"),
+            "--peek",
             cwd=workspace,
         )
         after = tree_snapshot(foreign_root)
@@ -389,6 +390,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             str(root),
             "--as",
             "foreign-node",
+            "--peek",
             cwd=workspace,
         )
         after = tree_snapshot(root)
@@ -412,7 +414,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
         self.write_seat_fixture(workspace, root, public_ids.builder("a"))
 
         completed, artifact = self.invoke(
-            "inbox", "--root", str(root), "--as", public_ids.builder("a"), cwd=workspace
+            "inbox", "--root", str(root), "--as", public_ids.builder("a"), "--peek", cwd=workspace
         )
 
         self.assertEqual(0, completed.returncode)
@@ -434,7 +436,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
         self.assertFalse((workspace / "SEAT.json").exists())
 
         completed, artifact = self.invoke(
-            "inbox", "--root", str(root), "--as", public_ids.builder("a"), cwd=workspace
+            "inbox", "--root", str(root), "--as", public_ids.builder("a"), "--peek", cwd=workspace
         )
 
         self.assertEqual(31, completed.returncode)

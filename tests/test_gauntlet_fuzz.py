@@ -78,7 +78,7 @@ def _message() -> dict[str, object]:
         **_common("msg-", "message_envelope"),
         "sender": public_ids.worker('alpha'),
         "recipient": "bob",
-        "repo": "slipway",
+        "repo": "floati",
         "sha": "a" * 40,
         "doc": "docs/evidence/hm3h.md",
         "note": HOSTILE,
@@ -177,7 +177,7 @@ def _seed_decision_source(root: FloatiRoot) -> None:
 class ReaderFuzzGauntletTests(unittest.TestCase):
     def invoke(self, *arguments: str) -> subprocess.CompletedProcess[bytes]:
         environment = dict(os.environ)
-        environment["PYTHONPYCACHEPREFIX"] = "\x2ftmp/slipway-hm3h-fuzz-pycache"
+        environment["PYTHONPYCACHEPREFIX"] = "\x2ftmp/floati-hm3h-fuzz-pycache"
         return subprocess.run(
             [sys.executable, "-m", "floati", *arguments],
             cwd=REPO_ROOT,
@@ -216,7 +216,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
 
     def reader_cases(self, home: Path) -> tuple[tuple[str, str, object, tuple[str, ...]], ...]:
         return (
-            ("inbox", "events.jsonl", _message, ("inbox", "--root", str(home), "--as", "bob")),
+            ("inbox", "events.jsonl", _message, ("inbox", "--root", str(home), "--as", "bob", "--peek")),
             ("log", "events.jsonl", _message, ("log", "--root", str(home))),
             ("replay", "receipts/denials.jsonl", _denial, ("log", "--root", str(home), "--replay", "--plain")),
             ("board", "work/items.jsonl", _work_item, ("board", "--root", str(home), "--no-animation")),
@@ -323,7 +323,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                     relative = "events.jsonl"
                     payload = encode_frame(reply) + encode_frame(original)
                     command = (
-                        ("inbox", "--root", str(home), "--as", public_ids.worker('alpha'))
+                        ("inbox", "--root", str(home), "--as", public_ids.worker('alpha'), "--peek")
                         if reader == "inbox"
                         else ("log", "--root", str(home))
                     )
@@ -432,8 +432,8 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             cases = (
                 ("init-solo", ("init", "--root={root}", "--solo" + field)),
                 ("register", ("register", "--root={root}", "--harness=Codex", "--", node)),
-                ("send-from", ("send", "--root={root}", "--from" + field, "--to=recipient", "--repo=slipway", "--sha=" + "a" * 40, "--doc=docs/evidence/td1.md", "--note=td1")),
-                ("send-to", ("send", "--root={root}", "--from=sender", "--to" + field, "--repo=slipway", "--sha=" + "a" * 40, "--doc=docs/evidence/td1.md", "--note=td1")),
+                ("send-from", ("send", "--root={root}", "--from" + field, "--to=recipient", "--repo=floati", "--sha=" + "a" * 40, "--doc=docs/evidence/td1.md", "--note=td1")),
+                ("send-to", ("send", "--root={root}", "--from=sender", "--to" + field, "--repo=floati", "--sha=" + "a" * 40, "--doc=docs/evidence/td1.md", "--note=td1")),
                 ("inbox", ("inbox", "--root={root}", "--as" + field)),
                 ("ack", ("ack", "--root={root}", "--as" + field, "--id=msg-018f7e9b3c117abc8def0123456789ab")),
                 ("receipts", ("receipts", "--root={root}", "--", node)),
@@ -623,7 +623,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
         cases = (
             ("init",),
             ("register", "node", "--harness", "Codex"),
-            ("send", "--from", "sender", "--to", "recipient", "--repo", "slipway", "--sha", "a" * 40, "--doc", "docs/evidence/td2.md", "--note", "td2"),
+            ("send", "--from", "sender", "--to", "recipient", "--repo", "floati", "--sha", "a" * 40, "--doc", "docs/evidence/td2.md", "--note", "td2"),
             ("inbox", "--as", "recipient"),
             ("ack", "--as", "recipient", "--session", "fuzz-session", "--id", "msg-" + "0" * 32),
             ("log",),
@@ -819,12 +819,12 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             session_a = "worker-" + uuid7_hex()
             session_b = "worker-" + uuid7_hex()
             message_a = events.send(
-                "sender", "recipient", "slipway", "a" * 40,
+                "sender", "recipient", "floati", "a" * 40,
                 "docs/evidence/td3-a.md", "session a",
                 idempotency_key="td3-a", worker_session_id=session_a,
             )
             message_b = events.send(
-                "sender", "recipient", "slipway", "b" * 40,
+                "sender", "recipient", "floati", "b" * 40,
                 "docs/evidence/td3-b.md", "session b",
                 idempotency_key="td3-b", worker_session_id=session_b,
             )
@@ -903,12 +903,12 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             events = EventLog(root, registry)
             session = "worker-" + uuid7_hex()
             legacy = events.send(
-                "sender", "recipient", "slipway", "a" * 40,
+                "sender", "recipient", "floati", "a" * 40,
                 "docs/evidence/td4-legacy.md", "legacy",
                 idempotency_key="td4-legacy",
             )
             partial = events.send(
-                "sender", "recipient", "slipway", "b" * 40,
+                "sender", "recipient", "floati", "b" * 40,
                 "docs/evidence/td4-partial.md", "partial",
                 idempotency_key="td4-partial", worker_session_id=session,
                 attempt_binding={"attempt_id": "attempt-" + uuid7_hex()},
@@ -931,7 +931,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 now + timedelta(seconds=1),
             )
             stale = events.send(
-                "sender", "recipient", "slipway", "c" * 40,
+                "sender", "recipient", "floati", "c" * 40,
                 "docs/evidence/td4-stale.md", "stale",
                 idempotency_key="td4-stale", worker_session_id=session,
                 attempt_binding=binding,
@@ -2406,7 +2406,7 @@ class SequencerHostileGauntletTests(unittest.TestCase):
             for node in ("sender", "recipient"):
                 registry.register(node, "worker")
             message = EventLog(root, registry).send(
-                "sender", "recipient", "slipway", "d" * 40,
+                "sender", "recipient", "floati", "d" * 40,
                 "docs/evidence/td4-foc.md", "full FOC prefix",
                 idempotency_key="td4-foc",
                 worker_session_id=trace.worker_session_id,
@@ -2445,7 +2445,7 @@ class WakeHoldFuzzTests(unittest.TestCase):
         events = EventLog(root, registry)
         messages = [
             events.send(
-                public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+                public_ids.worker('alpha'), "bob", "floati", "a" * 40,
                 "docs/evidence/wake-fuzz.md", f"wake fuzz {index}",
                 idempotency_key=f"wake-fuzz-message-{index}",
             )

@@ -74,7 +74,7 @@ class RecordValidationTests(unittest.TestCase):
             "kind": "message_envelope",
             "sender": public_ids.worker('alpha'),
             "recipient": "bob",
-            "repo": "owner/slipway",
+            "repo": "owner/floati",
             "sha": "a" * 40,
             "doc": "docs/evidence/checkpoint.md",
             "note": "HM-0.5 delivered",
@@ -157,7 +157,7 @@ class RecordValidationTests(unittest.TestCase):
             "kind": "approval_request",
             "requester": public_ids.worker('alpha'),
             "capability": "workspace.patch",
-            "scope": "repo:slipway",
+            "scope": "repo:floati",
             "requested_ttl_seconds": 60,
             "requested_at": "2026-08-09T12:00:00.000Z",
             "expires_at": "2026-08-09T12:01:00.000Z",
@@ -175,7 +175,7 @@ class RecordValidationTests(unittest.TestCase):
             "request_id": request["id"],
             "decider": public_ids.reviewer(),
             "decision": decision,
-            "granted_scope": "repo:slipway" if approved else None,
+            "granted_scope": "repo:floati" if approved else None,
             "granted_ttl_seconds": 30 if approved else None,
             "reason_code": None if approved else "operator_denied",
             "decided_at": "2026-08-09T12:00:01.000Z",
@@ -206,7 +206,7 @@ class RecordValidationTests(unittest.TestCase):
             (request, "exact_action_digest", "0" * 63, "exact_action_digest_invalid"),
             (approved, "exact_action_digest", "A" * 64, "exact_action_digest_invalid"),
             (approved, "reason_code", "operator_denied", "reason_code_invalid"),
-            (denied, "granted_scope", "repo:slipway", "denial_grant_invalid"),
+            (denied, "granted_scope", "repo:floati", "denial_grant_invalid"),
             (request, "caller_authority", True, "record_fields_invalid"),
         ):
             malformed = dict(source, **{field: value})
@@ -455,7 +455,7 @@ class RecordValidationTests(unittest.TestCase):
         )
         second = self.valid_message()
         second.update({
-            "repo": "slipway",
+            "repo": "floati",
             "sha": "b" * 64,
             "doc": "README.md",
             "note": "",
@@ -634,7 +634,7 @@ class RecordValidationTests(unittest.TestCase):
             "schema_version": 0, "id": "task-contract-" + uuid7_hex(), "tenant_id": "alpha",
             "timestamp": "2026-08-08T12:00:00.000Z", "kind": "task_contract",
             "run_id": "run-" + uuid7_hex(), "item_id": "work-" + uuid7_hex(), "objective": "bounded",
-            "non_goals": [[]], "areas_to_avoid": [{"path": "slip/graph.py", "region": "all"}],
+            "non_goals": [[]], "areas_to_avoid": [{"path": "floati/graph.py", "region": "all"}],
             "input_hashes": {"brief": "a" * 64}, "acceptance_checks": {"tests.unit": "python3 -m unittest"},
             "constraints": {"network": "dark"}, "risk_class": "high",
             "retry_policy": {"max_attempts": 1, "backoff": {"base_delay_ms": 0, "cap_delay_ms": 0, "strategy": "fixed"}},
@@ -706,7 +706,7 @@ class RecordValidationTests(unittest.TestCase):
             "schema_version": 0, "id": "task-contract-" + uuid7_hex(), "tenant_id": "alpha",
             "timestamp": "2026-08-08T12:00:00.000Z", "kind": "task_contract",
             "run_id": "run-" + uuid7_hex(), "item_id": "work-" + uuid7_hex(), "objective": "bounded",
-            "non_goals": ["no inference"], "areas_to_avoid": [{"path": "slip/graph.py", "region": "all"}],
+            "non_goals": ["no inference"], "areas_to_avoid": [{"path": "floati/graph.py", "region": "all"}],
             "input_hashes": {"brief": "a" * 64}, "acceptance_checks": {"tests.unit": "python3 -m unittest"},
             "constraints": {"network": "dark"}, "risk_class": "high",
             "retry_policy": {"max_attempts": 1, "backoff": {"base_delay_ms": 0, "cap_delay_ms": 0, "strategy": "fixed"}},

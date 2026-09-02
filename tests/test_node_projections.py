@@ -193,6 +193,10 @@ class NodeProjectionTests(unittest.TestCase):
         self.assertEqual("armed", projected["wake"]["status"])
         self.assertTrue(projected["wake"]["poll_at_row_boundaries"])
         self.assertEqual(
+            ["ack", "--id", "--session"],
+            projected["managed_bus"]["ack"],
+        )
+        self.assertEqual(
             ["send", "--to", "--sha", "--doc", "--idempotency-key", "--note"],
             projected["managed_bus"]["send"],
         )
@@ -201,6 +205,10 @@ class NodeProjectionTests(unittest.TestCase):
         self.assertIn(projected["role"]["stops"][0], projected["prompt"])
         self.assertIn(projected["role"]["fences"][1], projected["prompt"])
         self.assertIn("--idempotency-key", projected["prompt"])
+        self.assertIn(
+            "ack --id <message-id> [--id <message-id> ...] --session <session-id>",
+            projected["prompt"],
+        )
         self.assertIn("floati wake pause --root", projected["prompt"])
         self.assertIn("--as builder-a --session <session-id>", projected["prompt"])
         self.assertIn("floati wake resume --root", projected["prompt"])

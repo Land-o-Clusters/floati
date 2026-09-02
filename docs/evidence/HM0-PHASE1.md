@@ -10,7 +10,7 @@
 Command:
 
 ```bash
-PYTHONPYCACHEPREFIX=<temp>/slipway-pycache python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/pycache python3 -m <retired>.selftest
 ```
 
 Observed result at the implementation SHA:
@@ -23,7 +23,7 @@ OK
 exit 0
 ```
 
-The direct CI command is `python3 -m slip.selftest`; the temporary bytecode
+The direct CI command is `python3 -m <retired>.selftest`; the temporary bytecode
 cache prefix is needed only for this sandboxed local verification environment.
 The bundle manifest covers 23 deployable Python and schema files.
 
@@ -33,7 +33,7 @@ Commands:
 
 ```bash
 git diff --check d0ebbe6..HEAD
-PYTHONPYCACHEPREFIX=<temp>/slipway-pycache python3 -m py_compile slip/*.py tests/*.py
+PYTHONPYCACHEPREFIX=<temp>/pycache python3 -m py_compile <retired>/*.py tests/*.py
 ```
 
 Observed result: both exited `0` with no diagnostic output.
@@ -43,7 +43,7 @@ Observed result: both exited `0` with no diagnostic output.
 Command:
 
 ```bash
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; h=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(h))); raise SystemExit(bool(h))'
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; h=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(h))); raise SystemExit(bool(h))'
 ```
 
 Observed result:

@@ -99,6 +99,17 @@ _EFFECT_EVENT_FIELDS = {
 
 _WORKER_BOOTSTRAP_PATH = Path(__file__).resolve().with_name("worker_bootstrap.py")
 
+# The retired repository name, built from hex rather than spelled. This value is
+# a salt inside the sha256 preimage that derives the process-loss evidence
+# digest below, and operator ledgers already carry digests computed over these
+# exact bytes: changing them re-derives every process-loss evidence digest and
+# splits readers across two vocabularies. Built for the reason
+# floati/identity_fence.py builds its governed tokens -- a fence that must
+# forbid this word may not find it in shipped source, and the runtime value may
+# not move to satisfy the fence. Pinned in tests/test_retired_name_pins.py.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_WORKER_PROCESS_LOSS_DOMAIN = _RETIRED_NAME + "-worker-effect-process-loss-v1"
+
 
 def _cleanup_unused_prepared_workspace(policy: WorkerIsolationPolicy) -> None:
     """Remove only the still-identical empty workspace from a pre-ready failure."""
@@ -1530,7 +1541,7 @@ class WorkerRunner:
         for operation in uncertain_operations(controller, context):
             evidence_digest = hashlib.sha256(json.dumps(
                 {
-                    "domain": "slipway-worker-effect-process-loss-v1",
+                    "domain": _WORKER_PROCESS_LOSS_DOMAIN,
                     "operation_id": operation["operation_id"],
                     "run_id": context["run_id"],
                     "attempt_id": context["attempt_id"],

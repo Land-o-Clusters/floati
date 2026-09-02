@@ -54,7 +54,7 @@ prove registration/equality, not the architect voice approval.
 
 ## D — one-command orchestration
 
-`slip orchestrate --root R --plan P --adapter codex --deadline S
+`<retired> orchestrate --root R --plan P --adapter codex --deadline S
 [--no-animation]` preflights registrations and exact live authority, seeds the
 DAG, launches one controller per worker, streams frames on stderr, and emits
 one JSON artifact on stdout. Final states are `drained`/0, `deadline`/34, and

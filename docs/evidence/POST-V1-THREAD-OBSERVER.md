@@ -34,14 +34,14 @@ schemas/v1/thread-attachment-registered-record.schema.json
 schemas/v1/thread-observation-recorded-record.schema.json
 schemas/v1/thread-observation-status-artifact.schema.json
 schemas/v1/watch-artifact.schema.json
-slip/cli.py
-slip/helptext.py
-slip/jsonl.py
-slip/projection.py
-slip/records.py
-slip/runtruth.py
-slip/thread_observations.py
-slip/thread_source.py
+<retired>/cli.py
+<retired>/helptext.py
+<retired>/jsonl.py
+<retired>/projection.py
+<retired>/records.py
+<retired>/runtruth.py
+<retired>/thread_observations.py
+<retired>/thread_source.py
 tests/fixtures/codex-thread-observer/reference_harness.py
 tests/schema_validation.py
 tests/test_codex_adapter_contract.py
@@ -65,7 +65,7 @@ exact frozen base.
 
 - Three closed schema-v1 durable records register one explicit Codex thread,
   append normalized read-only observation testimony, and detach it. Provider
-  coordinates are canonical lowercase hyphenated UUIDv7 values; Slipway's
+  coordinates are canonical lowercase hyphenated UUIDv7 values; Floati's
   compact internal identifiers remain unchanged.
 - Runtime and Draft 2020-12 schemas agree on exact actors, terminal-unsafe
   strings, integral provider timestamps, evidence classes, normalized flags,
@@ -174,7 +174,7 @@ does not claim that a live registered thread was observed.
 codex-cli 0.147.0
 
 /opt/homebrew/bin/codex app-server generate-json-schema --experimental \
-  --out <temp>/slipway-thread-observer-schema-final-20260813
+  --out <temp>/thread-observer-schema-final-20260813
 ```
 
 Both commands exited 0. They emitted only the local sandbox warning that PATH
@@ -210,7 +210,7 @@ notification parameter as testimony.
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - Final source/copy ledger bank: 10/10 in 0.563s.
 - Python 3.9-compatible `py_compile`, `git diff --check`, direct manifest
-  verification (`[]`), `python3 -m slip.copy`, and the exact frozen-base diff
+  verification (`[]`), `python3 -m <retired>.copy`, and the exact frozen-base diff
   for `schemas/v0`, `bundle/c7.1`, and `bundle/c7.2`: exit 0.
 
 The repeated `sandbox initialization failed: Operation not permitted` lines

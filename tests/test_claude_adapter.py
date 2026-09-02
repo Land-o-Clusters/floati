@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.workers import WorkerAdapterFailure
 from tests.temp_roots import REAL_TEMP_ROOT
 
@@ -27,6 +28,12 @@ except (ImportError, ModuleNotFoundError):
 
 FIXTURE = Path("tests/fixtures/claude-headless/reference_harness.py").resolve()
 
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
+
+
 
 class ClaudeHeadlessAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -34,7 +41,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
         self.assertIsNotNone(ClaudeHeadlessAdapter, "Claude headless adapter must exist")
         self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
-        self.parent = Path(self.temp.name) / "slipway-work"
+        self.parent = Path(self.temp.name) / "floati-work"
         codex_patcher = mock.patch("floati.adapters.codex_live._WORKSPACE_PARENT", self.parent)
         claude_patcher = mock.patch("floati.adapters.claude._WORKSPACE_PARENT", self.parent)
         codex_patcher.start()
@@ -80,7 +87,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
         self.assertEqual("PROOF.txt", bindings[0]["doc"])
         self.assertEqual("FLOATI Claude fixture proof\n", (workspace / "PROOF.txt").read_text())
         self.assertFalse((workspace / ".floati" / "claude-output.json").is_symlink())
-        self.assertFalse(os.path.lexists(workspace / ".slipway"))
+        self.assertFalse(os.path.lexists(workspace / LEGACY_PREFIX))
 
     def test_prepared_workspace_refuses_legacy_before_git_or_evidence_creation(self) -> None:
         self.assertIsNotNone(
@@ -90,7 +97,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
         workspace = Path(str(self.item["workspace"]))
         workspace.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         workspace.mkdir(mode=0o700)
-        legacy = workspace / ".slipway-claude"
+        legacy = workspace / f"{LEGACY_PREFIX}-claude"
         contents = b"Claude legacy workspace sentinel\n"
         legacy.write_bytes(contents)
         metadata = workspace.lstat()
@@ -122,7 +129,7 @@ class ClaudeHeadlessAdapterTests(unittest.TestCase):
 
         self.assertEqual("legacy_workspace_artifacts", raised.exception.code)
         self.assertEqual(
-            "workspace refused: legacy artifact '.slipway-claude' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+            f"workspace refused: legacy artifact '{LEGACY_PREFIX}-claude' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
             raised.exception.detail,
         )
         current = legacy.lstat()

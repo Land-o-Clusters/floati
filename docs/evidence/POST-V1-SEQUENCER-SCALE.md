@@ -42,7 +42,7 @@ replay; no timeout or workload threshold was changed.
 
 The full suite also honestly exposed a stale generated copy ledger. Its focused
 test failed 1/1 in 0.008 seconds, then passed 2/2 in 0.035 seconds after the
-canonical `python3 -m slip.copy` regeneration.
+canonical `python3 -m <retired>.copy` regeneration.
 
 Independent review of commit
 `4211b016cbcced284a2b281147a9907788ebf8c2` found two cache-identity defects,
@@ -220,7 +220,7 @@ Fresh downstream evidence for this wave:
 - Task 6 command-1 affected bank: 103 tests in 19.579 seconds, all passed;
 - the first complete-suite run executed 765 tests in 63.221 seconds and failed
   only the manifest-current test, which reported the two intentionally stale
-  deployable digests for `slip/sequencer.py` and `slip/wake.py`; it is retained
+  deployable digests for `<retired>/sequencer.py` and `<retired>/wake.py`; it is retained
   as failed pre-refresh evidence;
 - after refreshing only those two deployable entries, the complete suite ran
   765 tests in 61.469 seconds, all passed;

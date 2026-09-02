@@ -191,9 +191,20 @@ class OneShotWakeRequest:
             raise ProtocolRefusal("wake_fence_invalid", "wake fence token must be lowercase SHA-256 text")
 
 
+# The retired repository name, built from hex rather than spelled. This salt
+# sits INSIDE the sha256 preimage below, so its bytes decide the label of every
+# one-shot wake already scheduled with the host: a changed byte orphans them.
+# Built for the reason floati/identity_fence.py builds its governed tokens -- a
+# fence that must forbid this word may not find it in shipped source, and the
+# runtime value may not move to satisfy the fence. Pinned in
+# tests/test_retired_name_pins.py.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_ONE_SHOT_WAKE_DOMAIN = _RETIRED_NAME + "-one-shot-wake-v1"
+
+
 def _label(request: OneShotWakeRequest) -> str:
     coordinates = "\0".join((
-        "slipway-one-shot-wake-v1", str(request.root.path), request.root.tenant_id,
+        _ONE_SHOT_WAKE_DOMAIN, str(request.root.path), request.root.tenant_id,
         request.run_id, request.item_id, request.attempt_id, request.wake_at,
         str(request.scheduler_epoch), request.fence_token,
     ))

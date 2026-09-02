@@ -121,7 +121,7 @@ GREEN used the same command. Observed: exit 0; 11 tests ran; `OK`.
 Real smoke command:
 
 ```sh
-python3 -m slip.conformance --live-root-smoke
+python3 -m <retired>.conformance --live-root-smoke
 ```
 
 Observed: exit 0; `{"cases":5,"status":"conformant"}`. Commit:
@@ -146,7 +146,7 @@ documentation change.
 
 Second observed RED using the same command: exit 1; 12 tests ran with four
 failures. Two failures named absent `docs/FLEET.md`; two named the stale
-deployable set/digests and omitted `slip/__main__.py` plus `slip/cli.py`.
+deployable set/digests and omitted `<retired>/__main__.py` plus `<retired>/cli.py`.
 
 Focused GREEN used the same command after the fleet/operator documentation and
 mechanical manifest refresh. Observed: exit 0; 12 tests ran in 0.126 seconds;
@@ -155,7 +155,7 @@ mechanical manifest refresh. Observed: exit 0; 12 tests ran in 0.126 seconds;
 Full local gate:
 
 ```sh
-python3 -m slip.selftest
+python3 -m <retired>.selftest
 ```
 
 Observed: exit 0; 100 tests ran in 3.691 seconds; `OK`; final artifact
@@ -164,7 +164,7 @@ Observed: exit 0; 100 tests ran in 3.691 seconds; `OK`; final artifact
 Fresh standalone smoke:
 
 ```sh
-python3 -m slip.conformance --live-root-smoke
+python3 -m <retired>.conformance --live-root-smoke
 ```
 
 Observed: exit 0; `{"cases":5,"status":"conformant"}`.
@@ -172,7 +172,7 @@ Observed: exit 0; `{"cases":5,"status":"conformant"}`.
 Fresh generated-artifact scrub:
 
 ```sh
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 ```
 
 Observed: exit 0; `scrub_hits=0`.
@@ -187,7 +187,7 @@ Observed: exit 0 with no output.
 
 After this evidence file was drafted, the complete pre-checkpoint gate was
 repeated. The focused command ran 12 tests in 0.144 seconds with `OK`; full
-`python3 -m slip.selftest` ran 100 tests in 3.137 seconds with `OK` and
+`python3 -m <retired>.selftest` ran 100 tests in 3.137 seconds with `OK` and
 `bundle_verified`; the standalone smoke again returned exit 0 with five
 conformant cases; the scrub again returned `scrub_hits=0`; and
 `git diff --check` again exited 0 with no output.
@@ -206,7 +206,7 @@ python3 -m unittest -v tests.test_cli tests.test_direct_home_root tests.test_man
 ```
 
 Observed on `ea76173`: exit 1; 42 tests ran; six failures and two errors. The
-outside-cwd launcher selected a fake unrelated `slip` package and exited 91;
+outside-cwd launcher selected a fake unrelated `<retired>` package and exited 91;
 file-backed `init` exited 1 while the core leaked `FileExistsError` and
 `NotADirectoryError`; the manifest reported launcher tracked-set omissions and
 did not name `scripts/slip`; and smoke plus explicit `--call-timeout` exited 0.
@@ -214,7 +214,7 @@ did not name `scripts/slip`; and smoke plus explicit `--call-timeout` exited 0.
 Minimal GREEN changes:
 
 - `scripts/slip` resolves its own physical directory, changes to the repository
-  root, and then executes `python3 -m slip`; mode remains `100755`.
+  root, and then executes `python3 -m <retired>`; mode remains `100755`.
 - Direct-home creation refuses an existing non-directory with
   `direct_home_not_directory` and translates expected creation `OSError`
   failures to `root_unavailable` without catching `ProtocolRefusal`.
@@ -234,9 +234,9 @@ Observed before checkpoint: exit 0; 47 tests ran; `OK`.
 
 Fresh complete gates before checkpoint:
 
-- `python3 -m slip.selftest`: exit 0; 106 tests ran; `OK`;
+- `python3 -m <retired>.selftest`: exit 0; 106 tests ran; `OK`;
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
-- `python3 -m slip.conformance --live-root-smoke`: exit 0;
+- `python3 -m <retired>.conformance --live-root-smoke`: exit 0;
   `{"cases":5,"status":"conformant"}`.
 - Generated-artifact scrub: exit 0; `scrub_hits=0`.
 - `git diff --check`: exit 0 with no output.
@@ -246,8 +246,8 @@ Implementation checkpoint:
 
 ## Exact deployable manifest change
 
-Before interim review, `slip.manifest._deployable_paths()` returned every
-`slip/**/*.py` and `schemas/v0/*.json` regular file in sorted order. The
+Before interim review, `<retired>.manifest._deployable_paths()` returned every
+`<retired>/**/*.py` and `schemas/v0/*.json` regular file in sorted order. The
 review fix adds exact launcher path `scripts/slip` to that deployable set. The
 sorted real manifest now includes its digest plus current digests for all
 changed deployable Python files. Artifact-contract tests separately assert
@@ -283,7 +283,7 @@ register `the architect` or `build lane`.
 First notification attempt:
 
 ```sh
-scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo slipway --sha 20816bd4f4be80086f768576f8bff0db6f0fbcd4 --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
+scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo <retired> --sha 20816bd4f4be80086f768576f8bff0db6f0fbcd4 --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
 ```
 
 Observed: exit 20; status `refused`; code `unknown_recipient`; detail
@@ -321,13 +321,13 @@ between that capture and the acceptance send.
 Acceptance send command:
 
 ```sh
-scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo slipway --sha 8ac460715c3cb60c79a5d6da9cddcf4e218ee4af --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
+scripts/slip send --root ~/.slipway-bus/the fleet/ --from build lane --to the architect --repo <retired> --sha 8ac460715c3cb60c79a5d6da9cddcf4e218ee4af --doc docs/evidence/HM05-DOGFOOD.md --note 'HM-0.5 delivered'
 ```
 
 Observed: exit 0; status `ok`; message ID
 `msg-019fb99aeadb7b4fa20a2b4fc38f273e`. The durable message envelope is in
 `~/.slipway-bus/the fleet/events.jsonl` and binds sender
-`build lane`, recipient `the architect`, repository `slipway`, the exact captured
+`build lane`, recipient `the architect`, repository `<retired>`, the exact captured
 SHA, this repository-relative evidence document, and note
 `HM-0.5 delivered`.
 

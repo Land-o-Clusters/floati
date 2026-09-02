@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from floati.events import EventLog
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.jsonl import append_record
 from floati.projection import FleetProjection
 from floati.registry import Registry
@@ -23,6 +24,11 @@ from floati.runtruth import RunLedger
 from floati.tui import model_from_root
 from floati.tui_render import render_plain_dump
 from floati.work import WorkLog
+
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 from tests.hm3i_gauntlet_fixtures import (
     assert_physical_projection,
     build_success_trace,
@@ -92,7 +98,7 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             EventLog(root).send(
                 public_ids.worker('alpha'),
                 "bob",
-                "slipway",
+                "floati",
                 "a" * 40,
                 "docs/evidence/HM3H-GAUNTLET.md",
                 "snapshot gauntlet",
@@ -136,7 +142,7 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             )
         )
         self.assertEqual(1, len(snapshots), "Floati snapshot reader must publish one cache")
-        self.assertFalse(os.path.lexists(root.tenant_home / ".slipway-snapshots"))
+        self.assertFalse(os.path.lexists(root.tenant_home / f"{LEGACY_PREFIX}-snapshots"))
         snapshot_path = snapshots[0]
         case = ReaderCase(name, root, answer, snapshot_path)
         self.assertEqual(expected, case.answer())
@@ -228,7 +234,7 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
 
             self.assertEqual("fleet_status", artifact["kind"])
             self.assertEqual([], list(outside.iterdir()))
-            self.assertFalse(os.path.lexists(root.tenant_home / ".slipway-snapshots"))
+            self.assertFalse(os.path.lexists(root.tenant_home / f"{LEGACY_PREFIX}-snapshots"))
 
     def test_hm3i_run_projection_reopens_authoritative_frames_without_a_run_snapshot_cache(self) -> None:
         """Run truth is read from its physical ledger, never a newly invented snapshot surface."""
@@ -237,7 +243,7 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             trace = build_success_trace(root)
             expected = assert_physical_projection(trace)
             snapshot_root = root.tenant_home / ".floati-snapshots"
-            legacy_snapshot_root = root.tenant_home / ".slipway-snapshots"
+            legacy_snapshot_root = root.tenant_home / f"{LEGACY_PREFIX}-snapshots"
 
             self.assertFalse(snapshot_root.exists())
             self.assertFalse(os.path.lexists(legacy_snapshot_root))

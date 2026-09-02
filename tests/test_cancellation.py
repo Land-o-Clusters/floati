@@ -87,7 +87,7 @@ class CancellationTests(unittest.TestCase):
     def bind_contract(self, item_id: str) -> dict:
         contract = TaskContract.create(
             objective="govern cancellation attempt", non_goals=["no post-attempt amendment"],
-            areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
             input_hashes={"brief": DIGEST}, acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"}, risk_class="high",
             retry_policy={"max_attempts": 2, "backoff": {"base_delay_ms": 10, "cap_delay_ms": 10, "strategy": "exponential"}}, dependencies=[],

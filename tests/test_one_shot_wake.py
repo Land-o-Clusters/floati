@@ -22,6 +22,7 @@ from unittest import mock
 import floati.wake as wake_module
 from floati.contracts import TaskContract, contract_digest
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.root import FloatiRoot
 from floati.runtruth import RunLedger
@@ -68,7 +69,7 @@ def _seed_open_attempt(root: FloatiRoot) -> tuple[RunLedger, RunScheduler, dict]
                           item_ids=[ITEM_ID], dependency_edges=[]))
     contract = TaskContract.create(
         objective="wake one current retry", non_goals=["no wake record"],
-        areas_to_avoid=[{"path": "slip/runtruth.py", "region": "all"}],
+        areas_to_avoid=[{"path": "floati/runtruth.py", "region": "all"}],
         input_hashes={"brief": DIGEST}, acceptance_checks={"tests.unit": "python3 -m unittest"},
         constraints={"network": "dark"}, risk_class="high",
         retry_policy={"max_attempts": 2, "backoff": {
@@ -810,7 +811,8 @@ class OneShotWakeTests(unittest.TestCase):
         self.assertEqual({"Year": 2099, "Month": 1, "Day": 2, "Hour": 3, "Minute": 5, "Second": 6},
                          preview["plist"]["StartCalendarInterval"])
         expected_label = "com.landoclusters.floati.oneshot." + hashlib.sha256("\0".join((
-            "slipway-one-shot-wake-v1", str(self.root.path), "alpha", RUN_ID, ITEM_ID,
+            RETIRED_PRODUCT_NAME + "-one-shot-wake-v1",
+            str(self.root.path), "alpha", RUN_ID, ITEM_ID,
             self.attempt["attempt_id"], WAKE_AT, "7", self.attempt["fence_token"],
         )).encode("utf-8")).hexdigest()
         self.assertEqual(expected_label, preview["label"])

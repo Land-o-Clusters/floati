@@ -58,7 +58,7 @@ is:
 
 ### Class 1 — internal code identity: complete locally
 
-- The Python package is floati/; the retired slip/ package and scripts/slip
+- The Python package is floati/; the retired <retired>/ package and scripts/slip
   launcher are absent. The canonical regular executable is scripts/floati,
   with no compatibility shim.
 - Static, dynamic, bootstrap, worker, subprocess, test, and fixture imports
@@ -111,13 +111,13 @@ is:
   31 unique source files). C7.2 refreshed 38 source digests plus its
   projection digest (39 fields; 32 unique source files). Catalog $id/source
   bytes, SHA-256 rows, non-digest values, and key order were audited.
-- The frozen manifest stays at 206 rows. Its retired slip/** and scripts/slip
+- The frozen manifest stays at 206 rows. Its retired <retired>/** and scripts/slip
   rows fell from 79 to 0; its floati/** and scripts/floati rows are 80; and
   schema_version 0, protocol_version "0", and canonical_ref
   refs/heads/lane/hm0 are preserved.
 - Current living documentation was reconciled only in docs/DESIGN.md and
   docs/COPY-LEDGER.md. Those changes replace current .slipway-install,
-  .slipway, and <temp>/slipway-work instructions/transcript coordinates
+  .slipway, and <temp>/work instructions/transcript coordinates
   with their ruled Floati equivalents; no historical material was rewritten.
 
 ### Class 4 — owner-only external coordinates: pending
@@ -153,7 +153,7 @@ was clean after each restoration.
 
 | Control | Temporary mutation and focused gate | Required failure receipt | Pre/post SHA-256 |
 | --- | --- | --- | --- |
-| Retired import coordinate | In floati/worker_bootstrap.py, from floati.worker_errors import WorkerAdapterFailure was changed to from slip.worker_errors import WorkerAdapterFailure. Gate: python3 -m unittest -v tests.test_internal_rename.InternalRenameCodeIdentityTests.test_dynamic_runtime_modules_resolve_under_floati | Exit 1; Ran 1 test; failures=1; legacy module namespace remains in floati/worker_bootstrap.py. | f087dd27885eb53cf1a52e21fc63ca713ce8f5754de91ae29d357db9f3339ab4 |
+| Retired import coordinate | In floati/worker_bootstrap.py, from floati.worker_errors import WorkerAdapterFailure was changed to from <retired>.worker_errors import WorkerAdapterFailure. Gate: python3 -m unittest -v tests.test_internal_rename.InternalRenameCodeIdentityTests.test_dynamic_runtime_modules_resolve_under_floati | Exit 1; Ran 1 test; failures=1; legacy module namespace remains in floati/worker_bootstrap.py. | f087dd27885eb53cf1a52e21fc63ca713ce8f5754de91ae29d357db9f3339ab4 |
 | Retired workspace evidence directory | In floati/storage_identity.py, EVIDENCE_DIRECTORY = ".floati" was changed to EVIDENCE_DIRECTORY = ".slipway". Gate: python3 -m unittest -v tests.test_codex_live_adapter.CodexAppServerSessionTests.test_session_drives_exact_stdio_sequence_and_correlates_responses | Exit 1; Ran 1 test; failures=1; self.workspace / ".floati" / "transcript.jsonl" is not a file. | d17a9ea7520cd674c74b831fe9872493540d4427855b7aa268224626556697a1 |
 | Unowned schema origin | In schemas/v0/work-item-record.schema.json, the $id origin was changed from https://landoclusters.com/floati/schemas/ to https://slipway.dev/schemas/. Gate: python3 -m unittest -v tests.test_internal_rename.InternalRenameCodeIdentityTests.test_schema_ids_use_owned_floati_origin_without_assigning_missing_ids | Exit 1; Ran 1 test; failures=1; reported https://slipway.dev/schemas/v0/work-item-record.schema.json. | be26a743b9706811e9859247a45157f7159fb5d32d6221f1a9be32b70f8ef96d |
 | Stale manifest digest | In bundle-manifest.v0.json, the floati/conformance.py SHA-256 row was changed to 64 zeroes. Gate: python3 -c 'from pathlib import Path; from floati.manifest import verify_manifest; errors = verify_manifest(Path.cwd()); print(errors); raise SystemExit(1 if errors else 0)' | Exit 1; exact output ['digest_mismatch:floati/conformance.py']. | d41e82214ea919f69f10dd343ea1a3745eecb33bc04b43e1d81b560e45ec898d |

@@ -4,6 +4,13 @@ import unittest
 
 from floati.contracts import AcceptanceReceipt, ContractHistory, PlanAmendment, TaskContract, contract_digest
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_SHORT_NAME
+
+# The retired package directory, built rather than spelled. It is free text
+# everywhere else in the suite and was renamed there -- but here it is an
+# INPUT to the literal contract digest pinned below, so changing the bytes
+# moves a golden value. The digest is the pin; this string is its preimage.
+AVOID_PATH = RETIRED_PRODUCT_SHORT_NAME + "/graph.py"
 
 
 class TaskContractTests(unittest.TestCase):
@@ -13,7 +20,7 @@ class TaskContractTests(unittest.TestCase):
             non_goals=("do not score model confidence", "do not mutate history"),
             areas_to_avoid=(
                 {"path": "docs/DESIGN.md", "region": "Task 6"},
-                {"path": "slip/graph.py", "region": "all"},
+                {"path": AVOID_PATH, "region": "all"},
             ),
             input_hashes={"brief": "a" * 64, "design": "b" * 64},
             acceptance_checks={
@@ -42,7 +49,7 @@ class TaskContractTests(unittest.TestCase):
                 "non_goals": ["do not score model confidence", "do not mutate history"],
                 "areas_to_avoid": [
                     {"path": "docs/DESIGN.md", "region": "Task 6"},
-                    {"path": "slip/graph.py", "region": "all"},
+                    {"path": AVOID_PATH, "region": "all"},
                 ],
                 "input_hashes": {"brief": "a" * 64, "design": "b" * 64},
                 "acceptance_checks": {

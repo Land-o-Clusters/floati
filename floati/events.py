@@ -627,6 +627,48 @@ class EventLog:
             )
 
     @shared_epoch_operation
+    def drain(
+        self,
+        recipient: str,
+        *,
+        acting_session_id: str,
+        limit: int = MAX_PRESENTATION_ITEMS,
+        worker_session_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> Tuple[
+        List[Dict[str, object]],
+        Optional[Dict[str, object]],
+        Optional[Dict[str, object]],
+    ]:
+        """Present and acknowledge one exact batch under one coordination guard."""
+
+        from .cursor import SparseCursor
+        from .wake_control import validate_session_id
+        from .wake_hold import wake_coordination_guard
+
+        node = self.registry.resolve_node_id(recipient, field="recipient")
+        session = validate_session_id(acting_session_id)
+        with wake_coordination_guard(
+            self.root, node, worker_session_id=worker_session_id
+        ):
+            messages, delivery = self._present_already_guarded(
+                node,
+                limit,
+                worker_session_id=worker_session_id,
+                now=now,
+            )
+            if not messages:
+                return [], None, None
+            acknowledgment = SparseCursor(self.root)._ack_already_guarded(
+                node,
+                [str(message["id"]) for message in messages],
+                acting_session_id=session,
+                worker_session_id=worker_session_id,
+                now=now,
+            )
+            return messages, delivery, acknowledgment
+
+    @shared_epoch_operation
     def present_compatible(
         self,
         recipient: str,

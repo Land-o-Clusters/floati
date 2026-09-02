@@ -46,8 +46,8 @@ class ReconciliationObserverTests(unittest.TestCase):
         (self.repository / "README.md").write_text("observer fixture\n", encoding="utf-8")
         self.git("add", "README.md")
         self.git(
-            "-c", "user.name=Slipway Tests",
-            "-c", "user.email=tests@slipway.invalid",
+            "-c", "user.name=Floati Tests",
+            "-c", "user.email=tests@floati.invalid",
             "commit", "--quiet", "-m", "fixture",
         )
         self.sha = self.git("rev-parse", "HEAD").stdout.strip()
@@ -514,8 +514,8 @@ class ReconciliationObserverTests(unittest.TestCase):
         (replacement / "README.md").write_text("replacement\n", encoding="utf-8")
         self.git("add", "README.md", cwd=replacement)
         self.git(
-            "-c", "user.name=Slipway Tests",
-            "-c", "user.email=tests@slipway.invalid",
+            "-c", "user.name=Floati Tests",
+            "-c", "user.email=tests@floati.invalid",
             "commit", "--quiet", "-m", "replacement", cwd=replacement,
         )
         replacement_sha = self.git("rev-parse", "HEAD", cwd=replacement).stdout.strip()

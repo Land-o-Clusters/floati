@@ -59,6 +59,15 @@ PROBE_REASON = (
 PROBE_DEADLINE_SECONDS = 300
 
 
+def _codex_executable_absent() -> ProtocolRefusal:
+    path = str(CODEX_EXECUTABLE)
+    return ProtocolRefusal(
+        "wake_daemon_codex_executable_absent",
+        f"the fixed Codex queue executable is absent at {path}",
+        remedy=f"restore the reviewed Codex queue executable at {path}",
+    )
+
+
 def resume_probe_class(harness: str) -> str:
     """Return the adapter's declared resume_probe class, refusing if undeclared."""
 
@@ -159,10 +168,7 @@ def record_codex_daemon_binding(
     try:
         executable = CODEX_EXECUTABLE.resolve(strict=True)
     except OSError as exc:
-        raise ProtocolRefusal(
-            "wake_daemon_codex_executable_absent",
-            "the fixed Codex queue executable is absent",
-        ) from exc
+        raise _codex_executable_absent() from exc
     coordinate = DaemonCoordinate(
         participant.root, participant.binding.node_id, "codex"
     )
@@ -337,10 +343,7 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
         try:
             executable = CODEX_EXECUTABLE.resolve(strict=True)
         except OSError as exc:
-            raise ProtocolRefusal(
-                "wake_daemon_codex_executable_absent",
-                "the fixed Codex queue executable is absent",
-            ) from exc
+            raise _codex_executable_absent() from exc
         if executable != current.executable:
             raise ProtocolRefusal(
                 "wake_daemon_executable_digest_mismatch",
@@ -494,8 +497,19 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
     def resume_argv(
         executable: Path, session_id: str, reason: str
     ) -> tuple[str, ...]:
+        try:
+            node = ZCODE_NODE.resolve(strict=True)
+        except OSError as exc:
+            raise ProtocolRefusal(
+                "wake_daemon_zcode_node_absent",
+                f"the fixed zcode node interpreter is absent at {ZCODE_NODE}",
+                remedy=(
+                    "restore the reviewed zcode node interpreter at "
+                    f"{ZCODE_NODE}"
+                ),
+            ) from exc
         return (
-            str(ZCODE_NODE),
+            str(node),
             str(executable),
             "--json",
             "--no-color",

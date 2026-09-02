@@ -170,6 +170,11 @@
           "else": {"not": {"required": ["wake_health"]}}
         },
         {
+          "if": {"properties": {"code": {"const": "acknowledgment_health"}}},
+          "then": {"required": ["acknowledgment"]},
+          "else": {"not": {"required": ["acknowledgment"]}}
+        },
+        {
           "if": {
             "properties": {
               "code": {"const": "effect_reconciliation_interpreter_trust"},
@@ -211,7 +216,7 @@
       ],
       "properties": {
         "code": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?$"},
-        "severity": {"enum": ["ok", "warning", "error"]},
+        "severity": {"enum": ["ok", "info", "warning", "error"]},
         "subject": {"type": "string", "minLength": 1, "maxLength": 4096},
         "detail": {"type": "string", "minLength": 1, "maxLength": 8192},
         "remediation": {"type": ["string", "null"], "maxLength": 4096},
@@ -220,6 +225,7 @@
         "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},
         "epoch_roll": {"$ref": "#/$defs/epoch_roll"},
         "wake_health": {"$ref": "wake-health-fact.schema.json"},
+        "acknowledgment": {"$ref": "#/$defs/acknowledgment_health"},
         "interpreter_trust": {"$ref": "#/$defs/interpreter_trust"},
         "hook_trust_key": {"type": "string", "minLength": 1, "maxLength": 4096},
         "hook_trust": {"enum": ["trusted", "untrusted_pending_user"]},
@@ -234,6 +240,29 @@
         "hook_enabled": {"type": ["boolean", "null"]},
         "hook_armed": {"type": "boolean"},
         "hook_trust_remediation": {"type": ["string", "null"], "maxLength": 4096}
+      }
+    },
+    "acknowledgment_health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivered_unacknowledged_count", "oldest_attention_minutes", "oldest_message_id", "acknowledged_count", "latencies", "cadence", "sla"],
+      "properties": {
+        "delivered_unacknowledged_count": {"type": "integer", "minimum": 0},
+        "oldest_attention_minutes": {"type": ["integer", "null"], "minimum": 0},
+        "oldest_message_id": {"type": ["string", "null"], "pattern": "^msg-"},
+        "acknowledged_count": {"type": "integer", "minimum": 0},
+        "latencies": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/acknowledgment_latency"}},
+        "cadence": {"type": ["string", "null"], "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+        "sla": {"const": "undeclared"}
+      }
+    },
+    "acknowledgment_latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_id", "seconds"],
+      "properties": {
+        "message_id": {"type": "string", "pattern": "^msg-"},
+        "seconds": {"type": "integer", "minimum": 0}
       }
     },
     "interpreter_trust": {

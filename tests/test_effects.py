@@ -54,7 +54,7 @@ class EffectRecordFixture:
             "effect_type": "git_ref_update",
             "target": {
                 "kind": "git_ref",
-                "coordinate": "owner/slipway:refs/heads/main",
+                "coordinate": "owner/floati:refs/heads/main",
                 "identity_digest": "b" * 64,
             },
             "request_digest": "c" * 64,
@@ -722,7 +722,7 @@ class EffectProjectionTests(unittest.TestCase):
         projection = EffectProjection.from_records(records)
         records[0]["target"]["coordinate"] = "mutated"
         operation = projection.operation(self.fixture.binding()["operation_id"])
-        self.assertEqual("owner/slipway:refs/heads/main", operation["target"]["coordinate"])
+        self.assertEqual("owner/floati:refs/heads/main", operation["target"]["coordinate"])
         with self.assertRaises(TypeError):
             operation["target"]["coordinate"] = "mutated"
         self.assertIsInstance(projection.for_attempt(self.fixture.run_id, self.fixture.attempt_id), tuple)

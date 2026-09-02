@@ -127,7 +127,7 @@ class WorkerBootstrapProtocolTests(unittest.TestCase):
             ("spawned", None),
             ("descendant", {"provider_descendant_id": "native-1", "state": "observed"}),
             ("effect", {"verb": "intent", "idempotency_key": "key-1"}),
-            ("result", [{"repo": "slipway", "sha": "a" * 40, "doc": "README.md"}]),
+            ("result", [{"repo": "floati", "sha": "a" * 40, "doc": "README.md"}]),
             ("effect_reporting_closed", None),
             ("effect_reporting_closed_ack", None),
             ("observation_closed", None),

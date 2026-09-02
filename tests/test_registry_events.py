@@ -92,7 +92,7 @@ class RegistryEventTests(unittest.TestCase):
         first = self.events.send(
             "sender",
             "recipient",
-            "slipway",
+            "floati",
             "a" * 40,
             "docs/evidence/checkpoint.md",
             "HM-0.5 delivered",
@@ -101,7 +101,7 @@ class RegistryEventTests(unittest.TestCase):
         replay = self.events.send(
             "sender",
             "recipient",
-            "slipway",
+            "floati",
             "a" * 40,
             "docs/evidence/checkpoint.md",
             "HM-0.5 delivered",
@@ -111,7 +111,7 @@ class RegistryEventTests(unittest.TestCase):
         records = read_records(self.root, "events.jsonl", allowed_kinds={"message_envelope"})
         self.assertEqual(1, len(records))
         self.assertEqual("message_envelope", records[0]["kind"])
-        self.assertEqual("slipway", records[0]["repo"])
+        self.assertEqual("floati", records[0]["repo"])
         self.assertEqual("a" * 40, records[0]["sha"])
         self.assertEqual("docs/evidence/checkpoint.md", records[0]["doc"])
         self.assertEqual("HM-0.5 delivered", records[0]["note"])
@@ -139,7 +139,7 @@ class RegistryEventTests(unittest.TestCase):
                 before = self.events.path.read_bytes() if self.events.path.exists() else b""
                 with self.assertRaises(ProtocolRefusal) as caught:
                     self.events.send(
-                        "sender", "recipient", "slipway", "a" * 40,
+                        "sender", "recipient", "floati", "a" * 40,
                         "docs/evidence/checkpoint.md", "HM-0.5 delivered",
                         idempotency_key=key,
                     )
@@ -151,13 +151,13 @@ class RegistryEventTests(unittest.TestCase):
         for node in ("sender", "recipient", "other"):
             self.registry.register(node, "worker")
         reply_target = self.events.send(
-            "recipient", "sender", "slipway", "f" * 40,
+            "recipient", "sender", "floati", "f" * 40,
             "docs/evidence/reply-target.md", "target", idempotency_key="reply-target",
         )
         base = {
             "sender": "sender",
             "recipient": "recipient",
-            "repo": "slipway",
+            "repo": "floati",
             "sha": "a" * 40,
             "doc": "docs/evidence/checkpoint.md",
             "note": "HM-0.5 delivered",
@@ -165,7 +165,7 @@ class RegistryEventTests(unittest.TestCase):
         mutations = {
             "sender": "other",
             "recipient": "other",
-            "repo": "owner/slipway",
+            "repo": "owner/floati",
             "sha": "b" * 40,
             "doc": "docs/evidence/other.md",
             "note": "different note",
@@ -187,11 +187,11 @@ class RegistryEventTests(unittest.TestCase):
         for node in ("sender", "recipient", "other"):
             self.registry.register(node, "worker")
         first = self.events.send(
-            "sender", "recipient", "slipway", "a" * 40,
+            "sender", "recipient", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="first",
         )
         reply = self.events.send(
-            "recipient", "sender", "slipway", "b" * 40,
+            "recipient", "sender", "floati", "b" * 40,
             "docs/evidence/reply.md", "reply", reply_to=first["id"],
             idempotency_key="reply",
         )
@@ -204,7 +204,7 @@ class RegistryEventTests(unittest.TestCase):
             with self.subTest(code=code):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     self.events.send(
-                        sender, recipient, "slipway", "c" * 40,
+                        sender, recipient, "floati", "c" * 40,
                         "docs/evidence/reply.md", "reply", reply_to=reply_to,
                     )
                 self.assertEqual(code, caught.exception.code)
@@ -215,7 +215,7 @@ class RegistryEventTests(unittest.TestCase):
         valid = {
             "sender": "sender",
             "recipient": "recipient",
-            "repo": "slipway",
+            "repo": "floati",
             "sha": "a" * 40,
             "doc": "docs/evidence/checkpoint.md",
             "note": "HM-0.5 delivered",
@@ -264,7 +264,7 @@ class RegistryEventTests(unittest.TestCase):
 
         with self.assertRaises(IntegrityFailure):
             self.events.send(
-                "sender", "recipient", "slipway", "a" * 40,
+                "sender", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
 
@@ -291,7 +291,7 @@ class RegistryEventTests(unittest.TestCase):
         before = root_entries(self.root)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "stranger", "recipient", "slipway", "a" * 40,
+                "stranger", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("unknown_sender", caught.exception.code)
@@ -308,7 +308,7 @@ class RegistryEventTests(unittest.TestCase):
         before = root_entries(self.root)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "alpha", "stranger", "slipway", "a" * 40,
+                "alpha", "stranger", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("recipient_unregistered", caught.exception.code)
@@ -325,7 +325,7 @@ class RegistryEventTests(unittest.TestCase):
         before = root_entries(self.root)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "retired", "recipient", "slipway", "a" * 40,
+                "retired", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("unknown_sender", caught.exception.code)
@@ -338,7 +338,7 @@ class RegistryEventTests(unittest.TestCase):
         before = root_entries(self.root)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "stranger", "recipient", "slipway", "a" * 40,
+                "stranger", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("unknown_sender", caught.exception.code)
@@ -354,7 +354,7 @@ class RegistryEventTests(unittest.TestCase):
         before = root_entries(self.root)
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "stranger", "retired", "slipway", "a" * 40,
+                "stranger", "retired", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("unknown_sender", caught.exception.code)
@@ -368,7 +368,7 @@ class RegistryEventTests(unittest.TestCase):
         self.registry.register("recipient", "worker")
         before = root_entries(self.root)
         self.events.send(
-            "sender", "recipient", "slipway", "a" * 40,
+            "sender", "recipient", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
         )
         self.assertNotEqual(before, root_entries(self.root))
@@ -381,12 +381,12 @@ class RegistryEventTests(unittest.TestCase):
         self.registry.register("sender", "worker")
         self.registry.register("recipient", "worker")
         self.events.send(
-            "sender", "recipient", "slipway", "a" * 40,
+            "sender", "recipient", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "first", idempotency_key="conflict",
         )
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "sender", "recipient", "slipway", "a" * 40,
+                "sender", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "second", idempotency_key="conflict",
             )
         self.assertEqual("idempotency_conflict", caught.exception.code)
@@ -398,7 +398,7 @@ class RegistryEventTests(unittest.TestCase):
         self.registry.register("recipient", "worker")
         with self.assertRaises(ProtocolRefusal) as caught:
             self.events.send(
-                "", "recipient", "slipway", "a" * 40,
+                "", "recipient", "floati", "a" * 40,
                 "docs/evidence/checkpoint.md", "HM-0.5 delivered",
             )
         self.assertEqual("sender_invalid", caught.exception.code)
@@ -410,12 +410,12 @@ class RegistryEventTests(unittest.TestCase):
             self.registry.register(node, "worker")
         session = "worker-" + uuid7_hex()
         first = self.events.send(
-            "sender", "recipient", "slipway", "a" * 40,
+            "sender", "recipient", "floati", "a" * 40,
             "docs/evidence/first.md", "first",
             idempotency_key="writer-forged-first", worker_session_id=session,
         )
         second = self.events.send(
-            "sender", "recipient", "slipway", "b" * 40,
+            "sender", "recipient", "floati", "b" * 40,
             "docs/evidence/second.md", "second",
             idempotency_key="writer-forged-second", worker_session_id=session,
         )
@@ -453,7 +453,7 @@ class RegistryEventTests(unittest.TestCase):
         for node in (public_ids.worker('alpha'), "bob"):
             self.registry.register(node, "worker")
         session = "worker-018f7e9b3c137abc8def0123456789ab"
-        item = self.events.send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/held.md", "held", idempotency_key="held", worker_session_id=session)
+        item = self.events.send(public_ids.worker('alpha'), "bob", "floati", "a" * 40, "docs/evidence/held.md", "held", idempotency_key="held", worker_session_id=session)
         WakeHoldController(self.root).evaluate("bob", idempotency_key="held-key", worker_session_id=session)
         self.events.retract(item["id"], worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'))
         artifact = WakeHoldController(self.root).evaluate("bob", idempotency_key="later-key", worker_session_id=session)

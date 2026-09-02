@@ -36,7 +36,6 @@ READ_TOOLS = {
     "doctor",
     "effects",
     "graph",
-    "inbox",
     "intake_scan",
     "intake_show",
     "intake_preview",
@@ -48,6 +47,7 @@ GOVERNED_TOOLS = {
     "ack",
     "confluence_grant",
     "confluence_revoke",
+    "inbox",
     "send",
     "wake_pause",
     "wake_resume",
@@ -172,6 +172,9 @@ class McpToolSurfaceTests(unittest.TestCase):
         self.assertEqual("boolean", doctor["properties"]["probe"]["type"])
         receipts = self.tool("receipts")["inputSchema"]
         self.assertEqual(["node"], receipts["required"])
+        inbox = self.tool("inbox")["inputSchema"]
+        self.assertEqual({}, inbox["properties"])
+        self.assertEqual([], inbox["required"])
 
         parser = _parser()
         leaf_parser(parser, ("worker", "run")).floati_mcp_exposure = "governed"

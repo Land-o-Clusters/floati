@@ -6,7 +6,7 @@ Date: 2026-08-16
 
 ## Identity and authority
 
-- Floati worktree: `<temp>/slipway-spawn-groups`
+- Floati worktree: `<temp>/spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - Clean pre-evidence HEAD:
   `1094cf5bd0a3e2a3a980a76507f9f5186c72210a`

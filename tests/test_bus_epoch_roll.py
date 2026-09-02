@@ -72,6 +72,7 @@ READER_ASSIGNMENTS = (
     ("floati/conformance.py", "ReferenceAdapter.__init__", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/conformance.py", "run_live_root_smoke", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/demo.py", "seed_demo", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
+    ("floati/events.py", "EventLog.drain", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog._present_from_frames", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog._present_from_frames", "SparseCursor(self.root).state_for", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog._messages_from_snapshot", "SparseCursor", 1, "sparse_inbox_ack_cursor"),

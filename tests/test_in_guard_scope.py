@@ -41,7 +41,7 @@ class InGuardScopeTests(unittest.TestCase):
 
     def test_empty_inbox_names_root_tenant_and_explicit_source(self):
         _completed, artifact = invoke(
-            "inbox", "--root", str(self.root), "--as", public_ids.builder("a")
+            "inbox", "--root", str(self.root), "--as", public_ids.builder("a"), "--peek"
         )
         self.assertEqual(str(self.opened.path), artifact["evidence"]["scope"]["root"])
         self.assertEqual(self.opened.tenant_id, artifact["evidence"]["scope"]["tenant"])
@@ -49,7 +49,7 @@ class InGuardScopeTests(unittest.TestCase):
 
     def test_unknown_node_is_typed_not_empty(self):
         completed, artifact = invoke(
-            "inbox", "--root", str(self.root), "--as", "never-registered"
+            "inbox", "--root", str(self.root), "--as", "never-registered", "--peek"
         )
         self.assertEqual(20, completed.returncode)
         self.assertEqual("", completed.stdout)

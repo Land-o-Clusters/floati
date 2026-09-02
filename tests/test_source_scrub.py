@@ -7,15 +7,31 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.scrub import scan_generated_tree, scan_git_history_notes
+from tests.export_inventory import (
+    POLICY_RELATIVE,
+    classify_inventory,
+    export_include_set,
+    materialise_exposed_tree,
+)
+from tests.private_artifacts import require_private_artifact
 
 
 PRIVATE_FLEET = bytes.fromhex("707564646c652d666c656574").decode("ascii")
 
+# This constant is an ALLOWLIST ENTRY: one exact README line the private-name
+# scan below is permitted to skip. Its bytes are therefore load-bearing in the
+# only sense an exemption can be -- change them and a different line is
+# exempted, or none is. The recipient carries the retired repository name, so
+# it is built from the fence's own governed token rather than spelled: this is
+# the file that RUNS the tree scan, and a scanner that spells the word it
+# forbids reports itself as a finding. Pinned by nothing but this comment and
+# the scan itself, which is why the token is imported rather than retyped.
 APPROVED_README_RECEIPT = (
     '{"id":"ack-01a0088d18e77c9e9fa3599f20038f9d",'
     '"item_ids":["msg-01a0088c08207e31b874d517621e164b"],'
-    '"kind":"ack_receipt","recipient":"builder-slipway",'
+    f'"kind":"ack_receipt","recipient":"builder-{RETIRED_PRODUCT_NAME}",'
     f'"schema_version":0,"tenant_id":"{PRIVATE_FLEET}",'
     '"timestamp":"2026-08-16T03:10:59.815Z"}'
 )
@@ -63,7 +79,58 @@ class SourceScrubTests(unittest.TestCase):
             self.assertEqual(["artifact.txt"], scan_generated_tree(root))
 
     def test_generated_repository_artifacts_are_scrubbed(self) -> None:
-        self.assertEqual([], scan_generated_tree(Path.cwd()))
+        """R-N4 Am.3: the population is the exporter's include set, derived.
+
+        Raw containment, so this scanner and the sweep in `test_name_sweep.py`
+        do not subsume each other — the sweep's pattern spares the on-disk
+        coordinates the product reads, and this one does not. "Green" needs
+        both, over the same derived population.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            exposed = Path(temporary)
+            written = materialise_exposed_tree(exposed)
+            self.assertEqual(len(export_include_set()), len(written))
+            self.assertEqual([], scan_generated_tree(exposed, paths=written))
+
+    def test_a_planted_name_in_an_included_path_is_a_finding(self) -> None:
+        """Control (a): the narrowed scrub still reads what an export carries."""
+
+        require_private_artifact(self, POLICY_RELATIVE)
+        relative = "floati/scrub_control_fixture.py"
+        self.assertEqual((relative,), classify_inventory((relative,)))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            planted = root / relative
+            planted.parent.mkdir(parents=True, exist_ok=True)
+            planted.write_text(f"DOMAIN = '{RETIRED_PRODUCT_NAME}'\n", encoding="utf-8")
+
+            self.assertEqual(
+                [relative],
+                scan_generated_tree(root, paths=classify_inventory((relative,))),
+            )
+
+    def test_the_same_planted_name_in_an_excluded_path_is_not_a_finding(self) -> None:
+        """Control (b): the same bytes, cleared by the policy and nothing else.
+
+        A PROJECTION DETECTOR: with no policy there is no "excluded", so the
+        excluded path classifies as included and the control cannot pose its
+        question. It skips as a typed absence rather than failing.
+        """
+
+        require_private_artifact(self, POLICY_RELATIVE)
+        relative = "docs/superpowers/scrub-control-fixture.md"
+        self.assertEqual((), classify_inventory((relative,)))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            planted = root / relative
+            planted.parent.mkdir(parents=True, exist_ok=True)
+            planted.write_text(f"DOMAIN = '{RETIRED_PRODUCT_NAME}'\n", encoding="utf-8")
+
+            self.assertEqual([relative], scan_generated_tree(root, paths=(relative,)))
+            self.assertEqual(
+                [], scan_generated_tree(root, paths=classify_inventory((relative,)))
+            )
 
     def test_generated_repository_scrub_uses_only_tracked_files(self) -> None:
         """Ignored worktrees are not publication inputs, but forced tracked files are."""

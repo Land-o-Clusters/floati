@@ -100,7 +100,7 @@ class DoctorProbe:
                     ),
                     "remediation": (
                         "check the node's wake path, then drain its inbox "
-                        "(floati inbox --root <root> --as %s)" % node
+                        "(floati inbox --root <root> --as %s --session <session-id>)" % node
                     ),
                 }
         return ProbeReport(by_node=results, findings_by_node=findings)

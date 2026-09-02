@@ -54,35 +54,35 @@ schemas/v1/effect-record-common.schema.json
 schemas/v1/effect-status-artifact.schema.json
 schemas/v1/effect-unknown-record.schema.json
 schemas/v1/run-result-accepted-record.schema.json
-slip/adapters/claude.py
-slip/adapters/codex_live.py
-slip/adapters/pi.py
-slip/approvals.py
-slip/cli.py
-slip/copy.py
-slip/effect_reconciliation_exec.py
-slip/effect_reconciliation_observer.py
-slip/effect_reconciliation_protocol.py
-slip/effects.py
-slip/helptext.py
-slip/jsonl.py
-slip/policy.py
-slip/projection.py
-slip/records.py
-slip/run_limits.py
-slip/runtruth.py
-slip/sequencer.py
-slip/spawn_groups.py
-slip/supervisor.py
-slip/tui.py
-slip/tui_render.py
-slip/worker_adapter_runtime.py
-slip/worker_bootstrap.py
-slip/worker_bootstrap_protocol.py
-slip/worker_errors.py
-slip/worker_exec.py
-slip/worker_isolation.py
-slip/workers.py
+<retired>/adapters/claude.py
+<retired>/adapters/codex_live.py
+<retired>/adapters/pi.py
+<retired>/approvals.py
+<retired>/cli.py
+<retired>/copy.py
+<retired>/effect_reconciliation_exec.py
+<retired>/effect_reconciliation_observer.py
+<retired>/effect_reconciliation_protocol.py
+<retired>/effects.py
+<retired>/helptext.py
+<retired>/jsonl.py
+<retired>/policy.py
+<retired>/projection.py
+<retired>/records.py
+<retired>/run_limits.py
+<retired>/runtruth.py
+<retired>/sequencer.py
+<retired>/spawn_groups.py
+<retired>/supervisor.py
+<retired>/tui.py
+<retired>/tui_render.py
+<retired>/worker_adapter_runtime.py
+<retired>/worker_bootstrap.py
+<retired>/worker_bootstrap_protocol.py
+<retired>/worker_errors.py
+<retired>/worker_exec.py
+<retired>/worker_isolation.py
+<retired>/workers.py
 tests/schema_validation.py
 tests/test_approvals.py
 tests/test_claude_adapter.py
@@ -371,7 +371,7 @@ was reported. Known nested-isolation `sandbox initialization failed: Operation
 not permitted` diagnostics were printed; their assertions passed.
 
 ```text
-python3 -m slip.selftest
+python3 -m <retired>.selftest
 ```
 
 Exit 0; 1255/1255 in 166.424s; final artifact:
@@ -386,7 +386,7 @@ python3 -m unittest -v tests.test_manifest tests.test_schemas tests.test_copy_le
 Exit 0; 57/57 in 7.929s.
 
 ```text
-python3 -c 'from pathlib import Path; from slip.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'
+python3 -c 'from pathlib import Path; from <retired>.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'
 ```
 
 Exit 0; printed `[]`.
@@ -436,7 +436,7 @@ was reported. Expected nested-sandbox denial diagnostics came from passing
 refusal controls.
 
 ```text
-python3 -m slip.selftest
+python3 -m <retired>.selftest
 ```
 
 Exit 0; 1263/1263 in 232.482s; final artifact:
@@ -510,7 +510,7 @@ unsupported controls.
 The final combined bootstrap protocol/isolation, real-adapter, Effect, and
 manifest bank passed `146/146` in `21.691 s`.
 
-The deployable manifest digest for `slip/adapters/codex_live.py` was refreshed
+The deployable manifest digest for `<retired>/adapters/codex_live.py` was refreshed
 mechanically after the final source bytes. The Wake/Hold whole-review inventory
 test is now bound to its exact closed candidate
 `097867580d79d6fc7874d0dc55a689b4f4ab1669`, rather than moving `HEAD`, and
@@ -520,7 +520,7 @@ ruling.
 Final rebuilt-tree verification after the workstation restart:
 
 - fresh full `python3 -m unittest -q`: `1412/1412` in `191.919 s`, exit 0;
-- fresh `python3 -m slip.selftest`: `1412/1412` in `237.694 s`, exit 0,
+- fresh `python3 -m <retired>.selftest`: `1412/1412` in `237.694 s`, exit 0,
   followed by `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`;
 - direct manifest verification: `[]`;
 - source scrub, generated-copy equality, and exact Effect source inventory:
@@ -584,7 +584,7 @@ Final exact-byte verification:
 - private-cache compile, `git diff --check`, and the frozen C7.1/C7.2 plus
   schemas/v0 manifest controls: exit 0.
 
-Only the `slip/worker_isolation.py` deployable digest changed in
+Only the `<retired>/worker_isolation.py` deployable digest changed in
 `bundle-manifest.v0.json`. The primary `lane/hm0` checkout remained untouched;
 all edits and receipts belong to the isolated `codex/herdr-adapter-source`
 worktree.
@@ -639,7 +639,7 @@ macOS, sandbox-exec available) — the environment where round 1 degraded
 with `spawn_context_hook_missing` and the first fix degraded with
 `git_finalize_failed` — my independent runs now show:
 `WorkerEffectAuthorityTests` + `WorkerEffectPipeTests` **OK**, full
-`python3 -m unittest -q` **OK**, `python3 -m slip.selftest` **exit 0**.
+`python3 -m unittest -q` **OK**, `python3 -m <retired>.selftest` **exit 0**.
 The supported-host kernel-enforcement path has now executed and passed
 for the first time in its history. Consequences per the post-v1 closure
 ruling: **item 5 (Effect Ledger) CLOSED** · items 6 (Thread Observer)

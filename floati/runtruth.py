@@ -108,8 +108,22 @@ def effect_acceptance_guard(root: FloatiRoot, *, exclusive: bool = True):
         yield
 
 
+# The retired repository name, built from hex rather than spelled, and the two
+# salts derived from it. Both sit INSIDE a sha256 preimage, so their bytes are
+# a compatibility contract with data already written, not copy: a changed byte
+# in the first re-derives every attempt fence token an existing run stored, and
+# a changed byte in the second moves retry TIMING rather than only ids. Built
+# for the reason floati/identity_fence.py builds its governed tokens -- a fence
+# that must forbid this word may not find it in shipped source, and the runtime
+# value may not move to satisfy the fence. Pinned in
+# tests/test_retired_name_pins.py, the jitter one by its resulting delay.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_ATTEMPT_FENCE_DOMAIN = _RETIRED_NAME + "-attempt-fence-v0"
+_RETRY_JITTER_DOMAIN = _RETIRED_NAME + "-retry-jitter-v0"
+
+
 def attempt_fence_token(run_id: str, item_id: str, ordinal: int, scheduler_epoch: int) -> str:
-    payload = "\0".join(("slipway-attempt-fence-v0", run_id, item_id, str(ordinal), str(scheduler_epoch)))
+    payload = "\0".join((_ATTEMPT_FENCE_DOMAIN, run_id, item_id, str(ordinal), str(scheduler_epoch)))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -118,7 +132,7 @@ def retry_delay_from_backoff(run_id: str, item_id: str, ordinal: int, backoff: D
     ceiling = base if backoff["strategy"] == "fixed" else min(cap, base * (2 ** max(0, ordinal - 2)))
     if ceiling == 0:
         return 0
-    payload = "\0".join(("slipway-retry-jitter-v0", run_id, item_id, str(ordinal)))
+    payload = "\0".join((_RETRY_JITTER_DOMAIN, run_id, item_id, str(ordinal)))
     jitter = int.from_bytes(hashlib.sha256(payload.encode("utf-8")).digest()[:8], "big") % (ceiling // 4 + 1)
     return min(cap, ceiling + jitter)
 

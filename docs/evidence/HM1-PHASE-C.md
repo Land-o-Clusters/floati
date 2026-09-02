@@ -15,11 +15,11 @@ does not claim the architect live polish, hosted CI, deployment, activation, or 
 
 ## RED-first ledger
 
-The first Phase C focused run collected eight errors because `slip.tui` and
-`slip.tui_render` did not exist. The implemented board then passed eight
+The first Phase C focused run collected eight errors because `<retired>.tui` and
+`<retired>.tui_render` did not exist. The implemented board then passed eight
 focused rendering and control tests.
 
-The demo-first run subsequently failed because `slip.demo`, the `make demo`
+The demo-first run subsequently failed because `<retired>.demo`, the `make demo`
 target, the board CLI/help surface, and state-signature seam were absent. The
 first deterministic capture test also exposed unstable receipt ordering when
 timestamps tied; an explicit kind tie-break fixed it. A later keyboard audit
@@ -53,18 +53,18 @@ Fresh gate commands after the manifest, design, README, evidence, ruling
 request, and captures were present:
 
 ```sh
-python3 -m slip.selftest
-python3 -m slip.conformance --live-root-smoke
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -m <retired>.selftest
+python3 -m <retired>.conformance --live-root-smoke
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger
 make demo-capture
-python3 -m slip.demo --capture monochrome > <temp>/floati-hm1-mono.txt
+python3 -m <retired>.demo --capture monochrome > <temp>/floati-hm1-mono.txt
 cmp docs/evidence/captures/hm1-tui-monochrome.txt <temp>/floati-hm1-mono.txt
 git diff --check
 ```
 
 The first complete run stopped RED after 146 tests because the manifest held a
-stale committed digest for `slip/copy.py`. Only the measured digest was
+stale committed digest for `<retired>/copy.py`. Only the measured digest was
 corrected. The complete command was then restarted from the beginning.
 
 Observed on the restart: selftest exit 0, 146 tests, `OK`, then
@@ -78,8 +78,8 @@ diff check exit 0 with no output.
 - Board model, rendering, keyboard path, durable visible ack, and synthetic
   fleet: locally executed.
 - the architect voice approval and live visual-polish session: pending and unobserved.
-- Bare `slip` remains intentionally unbound: choosing a hidden default root or
+- Bare `<retired>` remains intentionally unbound: choosing a hidden default root or
   showing synthetic evidence would violate the explicit-root and honest-state
-  laws. The operator surfaces are `slip board --root`, `slip board --demo`,
+  laws. The operator surfaces are `<retired> board --root`, `<retired> board --demo`,
   and `make demo` pending a governed root-selection ruling.
 - Hosted CI, deployment, activation, push, and local/origin parity: unobserved.

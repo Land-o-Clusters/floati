@@ -39,16 +39,17 @@ Every node polls at boot and before stand-down. There is no wake adapter in
 HM-0.5:
 
 ```sh
-/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as reviewer
-/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-app
-/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-floati
+/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as reviewer --session <session-id>
+/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-app --session <session-id>
+/repo/floati/scripts/floati inbox --root /var/tmp/floati-tenant-a --as builder-floati --session <session-id>
 ```
 
-An inbox presentation writes a delivery receipt. After reviewing the Git
-notification, the receiving node may acknowledge that exact message:
+The default inbox drain writes distinct delivery and acknowledgment receipts
+for exactly the returned batch. An explicit process-before-ack workflow uses
+`--peek`, then acknowledges the reviewed batch with the acting session:
 
 ```sh
-/repo/floati/scripts/floati ack --root /var/tmp/floati-tenant-a --as reviewer --id <message-id>
+/repo/floati/scripts/floati ack --root /var/tmp/floati-tenant-a --as reviewer --id <message-id> --session <session-id>
 ```
 
 Acknowledgment is not completion. It records the exact presented message ID;

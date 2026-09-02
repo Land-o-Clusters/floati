@@ -3,13 +3,13 @@
   "diagnostic_version": "0",
   "state": "healthy",
   "root": "\u002fprivate/tmp/alpha",
-  "source": "\u002fprivate/tmp/slipway",
+  "source": "\u002fprivate/tmp/floati",
   "ref": "origin/lane/hm0",
   "findings": [
     {"code": "root_valid", "severity": "ok", "subject": "\u002fprivate/tmp/alpha", "detail": "direct-home root is valid", "remediation": null},
     {"code": "registry_live_dirs_match", "severity": "ok", "subject": "\u002fprivate/tmp/alpha", "detail": "active registry and liveness directory identities match", "remediation": null},
-    {"code": "manifest_exact_set", "severity": "ok", "subject": "\u002fprivate/tmp/slipway", "detail": "manifest paths and digests are an exact deployable set", "remediation": null},
-    {"code": "deploy_currency_current", "severity": "ok", "subject": "\u002fprivate/tmp/slipway", "detail": "clean HEAD equals origin/lane/hm0", "remediation": null},
+    {"code": "manifest_exact_set", "severity": "ok", "subject": "\u002fprivate/tmp/floati", "detail": "manifest paths and digests are an exact deployable set", "remediation": null},
+    {"code": "deploy_currency_current", "severity": "ok", "subject": "\u002fprivate/tmp/floati", "detail": "clean HEAD equals origin/lane/hm0", "remediation": null},
     {"code": "symlink_identity_valid", "severity": "ok", "subject": "\u002fprivate/tmp/alpha", "detail": "governed identities are lexical non-symlink paths", "remediation": null},
     {"code": "consumption_coordinate_valid", "severity": "ok", "subject": "work/items.jsonl", "detail": "sole consumption coordinate is structurally valid", "remediation": null}
   ]

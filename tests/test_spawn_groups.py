@@ -24,6 +24,7 @@ from floati.capability_binding import CapabilityBinder
 from floati.contracts import TaskContract, contract_digest
 from floati.errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from floati.host_paths import worker_workspace_root
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.jsonl import append_record
 from floati.admission import AdmissionBinder, AdmissionEvaluator, AdmissionPlan
@@ -82,7 +83,7 @@ def _contract() -> TaskContract:
     return TaskContract.create(
         objective="bounded child",
         non_goals=["no hidden descendants"],
-        areas_to_avoid=[{"path": "slip/provider.py", "region": "all"}],
+        areas_to_avoid=[{"path": "floati/provider.py", "region": "all"}],
         input_hashes={"brief": DIGEST},
         acceptance_checks={"tests.unit": "python3 -m unittest"},
         constraints={"network": "dark"},
@@ -126,7 +127,7 @@ class _GovernedSpawnPipeAdapter:
             raise RuntimeError("spawn event pipe missing")
         for event in self.during_drive:
             self._emit(dict(event))
-        return [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
 class _PostResultObservationCloseFailureAdapter:
@@ -152,7 +153,7 @@ class _PostResultObservationCloseFailureAdapter:
         if frame is None:
             raise RuntimeError("worker child private pipe is unavailable")
         connection = frame.f_locals["connection"]
-        bindings = [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        bindings = [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
         connection.send(("result", bindings))
         if connection.recv() != ("observation_closed", None):
             raise RuntimeError("parent observation close was not delivered")
@@ -178,14 +179,14 @@ class _ResultBeforeSpawnAdapter:
         if frame is None:
             raise RuntimeError("worker child private pipe is unavailable")
         frame.f_locals["connection"].send(("result", [{
-            "repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md",
+            "repo": "floati-proof", "sha": "a" * 40, "doc": "README.md",
         }]))
         return object()
 
     def drive(
         self, handle: object, item: dict[str, object], *, deadline_seconds: float,
     ) -> list[dict[str, str]]:
-        return [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
 def _canonical_edges(edges: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -2906,7 +2907,13 @@ class SpawnGroupRecordTests(unittest.TestCase):
 
         for workspace, expected in (
             (str(worker_workspace_root() / fixture.child), (True, True)),
-            (f"\x2fprivate/tmp/slipway-work/{fixture.child}", (False, False)),
+            # The RETIRED governed-workspace root, built rather than spelled:
+            # this row asserts that exact coordinate is refused, so its bytes
+            # are the assertion.
+            (
+                f"\x2fprivate/tmp/{RETIRED_PRODUCT_NAME}-work/{fixture.child}",
+                (False, False),
+            ),
         ):
             with self.subTest(workspace=workspace):
                 self.assertEqual(
@@ -5879,7 +5886,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
             return {
                 "schema_version": 1,
                 "id": "untracked-descendant-" + _semantic_uuid(
-                    "slipway-descendant-v1", semantic,
+                    RETIRED_PRODUCT_NAME + "-descendant-v1", semantic,
                 ),
                 "tenant_id": "alpha",
                 "timestamp": timestamp,
@@ -5994,7 +6001,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
                 self, handle: object, item: object, *, deadline_seconds: float,
             ) -> list[dict[str, str]]:
                 return [{
-                    "repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md",
+                    "repo": "floati-proof", "sha": "a" * 40, "doc": "README.md",
                 }]
 
         case = _Task3Case(self)

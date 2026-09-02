@@ -148,7 +148,7 @@ class RunTruthTests(unittest.TestCase):
     def contract(self, *, objective="durable acceptance") -> TaskContract:
         return TaskContract.create(
             objective=objective, non_goals=["no semantic score"],
-            areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
             input_hashes={"brief": DIGEST}, acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"}, risk_class="high",
             retry_policy={"max_attempts": 2, "backoff": {"base_delay_ms": 10, "cap_delay_ms": 10, "strategy": "exponential"}},

@@ -26,6 +26,16 @@ GOVERNED_TEMP_PREFIXES = tuple(prefix for _code, prefix in GOVERNED_TEMP_FENCES)
 OWNER_USERNAME = bytes.fromhex("63687269736d656e656e64657a").decode("ascii")
 HOME_PATTERN = re.compile(re.escape(HOME_PREFIX) + r"[A-Za-z0-9._-]+")
 
+# The retired repository name. It is a governed token for the same reason the
+# others here are: a fence that spells the string it forbids reports itself as
+# a finding. Every shipped use of this name is a hash-domain salt, a persisted
+# field value, or an on-disk coordinate the product reads — values that must
+# keep their exact bytes — so the convention is to build the token, never to
+# rewrite it. Consumers: floati/scrub.py's vocabulary and the tests that sweep
+# for the name.
+RETIRED_PRODUCT_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+RETIRED_PRODUCT_SHORT_NAME = bytes.fromhex("736c6970").decode("ascii")
+
 
 # A governed prefix is a POSITION, not a substring. The shortest governed
 # prefix also occurs INSIDE a longer, ungoverned system path, and a plain

@@ -114,7 +114,7 @@ def _send_then_crash(base: str, point: str) -> None:
     EventLog(root).send(
         public_ids.worker('alpha'),
         "bob",
-        "slipway",
+        "floati",
         "b" * 40,
         "docs/evidence/hm3h.md",
         "crash retry",
@@ -306,7 +306,7 @@ def _decision_proposal_then_crash(base: str, point: str) -> None:
 def _append_task_contract(ledger: RunLedger, run_id: str, item_id: str) -> dict:
     contract = TaskContract.create(
         objective="govern crash retry", non_goals=["no post-attempt amendment"],
-        areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+        areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
         input_hashes={"brief": "a" * 64}, acceptance_checks={"tests.unit": "python3 -m unittest"},
         constraints={"network": "dark"}, risk_class="high",
         retry_policy={"max_attempts": 2, "backoff": {"base_delay_ms": 10, "cap_delay_ms": 10, "strategy": "exponential"}}, dependencies=[],
@@ -405,7 +405,7 @@ class CrashPointGauntletTests(unittest.TestCase):
         EventLog(root).send(
             public_ids.worker('alpha'),
             "bob",
-            "slipway",
+            "floati",
             "a" * 40,
             "docs/evidence/hm3h.md",
             "baseline",
@@ -548,7 +548,7 @@ class CrashPointGauntletTests(unittest.TestCase):
                         EventLog(root).send(
                             public_ids.worker('alpha'),
                             "bob",
-                            "slipway",
+                            "floati",
                             "b" * 40,
                             "docs/evidence/hm3h.md",
                             "crash retry",
@@ -563,7 +563,7 @@ class CrashPointGauntletTests(unittest.TestCase):
                 retried = EventLog(root).send(
                     public_ids.worker('alpha'),
                     "bob",
-                    "slipway",
+                    "floati",
                     "b" * 40,
                     "docs/evidence/hm3h.md",
                     "crash retry",
@@ -1189,19 +1189,19 @@ class EffectWorkerCrashTests(unittest.TestCase):
                     "            [sys.executable, '-c',\n"
                     "             \"import os,signal,time; from pathlib import Path; \"\n"
                     "             \"signal.signal(signal.SIGTERM, signal.SIG_IGN); \"\n"
-                    "             \"Path(os.environ['SLIPWAY_PROVIDER_PID']).write_text(\"\n"
+                    "             \"Path(os.environ['FLOATI_PROVIDER_PID']).write_text(\"\n"
                     "             \"str(os.getpid()) + ':' + str(os.getpgrp()), encoding='utf-8'); \"\n"
                     "             \"time.sleep(30)\"],\n"
                     "            start_new_session=self.isolate_process_group,\n"
                     "        )\n"
                     "        ready_deadline = time.monotonic() + 1.0\n"
-                    "        while not Path(os.environ['SLIPWAY_PROVIDER_PID']).exists():\n"
+                    "        while not Path(os.environ['FLOATI_PROVIDER_PID']).exists():\n"
                     "            if time.monotonic() >= ready_deadline:\n"
                     "                raise RuntimeError('provider did not install SIGTERM handler')\n"
                     "            time.sleep(0.005)\n"
                     "        if self.isolate_process_group and self.registrar is not None:\n"
                     "            self.registrar(provider.pid)\n"
-                    "        if os.environ['SLIPWAY_PROVIDER_MODE'] == 'crash':\n"
+                    "        if os.environ['FLOATI_PROVIDER_MODE'] == 'crash':\n"
                     "            os._exit(7)\n"
                     "        time.sleep(30)\n"
                     "        return object()\n"
@@ -1227,8 +1227,8 @@ class EffectWorkerCrashTests(unittest.TestCase):
                 # the provider PID/process group exists.
                 runner.call_timeout = 2.0
                 environment = {
-                    "SLIPWAY_PROVIDER_PID": str(pid_path),
-                    "SLIPWAY_PROVIDER_MODE": mode,
+                    "FLOATI_PROVIDER_PID": str(pid_path),
+                    "FLOATI_PROVIDER_MODE": mode,
                 }
                 with mock.patch(
                     "floati.workers._WORKER_BOOTSTRAP_PATH", bootstrap,

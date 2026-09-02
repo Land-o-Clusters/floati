@@ -106,7 +106,7 @@ class ManagedVerbShape:
     executable: str
     profile: str
     inbox: Tuple[str, ...] = ("inbox",)
-    ack: Tuple[str, ...] = ("ack", "--id")
+    ack: Tuple[str, ...] = ("ack", "--id", "--session")
     send: Tuple[str, ...] = ("send",) + _REQUIRED_SEND_FLAGS
     optional_send: Tuple[str, ...] = ("--reply-to",)
 
@@ -161,7 +161,7 @@ class ManagedVerbShape:
                 "node_projection_managed_bus_invalid",
                 "managed bus inbox shape is not the exact inbox verb",
             )
-        if self.ack != ("ack", "--id"):
+        if self.ack != ("ack", "--id", "--session"):
             raise ProtocolRefusal(
                 "node_projection_managed_bus_invalid",
                 "managed bus ack shape is not the exact ack verb",
@@ -199,7 +199,10 @@ class ManagedVerbShape:
         return f"{self._prefix()} inbox"
 
     def ack_line(self) -> str:
-        return f"{self._prefix()} ack --id <message-id>"
+        return (
+            f"{self._prefix()} ack --id <message-id> "
+            "[--id <message-id> ...] --session <session-id>"
+        )
 
     def send_line(self) -> str:
         return (

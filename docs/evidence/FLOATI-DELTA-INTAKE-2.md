@@ -41,7 +41,7 @@ CLI advertises `--adapter codex|pi`.
 
 `command -v pi` returned no executable at this checkpoint. Therefore the lane
 has fixture-plus-honest-absence evidence, not a real Pi worker-turn proof.
-Pi's child process is the owner of its model traffic; Slipway's adapter only
+Pi's child process is the owner of its model traffic; Floati's adapter only
 speaks the local process boundary.
 
 ## D — self-deploy story
@@ -57,8 +57,8 @@ foreign managed collisions refuse without mutation.
 The CLI surfaces are:
 
 ```text
-slip install --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree]
-slip update  --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree]
+<retired> install --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree]
+<retired> update  --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree]
 ```
 
 Normal mode defaults to `origin/main`; committed-tree mode is explicit and
@@ -71,8 +71,8 @@ The complete local command was:
 
 ```sh
 python3 -m unittest discover -s tests
-python3 -m slip.selftest
-python3 -c 'from pathlib import Path; from slip.manifest import verify_manifest; errors=verify_manifest(Path.cwd()); print(errors); raise SystemExit(bool(errors))'
+python3 -m <retired>.selftest
+python3 -c 'from pathlib import Path; from <retired>.manifest import verify_manifest; errors=verify_manifest(Path.cwd()); print(errors); raise SystemExit(bool(errors))'
 git diff --check
 ```
 

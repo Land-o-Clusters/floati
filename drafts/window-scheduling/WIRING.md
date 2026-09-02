@@ -10,14 +10,14 @@ Product call sites, by file and symbol (floati tree):
 
 | # | product file | symbol / call site | what it calls |
 |---|---|---|---|
-| 1 | `floati/cli.py` | new verb `slip schedule --provider P --as NODE --do ACTION` — handler beside `_doctor`/`_wait` | `Scheduler.schedule(node=…, action=…, provider=…, now=…)`, fed `Window`s from integrator-supplied measured records |
+| 1 | `floati/cli.py` | new verb `floati schedule --provider P --as NODE --do ACTION` — handler beside `_doctor`/`_wait` | `Scheduler.schedule(node=…, action=…, provider=…, now=…)`, fed `Window`s from integrator-supplied measured records |
 | 2 | `<wake-layer>` (H1 `floati wait`) | consumes emitted `Schedule.run_at` as its deadline input — composition, not a second engine | reads the returned `Schedule` |
 
 DISTRIBUTION REACH (Amendment 3): standalone SwiftPM-style draft directory
 `drafts/window-scheduling/` under the floati repo — **dev-only today; no
 user disk path exists**. At wiring it is VENDORED into the floati CLI
 tree exactly like the night-watch package decision, which is what
-activates §4's Slipway rows.
+activates §4's Floati rows.
 
 ## 2. The surface
 
@@ -43,14 +43,14 @@ Placeholder keys only; no authored copy exists in this package.
 
 | file | release-binary? | why it changes |
 |---|---|---|
-| `floati/cli.py` | **yes (Slipway)** | schedule verb + handler (beside `_doctor`) |
-| `floati/helptext.py` | **yes (Slipway)** | help lines for the verb |
-| `floati/window_scheduling/**` (vendored at wiring) | **yes (Slipway)** | engine moves into the deployable set |
+| `floati/cli.py` | **yes (Floati)** | schedule verb + handler (beside `_doctor`) |
+| `floati/helptext.py` | **yes (Floati)** | help lines for the verb |
+| `floati/window_scheduling/**` (vendored at wiring) | **yes (Floati)** | engine moves into the deployable set |
 | `bundle-manifest.v0.json` | n/a — regenerated mechanically | tracks the above |
 | `drafts/window-scheduling/**` | no | stays out of the product graph (L1 fence test) |
 | Puddle.app sources | no | Puddle-enrichment is optional and absent-tolerant (charter) |
 
-Release-binary rows: 3 (**Slipway**), 7 files — rides an owner slot;
+Release-binary rows: 3 (**Floati**), 7 files — rides an owner slot;
 0 (**Puddle**) — the Puddle dial reads free.
 
 THE LOCKS territory: untouched (parked with no charter; do not build

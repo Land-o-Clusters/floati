@@ -832,7 +832,7 @@ class SequencerTests(unittest.TestCase):
         contract = TaskContract.create(
             objective="typed scheduler intent",
             non_goals=["no raw authority"],
-            areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
             input_hashes={"brief": "a" * 64},
             acceptance_checks={"tests": "python3 -m unittest"},
             constraints={"network": "dark"},
@@ -961,7 +961,7 @@ class SequencerTests(unittest.TestCase):
             "resume_mode": "unsupported",
             "provider_session_or_thread_id": None,
             "workspace_checkpoint": {
-                "repo": "owner/slipway",
+                "repo": "owner/floati",
                 "sha": "d" * 40,
                 "doc": "docs/checkpoints/approval-park.md",
             },

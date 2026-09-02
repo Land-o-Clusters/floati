@@ -417,7 +417,7 @@ class WorkerBootstrapTests(unittest.TestCase):
                 isolation_source=self._stub_isolation(
                     "import os\n"
                     "try:\n"
-                    "    os.fstat(int(os.environ['SLIPWAY_TEST_LEAK_FD']))\n"
+                    "    os.fstat(int(os.environ['FLOATI_TEST_LEAK_FD']))\n"
                     "except OSError:\n"
                     "    Path(os.environ['FLOATI_BOOTSTRAP_TRACE']).write_text('closed\\n', encoding='utf-8')\n"
                     "else:\n"
@@ -428,7 +428,7 @@ class WorkerBootstrapTests(unittest.TestCase):
             )
             environment = dict(os.environ)
             environment.update({
-                "SLIPWAY_TEST_LEAK_FD": str(leaked),
+                "FLOATI_TEST_LEAK_FD": str(leaked),
                 "FLOATI_BOOTSTRAP_TRACE": str(trace),
             })
             pid, channel = self._spawn(
@@ -670,7 +670,7 @@ class WorkerBootstrapTests(unittest.TestCase):
                 "import time\n"
                 "from pathlib import Path\n"
                 "TRACE = Path(os.environ['FLOATI_BOOTSTRAP_TRACE'])\n"
-                "GATE = Path(os.environ['SLIPWAY_BOOTSTRAP_READY_GATE'])\n"
+                "GATE = Path(os.environ['FLOATI_BOOTSTRAP_READY_GATE'])\n"
                 "deadline = time.monotonic() + 2.0\n"
                 "while not GATE.exists() and time.monotonic() < deadline:\n"
                 "    time.sleep(0.01)\n"
@@ -703,7 +703,7 @@ class WorkerBootstrapTests(unittest.TestCase):
             )
             environment = dict(os.environ)
             environment["FLOATI_BOOTSTRAP_TRACE"] = str(trace)
-            environment["SLIPWAY_BOOTSTRAP_READY_GATE"] = str(readiness_gate)
+            environment["FLOATI_BOOTSTRAP_READY_GATE"] = str(readiness_gate)
             pid, channel = self._spawn(
                 bootstrap, self._launch_payload(policy), environment=environment,
             )
@@ -792,7 +792,7 @@ class WorkerBootstrapTests(unittest.TestCase):
 
                 def drive(self, handle: object, item: dict[str, object], *, deadline_seconds: float) -> list[dict[str, str]]:
                     calls.append(("drive", handle, item))
-                    return [{"repo": "slipway", "sha": "a" * 40, "doc": "README.md"}]
+                    return [{"repo": "floati", "sha": "a" * 40, "doc": "README.md"}]
 
             run_adapter_session(
                 channel, Adapter(), {"id": "work-a"}, 2.0,

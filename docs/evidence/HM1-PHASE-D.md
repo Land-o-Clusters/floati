@@ -52,7 +52,7 @@ tests with `OK` and returned `bundle_verified` for `refs/heads/lane/hm0`.
 `docs/research/ACP-SCHEMA-STUDY.md` was refreshed from official ACP material on
 2026-07-31. It targets v1 latest and excludes v2 draft. It maps initialization,
 sessions, prompt/update, tool, permission, filesystem, cancellation, artifact,
-usage, and process observations to existing Slipway records or explicit schema
+usage, and process observations to existing Floati records or explicit schema
 gaps. The study creates no runtime configuration or implementation.
 
 ## Complete local gate
@@ -61,12 +61,12 @@ Fresh gate commands after the README, design, evidence, and ruling request
 were present:
 
 ```sh
-python3 -m slip.selftest
-python3 -m slip.conformance --live-root-smoke
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -m <retired>.selftest
+python3 -m <retired>.conformance --live-root-smoke
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger tests.test_codex_adapter_contract
 make demo-capture
-python3 -m slip.demo --capture monochrome > <temp>/floati-hm1-mono.txt
+python3 -m <retired>.demo --capture monochrome > <temp>/floati-hm1-mono.txt
 cmp docs/evidence/captures/hm1-tui-monochrome.txt <temp>/floati-hm1-mono.txt
 git diff --check
 ```

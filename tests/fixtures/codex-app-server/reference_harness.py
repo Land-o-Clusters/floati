@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local-only newline-delimited JSON-RPC harness for the Slipway Codex adapter."""
+"""Local-only newline-delimited JSON-RPC harness for the Floati Codex adapter."""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ def main() -> int:
                 "codexHome": "\x2fprivate/tmp/reference-codex-home",
                 "platformFamily": "unix",
                 "platformOs": "macos",
-                "userAgent": "slipway-reference-harness/0",
+                "userAgent": "floati-reference-harness/0",
             },
         }
     )
@@ -253,11 +253,11 @@ def main() -> int:
             ):
                 if args.mode in ("complete", "interleaved"):
                     (workspace / "PROOF.txt").write_text(
-                        "slipway live worker proof\n", encoding="utf-8"
+                        "floati live worker proof\n", encoding="utf-8"
                     )
                 elif args.mode == "complete-background-mutate":
                     (workspace / "PROOF.txt").write_text(
-                        "slipway live worker proof\n", encoding="utf-8"
+                        "floati live worker proof\n", encoding="utf-8"
                     )
                     subprocess.Popen(
                         (
