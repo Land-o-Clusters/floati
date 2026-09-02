@@ -15,13 +15,13 @@ run.
 - `git merge-base --is-ancestor 6ee8582 origin/lane/hm0`: exit 0.
 - Boot fleet poll: `intentional_silence`; no message and no delivery receipt.
 - Untouched baseline:
-  `PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-baseline python3 -m unittest discover -v`
+  `PYTHONPYCACHEPREFIX=<temp>/hm3h-baseline python3 -m unittest discover -v`
   ran 324 tests in 17.752 seconds, exit 0, `OK`.
 
 ## A — Crash-point injection
 
 The durable writer inventory resolves every record append and transaction to
-`slip.jsonl._append_unlocked`. The crash test kills real forked children at:
+`<retired>.jsonl._append_unlocked`. The crash test kills real forked children at:
 
 - before, during, and after the single append write;
 - before and after file `fsync`;
@@ -29,7 +29,7 @@ The durable writer inventory resolves every record append and transaction to
 - before and after short-write rollback truncation; and
 - before and after rollback `fsync`.
 
-`PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-crash python3 -m unittest -v tests.test_gauntlet_crash`
+`PYTHONPYCACHEPREFIX=<temp>/hm3h-crash python3 -m unittest -v tests.test_gauntlet_crash`
 ran 3 tests in 0.090 seconds, exit 0, `OK`.
 
 Observed laws:
@@ -62,7 +62,7 @@ implementation deadline and stable refusal codes. Focused plus adjacent
 verification:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-cas-green python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/hm3h-cas-green python3 -m unittest -v \
   tests.test_gauntlet_concurrency tests.test_planes tests.test_process_atomicity
 Ran 17 tests in 2.215s
 OK
@@ -72,7 +72,7 @@ The 12-process hammer ran sends, registrations, acknowledgments, and work
 claims against one root:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-hammer python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/hm3h-hammer python3 -m unittest -v \
   tests.test_gauntlet_concurrency.ConcurrentWriterGauntletTests.test_twelve_process_send_register_ack_and_claim_torture_has_no_double_effects
 Ran 1 test in 1.091s
 OK
@@ -93,7 +93,7 @@ available exercised volume satisfies both named properties.
 
 ### A/B checkpoint verification
 
-`PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-ab-full python3 -m unittest discover -v`
+`PYTHONPYCACHEPREFIX=<temp>/hm3h-ab-full python3 -m unittest discover -v`
 ran 330 tests in 25.847 seconds, exit 0, `OK`. Direct manifest verification
 returned `[]`; generated copy-ledger equality and `git diff --check` both
 exited 0.
@@ -114,7 +114,7 @@ and adjacent tests ran in 3.615 seconds, `OK`.
 The final matrix command was:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fuzz-full python3 -m unittest -v tests.test_gauntlet_fuzz
+PYTHONPYCACHEPREFIX=<temp>/hm3h-fuzz-full python3 -m unittest -v tests.test_gauntlet_fuzz
 Ran 3 tests in 2.370s
 OK
 ```
@@ -128,7 +128,7 @@ bytes raw.
 ## D — Soak and performance budgets
 
 The first harness launch stopped before fixture generation with
-`ModuleNotFoundError: slip`; it is recorded as **not executed**, not a budget
+`ModuleNotFoundError: <retired>`; it is recorded as **not executed**, not a budget
 result. Anchoring the standalone harness to its own repository path fixed only
 the harness invocation. The executed command then exited 1 with
 `status=budget_failed` as required:
@@ -153,7 +153,7 @@ under fixed source precedence and keeps replay elapsed time monotonic and
 nonnegative.
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-time-green2 python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/hm3h-time-green2 python3 -m unittest -v \
   tests.test_gauntlet_time tests.test_replay tests.test_supervisor tests.test_tui_render
 Ran 26 tests in 0.329s
 OK
@@ -166,7 +166,7 @@ torn tail; chmod read-only escaped raw; deleted-root watch emitted an empty
 fleet change and exited 0. F.6 records the shared cause and correction.
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-recovery-green2 python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/hm3h-recovery-green2 python3 -m unittest -v \
   tests.test_gauntlet_recovery tests.test_root_jsonl tests.test_cli tests.test_watch
 Ran 42 tests in 7.529s
 OK
@@ -189,7 +189,7 @@ with `root_deleted` and no traceback.
 ## G — Full-suite verification
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-final-full python3 -m unittest discover -v
+PYTHONPYCACHEPREFIX=<temp>/hm3h-final-full python3 -m unittest discover -v
 Ran 339 tests in 32.239s
 OK
 ```
@@ -201,7 +201,7 @@ coverage. It does not convert the failed D budgets into a pass.
 The repository gate was then run directly against the same working tree:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-final-selftest python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/hm3h-final-selftest python3 -m <retired>.selftest
 Ran 339 tests in 26.827s
 OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
@@ -235,7 +235,7 @@ Independent re-verification in a SHA-bound scratch checkout at
 - Full suite: 339 tests, `OK` (MEASURED, my run, 26.493 s).
 - Focused gauntlet re-run (`test_gauntlet_fuzz` + `test_gauntlet_time` +
   `test_gauntlet_recovery`): 9 tests, `OK` (MEASURED).
-- `python3 -m slip.selftest`: 339 OK + `bundle_verified` (MEASURED).
+- `python3 -m <retired>.selftest`: 339 OK + `bundle_verified` (MEASURED).
 - F.2–F.6 all filed in `docs/FINDINGS.md`; D budget table preserved as FAIL
   with no tolerance change — the honest RED is exactly the required behavior.
 - `RULING-REQUEST-HM3H-SCALE-READ-PATH.md` present; ruled this session (see
@@ -269,7 +269,7 @@ The harness and budgets were unchanged: exact 10,000-work-item / 100,000-event
 profiles, one warmup, three measured samples, median statistic.
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-soak python3 scripts/hm3h-soak.py
+PYTHONPYCACHEPREFIX=<temp>/hm3h-fix-soak python3 scripts/hm3h-soak.py
 ```
 
 | Reader | Budget | Samples (ms) | Median | Gate |
@@ -310,7 +310,7 @@ The permanent hostile matrix was then run with the existing crash, fuzz, time,
 and recovery gauntlets:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-gauntlets python3 -m unittest -v \
+PYTHONPYCACHEPREFIX=<temp>/hm3h-fix-gauntlets python3 -m unittest -v \
   tests.test_gauntlet_snapshot tests.test_gauntlet_crash \
   tests.test_gauntlet_fuzz tests.test_gauntlet_time \
   tests.test_gauntlet_recovery
@@ -326,7 +326,7 @@ evidence into an answer.
 ### Full-suite verification — MEASURED
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-full python3 -m unittest discover -v
+PYTHONPYCACHEPREFIX=<temp>/hm3h-fix-full python3 -m unittest discover -v
 Ran 354 tests in 28.795s
 OK
 ```
@@ -341,7 +341,7 @@ The governed repository gate was then run against the same implementation and
 evidence worktree:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm3h-fix-selftest3 python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/hm3h-fix-selftest3 python3 -m <retired>.selftest
 Ran 354 tests in 30.241s
 OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
@@ -352,7 +352,7 @@ OK
 Independent re-verification in a SHA-bound scratch checkout at
 `3ed8f846180038405f63a736f7b90cad23c9934f`:
 
-- `python3 -m slip.selftest`: 354 OK + `bundle_verified` (MEASURED, my run).
+- `python3 -m <retired>.selftest`: 354 OK + `bundle_verified` (MEASURED, my run).
 - All five gauntlet suites (snapshot + crash + fuzz + time + recovery):
   14 tests, `OK` (MEASURED).
 - **D soak re-measured by me, same harness, budgets unchanged** — all five
@@ -361,7 +361,7 @@ Independent re-verification in a SHA-bound scratch checkout at
   (<100) · replay render start 55.223 ms (<300) · board full redraw
   94.955 ms (<250) · doctor 146.446 ms (<2000). Medians, one warmup, three
   samples. (MEASURED)
-- Ruling-term audit at source: `slip/snapshot.py` imported ONLY by read-side
+- Ruling-term audit at source: `<retired>/snapshot.py` imported ONLY by read-side
   modules (events, projection, replay, tui); the writer module's two
   "snapshot" hits are a pre-existing read helper and comment — writer
   isolation holds. Hostile matrix (28 reader/mutation combinations incl.

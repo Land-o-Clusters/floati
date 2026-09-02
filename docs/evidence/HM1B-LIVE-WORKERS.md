@@ -58,7 +58,7 @@ shutdown, and artifact questions. The implementation checkpoint is
 `baafa20c3881dc5d40c63eead96cc5cfa5abc065`.
 
 Work items opt into one derived mapping at
-`<temp>/slipway-work/<work-id>`. The worker creates it only after the
+`<temp>/work/<work-id>`. The worker creates it only after the
 authority-checked claim. The local reference harness executes the exact stdio
 sequence `initialize → initialized → thread/start → turn/start`, interleaves
 unrelated responses and notifications, and completes one real local file
@@ -90,9 +90,9 @@ and remains available to the outer runner for abrupt-death cleanup.
 ### Real-provider proof boundary
 
 A fresh fleet was created at
-`<temp>/slipway-hm1b-live-20260731-1`. The first real item was
+`<temp>/hm1b-live-20260731-1`. The first real item was
 `work-019fba52105171f2b9473c25db908d78`, with retained workspace
-`<temp>/slipway-work/work-019fba52105171f2b9473c25db908d78`.
+`<temp>/work/work-019fba52105171f2b9473c25db908d78`.
 The exact CLI command durably wrote claim receipt
 `worker-receipt-019fba523cfe74729d29b1034a897809`, then degradation receipt
 `worker-receipt-019fba523de7790aae834c20cd9b9441` with
@@ -125,8 +125,8 @@ lane. Under fresh authority grant
 command executed once unsandboxed:
 
 ```sh
-python3 -m slip worker run \
-  --root <temp>/slipway-hm1b-live-20260731-1 \
+python3 -m <retired> worker run \
+  --root <temp>/hm1b-live-20260731-1 \
   --as floati-proof --adapter codex
 ```
 
@@ -141,7 +141,7 @@ It returned exit 0 with `transition=complete` for work item
 5. `complete` — `worker-receipt-019fba82fe06725bada7bdb343c0c383`
 
 Both binding receipts and the completed work item name the retained workspace
-`<temp>/slipway-work/work-019fba52a0f77de6a5d41c0a0080b359`,
+`<temp>/work/work-019fba52a0f77de6a5d41c0a0080b359`,
 repository `local/work-019fba52a0f77de6a5d41c0a0080b359`, document
 `PROOF.txt`, and commit `746dc783b96f75b586fa77ab9bd1aa90fe730af8`.
 Independent verification observed commit type `commit`, exact tree
@@ -176,7 +176,7 @@ launched. ACP evidence is therefore fixture round-trip plus honest absence.
 The conformance runner's independent fixture mode also executed:
 
 ```sh
-python3 -m slip.conformance --acp-fixture
+python3 -m <retired>.conformance --acp-fixture
 ```
 
 It returned exit 0 with four conformant codec cases and
@@ -203,14 +203,14 @@ Fresh commands after implementation, docs, generated copy, manifest, and demo
 captures were present:
 
 ```sh
-python3 -m slip.selftest
-python3 -m slip.conformance --live-root-smoke
-python3 -m slip.conformance --acp-fixture
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -m <retired>.selftest
+python3 -m <retired>.conformance --live-root-smoke
+python3 -m <retired>.conformance --acp-fixture
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger tests.test_workers \
   tests.test_acp_adapter tests.test_tui_render tests.test_supervisor
 make demo-capture
-python3 -m slip.demo --capture monochrome
+python3 -m <retired>.demo --capture monochrome
 git diff --check
 ```
 
@@ -219,8 +219,8 @@ deadline, process-group, CLI, schema, copy-ledger, and manifest changes:
 
 ```sh
 python3 -m unittest discover -s tests
-python3 -m slip.selftest
-python3 -c 'from pathlib import Path; from slip.manifest import verify_manifest; errors=verify_manifest(Path.cwd()); print(errors); raise SystemExit(bool(errors))'
+python3 -m <retired>.selftest
+python3 -c 'from pathlib import Path; from <retired>.manifest import verify_manifest; errors=verify_manifest(Path.cwd()); print(errors); raise SystemExit(bool(errors))'
 git diff --check
 ```
 

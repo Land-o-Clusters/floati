@@ -7,6 +7,6 @@
   "gateway_version": 0,
   "session_id": "session-019fbb00000070008000000000000011",
   "actor": "builder-a",
-  "workspace": "\u002fprivate/tmp/slipway-gateway-work/session-a",
+  "workspace": "\u002fprivate/tmp/floati-gateway-work/session-a",
   "transport": "stdio"
 }

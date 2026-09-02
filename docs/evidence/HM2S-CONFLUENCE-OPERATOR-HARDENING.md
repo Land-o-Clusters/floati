@@ -4,7 +4,7 @@ Status date: 2026-08-01.
 
 ## Identity and authority
 
-- Checkout: `~/Projects/slipway`.
+- Checkout: `~/Projects/<retired>`.
 - Branch: `lane/hm0`.
 - Starting local and remote tip:
   `b08ccf20ced67fccdc783df3057c298c6eb8dbef`.
@@ -34,14 +34,14 @@ adoption, or Puddle activation was added.
 
 ### C — Harbor Chart graph contract
 
-Added `slip graph --root ROOT --json` and a strict typed topology contract.
+Added `<retired> graph --root ROOT --json` and a strict typed topology contract.
 Nodes, workers, work dependency edges, and bridge stubs are deterministic,
 sorted projections of allowlisted durable ledgers. Wall clocks, mtimes, PIDs,
 filesystem discovery, and process inspection are excluded.
 
 ### D — Doctor
 
-Added `slip doctor --root ROOT --source SOURCE [--ref REF]`. It checks direct
+Added `<retired> doctor --root ROOT --source SOURCE [--ref REF]`. It checks direct
 root identity, registry/liveness agreement, exact manifest membership and
 digests, source currency and cleanliness, invoked symlink identities, the sole
 work coordinate, and alternate consumption coordinates. Findings are typed and
@@ -85,14 +85,14 @@ existing test and the new duplicate-suppression test passed. That initial
 All commands ran from the named checkout on `lane/hm0`:
 
 ```text
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m slip.selftest
+PYTHONPYCACHEPREFIX=<temp>/hm2s-pycache python3 -m <retired>.selftest
   Ran 305 tests in 21.767s — OK
   {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m slip.conformance --live-root-smoke
+PYTHONPYCACHEPREFIX=<temp>/hm2s-pycache python3 -m <retired>.conformance --live-root-smoke
   {"cases":5,"status":"conformant"}
 
-PYTHONPYCACHEPREFIX=<temp>/slipway-hm2s-pycache python3 -m unittest tests.test_copy_ledger tests.test_manifest
+PYTHONPYCACHEPREFIX=<temp>/hm2s-pycache python3 -m unittest tests.test_copy_ledger tests.test_manifest
   Ran 10 tests in 0.090s — OK
 
 generated-tree scrub

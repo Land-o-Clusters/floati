@@ -23,7 +23,6 @@ CAPTURE_ROOT = REPOSITORY_ROOT / "docs/evidence/captures"
 # Captures no test reads today, each with the reason it is not simply fixed.
 UNGUARDED = {
     "floati-orchestrate-drill.txt": "no committed producer; provenance unknown",
-    "floati-orchestrate-live.txt": "no committed producer; provenance unknown",
     "floati-replay-live.txt": "no committed producer; provenance unknown",
     "hm1-tui-color.txt": "producer is the Makefile demo-capture target, not a test",
     "hm1-tui-monochrome.txt": "producer is the Makefile demo-capture target, not a test",
@@ -36,8 +35,13 @@ class CaptureCurrencyTests(unittest.TestCase):
 
         captures = sorted(path.name for path in CAPTURE_ROOT.glob("*.txt"))
         # Count anchor: without it, a glob regression would find nothing and pass green.
+        # The floor is the SMALLER of the two trees this file runs in. The harbor holds
+        # 20; the public projection holds 19, because one capture is excluded from the
+        # export by policy (it holds the retired repository name and a photograph is not
+        # rewritten). This test enumerates a directory and cannot read the export policy,
+        # which is harbor-only, so the floor is stated rather than derived.
         self.assertGreaterEqual(
-            len(captures), 20, f"capture enumeration collapsed: {captures}"
+            len(captures), 19, f"capture enumeration collapsed: {captures}"
         )
 
         sources = [

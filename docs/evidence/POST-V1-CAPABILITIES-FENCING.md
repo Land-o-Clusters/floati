@@ -17,9 +17,9 @@ names the replacing digest, and bounded lock acquisition refuses on timeout.
   failed with `policy_fields_invalid` because production did not yet accept
   `capability_registry`.
 - Capability grant RED: all four initial grant-lifecycle tests failed because
-  `slip.capabilities` and `CapabilityGrantLedger` did not exist.
+  `<retired>.capabilities` and `CapabilityGrantLedger` did not exist.
 - Capability binding RED: all four initial snapshot/dispatch tests failed
-  because `slip.capability_binding` and `CapabilityBinder` did not exist.
+  because `<retired>.capability_binding` and `CapabilityBinder` did not exist.
 
 These were observed before their respective production implementations.
 
@@ -53,7 +53,7 @@ not enter the digest.
 ## Measured verification
 
 - `python3 -m unittest -q`: 625 tests, 0 failures, 40.823 seconds.
-- `python3 -m slip.selftest`: 625 tests, 0 failures, 41.704 seconds; emitted
+- `python3 -m <retired>.selftest`: 625 tests, 0 failures, 41.704 seconds; emitted
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - Focused capability, policy, schema, and manifest gate: 76 tests, 0 failures,
   2.373 seconds.

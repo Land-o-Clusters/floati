@@ -1202,6 +1202,7 @@ class DoctorContractTests(unittest.TestCase):
                 "wake_daemon_health",
                 "wake_bridge_uninstalled",
                 "delivery_health",
+                "acknowledgment_health",
                 "wake_health",
                 "sandbox_write",
                 "sandbox_write",

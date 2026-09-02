@@ -15,7 +15,11 @@ from pathlib import Path
 from typing import Callable, IO, Dict, Optional, Sequence
 
 from ..host_paths import worker_workspace_root
-from ..storage_identity import EVIDENCE_DIRECTORY, refuse_legacy_workspace_artifacts
+from ..storage_identity import (
+    EVIDENCE_DIRECTORY,
+    LEGACY_ARTIFACT_PREFIX,
+    refuse_legacy_workspace_artifacts,
+)
 from ..workers import WorkerAdapterFailure
 
 
@@ -509,7 +513,15 @@ class CodexAppServerAdapter:
             ):
                 raise WorkerAdapterFailure("workspace_invalid")
             entries = os.listdir(descriptor)
-            if entries and not any(name.startswith(".slipway") for name in entries):
+            # The same on-disk prefix floati/storage_identity.py refuses, read
+            # here with the OPPOSITE polarity: a non-empty prepared workspace
+            # must carry the marker. Imported rather than repeated so the two
+            # readers of one disk name cannot drift apart, and hex-built there
+            # rather than spelled here. Pinned in
+            # tests/test_retired_name_pins.py, at this site and at that one.
+            if entries and not any(
+                name.startswith(LEGACY_ARTIFACT_PREFIX) for name in entries
+            ):
                 raise WorkerAdapterFailure("workspace_invalid")
             path_metadata = prepared.lstat()
             if (

@@ -251,7 +251,7 @@ class ConfluenceCliRoundTrip(unittest.TestCase):
             "01a0530000007000800000000000000000000000",
             "--doc", "docs/CONFLUENCE-v0.md", "--note", "confluence round trip")
         cli("inbox", "--root", str(root),
-            "--as", public_ids.builder("b"))  # pull writes delivery receipts
+            "--as", public_ids.builder("b"), "--peek")  # pull writes delivery receipts
         cli("confluence", "grant", "--root", str(root),
             "--consumer", "puddle", "--idempotency-key", "cli-1")
         status = cli("confluence", "status", "--root", str(root))

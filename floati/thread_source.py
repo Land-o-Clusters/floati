@@ -16,13 +16,13 @@ from pathlib import Path
 from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 from .errors import ProtocolRefusal
+from .fleet_update import _explicit_executable
 
 
 _MAX_FRAME_BYTES = 1_048_576
 _MAX_TOTAL_BYTES = 2_097_152
 _DEFAULT_DEADLINE_SECONDS = 5.0
 _MAX_DEADLINE_SECONDS = 60.0
-_PRODUCTION_EXECUTABLE = Path("/opt/homebrew/bin/codex")
 _PRODUCTION_ARGUMENTS = ("app-server", "--stdio")
 _THREAD_ID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-"
@@ -359,11 +359,28 @@ def _cleanup(process: Optional[subprocess.Popen[bytes]]) -> bool:
 class CodexLocalThreadSource:
     """Read exactly one explicitly registered local Codex thread."""
 
-    def __init__(self) -> None:
+    def __init__(self, executable: object = None) -> None:
         self._command: Sequence[str] = (
-            str(_PRODUCTION_EXECUTABLE),
+            "/opt/homebrew/bin/codex",
             *_PRODUCTION_ARGUMENTS,
         )
+        self._executable_declared = executable is not None
+        if executable is None:
+            return
+        try:
+            selected = _explicit_executable(
+                executable, "thread_source_codex_executable_invalid"
+            )
+        except ProtocolRefusal as exc:
+            raise ProtocolRefusal(
+                exc.code,
+                exc.detail,
+                remedy=(
+                    "pass --codex-executable with one absolute canonical "
+                    "executable path"
+                ),
+            ) from exc
+        self._command = (selected, *_PRODUCTION_ARGUMENTS)
 
     @classmethod
     def _for_test(cls, command: Sequence[str]) -> "CodexLocalThreadSource":
@@ -375,6 +392,7 @@ class CodexLocalThreadSource:
             raise ProtocolRefusal("thread_source_invalid", "test source command is invalid")
         source = cls.__new__(cls)
         source._command = tuple(command)
+        source._executable_declared = True
         return source
 
     def read(
@@ -399,6 +417,8 @@ class CodexLocalThreadSource:
                 "thread_source_deadline_invalid",
                 "deadline must be finite, positive, and at most 60 seconds",
             )
+        if not self._executable_declared:
+            return _unknown("codex_executable_absent")
 
         process: Optional[subprocess.Popen[bytes]] = None
         result = _unknown("provider_unavailable")

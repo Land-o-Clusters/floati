@@ -32,7 +32,7 @@ idempotency behavior rather than malformed input. The focused workflow command
 then exited 0 with 47 tests and `OK`.
 
 The copy generator's first real module invocation exposed a two-module-instance
-bug: `python3 -m slip.copy` printed an empty table although imported generation
+bug: `python3 -m <retired>.copy` printed an empty table although imported generation
 worked. A subprocess regression failed against the empty output, the canonical
 module entry was fixed, and that regression then passed. The generated
 `docs/COPY-LEDGER.md` exactly matches the catalog.
@@ -51,9 +51,9 @@ Fresh gate commands after the manifest, design, README, evidence, and ruling
 request were present:
 
 ```sh
-python3 -m slip.selftest
-python3 -m slip.conformance --live-root-smoke
-python3 -c 'from pathlib import Path; from slip.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
+python3 -m <retired>.selftest
+python3 -m <retired>.conformance --live-root-smoke
+python3 -c 'from pathlib import Path; from <retired>.scrub import scan_generated_tree; hits=scan_generated_tree(Path.cwd()); print("scrub_hits="+str(len(hits))); raise SystemExit(bool(hits))'
 python3 -m unittest -v tests.test_copy_ledger
 git diff --check
 ```

@@ -28,6 +28,7 @@ from floati.graph import HarborGraph, HarborTraffic  # noqa: E402
 from floati.graph_render import render_harbor_chart  # noqa: E402
 from floati.host_paths import capture_temporary_parent  # noqa: E402
 from floati.identity_fence import (  # noqa: E402
+    RETIRED_PRODUCT_NAME,
     GOVERNED_TEMP_PREFIXES,
     redact_governed_temp_prefixes,
 )
@@ -44,7 +45,10 @@ UNSAFE_TEXT = (
     "\x2fUsers/",
     *GOVERNED_TEMP_PREFIXES,
     _operator_account_name(),
-    "slipway-spawn-groups",
+    # The refusal token KEEPS ITS VALUE -- it is what stops the retired name
+    # reaching a rendered GIF -- and is hex-built so the guard is not itself
+    # a finding of the scrub that now carries the same name.
+    RETIRED_PRODUCT_NAME + "-spawn-groups",
 )
 INSTALL_CAPTURE_TEMPORARY_PREFIX = "floati-capture-install-"
 

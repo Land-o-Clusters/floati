@@ -12,7 +12,7 @@ approval.
 
 ## A — flight recorder
 
-`slip log --root ROOT --replay [--speed X] [--plain]` projects only the
+`<retired> log --root ROOT --replay [--speed X] [--plain]` projects only the
 allowlisted durable work, worker, worker-refusal, and denial ledgers. The sort
 key is `(timestamp, record ID, source path, source ordinal)`. Playback speed
 changes interactive waiting only. Plain and non-terminal modes do not sleep;
@@ -36,7 +36,7 @@ wall fixtures. The original HM-1d execution and fault evidence remains in
 
 ## B — single-harness value
 
-`slip init ROOT --solo NODE [--harness HARNESS]` records one immutable v0
+`<retired> init ROOT --solo NODE [--harness HARNESS]` records one immutable v0
 identity, registers it, and grants the existing bounded `solo-work` authority.
 Within that unambiguous root, `work add`, `work claim`, and `work complete`
 may resolve their sole owner or actor. Multi-node and explicit-argument flows
@@ -63,7 +63,7 @@ items.
 
 ## D — C7 contracts only
 
-`slip status --root ROOT --json` emits the stable v0 `fleet_status` artifact.
+`<retired> status --root ROOT --json` emits the stable v0 `fleet_status` artifact.
 `docs/CONFLUENCE-v0.md`, `schemas/v0/fleet-status-artifact.schema.json`,
 `schemas/v0/receipts-read-bundle.schema.json`, and fixed v0 fixtures define
 the read-only consumer seam. The receipts-read bundle allowlists the existing
@@ -79,17 +79,17 @@ Fresh pre-review gates at the containing tree:
 python3 -m unittest discover -q
 Ran 278 tests in 16.685s — OK
 
-python3 -m slip.selftest
+python3 -m <retired>.selftest
 Ran 278 tests in 18.605s — OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 
-python3 -m slip.conformance --live-root-smoke
+python3 -m <retired>.conformance --live-root-smoke
 {"cases":5,"status":"conformant"}
 
-slip.scrub.scan_generated_tree(Path('.'))
+<retired>.scrub.scan_generated_tree(Path('.'))
 {"scrub_hits": []}
 
-slip.manifest.verify_manifest(Path('.'))
+<retired>.manifest.verify_manifest(Path('.'))
 {"manifest_errors": []}
 
 git diff --check
@@ -132,11 +132,11 @@ Fresh correction gates before the new exact-SHA review commit:
 python3 -m unittest discover -q
 Ran 281 tests in 16.912s — OK
 
-python3 -m slip.selftest
+python3 -m <retired>.selftest
 Ran 281 tests in 17.838s — OK
 {"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}
 
-python3 -m slip.conformance --live-root-smoke
+python3 -m <retired>.conformance --live-root-smoke
 {"cases":5,"status":"conformant"}
 
 copy ledger equality: true

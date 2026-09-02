@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from .mail_health import oldest_unread_fact
 
@@ -39,17 +39,40 @@ class NodeDeliveryHealth:
 
 
 @dataclass(frozen=True)
+class NodeAcknowledgmentHealth:
+    node: str
+    delivered_unacknowledged_count: int
+    oldest_attention_minutes: Optional[int]
+    oldest_message_id: Optional[str]
+    acknowledged_count: int
+    acknowledgment_latencies_seconds: Tuple[int, ...]
+    cadence: Optional[str]
+    red: bool
+    sentence: str
+
+
+@dataclass(frozen=True)
 class DeliveryHealthReport:
     by_node: Dict[str, NodeDeliveryHealth]
     findings_by_node: Dict[str, dict] = field(default_factory=dict)
+    acknowledgments_by_node: Dict[str, NodeAcknowledgmentHealth] = field(
+        default_factory=dict
+    )
+    acknowledgment_findings_by_node: Dict[str, dict] = field(default_factory=dict)
 
     @property
     def findings(self) -> List[dict]:
-        return [self.findings_by_node[node] for node in sorted(self.by_node)]
+        rows: List[dict] = []
+        for node in sorted(self.by_node):
+            rows.append(self.findings_by_node[node])
+            rows.append(self.acknowledgment_findings_by_node[node])
+        return rows
 
     @property
     def any_red(self) -> bool:
-        return any(health.red for health in self.by_node.values())
+        return any(health.red for health in self.by_node.values()) or any(
+            health.red for health in self.acknowledgments_by_node.values()
+        )
 
 
 class DeliveryHealthAnalyzer:
@@ -59,6 +82,7 @@ class DeliveryHealthAnalyzer:
         root,
         nodes: List[str],
         now: datetime,
+        cadences: Optional[Mapping[str, str]] = None,
     ) -> DeliveryHealthReport:
         envelopes_by_node: Dict[str, List[Dict[str, object]]] = {
             node: [] for node in nodes
@@ -72,8 +96,12 @@ class DeliveryHealthAnalyzer:
 
         by_node: Dict[str, NodeDeliveryHealth] = {}
         findings_by_node: Dict[str, dict] = {}
+        acknowledgments_by_node: Dict[str, NodeAcknowledgmentHealth] = {}
+        acknowledgment_findings_by_node: Dict[str, dict] = {}
         for node in nodes:
-            delivered_ids = _delivered_ids(root, node)
+            delivery_times = _receipt_item_times(root, "deliveries", node)
+            acknowledgment_times = _receipt_item_times(root, "acks", node)
+            delivered_ids = set(delivery_times)
             pending = sorted(
                 (
                     envelope
@@ -117,12 +145,122 @@ class DeliveryHealthAnalyzer:
                 "oldest_unread": oldest_unread,
                 "remediation": (
                     "check the node's wake path, then drain its inbox "
-                    "(floati inbox --root <root> --as %s)" % node
+                    "(floati inbox --root <root> --as %s --session <session-id>)" % node
                 )
                 if red
                 else None,
             }
-        return DeliveryHealthReport(by_node=by_node, findings_by_node=findings_by_node)
+
+            delivered_unacknowledged = sorted(
+                (
+                    envelope
+                    for envelope in envelopes_by_node[node]
+                    if envelope["id"] in delivery_times
+                    and envelope["id"] not in acknowledgment_times
+                ),
+                key=lambda envelope: delivery_times[str(envelope["id"])],
+            )
+            acknowledged = sorted(
+                (
+                    envelope
+                    for envelope in envelopes_by_node[node]
+                    if envelope["id"] in delivery_times
+                    and envelope["id"] in acknowledgment_times
+                ),
+                key=lambda envelope: str(envelope["timestamp"]),
+            )
+            latencies = tuple(
+                int(
+                    (
+                        acknowledgment_times[str(envelope["id"])]
+                        - delivery_times[str(envelope["id"])]
+                    ).total_seconds()
+                )
+                for envelope in acknowledged
+            )
+            if any(seconds < 0 for seconds in latencies):
+                from .errors import IntegrityFailure
+
+                raise IntegrityFailure(
+                    "acknowledgment_receipt_order_invalid",
+                    "acknowledgment precedes its delivery receipt",
+                )
+            latency_rows = tuple(
+                {
+                    "message_id": str(envelope["id"]),
+                    "seconds": seconds,
+                }
+                for envelope, seconds in zip(acknowledged, latencies)
+            )
+            oldest_message_id = (
+                None
+                if not delivered_unacknowledged
+                else str(delivered_unacknowledged[0]["id"])
+            )
+            oldest_attention_minutes = (
+                None
+                if oldest_message_id is None
+                else int(
+                    (now - delivery_times[oldest_message_id]).total_seconds() // 60
+                )
+            )
+            cadence = None if cadences is None else cadences.get(node)
+            acknowledgment_red = False
+            acknowledgment_sentence = _acknowledgment_sentence(
+                node,
+                delivered_unacknowledged=len(delivered_unacknowledged),
+                oldest_attention_minutes=oldest_attention_minutes,
+                acknowledged=len(acknowledged),
+                latencies=latencies,
+                cadence=cadence,
+            )
+            acknowledgments_by_node[node] = NodeAcknowledgmentHealth(
+                node=node,
+                delivered_unacknowledged_count=len(delivered_unacknowledged),
+                oldest_attention_minutes=oldest_attention_minutes,
+                oldest_message_id=oldest_message_id,
+                acknowledged_count=len(acknowledged),
+                acknowledgment_latencies_seconds=latencies,
+                cadence=cadence,
+                red=acknowledgment_red,
+                sentence=acknowledgment_sentence,
+            )
+            acknowledgment_findings_by_node[node] = {
+                "code": "acknowledgment_health",
+                "severity": (
+                    "error"
+                    if acknowledgment_red
+                    else "info"
+                    if delivered_unacknowledged
+                    else "ok"
+                ),
+                "subject": node,
+                "detail": acknowledgment_sentence,
+                "remediation": (
+                    "acknowledge the exact delivered batch with "
+                    "floati ack --root <root> --as %s --id <message-id> "
+                    "--session <session-id>" % node
+                )
+                if delivered_unacknowledged
+                else None,
+                "acknowledgment": {
+                    "delivered_unacknowledged_count": len(
+                        delivered_unacknowledged
+                    ),
+                    "oldest_attention_minutes": oldest_attention_minutes,
+                    "oldest_message_id": oldest_message_id,
+                    "acknowledged_count": len(acknowledged),
+                    "latencies": list(latency_rows),
+                    "cadence": cadence,
+                    "sla": "undeclared",
+                },
+            }
+        return DeliveryHealthReport(
+            by_node=by_node,
+            findings_by_node=findings_by_node,
+            acknowledgments_by_node=acknowledgments_by_node,
+            acknowledgment_findings_by_node=acknowledgment_findings_by_node,
+        )
 
 
 def _sentence(
@@ -145,12 +283,37 @@ def _sentence(
     return ", ".join(parts)
 
 
-def _delivery_rows(root, node: str) -> List[Dict[str, object]]:
-    """Read every drain receipt row for one node (plain file + sessions)."""
+def _acknowledgment_sentence(
+    node: str,
+    *,
+    delivered_unacknowledged: int,
+    oldest_attention_minutes: Optional[int],
+    acknowledged: int,
+    latencies: Tuple[int, ...],
+    cadence: Optional[str],
+) -> str:
+    parts = [
+        f"{node}: {delivered_unacknowledged} delivered-unacknowledged",
+        f"{acknowledged} acknowledged",
+    ]
+    if oldest_attention_minutes is not None:
+        parts.append(f"oldest attention {oldest_attention_minutes}m")
+    if latencies:
+        parts.append("ack latency seconds=" + ",".join(str(value) for value in latencies))
+    if cadence is None:
+        parts.append("role cadence unavailable")
+    else:
+        parts.append(f"cadence {cadence}")
+    parts.append("no acknowledgment SLA declared")
+    return ", ".join(parts)
+
+
+def _receipt_rows(root, directory: str, node: str) -> List[Dict[str, object]]:
+    """Read every receipt row for one node (plain file + sessions)."""
 
     import json
 
-    base = root.resolve_relative("receipts/deliveries")
+    base = root.resolve_relative(f"receipts/{directory}")
     candidates = []
     plain = base / f"{node}.jsonl"
     if plain.is_file():
@@ -167,6 +330,26 @@ def _delivery_rows(root, node: str) -> List[Dict[str, object]]:
                     continue
                 rows.append(json.loads(line))
     return rows
+
+
+def _delivery_rows(root, node: str) -> List[Dict[str, object]]:
+    return _receipt_rows(root, "deliveries", node)
+
+
+def _receipt_item_times(root, directory: str, node: str) -> Dict[str, datetime]:
+    result: Dict[str, datetime] = {}
+    for row in _receipt_rows(root, directory, node):
+        stamp = row.get("timestamp")
+        item_ids = row.get("item_ids")
+        if not isinstance(stamp, str) or not isinstance(item_ids, list):
+            continue
+        moment = _parse_timestamp(stamp)
+        for item_id in item_ids:
+            if isinstance(item_id, str) and (
+                item_id not in result or moment < result[item_id]
+            ):
+                result[item_id] = moment
+    return result
 
 
 def _delivered_ids(root, node: str) -> set:

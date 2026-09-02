@@ -38,7 +38,7 @@ from .projection import (
     iter_deltas,
 )
 from .registry import Registry
-from .root import FloatiRoot, resolve_command_root
+from .root import FloatiRoot, resolve_command_root, validate_identifier
 from .seat_declaration import (
     COORDINATOR_AUTHORITIES,
     OWNER_TIERS,
@@ -459,8 +459,23 @@ def _verify(args: argparse.Namespace) -> HandlerResult:
 def _inbox(args: argparse.Namespace) -> HandlerResult:
     root, scope = resolve_command_scope(args.root)
     try:
+        if args.peek and args.session is not None:
+            raise ProtocolRefusal(
+                "inbox_mode_invalid", "inbox accepts --peek or --session, never both"
+            )
+        if not args.peek and args.session is None:
+            raise ProtocolRefusal(
+                "inbox_session_required",
+                "default inbox drain requires --session; use --peek for an explicit non-acknowledging read",
+            )
         identity = require_declared_coordinate(Path.cwd(), args.recipient, root)
-        messages, receipt = EventLog(root).present(args.recipient)
+        if args.peek:
+            messages, receipt = EventLog(root).present(args.recipient)
+            acknowledgment = None
+        else:
+            messages, receipt, acknowledgment = EventLog(root).drain(
+                args.recipient, acting_session_id=args.session
+            )
     except (ProtocolRefusal, IntegrityFailure, DurabilityFailure) as exc:
         if isinstance(exc, ProtocolRefusal) and exc.code == "unknown_node":
             exc = ProtocolRefusal(
@@ -470,7 +485,13 @@ def _inbox(args: argparse.Namespace) -> HandlerResult:
             )
         return _scoped_failure(scope, exc)
     evidence = _with_scope(
-        scope, {"messages": messages, "receipt": receipt, **identity}
+        scope,
+        {
+            "messages": messages,
+            "receipt": receipt,
+            "acknowledgment": acknowledgment,
+            **identity,
+        },
     )
     if not messages:
         return "intentional_silence", evidence, INTENTIONAL_SILENCE
@@ -512,10 +533,19 @@ def _wake_record(args: argparse.Namespace) -> HandlerResult:
 def _ack(args: argparse.Namespace) -> HandlerResult:
     receipt = SparseCursor(_root(args.root)).ack(
         args.recipient,
-        [args.message_id],
+        args.message_ids,
         acting_session_id=args.session,
     )
     return "ok", receipt, OK
+
+
+def _sent(args: argparse.Namespace) -> HandlerResult:
+    from .sent import SentProjection
+
+    evidence = SentProjection(_root(args.root)).artifact(args.sender)
+    if not evidence["items"]:
+        return "no_result", evidence, NO_RESULT
+    return "ok", evidence, OK
 
 
 def _log(args: argparse.Namespace) -> HandlerResult:
@@ -677,7 +707,9 @@ def _thread_attach(args: argparse.Namespace) -> HandlerResult:
 def _thread_observe(args: argparse.Namespace) -> HandlerResult:
     from .thread_observations import ThreadObserver
 
-    observer = ThreadObserver(_root(args.root))
+    observer = ThreadObserver(
+        _root(args.root), codex_executable=args.codex_executable
+    )
     row = observer.observe(args.attachment_id)
     artifact = ThreadObservationStatusProjection(observer.root).artifact(
         _current_time(), attachment_id=str(row["attachment_id"])
@@ -1110,12 +1142,38 @@ def _intake_dispatch(args: argparse.Namespace) -> HandlerResult:
 
 
 def _worker_run(args: argparse.Namespace) -> HandlerResult:
-    result = WorkerRunner(
-        _root(args.root), {
-            "claude": ClaudeHeadlessAdapter(),
-            "codex": CodexAppServerAdapter(),
-            "pi": PiRpcAdapter(),
+    from .fcd20_conformance import (
+        ROWS,
+        _host_condition,
+        resolve_declared_executable,
+        validate_declarations,
+    )
+
+    validate_identifier(args.actor, "node")
+    declarations = validate_declarations(
+        {
+            "claude": args.claude_executable,
+            "codex": args.codex_executable,
+            "pi": args.pi_executable,
         }
+    )
+    spec = next(row for row in ROWS if row.harness == args.adapter)
+    resolution = resolve_declared_executable(spec, declarations)
+    if resolution.executable is None:
+        return "degraded", _host_condition(spec, resolution), DEGRADED
+
+    executable = str(resolution.executable)
+    adapters = {
+        "claude": lambda: ClaudeHeadlessAdapter((executable,)),
+        "codex": lambda: CodexAppServerAdapter(
+            (executable, "app-server", "--stdio")
+        ),
+        "pi": lambda: PiRpcAdapter(
+            (executable, "--mode", "rpc", "--no-session")
+        ),
+    }
+    result = WorkerRunner(
+        _root(args.root), {args.adapter: adapters[args.adapter]()}
     ).run(args.actor, args.adapter)
     if result["transition"] == "degrade":
         return "degraded", result, NO_RESULT
@@ -1692,9 +1750,13 @@ def _parser() -> _ArtifactParser:
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(handler=_verify)
 
-    inbox = commands.add_parser("inbox", floati_mcp_exposure="read")
+    inbox = commands.add_parser(
+        "inbox", floati_mcp_exposure="governed", floati_mcp_omit=("peek",)
+    )
     inbox.add_argument("--root")
     inbox.add_argument("--as", dest="recipient", required=True)
+    inbox.add_argument("--session")
+    inbox.add_argument("--peek", action="store_true")
     inbox.set_defaults(handler=_inbox)
 
     wake_evaluate = commands.add_parser(
@@ -1724,9 +1786,14 @@ def _parser() -> _ArtifactParser:
     ack = commands.add_parser("ack", floati_mcp_exposure="governed")
     ack.add_argument("--root")
     ack.add_argument("--as", dest="recipient", required=True)
-    ack.add_argument("--id", dest="message_id", required=True)
+    ack.add_argument("--id", dest="message_ids", action="append", required=True)
     ack.add_argument("--session", required=True)
     ack.set_defaults(handler=_ack)
+
+    sent = commands.add_parser("sent")
+    sent.add_argument("--root")
+    sent.add_argument("--as", dest="sender", required=True)
+    sent.set_defaults(handler=_sent)
 
     log = commands.add_parser(
         "log",
@@ -1793,6 +1860,7 @@ def _parser() -> _ArtifactParser:
     thread_observe = thread_commands.add_parser("observe")
     thread_observe.add_argument("--root")
     thread_observe.add_argument("--attachment", dest="attachment_id", required=True)
+    thread_observe.add_argument("--codex-executable")
     thread_observe.set_defaults(handler=_thread_observe, artifact_schema_version=1)
     thread_detach = thread_commands.add_parser("detach")
     thread_detach.add_argument("--root")
@@ -2022,6 +2090,9 @@ def _parser() -> _ArtifactParser:
     worker_run.add_argument("--root")
     worker_run.add_argument("--as", dest="actor", required=True)
     worker_run.add_argument("--adapter", choices=("claude", "codex", "pi"), required=True)
+    worker_run.add_argument("--claude-executable")
+    worker_run.add_argument("--codex-executable")
+    worker_run.add_argument("--pi-executable")
     worker_run.set_defaults(handler=_worker_run)
 
     mcp = commands.add_parser("mcp")

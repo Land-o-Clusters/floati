@@ -159,7 +159,7 @@ class _EffectCase:
             "effect_type": "git_ref_update",
             "target": {
                 "kind": "git_ref",
-                "coordinate": "owner/slipway:refs/heads/main",
+                "coordinate": "owner/floati:refs/heads/main",
                 "identity_digest": "a" * 64,
             },
             "request_digest": REQUEST_DIGEST,
@@ -186,13 +186,13 @@ class _EffectCase:
         )
         approvals = ApprovalLedger(self.root)
         request = approvals.request_for_action(
-            "node-a", "effect.execute", "repo:slipway", 120, digest,
+            "node-a", "effect.execute", "repo:floati", 120, digest,
             "effect-approval", grant["epoch"],
             now=NOW + timedelta(seconds=23),
         )
         decision = approvals.decide(
             request["id"], public_ids.reviewer(), "approved", None,
-            granted_scope="repo:slipway", granted_ttl_seconds=90,
+            granted_scope="repo:floati", granted_ttl_seconds=90,
             now=NOW + timedelta(seconds=24),
         )
         return request, decision
@@ -209,12 +209,12 @@ class _EffectCase:
         )
         approvals = ApprovalLedger(self.root)
         request = approvals.request_for_action(
-            "node-a", "effect.execute", "repo:slipway", 120,
+            "node-a", "effect.execute", "repo:floati", 120,
             REQUEST_DIGEST, "resume-approval", approval_authority["epoch"],
             now=NOW + timedelta(seconds=23),
         )
         checkpoint = {
-            "repo": "owner/slipway", "sha": "d" * 40,
+            "repo": "owner/floati", "sha": "d" * 40,
             "doc": "docs/checkpoints/effect.md",
         }
         suspension = ApprovalSuspensionController(
@@ -234,7 +234,7 @@ class _EffectCase:
             return request, None, suspended, None
         decision = approvals.decide(
             request["id"], public_ids.reviewer(), "approved", None,
-            granted_scope="repo:slipway", granted_ttl_seconds=90,
+            granted_scope="repo:floati", granted_ttl_seconds=90,
             now=NOW + timedelta(seconds=25),
         )
         resumed_authority = authorities.claim(

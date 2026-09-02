@@ -309,27 +309,33 @@ class ThreadObservationRecordTests(unittest.TestCase):
                     )
 
     def test_unknown_observation_requires_null_values_and_unknown_evidence(self) -> None:
-        lawful = thread_record_rows(self.root.tenant_id)[1]
-        lawful.update(
-            {
-                "provider_status": {"value": "unknown", "evidence_class": "unknown"},
-                "active_flags": {"value": None, "evidence_class": "unknown"},
-                "provider_updated_at": {"value": None, "evidence_class": "unknown"},
-                "attention": {"value": "unknown", "evidence_class": "unknown"},
-                "observation_outcome": "unknown",
-                "observation_reason": "provider_timeout",
-            }
-        )
-        lawful["observation_digest"] = observation_digest(lawful)
-        try:
-            validate_record(
-                lawful,
-                self.root.tenant_id,
-                THREAD_OBSERVATION_KINDS,
-                integrity=False,
-            )
-        except ProtocolRefusal as exc:
-            self.fail(f"runtime rejected lawful unknown testimony: {exc.code}")
+        for reason in ("provider_timeout", "codex_executable_absent"):
+            with self.subTest(reason=reason):
+                lawful = thread_record_rows(self.root.tenant_id)[1]
+                lawful.update(
+                    {
+                        "provider_status": {"value": "unknown", "evidence_class": "unknown"},
+                        "active_flags": {"value": None, "evidence_class": "unknown"},
+                        "provider_updated_at": {"value": None, "evidence_class": "unknown"},
+                        "attention": {"value": "unknown", "evidence_class": "unknown"},
+                        "observation_outcome": "unknown",
+                        "observation_reason": reason,
+                    }
+                )
+                lawful["observation_digest"] = observation_digest(lawful)
+                try:
+                    validate_record(
+                        lawful,
+                        self.root.tenant_id,
+                        THREAD_OBSERVATION_KINDS,
+                        integrity=False,
+                    )
+                    validate_json_schema(
+                        lawful,
+                        Path("schemas/v1/thread-observation-recorded-record.schema.json"),
+                    )
+                except (ProtocolRefusal, SchemaValidationError) as exc:
+                    self.fail(f"runtime or schema rejected lawful unknown testimony: {exc}")
 
     def test_attention_is_the_exact_derivative_of_measured_flags(self) -> None:
         lawful = thread_record_rows(self.root.tenant_id)[1]
@@ -635,7 +641,7 @@ class ThreadObserverControllerTests(unittest.TestCase):
         contract = TaskContract.create(
             objective="observe one exact attempt",
             non_goals=["no provider mutation"],
-            areas_to_avoid=[{"path": "slip/thread_source.py", "region": "writes"}],
+            areas_to_avoid=[{"path": "floati/thread_source.py", "region": "writes"}],
             input_hashes={"brief": "b" * 64},
             acceptance_checks={"tests.thread": "python3 -m unittest"},
             constraints={"network": "local"},

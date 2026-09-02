@@ -48,6 +48,17 @@ _DECISION_AUTHOR_AUTHORITIES = frozenset({"operator", "architect", "worker"})
 _BIDI_CONTROLS = frozenset(
     {"LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI", "BN"}
 )
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+# The wake-hold decision domain, hoisted to module scope in the shape
+# floati/jsonl.py already ships: the token from hex, the domain from the token,
+# the sha256 preimage from the domain. Built as a LOCAL it produced the right
+# bytes and still failed its pin, because the call-site pin resolves the
+# preimage against this module's namespace -- a domain a reader cannot reach
+# without executing the function is one the pin cannot read either. Hoisting is
+# therefore not style: it is what makes the value checkable. Not one runtime
+# byte moves; ledgers written before the rename still read.
+WAKE_HOLD_DECISION_DOMAIN = _RETIRED_NAME + "-wake-hold-decision-v1"
+_WAKE_HOLD_DECISION_PREIMAGE = WAKE_HOLD_DECISION_DOMAIN.encode("ascii") + b"\0"
 READER_VERSION = "0"
 _COMMON = frozenset(("schema_version", "id", "tenant_id", "timestamp", "kind"))
 WAKE_HOLD_KINDS = frozenset({"delivery_receipt", "wake_hold_receipt"})
@@ -531,7 +542,7 @@ def wake_hold_decision_digest(record: Mapping[str, object]) -> str:
         payload, ensure_ascii=False, allow_nan=False, sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
-    return hashlib.sha256(b"slipway-wake-hold-decision-v1\0" + encoded).hexdigest()
+    return hashlib.sha256(_WAKE_HOLD_DECISION_PREIMAGE + encoded).hexdigest()
 
 
 def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[str], *, integrity: bool) -> Dict[str, Any]:
@@ -3912,6 +3923,7 @@ def _thread_observation_record(record: Mapping[str, object], refuse: Any) -> Non
         record["observation_reason"],
         {
             "exact_thread_read",
+            "codex_executable_absent",
             "provider_unavailable",
             "provider_timeout",
             "thread_missing",

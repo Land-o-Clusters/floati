@@ -217,8 +217,8 @@ _THREAD_OBSERVATION_LEDGER_APPEND_CODE = ThreadObservationLedger._transact.__cod
 class ThreadObserver:
     """Register, observe, and detach explicit Codex-local thread coordinates."""
 
-    def __init__(self, root: FloatiRoot) -> None:
-        self._initialize(root, CodexLocalThreadSource())
+    def __init__(self, root: FloatiRoot, *, codex_executable: object = None) -> None:
+        self._initialize(root, CodexLocalThreadSource(codex_executable))
 
     @classmethod
     def _for_test(

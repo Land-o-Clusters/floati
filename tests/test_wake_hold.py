@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import IntegrityFailure, ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.records import validate_record
 from floati.root import FloatiRoot
@@ -18,6 +19,12 @@ from tests.schema_validation import SchemaValidationError, validate_json_schema
 
 
 NOW = "2026-08-13T12:00:00.000Z"
+
+# A hash domain the product carries as a salt, rebuilt here from the fence's
+# own governed token rather than spelled -- and deliberately NOT imported
+# from the module under test, so this stays an independent witness to the
+# bytes rather than a mirror of them.
+EVENT_DOMAIN = RETIRED_PRODUCT_NAME + "-wake-hold-events-v1"
 
 
 def _persist_wake_hold_fixture(root: FloatiRoot, recipient: str, row: dict, *, session: object = None) -> None:
@@ -42,7 +49,7 @@ def message(message_id: str, *, recipient: str = "bob", session: object = None, 
         "kind": "message_envelope",
         "sender": public_ids.worker('alpha'),
         "recipient": recipient,
-        "repo": "slipway",
+        "repo": "floati",
         "sha": "a" * 40,
         "doc": "docs/evidence/wake.md",
         "note": "wake evidence",
@@ -181,7 +188,7 @@ class WakeHoldRecordTests(unittest.TestCase):
         registry = Registry(root)
         registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
-        EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/hold.md", "hold", idempotency_key="hold")
+        EventLog(root, registry).send(public_ids.worker('alpha'), "bob", "floati", "a" * 40, "docs/evidence/hold.md", "hold", idempotency_key="hold")
         WakeHoldController(root).evaluate("bob", idempotency_key="hold-view")
         self.assertEqual([], FleetProjection(root).receipts("bob")["deliveries"])
 
@@ -233,7 +240,8 @@ class WakeHoldRecordTests(unittest.TestCase):
             controller = WakeHoldController(root)
             row = self.receipt()
             row["delivery_prefix_digest"] = hashlib.sha256(
-                b"slipway-wake-hold-deliveries-v1\0"
+                (RETIRED_PRODUCT_NAME + "-wake-hold-deliveries-v1").encode("ascii")
+                + b"\0"
             ).hexdigest()
             row["decision_digest"] = wake_hold_decision_digest(row)
             from floati.cursor import SparseCursor
@@ -291,7 +299,7 @@ class WakeHoldRecordTests(unittest.TestCase):
             registry.register(public_ids.worker('alpha'), "worker")
             registry.register("bob", "worker")
             item = EventLog(root, registry).send(
-                public_ids.worker('alpha'), "bob", "slipway", "a" * 40, "docs/evidence/provenance.md",
+                public_ids.worker('alpha'), "bob", "floati", "a" * 40, "docs/evidence/provenance.md",
                 "provenance", idempotency_key="provenance-message",
             )
             return root, str(item["id"])
@@ -335,7 +343,7 @@ class WakeHoldRecordTests(unittest.TestCase):
                 registry.register(public_ids.worker('alpha'), "worker")
                 registry.register("bob", "worker")
                 EventLog(root, registry).send(
-                    public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+                    public_ids.worker('alpha'), "bob", "floati", "a" * 40,
                     "docs/evidence/copied-globals.md", "copied globals",
                     idempotency_key="copied-globals-message",
                 )
@@ -366,7 +374,7 @@ class WakeHoldRecordTests(unittest.TestCase):
         registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         EventLog(root, registry).send(
-            public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/private-globals.md", "private globals",
             idempotency_key="private-globals-message",
         )
@@ -697,10 +705,10 @@ class WakeHoldProjectionTests(unittest.TestCase):
         first = message(self.first)
         append_record(self.root, path, first, allowed_kinds={"message_envelope"})
         left, left_digests = read_records_with_prefix_digests(
-            self.root, path, allowed_kinds={"message_envelope"}, domain="slipway-wake-hold-events-v1",
+            self.root, path, allowed_kinds={"message_envelope"}, domain=EVENT_DOMAIN,
         )
         right, right_digests = read_records_with_prefix_digests(
-            self.root, path, allowed_kinds={"message_envelope"}, domain="slipway-wake-hold-events-v1",
+            self.root, path, allowed_kinds={"message_envelope"}, domain=EVENT_DOMAIN,
         )
         self.assertEqual((left, left_digests), (right, right_digests))
         event_path = self.root.resolve_relative(path)
@@ -709,13 +717,13 @@ class WakeHoldProjectionTests(unittest.TestCase):
         self.assertNotEqual(original, mutated)
         event_path.write_bytes(mutated)
         _changed, changed_digests = read_records_with_prefix_digests(
-            self.root, path, allowed_kinds={"message_envelope"}, domain="slipway-wake-hold-events-v1",
+            self.root, path, allowed_kinds={"message_envelope"}, domain=EVENT_DOMAIN,
         )
         self.assertNotEqual(left_digests, changed_digests)
         event_path.write_bytes(mutated.replace(b"\n", b" \n"))
         with self.assertRaises(IntegrityFailure):
             read_records_with_prefix_digests(
-                self.root, path, allowed_kinds={"message_envelope"}, domain="slipway-wake-hold-events-v1",
+                self.root, path, allowed_kinds={"message_envelope"}, domain=EVENT_DOMAIN,
             )
 
     def test_replay_requires_ancestor_and_immediate_prefix_testimony(self) -> None:
@@ -1015,7 +1023,7 @@ class WakeHoldControllerTests(unittest.TestCase):
 
     def send(self, recipient: str = "bob", *, session: object = None, key: str = "message") -> dict:
         return self.events.send(
-            public_ids.worker('alpha'), recipient, "slipway", "a" * 40,
+            public_ids.worker('alpha'), recipient, "floati", "a" * 40,
             "docs/evidence/wake-controller.md", "controller evidence",
             idempotency_key=key, worker_session_id=session,
         )

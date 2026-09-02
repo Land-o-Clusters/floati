@@ -100,7 +100,7 @@ class PackagedSmokeBattery(unittest.TestCase):
             "--doc", "docs/design/f10-1-remedy-ruling-2026-08-30.md",
             "--note", "packaged smoke battery")
         inbox = self.floati(
-            "inbox", "--root", str(self.fleet), "--as", "smoke-b")
+            "inbox", "--root", str(self.fleet), "--as", "smoke-b", "--peek")
         messages = inbox["evidence"]["messages"]
         self.assertEqual(1, len(messages), "smoke-b inbox is empty")
         self.floati(
@@ -116,12 +116,12 @@ class PackagedSmokeBattery(unittest.TestCase):
         # health family
         # --source is currency-comparison data (a real checkout); the
         # imports still come from the isolated tree via the launcher.
-        # doctor may lawfully report degraded on a scratch root (it names
-        # what it cannot establish); the artifact must parse either way.
+        # Doctor may lawfully report degraded on a scratch root or cannot_speak
+        # when no installer destination was named; the artifact must parse.
         artifact = self.floati(
             "doctor", "--root", str(self.fleet), "--source",
             str(REPOSITORY_ROOT), expect_ok=False)
-        self.assertIn(artifact["status"], ("ok", "degraded"))
+        self.assertIn(artifact["status"], ("ok", "degraded", "cannot_speak"))
         # solo work family
         self.floati("init", "--root", str(self.solo), "--solo", "solo-a",
                     "--harness", "codex")

@@ -216,7 +216,7 @@ def _contract(policy: RetryPolicy, *, objective: str) -> TaskContract:
     return TaskContract.create(
         objective=objective,
         non_goals=["no unbounded authority"],
-        areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+        areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
         input_hashes={"brief": DIGEST},
         acceptance_checks={"tests.unit": "python3 -m unittest"},
         constraints={"network": "dark"},
@@ -676,7 +676,7 @@ def build_admission_case(root: FloatiRoot) -> AdmissionCase:
                         "contract": {
                             "objective": "admit finite work",
                             "non_goals": ["no model authority"],
-                            "areas_to_avoid": [{"path": "slip/graph.py", "region": "all"}],
+                            "areas_to_avoid": [{"path": "floati/graph.py", "region": "all"}],
                             "input_hashes": {"brief": DIGEST},
                             "acceptance_checks": {"tests.unit": "python3 -m unittest"},
                             "constraints": {"network": "dark"},

@@ -40,8 +40,8 @@ class _GitFixture(unittest.TestCase):
         (self.repository / "README.md").write_text("effect reconciliation\n", encoding="utf-8")
         self.git("add", "README.md")
         self.git(
-            "-c", "user.name=Slipway Tests",
-            "-c", "user.email=tests@slipway.invalid",
+            "-c", "user.name=Floati Tests",
+            "-c", "user.email=tests@floati.invalid",
             "commit", "--quiet", "-m", "fixture",
         )
         self.sha = self.git("rev-parse", "HEAD").stdout.strip()

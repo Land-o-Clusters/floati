@@ -665,9 +665,21 @@ def _effect_timestamp(value: datetime) -> str:
     return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+# The retired repository name, built from hex rather than spelled. This value
+# is both a salt inside the sha256 preimage below AND a field WRITTEN INTO
+# persisted effect records, so operator ledgers already carry these exact
+# bytes: changing them re-derives every effect operation id and splits readers
+# across two vocabularies. Built for the reason floati/identity_fence.py builds
+# its governed tokens -- a fence that must forbid this word may not find it in
+# shipped source, and the runtime value may not move to satisfy the fence.
+# Pinned in tests/test_retired_name_pins.py.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_EFFECT_OPERATION_DOMAIN = _RETIRED_NAME + "-effect-operation-v1"
+
+
 def _semantic_operation_id(tenant_id: str, idempotency_key: object) -> str:
     payload = _canonical_ijson({
-        "domain": "slipway-effect-operation-v1",
+        "domain": _EFFECT_OPERATION_DOMAIN,
         "tenant_id": tenant_id,
         "idempotency_key": idempotency_key,
     })

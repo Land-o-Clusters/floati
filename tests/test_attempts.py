@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.contracts import TaskContract, contract_digest
 from floati.ids import uuid7_hex
 from floati.root import FloatiRoot
@@ -23,7 +24,7 @@ ITEM_ID = "work-018f7e9b3c117abc8def0123456789ab"
 def append_task_contract(ledger: RunLedger, run_id: str, item_id: str, policy: object) -> dict:
     contract = TaskContract.create(
         objective="govern scheduler retries", non_goals=["no post-attempt amendment"],
-        areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+        areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
         input_hashes={"brief": DIGEST}, acceptance_checks={"tests.unit": "python3 -m unittest"},
         constraints={"network": "dark"}, risk_class="high",
         retry_policy={"max_attempts": policy.max_attempts, "backoff": {
@@ -93,8 +94,11 @@ class AttemptLifecycleTests(unittest.TestCase):
         self.assertEqual(3, opened["max_attempts"])
         self.assertEqual({"strategy": "exponential", "base_delay_ms": 100,
                           "cap_delay_ms": 1000, "jitter": "sha256_25pct"}, opened["backoff"])
+        # See tests/test_retired_name_pins.py: this domain is a salt whose bytes
+        # are a ledger contract, so it is built from the governed token here.
         expected_fence = hashlib.sha256(
-            b"slipway-attempt-fence-v0\0run-018f7e9b3c117abc8def0123456789ab\0"
+            (RETIRED_PRODUCT_NAME + "-attempt-fence-v0").encode("ascii")
+            + b"\0run-018f7e9b3c117abc8def0123456789ab\0"
             b"work-018f7e9b3c117abc8def0123456789ab\0" b"1\0" b"7"
         ).hexdigest()
         self.assertEqual(expected_fence, opened["fence_token"])

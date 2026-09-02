@@ -53,11 +53,11 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.establish(now=NOW)
 
         outbound = bridge.forward(
-            self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+            self.left, public_ids.worker('alpha'), "bob", "floati", "a" * 40,
             "docs/evidence/alpha.md", "alpha to beta", now=NOW,
         )
         inbound = bridge.forward(
-            self.right, "bob", public_ids.worker('alpha'), "slipway", "b" * 40,
+            self.right, "bob", public_ids.worker('alpha'), "floati", "b" * 40,
             "docs/evidence/beta.md", "beta to alpha", now=NOW,
         )
 
@@ -94,7 +94,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.revoke(self.right, self.left, "bob", now=NOW)
         with self.assertRaises(ProtocolRefusal) as revoked:
             bridge.forward(
-                self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+                self.left, public_ids.worker('alpha'), "bob", "floati", "a" * 40,
                 "docs/evidence/refused.md", "must refuse", now=NOW,
             )
         self.assertEqual("bridge_consent_revoked", revoked.exception.code)
@@ -119,7 +119,7 @@ class LocalBridgeContractTests(unittest.TestCase):
         bridge.establish(now=NOW)
         with self.assertRaises(ProtocolRefusal) as remote:
             bridge.forward(
-                self.left, public_ids.worker('alpha'), "bob", "slipway", "a" * 40,
+                self.left, public_ids.worker('alpha'), "bob", "floati", "a" * 40,
                 "docs/evidence/refused.md", "must refuse", now=NOW,
                 transport="https",
             )
@@ -137,7 +137,7 @@ class LocalBridgeContractTests(unittest.TestCase):
 
         with self.assertRaises(ProtocolRefusal) as malformed:
             bridge.forward(
-                self.left, "NOT VALID", "bob", "slipway", "a" * 40,
+                self.left, "NOT VALID", "bob", "floati", "a" * 40,
                 "docs/evidence/refused.md", "must refuse", now=NOW,
             )
 

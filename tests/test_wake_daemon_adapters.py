@@ -370,6 +370,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         self.assertEqual(45, runner.calls[0][2])
 
     def test_zcode_probe_resume_uses_the_measured_vector(self) -> None:
+        from floati import wake_daemon_adapters as adapters
         from floati.wake_daemon_adapters import ZcodeResumeWakeAdapter
 
         stdout = '{"sessionId":"session-1","response":"probe woke"}\n'
@@ -390,7 +391,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         self.assertEqual("woke", result.outcome)
         self.assertEqual(
             (
-                "/opt/homebrew/bin/node",
+                str(adapters.ZCODE_NODE.resolve(strict=True)),
                 str(self.target),
                 "--json",
                 "--no-color",
@@ -559,7 +560,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         )
         self.assertEqual(
             (
-                "/opt/homebrew/bin/node",
+                str(adapters.ZCODE_NODE.resolve(strict=True)),
                 str(self.target),
                 "--json",
                 "--no-color",

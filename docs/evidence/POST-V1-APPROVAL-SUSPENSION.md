@@ -9,7 +9,7 @@ Task 5 starting HEAD: `081e8993f7f5e04236bfe05f6108f3cffdc00fa1`
 - Approval requests and decisions are exact-action-bound v1 records. A started attempt can durably suspend on its exact fence and workspace checkpoint, after which its old execution authority is durably released or confirmed inactive.
 - Approval consumption requires the exact approved action, exact suspended scope and checkpoint, decision time testimony no earlier than the suspension, and a strictly newer live authority on the same subject. Scope-tampered and causally early decisions refuse without adding a second durable truth.
 - The four new frame readers fail closed for malformed, truncated, duplicate-key, oversized, and non-UTF8 bytes. Hostile causal reorder, exact-ID divergence, request/decision tamper, old-authority replay, newer-epoch release attack, workspace reservation collision, raw private socket appends, and interrupted-response retries have lawful positive controls and byte-preservation assertions.
-- The manifest is mechanically regenerated from the sorted deployable set and current SHA-256 bytes. It includes `slip/suspension.py` and the four approval request, decision, suspension, and consumption schemas. `bundle/c7.1`, `bundle/c7.2`, and `schemas/v0` remain byte-identical to `4f1de17f5e68b6bc792e6716e593ca0e90f7ac68`.
+- The manifest is mechanically regenerated from the sorted deployable set and current SHA-256 bytes. It includes `<retired>/suspension.py` and the four approval request, decision, suspension, and consumption schemas. `bundle/c7.1`, `bundle/c7.2`, and `schemas/v0` remain byte-identical to `4f1de17f5e68b6bc792e6716e593ca0e90f7ac68`.
 
 ## RED evidence
 
@@ -33,7 +33,7 @@ Ran 78 tests in 8.611s
 FAILED (failures=4)
 ```
 
-The four intended failures were: broadened decision scope accepted; a decision earlier than its durable suspension accepted; all five approval-suspension manifest assets absent; and repository manifest currency reporting `tracked_set_mismatch` plus stale digests for `slip/approvals.py`, `slip/planes.py`, `slip/records.py`, `slip/runtruth.py`, and `slip/sequencer.py`.
+The four intended failures were: broadened decision scope accepted; a decision earlier than its durable suspension accepted; all five approval-suspension manifest assets absent; and repository manifest currency reporting `tracked_set_mismatch` plus stale digests for `<retired>/approvals.py`, `<retired>/planes.py`, `<retired>/records.py`, `<retired>/runtruth.py`, and `<retired>/sequencer.py`.
 
 After the narrow controller correction and mechanical manifest regeneration, the same hostile bank ran 78 tests in 8.531s and passed.
 
@@ -41,7 +41,7 @@ After the narrow controller correction and mechanical manifest regeneration, the
 
 1. Required focused bank: 230 tests in 14.681s, `OK`.
 2. Full `python3 -m unittest -q`: 813 tests in 61.502s, `OK`.
-3. `python3 -m slip.selftest`: 813 tests in 62.328s, `OK`, followed by `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`. An expected orchestration fault-drill child emitted a traceback while its enclosing test remained `ok`; this output is preserved rather than hidden or relabeled.
+3. `python3 -m <retired>.selftest`: 813 tests in 62.328s, `OK`, followed by `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`. An expected orchestration fault-drill child emitted a traceback while its enclosing test remained `ok`; this output is preserved rather than hidden or relabeled.
 4. Direct manifest verification printed `[]` and exited zero.
 5. Source scrub: 8 tests in 0.222s, `OK`.
 6. Frozen `bundle/c7.1`, `bundle/c7.2`, and `schemas/v0` diff exited zero.

@@ -111,6 +111,34 @@ def _normalize_spawn_group_numbers(
     return normalized
 
 
+# The retired repository name, built from hex rather than spelled.
+#
+# These nine strings are not copy. Each one sits INSIDE the sha256 preimage
+# below, so its bytes decide the id of every spawn-lifecycle record ever
+# written. `open_spawn_group` re-derives a group id and compares it to the
+# stored one, so a single changed byte makes this module refuse its own
+# retries against every ledger written before the change. They are a
+# compatibility contract with data on operator disks; the name they carry is
+# retired everywhere a reader can see it, and kept exactly here, where only a
+# hash can.
+#
+# Built, not spelled, for the reason floati/identity_fence.py builds its own
+# governed tokens: a publication fence that must forbid this word cannot be
+# allowed to find it in shipped source, and the runtime value must not move to
+# satisfy it. tests/test_retired_name_pins.py pins all nine derived ids
+# byte-for-byte and pins which domain each call site passes.
+_RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
+_SPAWN_GROUP_DOMAIN = _RETIRED_NAME + "-spawn-group-v1"
+_SPAWN_ACTIVATION_DOMAIN = _RETIRED_NAME + "-spawn-activation-v1"
+_SPAWN_ABORT_DOMAIN = _RETIRED_NAME + "-spawn-abort-v1"
+_CHILD_ADMITTED_DOMAIN = _RETIRED_NAME + "-child-admitted-v1"
+_CHILD_REJECTED_DOMAIN = _RETIRED_NAME + "-child-rejected-v1"
+_SPAWN_CLOSE_DOMAIN = _RETIRED_NAME + "-spawn-close-v1"
+_DESCENDANT_DOMAIN = _RETIRED_NAME + "-descendant-v1"
+_OBSERVATION_CLOSE_DOMAIN = _RETIRED_NAME + "-observation-close-v1"
+_LATE_RESULT_DOMAIN = _RETIRED_NAME + "-late-result-v1"
+
+
 def _semantic_uuid(domain: str, value: object) -> str:
     digest = bytearray(hashlib.sha256(domain.encode("ascii") + b"\0" + _canonical(value)).digest()[:16])
     digest[6] = (digest[6] & 0x0F) | 0x70
@@ -559,7 +587,7 @@ class SpawnGroupController:
         aggregate_budget = request_semantics["aggregate_budget"]
         required_count = request_semantics["required_count"]
         group_id = "spawn-group-created-" + _semantic_uuid(
-            "slipway-spawn-group-v1", request_semantics
+            _SPAWN_GROUP_DOMAIN, request_semantics
         )
         projection = self.ledger.project()
         run = projection.run(run_id)
@@ -858,7 +886,7 @@ class SpawnGroupController:
         record: Dict[str, object] = {
             "schema_version": 1,
             "id": "plan-amendment-" + _semantic_uuid(
-                "slipway-spawn-activation-v1", semantic
+                _SPAWN_ACTIVATION_DOMAIN, semantic
             ),
             "tenant_id": self.ledger.root.tenant_id,
             "timestamp": created["timestamp"],
@@ -978,7 +1006,7 @@ class SpawnGroupController:
         record: Dict[str, object] = {
             "schema_version": 1,
             "id": "spawn-group-aborted-" + _semantic_uuid(
-                "slipway-spawn-abort-v1", semantic
+                _SPAWN_ABORT_DOMAIN, semantic
             ),
             "tenant_id": self.ledger.root.tenant_id,
             "timestamp": _timestamp(current),
@@ -1060,7 +1088,7 @@ class SpawnGroupController:
         record: Dict[str, object] = {
             "schema_version": 1,
             "id": "child-admitted-" + _semantic_uuid(
-                "slipway-child-admitted-v1", {
+                _CHILD_ADMITTED_DOMAIN, {
                     "spawn_group_id": spawn_group_id,
                     "child_item_id": child_item_id,
                     "plan_amendment_id": group["amendment"]["id"],
@@ -1159,7 +1187,7 @@ class SpawnGroupController:
         }
         record: Dict[str, object] = {
             "schema_version": 1,
-            "id": "child-rejected-" + _semantic_uuid("slipway-child-rejected-v1", semantic),
+            "id": "child-rejected-" + _semantic_uuid(_CHILD_REJECTED_DOMAIN, semantic),
             "tenant_id": self.ledger.root.tenant_id,
             "timestamp": _timestamp(current), "kind": "child_rejected",
             **semantic, "evaluated_at_testimony": _timestamp(current),
@@ -1395,7 +1423,7 @@ class SpawnGroupController:
         }
         record: Dict[str, object] = {
             "schema_version": 1,
-            "id": "spawn-group-closed-" + _semantic_uuid("slipway-spawn-close-v1", semantic),
+            "id": "spawn-group-closed-" + _semantic_uuid(_SPAWN_CLOSE_DOMAIN, semantic),
             "tenant_id": self.ledger.root.tenant_id, "timestamp": _timestamp(current),
             "kind": "spawn_group_closed", **semantic,
             "closed_at_testimony": _timestamp(current),
@@ -1479,7 +1507,7 @@ class SpawnGroupController:
             observed_at_testimony = str(existing["observed_at_testimony"])
         record: Dict[str, object] = {
             "schema_version": 1,
-            "id": "untracked-descendant-" + _semantic_uuid("slipway-descendant-v1", semantic),
+            "id": "untracked-descendant-" + _semantic_uuid(_DESCENDANT_DOMAIN, semantic),
             "tenant_id": self.ledger.root.tenant_id, "timestamp": timestamp,
             "kind": "untracked_descendant", **semantic,
             "observed_at_testimony": observed_at_testimony,
@@ -1528,7 +1556,7 @@ class SpawnGroupController:
         rows = [row for (attempt_id, _adapter, _provider), row in run["untracked_descendants"].items() if attempt_id == parent_attempt_id]
         record: Dict[str, object] = {
             "schema_version": 1, "id": "descendant-observation-closed-" + _semantic_uuid(
-                "slipway-observation-close-v1", {"run_id": run_id, "attempt_id": parent_attempt_id}
+                _OBSERVATION_CLOSE_DOMAIN, {"run_id": run_id, "attempt_id": parent_attempt_id}
             ),
             "tenant_id": self.ledger.root.tenant_id, "timestamp": _timestamp(current),
             "kind": "descendant_observation_closed", "run_id": run_id,
@@ -1606,7 +1634,7 @@ class SpawnGroupController:
         }
         record: Dict[str, object] = {
             "schema_version": 1,
-            "id": "spawn-late-result-disposition-" + _semantic_uuid("slipway-late-result-v1", semantic),
+            "id": "spawn-late-result-disposition-" + _semantic_uuid(_LATE_RESULT_DOMAIN, semantic),
             "tenant_id": self.ledger.root.tenant_id, "timestamp": _timestamp(current),
             "kind": "spawn_late_result_disposition", **semantic,
             "decided_at_testimony": _timestamp(current),

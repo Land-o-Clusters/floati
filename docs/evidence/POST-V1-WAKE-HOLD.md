@@ -17,15 +17,15 @@ Changed paths against the whole-review base:
 - `schemas/v1/wake-decision-artifact.schema.json`
 - `schemas/v1/wake-hold-receipt-record.schema.json`
 - `schemas/v1/wake-path-status-artifact.schema.json`
-- `slip/cli.py`
-- `slip/cursor.py`
-- `slip/events.py`
-- `slip/jsonl.py`
-- `slip/projection.py`
-- `slip/records.py`
-- `slip/tui.py`
-- `slip/wake.py`
-- `slip/wake_hold.py`
+- `<retired>/cli.py`
+- `<retired>/cursor.py`
+- `<retired>/events.py`
+- `<retired>/jsonl.py`
+- `<retired>/projection.py`
+- `<retired>/records.py`
+- `<retired>/tui.py`
+- `<retired>/wake.py`
+- `<retired>/wake_hold.py`
 - `tests/test_cli.py`
 - `tests/test_copy_ledger.py`
 - `tests/test_cursor.py`
@@ -70,7 +70,7 @@ No `schemas/v0`, `bundle/c7.1`, or `bundle/c7.2` bytes changed.
    top-level invalid-command diagnostics. Exact hidden dispatch and required
    arguments are unchanged, and the command has no alias or environment-root
    fallback. The deployable manifest was mechanically regenerated after
-   `slip/cli.py` changed.
+   `<retired>/cli.py` changed.
 6. Fix Round 3 began from exact clean evidence head
    `f23bed748a5b373aced1c9da8a9ffe767eedceb5`. Its isolated combined RED ran
    two tests in `0.027 s` and reported three registrar seam failures plus one
@@ -78,7 +78,7 @@ No `schemas/v0`, `bundle/c7.1`, or `bundle/c7.2` bytes changed.
    failure stranded the deterministic leaf, while a later lawful retraction
    invalidated an already-presented acknowledgment. The same two tests passed
    in `0.032 s` after the minimal repair. The manifest RED then named only
-   `digest_mismatch:slip/cursor.py` and `digest_mismatch:slip/wake.py`; it was
+   `digest_mismatch:<retired>/cursor.py` and `digest_mismatch:<retired>/wake.py`; it was
    mechanically regenerated after the final source bytes.
 7. Fix Round 4 began from exact clean evidence head
    `e325e41dc0abd32e768523853e9c15e327e39626`. Its first-post-create-`fstat`
@@ -87,7 +87,7 @@ No `schemas/v0`, `bundle/c7.1`, or `bundle/c7.2` bytes changed.
    already retained the unrelated replacement. The same test passed in
    `0.005 s` after rollback recovered identity only from the still-held
    created descriptor. The manifest RED named only
-   `digest_mismatch:slip/wake.py`; the manifest was then mechanically
+   `digest_mismatch:<retired>/wake.py`; the manifest was then mechanically
    regenerated.
 8. Fix Round 5 began from exact clean evidence head
    `c22943026bfb95dec459a5455bec9b34589450db`. Its post-check/pre-rename race
@@ -96,7 +96,7 @@ No `schemas/v0`, `bundle/c7.1`, or `bundle/c7.2` bytes changed.
    test passed in `0.004 s` after a quarantined identity mismatch restored the
    retained replacement with a same-directory, no-overwrite hard link and
    verified both observed names before refusing. The manifest RED named only
-   `digest_mismatch:slip/wake.py`; the manifest was then mechanically
+   `digest_mismatch:<retired>/wake.py`; the manifest was then mechanically
    regenerated.
 
 ## Behavioral result
@@ -144,7 +144,7 @@ No `schemas/v0`, `bundle/c7.1`, or `bundle/c7.2` bytes changed.
 | Focused Wake/Hold/one-shot/CLI/JSONL/manifest bank | `152/152`, 7.793 s |
 | Complete concurrency/crash/fuzz gauntlets | `93/93`, 26.327 s |
 | Full `python3 -m unittest -q` | exit 0, 30.2 s |
-| `python3 -m slip.selftest` | exit 0, 27.0 s |
+| `python3 -m <retired>.selftest` | exit 0, 27.0 s |
 | Private-cache `py_compile` | exit 0 |
 | Direct manifest verification | `[]` |
 | Frozen v0/C7 comparison | exit 0 |
@@ -157,7 +157,7 @@ Fix Round 2 final-source gates:
 | Focused CLI/Wake/Copy/manifest bank | `132/132`, 7.973 s |
 | Live near-miss source scrub | exit 20; public choices only |
 | Full `python3 -m unittest -q` | exit 0, 30.2 s |
-| `python3 -m slip.selftest` | exit 0, 26.8 s |
+| `python3 -m <retired>.selftest` | exit 0, 26.8 s |
 | Private-cache `py_compile` | exit 0 |
 | Direct manifest verification | `[]` |
 | Frozen v0/C7 comparison and `git diff --check` | exit 0 |
@@ -170,7 +170,7 @@ Fix Round 3 final-source gates:
 | Focused cursor/events/Wake/Hold/one-shot/CLI/manifest bank | `152/152`, 8.677 s |
 | Complete concurrency/crash/fuzz gauntlets | `93/93`, 27.052 s |
 | Full `python3 -m unittest -q` | exit 0; `1,409` tests discovered |
-| `python3 -m slip.selftest` | exit 0 |
+| `python3 -m <retired>.selftest` | exit 0 |
 | Private-cache compile | exit 0 |
 | Direct manifest verification | `[]` |
 | Frozen v0/C7 comparison and `git diff --check` | exit 0 |
@@ -182,7 +182,7 @@ Fix Round 4 final-source gates:
 | First-post-create-`fstat` targeted GREEN | `1/1`, 0.005 s |
 | Focused one-shot/Wake/Hold/cursor/events/CLI/manifest bank | `153/153`, 8.484 s |
 | Full `python3 -m unittest -q` | exit 0; `1,410` tests discovered |
-| `python3 -m slip.selftest` | exit 0 |
+| `python3 -m <retired>.selftest` | exit 0 |
 | Private-cache compile | exit 0 |
 | Direct manifest verification | `[]` |
 | Frozen v0/C7 comparison and `git diff --check` | exit 0 |
@@ -195,7 +195,7 @@ Fix Round 5 final-source gates:
 | Whole one-shot/Wake/Hold/cursor/events/CLI fault matrix | `131/131`, 8.607 s |
 | Final focused bank including manifest | `154/154`, 8.512 s |
 | Full `python3 -m unittest -q` | exit 0; `1,411` tests discovered |
-| `python3 -m slip.selftest` | exit 0 |
+| `python3 -m <retired>.selftest` | exit 0 |
 | Private-cache compile | exit 0 |
 | Direct manifest verification | `[]` |
 | Frozen v0/C7 comparison and `git diff --check` | exit 0 |

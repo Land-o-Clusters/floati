@@ -119,18 +119,18 @@ FAILED (failures=11)
 All 137 non-manifest tests passed. The eleven failures were manifest-only: the
 complete sixteen-path Spawn Groups runtime/schema set was missing; aggregate
 currency reported `tracked_set_mismatch`; and current digests were absent for
-`schemas/v1/run-dispatch-decision-record.schema.json`, `slip/admission.py`,
-`slip/cancellation.py`, `slip/capability_binding.py`, `slip/records.py`,
-`slip/runtruth.py`, `slip/scheduler.py`, `slip/sequencer.py`, and
-`slip/workers.py`. No production correction was proved or made.
+`schemas/v1/run-dispatch-decision-record.schema.json`, `<retired>/admission.py`,
+`<retired>/cancellation.py`, `<retired>/capability_binding.py`, `<retired>/records.py`,
+`<retired>/runtruth.py`, `<retired>/scheduler.py`, `<retired>/sequencer.py`, and
+`<retired>/workers.py`. No production correction was proved or made.
 
 ## Manifest correction and hostile GREEN
 
 `bundle-manifest.v0.json` was regenerated mechanically from
-`slip.manifest._deployable_paths(root)`: every canonical deployable path was
+`<retired>.manifest._deployable_paths(root)`: every canonical deployable path was
 read from the repository, SHA-256 hashed, and emitted in generator order. No
 unrelated entry was hand-edited. A manifest regression asserts the sorted set
-and exact bytes for `slip/spawn_groups.py` plus all fifteen new v1 Spawn Groups
+and exact bytes for `<retired>/spawn_groups.py` plus all fifteen new v1 Spawn Groups
 schemas.
 
 After that sole non-test correction, the exact hostile bank passed 154/154 in
@@ -142,7 +142,7 @@ The first ordered sequence is retained as failed evidence:
 
 1. Required Spawn Groups regression bank: 373/373 in 27.555 seconds, `OK`.
 2. Full `python3 -m unittest -q`: 936/936 in 97.490 seconds, `OK`.
-3. `python3 -m slip.selftest`: 936 tests in 92.774 seconds,
+3. `python3 -m <retired>.selftest`: 936 tests in 92.774 seconds,
    `FAILED (errors=1)`. The other 935 passed; the sequencer round-robin test's sequential
    noisy client timed out and surfaced `sequencer_unavailable`.
 
@@ -152,7 +152,7 @@ changed. The complete ordered sequence was restarted from gate one:
 
 1. Required Spawn Groups regression bank: 373/373 in 25.152 seconds, `OK`.
 2. Full `python3 -m unittest -q`: 936/936 in 84.360 seconds, `OK`.
-3. `python3 -m slip.selftest`: 936/936 in 95.472 seconds, `OK`, followed by
+3. `python3 -m <retired>.selftest`: 936/936 in 95.472 seconds, `OK`, followed by
    `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 4. Direct manifest verification emitted no output and exited zero.
 5. Source scrub: 8/8 in 0.361 seconds, `OK`.
@@ -171,7 +171,7 @@ After two fixture-only focused failures (2 errors, then 1 error), the focused
 Spawn hostile class passed 9/9 in 2.090 seconds. The complete hostile bank
 passed 159/159 in 18.944 seconds, and the exact ordered Spawn regression gate
 passed 378/378 in 24.491 seconds. On the exact final test tree, the complete
-suite passed 941/941 in 102.520 seconds and `python3 -m slip.selftest` passed
+suite passed 941/941 in 102.520 seconds and `python3 -m <retired>.selftest` passed
 941/941 in 88.815 seconds followed by
 `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 Direct manifest verification was silent/zero, source scrub passed 8/8 in 0.335
@@ -247,7 +247,7 @@ The integrated corrections preserve the governed boundaries:
   closed-aware `_remember` cannot repopulate it from an in-flight request.
 
 After source and schema bytes were final, `bundle-manifest.v0.json` was
-regenerated mechanically from `slip.manifest._deployable_paths(root)`, hashing
+regenerated mechanically from `<retired>.manifest._deployable_paths(root)`, hashing
 each canonical path in generator order. Its focused contract bank passed 17/17
 in 0.053 seconds.
 
@@ -256,7 +256,7 @@ bytes:
 
 1. Required verbose Spawn regression bank: 386/386 in 24.824 seconds, `OK`.
 2. Complete `python3 -m unittest -q`: 949/949 in 69.938 seconds, `OK`.
-3. `python3 -m slip.selftest`: 949/949 in 72.333 seconds, `OK`, followed by
+3. `python3 -m <retired>.selftest`: 949/949 in 72.333 seconds, `OK`, followed by
    `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 4. Direct manifest verification emitted no output and exited zero.
 5. Source scrub: 8/8 in 0.281 seconds, `OK`.
@@ -336,7 +336,7 @@ seconds. The exact final ordered gates were:
 
 1. Required verbose Spawn bank: 389/389 in 33.959 seconds, `OK`.
 2. Complete suite: 952/952 in 78.109 seconds, `OK`.
-3. `python3 -m slip.selftest`: 952/952 in 79.345 seconds, `OK`, followed by
+3. `python3 -m <retired>.selftest`: 952/952 in 79.345 seconds, `OK`, followed by
    `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 4. Mandated manifest module invocation: silent, exit zero; non-vacuous direct
    verification and the manifest/selftest banks are recorded above.

@@ -110,7 +110,9 @@ contract for each.
 - **Nodes and roles:** `node {add|retire|switch|role|boot|teardown|explain|state-flush}`
   (preview-first; temporary nodes take `--lease-minutes`) · `role {list|show}`.
 - **Mail:** `send --root --from --to --repo --sha SHA --doc PATH --note TEXT
-  [--reply-to ID] [--idempotency-key KEY]` · `inbox` · `ack`. Delivery and
+  [--reply-to ID] [--idempotency-key KEY]` · `inbox --session SESSION`
+  (ack-on-drain by default; `--peek` is explicit) · `ack` (repeat `--id` for one
+  exact batch) · `sent` (read-only sender receipt projection). Delivery and
   acknowledgment are separate receipts; `status: ok` from `send` proves the
   append, never the delivery.
 - **Truth surfaces:** `describe --json` · `verify` · `journal {checkpoint|verify}` ·
@@ -166,7 +168,9 @@ contract for each.
 **Managed wrappers:** a harness seat provisioned with a managed bus profile
 sends through its wrapper binary, which pins root/from/repo and takes exactly
 `<wrapper> <profile> send --to NODE --sha SHA --doc PATH --idempotency-key KEY
---note TEXT [--reply-to ID]`. A seat's own boot projection (`node boot`)
+--note TEXT [--reply-to ID]`. Its acknowledgment shape is `<wrapper> <profile>
+ack --id MSG_ID [--id MSG_ID ...] --session SESSION_ID`; every id is explicit
+and the acting session is required. A seat's own boot projection (`node boot`)
 prints its exact wrapper shapes — use those verbatim, never a remembered
 shape.
 
@@ -217,6 +221,12 @@ floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --
 Every rule here was paid for by a real multi-agent incident. They are how a fleet stays
 coherent when nobody is watching every window.
 
+- **An ack means SEEN. Nothing more.** Not agreement, not action, not promise.
+  Disagreement is a reply; work is a work receipt. Withholding an ack to signal
+  displeasure is a defect because it manufactures ghost attention and poisons
+  the doctor's numbers. The default inbox drain acknowledges exactly what it
+  returns; use `--peek` only for an explicit process-before-ack workflow.
+
 - **An ask that needs a reply is an envelope, not a chat line.** A question typed into
   your own session — "approve this design?", "should I proceed?" — is invisible to every
   other node. If you are waiting on someone, they must be able to see the wait: send it on
@@ -224,8 +234,10 @@ coherent when nobody is watching every window.
 - **`status: ok` from `send` proves the append, never the delivery.** Delivery is the
   recipient's receipt; acknowledgment is a third thing. Never report "I told X" on the
   strength of your own send result.
-- **Ack after acting, never before.** An acknowledgment recorded before the work is a lie
-  waiting for a crash. Drain, act, then ack — in that order.
+- **Ack on seeing; record action separately.** The default drain records SEEN in
+  the same guarded operation. If a workflow explicitly peeks first, acknowledge
+  the exact reviewed batch before continuing; replies and work receipts carry
+  disagreement, action, and completion.
 - **Answer with coordinates, not summaries.** A report that names an exact commit, file,
   and count can be independently verified; "done" cannot. Copy SHAs by command
   substitution — never retype one by hand.

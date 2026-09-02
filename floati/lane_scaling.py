@@ -185,9 +185,9 @@ def load_role_profiles(directory: Path) -> Dict[str, RoleProfile]:
 
 
 _INBOX_READ_SENTENCE = (
-    " BEFORE you start a row and AFTER you envelope one, drain your"
-    " channel: floati inbox --root {root} --as {instance} - ack what it"
-    " presents; an empty inbox is a measurement and you may proceed;"
+    " BEFORE you start a row and AFTER you envelope one, drain and acknowledge"
+    " your channel in one guarded operation: floati inbox --root {root} --as"
+    " {instance} --session <session-id>; an empty inbox is a measurement and you may proceed;"
     " contents outrank your queue."
 )
 

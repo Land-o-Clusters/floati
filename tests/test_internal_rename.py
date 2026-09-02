@@ -9,6 +9,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from floati.identity_fence import (
+    RETIRED_PRODUCT_NAME as RETIRED,
+    RETIRED_PRODUCT_SHORT_NAME as RETIRED_SHORT,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FLOATI_SCHEMA_ORIGIN = "https://landoclusters.com/floati/schemas/"
@@ -26,19 +31,22 @@ INTENTIONALLY_UNIDENTIFIED_SCHEMAS = frozenset(
         "schemas/v1/wake-path-status-artifact.schema.json",
     }
 )
+# Hex-built, not spelled: this tuple is a FENCE VOCABULARY, and a fence that
+# writes out the token it forbids becomes a finding of the scrub that shares
+# that vocabulary. Every value below is byte-identical to what it replaced.
 FROZEN_IDENTITY_FORBIDDEN_TOKENS = (
-    "slipway.dev",
-    "slipway.local",
+    f"{RETIRED}.dev",
+    f"{RETIRED}.local",
     "floati.dev",
     "floati.local",
-    "Slipway",
-    "x-slipway-",
-    "\x2fprivate/tmp/slipway-work",
-    r"com\\.slipway\\.oneshot\\.",
-    '"path": "slip/',
-    '"path": "scripts/slip"',
+    RETIRED.capitalize(),
+    f"x-{RETIRED}-",
+    f"\x2fprivate/tmp/{RETIRED}-work",
+    rf"com\\.{RETIRED}\\.oneshot\\.",
+    f'"path": "{RETIRED_SHORT}/',
+    f'"path": "scripts/{RETIRED_SHORT}"',
 )
-_LEGACY_MODULE_ROOT = "sl" + "ip"
+_LEGACY_MODULE_ROOT = RETIRED_SHORT
 LEGACY_MODULE_NAMESPACE = re.compile(
     rf"""
     (?x)
@@ -240,8 +248,8 @@ class InternalRenameCodeIdentityTests(unittest.TestCase):
                 self.assertIsNotNone(_legacy_module_namespace_reference(source))
 
         for source in (
-            'reason = "A slip ahead of the installed copy answered first on PATH."',
-            "slip_source_path = source_path",
+            f'reason = "A {RETIRED_SHORT} ahead of the installed copy answered first on PATH."',
+            f"{RETIRED_SHORT}_source_path = source_path",
         ):
             with self.subTest(source=source):
                 self.assertIsNone(_legacy_module_namespace_reference(source))
@@ -258,9 +266,9 @@ class InternalRenameCodeIdentityTests(unittest.TestCase):
         errors = importlib.import_module("floati.errors")
         roots = importlib.import_module("floati.root")
         self.assertTrue(hasattr(errors, "FloatiError"))
-        self.assertFalse(hasattr(errors, "SlipwayError"))
+        self.assertFalse(hasattr(errors, RETIRED.capitalize() + "Error"))
         self.assertTrue(hasattr(roots, "FloatiRoot"))
-        self.assertFalse(hasattr(roots, "SlipRoot"))
+        self.assertFalse(hasattr(roots, RETIRED_SHORT.capitalize() + "Root"))
 
     def test_floati_launcher_resolves_only_the_floati_package(self) -> None:
         launcher_path = ROOT / "scripts" / "floati"

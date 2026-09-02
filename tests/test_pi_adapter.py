@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
@@ -19,6 +20,12 @@ from tests.temp_roots import REAL_TEMP_ROOT
 
 
 HARNESS = Path(__file__).parent / "fixtures" / "pi-rpc" / "reference_harness.py"
+
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
+
 
 try:
     import floati.adapters.pi as pi
@@ -54,7 +61,7 @@ class PiRpcSessionTests(unittest.TestCase):
         self.assertNotIn(b"\r", raw)
         self.assertEqual("prompt", json.loads(raw.decode("utf-8").splitlines()[0])["type"])
         self.assertEqual("FLOATI pi fixture proof\n", (self.workspace / "PI-PROOF.txt").read_text())
-        self.assertFalse(os.path.lexists(self.workspace / ".slipway"))
+        self.assertFalse(os.path.lexists(self.workspace / LEGACY_PREFIX))
 
     def test_session_waits_for_terminal_agent_event(self) -> None:
         session = self.session("interleaved")
@@ -121,7 +128,7 @@ class PiRpcAdapterTests(unittest.TestCase):
         )
         self.workspace.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.workspace.mkdir(mode=0o700)
-        legacy = self.workspace / ".slipway-pi"
+        legacy = self.workspace / f"{LEGACY_PREFIX}-pi"
         contents = b"Pi legacy workspace sentinel\n"
         legacy.write_bytes(contents)
         metadata = self.workspace.lstat()
@@ -158,7 +165,7 @@ class PiRpcAdapterTests(unittest.TestCase):
 
         self.assertEqual("legacy_workspace_artifacts", raised.exception.code)
         self.assertEqual(
-            "workspace refused: legacy artifact '.slipway-pi' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+            f"workspace refused: legacy artifact '{LEGACY_PREFIX}-pi' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
             raised.exception.detail,
         )
         current = legacy.lstat()

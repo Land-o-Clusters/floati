@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from floati import fixture_ids as public_ids
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 
 import hashlib
 import importlib.util
@@ -276,7 +277,7 @@ class DemoCaptureAssetTests(unittest.TestCase):
             bytes.fromhex("2f7661722f666f6c64657273").decode("ascii") + "/capture",
             bytes.fromhex("2f746d70").decode("ascii") + "/capture",
             operator_account_name(),
-            "slipway-spawn-groups",
+            RETIRED_PRODUCT_NAME + "-spawn-groups",
         ):
             with self.subTest(unsafe=unsafe):
                 with self.assertRaises(ValueError):

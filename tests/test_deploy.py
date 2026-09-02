@@ -12,7 +12,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import (
+    RETIRED_PRODUCT_NAME,
+    RETIRED_PRODUCT_SHORT_NAME,
+)
 from floati.uninstall import UninstallWriter
+
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 
 try:
     import floati.deploy as deploy
@@ -164,7 +173,7 @@ class DeploymentWriterTests(unittest.TestCase):
         )
         destination = self.base / "destination"
         destination.mkdir()
-        legacy = destination / ".slipway-install"
+        legacy = destination / f"{LEGACY_PREFIX}-install"
         contents = b"deployment legacy sentinel\n"
         legacy.write_bytes(contents)
         metadata = legacy.lstat()
@@ -196,7 +205,7 @@ class DeploymentWriterTests(unittest.TestCase):
 
         self.assertEqual("legacy_workspace_artifacts", raised.exception.code)
         self.assertEqual(
-            "workspace refused: legacy artifact '.slipway-install' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+            f"workspace refused: legacy artifact '{LEGACY_PREFIX}-install' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
             raised.exception.detail,
         )
         current = legacy.lstat()
@@ -479,7 +488,7 @@ class DeploymentWriterTests(unittest.TestCase):
             },
         )
         self.assertTrue((destination / ".floati-install/manifest.v0.json").is_file())
-        self.assertFalse(os.path.lexists(destination / ".slipway-install"))
+        self.assertFalse(os.path.lexists(destination / f"{LEGACY_PREFIX}-install"))
 
     def test_install_metadata_preserves_explicit_writer_source_ref(self) -> None:
         """Catches bundle canonical identity replacing the writer's selected Git ref."""
@@ -702,7 +711,7 @@ class DeploymentWriterTests(unittest.TestCase):
             result = self._writer(destination, committed_tree=True).run()
 
         self.assertTrue((destination / "scripts" / "floati").is_file())
-        self.assertFalse((destination / "scripts" / "slip").exists())
+        self.assertFalse((destination / "scripts" / RETIRED_PRODUCT_SHORT_NAME).exists())
         self.assertEqual(
             {
                 "outcome": "affirmative_none",
@@ -855,7 +864,7 @@ class DeploymentWriterTests(unittest.TestCase):
 
         self.assertEqual(before, collision.read_bytes())
         self.assertFalse((destination / ".floati-install").exists())
-        self.assertFalse(os.path.lexists(destination / ".slipway-install"))
+        self.assertFalse(os.path.lexists(destination / f"{LEGACY_PREFIX}-install"))
 
 
 if __name__ == "__main__":

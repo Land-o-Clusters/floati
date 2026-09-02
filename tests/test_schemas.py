@@ -14,11 +14,16 @@ from pathlib import Path
 from floati.decisions import decision_digest, validate_decision_binding
 from floati.errors import ProtocolRefusal
 from floati.host_paths import worker_workspace_root
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.records import _SPECS, validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
 
+
+# The retired schema-extension prefix, built rather than spelled: the rows
+# using it assert those exact keys are NOT honoured as compatibility aliases.
+LEGACY_EXTENSION_PREFIX = f"x-{RETIRED_PRODUCT_NAME}-"
 
 SCHEMA_DIR = Path("schemas/v0")
 V1_SCHEMA_DIR = Path("schemas/v1")
@@ -465,7 +470,7 @@ class SchemaContractTests(unittest.TestCase):
             "kind": "approval_request",
             "requester": public_ids.worker('alpha'),
             "capability": "workspace.patch",
-            "scope": "repo:slipway",
+            "scope": "repo:floati",
             "requested_ttl_seconds": 60,
             "requested_at": "2026-08-09T12:00:00.000Z",
             "expires_at": "2026-08-09T12:01:00.000Z",
@@ -482,7 +487,7 @@ class SchemaContractTests(unittest.TestCase):
             "request_id": request["id"],
             "decider": public_ids.reviewer(),
             "decision": "approved",
-            "granted_scope": "repo:slipway",
+            "granted_scope": "repo:floati",
             "granted_ttl_seconds": 30,
             "reason_code": None,
             "decided_at": "2026-08-09T12:00:01.000Z",
@@ -568,7 +573,7 @@ class SchemaContractTests(unittest.TestCase):
             dict(approved, granted_ttl_seconds=None),
             dict(approved, reason_code="operator_denied"),
             dict(approved, expires_at=None),
-            dict(denied, granted_scope="repo:slipway"),
+            dict(denied, granted_scope="repo:floati"),
             dict(denied, granted_ttl_seconds=1),
             dict(denied, reason_code=None),
             dict(denied, reason_code="operator\u202edenied"),
@@ -933,7 +938,7 @@ class SchemaContractTests(unittest.TestCase):
     def test_schema_helper_executes_x_floati_sorted_unique_budget_without_legacy_fallback(
         self,
     ) -> None:
-        """Catches a dead renamed budget extension or an x-slipway compatibility alias."""
+        """Catches a dead renamed budget extension or a retired-name alias."""
 
         ordered = [{"budget_id": "build"}, {"budget_id": "review"}]
         unordered = list(reversed(ordered))
@@ -954,7 +959,7 @@ class SchemaContractTests(unittest.TestCase):
                 json.dumps(
                     {
                         "type": "array",
-                        "x-slipway-sorted-unique-budget": True,
+                        LEGACY_EXTENSION_PREFIX + "sorted-unique-budget": True,
                     }
                 ),
                 encoding="utf-8",
@@ -968,7 +973,7 @@ class SchemaContractTests(unittest.TestCase):
     def test_schema_helper_executes_x_floati_terminal_unsafe_without_legacy_fallback(
         self,
     ) -> None:
-        """Catches a dead renamed Unicode guard or an x-slipway compatibility alias."""
+        """Catches a dead renamed Unicode guard or a retired-name alias."""
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -987,7 +992,7 @@ class SchemaContractTests(unittest.TestCase):
                 json.dumps(
                     {
                         "type": "string",
-                        "x-slipway-terminal-unsafe": True,
+                        LEGACY_EXTENSION_PREFIX + "terminal-unsafe": True,
                     }
                 ),
                 encoding="utf-8",
@@ -1047,7 +1052,7 @@ class SchemaContractTests(unittest.TestCase):
                 json.dumps(
                     {
                         "type": "array",
-                        "x-slipway-sorted-unique": True,
+                        LEGACY_EXTENSION_PREFIX + "sorted-unique": True,
                     }
                 ),
                 encoding="utf-8",
@@ -1406,14 +1411,14 @@ class SchemaContractTests(unittest.TestCase):
                 self.assertFalse(schema_accepts(worker_terminal, decision_schema_path))
 
         invalid_paths = (
-            "slip//decisions.py",
-            "slip/./decisions.py",
-            "slip/../decisions.py",
+            "pkg//decisions.py",
+            "pkg/./decisions.py",
+            "pkg/../decisions.py",
             "/slip/decisions.py",
-            "slip/decisions.py/",
-            "slip\\decisions.py",
-            "slip/\x01decisions.py",
-            "slip/\u202edecisions.py",
+            "pkg/decisions.py/",
+            "pkg\\decisions.py",
+            "pkg/\x01decisions.py",
+            "pkg/\u202edecisions.py",
         )
         for path in invalid_paths:
             scoped_record = deepcopy(record)
@@ -1834,7 +1839,10 @@ class SchemaContractTests(unittest.TestCase):
 
         for workspace, expected in (
             (str(worker_workspace_root() / item_id), True),
-            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
+            # The RETIRED governed-workspace root, built rather than spelled:
+            # this row asserts that exact coordinate is refused, so its bytes
+            # are the assertion.
+            (f"\x2fprivate/tmp/{RETIRED_PRODUCT_NAME}-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, runtime_accepts(dict(record, workspace=workspace)))
@@ -1865,7 +1873,10 @@ class SchemaContractTests(unittest.TestCase):
 
         for workspace, expected in (
             (str(worker_workspace_root() / item_id), True),
-            (f"\x2fprivate/tmp/slipway-work/{item_id}", False),
+            # The RETIRED governed-workspace root, built rather than spelled:
+            # this row asserts that exact coordinate is refused, so its bytes
+            # are the assertion.
+            (f"\x2fprivate/tmp/{RETIRED_PRODUCT_NAME}-work/{item_id}", False),
         ):
             with self.subTest(workspace=workspace):
                 self.assertIs(expected, schema_accepts(dict(record, workspace=workspace)))

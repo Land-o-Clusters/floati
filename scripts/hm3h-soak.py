@@ -92,7 +92,7 @@ def _message_records(tenant: str) -> Iterable[Mapping[str, object]]:
             **_common(tenant, "msg-", "message_envelope", index),
             "sender": _PRIMARY_WORKER,
             "recipient": "bob",
-            "repo": "slipway",
+            "repo": "floati",
             "sha": "a" * 40,
             "doc": "docs/evidence/HM3H-GAUNTLET.md",
             "note": f"soak event {index:06d}",
@@ -145,7 +145,7 @@ def _measure(action: Callable[[], object], budget_ms: float) -> dict[str, object
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="slipway-hm3h-soak-") as directory:
+    with tempfile.TemporaryDirectory(prefix="floati-hm3h-soak-") as directory:
         base = Path(directory)
         mail = _build_mail_profile(base / "mail-soak")
         replay = _build_replay_profile(base / "replay-soak")

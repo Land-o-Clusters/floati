@@ -25,11 +25,13 @@ from floati.delivery_health import (
     DELIVERY_STALL_RED_MINUTES,
     DeliveryHealthAnalyzer,
 )
-from floati.doctor import Doctor
+from floati.cursor import SparseCursor
+from floati.doctor import Doctor, _role_cadences
 from floati.doctor_probe import DoctorProbe
 from floati.events import EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from floati.role_templates import load_shipped_role_templates
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -64,6 +66,25 @@ class DeliveryHealthTestBase(unittest.TestCase):
 
 
 class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
+    def test_doctor_resolves_only_digest_bound_role_cadence(self):
+        templates = load_shipped_role_templates(Path.cwd() / "roles" / "shipped")
+        builder = templates["builder"]
+        rows = [
+            {
+                "kind": "registry_role_record",
+                "node_id": "bob",
+                "state": "active",
+                "template_role": "builder",
+                "template_version": builder.template_version,
+                "template_sha256": builder.digest,
+            }
+        ]
+
+        self.assertEqual(
+            {"bob": "envelope-per-row"},
+            _role_cadences(Path.cwd(), ["bob"], rows),
+        )
+
     def test_doctor_artifact_supplies_a_datetime_to_live_delivery_health(self):
         """Catches the Doctor boundary passing its RFC3339 string clock to datetime arithmetic."""
         self.registry.register(public_ids.worker('alpha'), "opencode")
@@ -156,6 +177,83 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         # Incident: "idle"/"deaf" indistinguishable for 40+ minutes. The RED
         # line must trip well before that scale.
         self.assertLess(DELIVERY_STALL_RED_MINUTES, 40)
+
+    def test_delivered_unacked_after_later_envelope_stays_info_without_template_sla(self):
+        """A-ack4: cadence is evidence, not an invented acknowledgment SLA."""
+
+        sender = public_ids.worker("alpha")
+        self.registry.register(sender, "opencode")
+        self.registry.register("bob", "opencode")
+        acknowledged = self._send_at(30, sender, "bob", "acknowledged")
+        pending = self._send_at(25, sender, "bob", "pending")
+        self._drain_at(20, "bob")
+        SparseCursor(self.root).ack(
+            "bob",
+            [acknowledged],
+            acting_session_id="bob-session",
+            now=NOW - timedelta(minutes=5),
+        )
+        self._send_at(10, "bob", sender, "next row")
+
+        report = DeliveryHealthAnalyzer.analyze(
+            events=self.log.records(),
+            root=self.root,
+            nodes=[sender, "bob"],
+            cadences={sender: "envelope-per-row", "bob": "envelope-per-row"},
+            now=NOW,
+        )
+
+        attention = report.acknowledgments_by_node["bob"]
+        self.assertEqual(1, attention.delivered_unacknowledged_count)
+        self.assertEqual(20, attention.oldest_attention_minutes)
+        self.assertEqual(1, attention.acknowledged_count)
+        self.assertEqual((900,), attention.acknowledgment_latencies_seconds)
+        self.assertEqual(pending, attention.oldest_message_id)
+        self.assertFalse(attention.red)
+        finding = report.acknowledgment_findings_by_node["bob"]
+        self.assertEqual("acknowledgment_health", finding["code"])
+        self.assertEqual("info", finding["severity"])
+        self.assertIn("cadence envelope-per-row", finding["detail"])
+        self.assertIn("no acknowledgment SLA declared", finding["detail"])
+        self.assertEqual(
+            {
+                "delivered_unacknowledged_count",
+                "oldest_attention_minutes",
+                "oldest_message_id",
+                "acknowledged_count",
+                "latencies",
+                "cadence",
+                "sla",
+            },
+            set(finding["acknowledgment"]),
+        )
+        self.assertEqual(
+            [{"message_id": acknowledged, "seconds": 900}],
+            finding["acknowledgment"]["latencies"],
+        )
+        self.assertEqual("undeclared", finding["acknowledgment"]["sla"])
+
+    def test_delivered_unacked_before_next_row_is_measured_without_time_guess(self):
+        sender = public_ids.worker("alpha")
+        self.registry.register(sender, "opencode")
+        self.registry.register("bob", "opencode")
+        self._send_at(120, sender, "bob")
+        self._drain_at(110, "bob")
+
+        report = DeliveryHealthAnalyzer.analyze(
+            events=self.log.records(),
+            root=self.root,
+            nodes=[sender, "bob"],
+            cadences={"bob": "envelope-per-row"},
+            now=NOW,
+        )
+
+        attention = report.acknowledgments_by_node["bob"]
+        self.assertEqual(110, attention.oldest_attention_minutes)
+        self.assertFalse(attention.red)
+        self.assertEqual(
+            "info", report.acknowledgment_findings_by_node["bob"]["severity"]
+        )
 
 
 class DoctorProbeTests(DeliveryHealthTestBase):

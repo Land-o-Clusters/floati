@@ -63,7 +63,7 @@ class WorkLogTests(unittest.TestCase):
 
     @staticmethod
     def binding(sha: str, doc: str) -> dict[str, str]:
-        return {"repo": "slipway", "sha": sha, "doc": doc}
+        return {"repo": "floati", "sha": sha, "doc": doc}
 
     def test_work_ledger_is_distinct_append_only_and_completes_sparse_items(self) -> None:
         from floati.jsonl import read_records

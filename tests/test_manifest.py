@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from floati.identity_fence import RETIRED_PRODUCT_SHORT_NAME
+
 
 _FROZEN_PROTOCOL_ASSET_ROOTS = (
     "bundle/c7.1",
@@ -314,9 +316,16 @@ class ManifestTests(unittest.TestCase):
         manifest = json.loads(Path("bundle-manifest.v0.json").read_text(encoding="utf-8"))
         paths = {entry["path"] for entry in manifest["files"]}
         self.assertIn("scripts/floati", paths)
-        self.assertNotIn("scripts/slip", paths)
+        self.assertNotIn("scripts/" + RETIRED_PRODUCT_SHORT_NAME, paths)
         self.assertTrue(any(path.startswith("floati/") for path in paths))
-        self.assertFalse(any(path.startswith("slip/") for path in paths))
+        # The retired package directory, built rather than spelled: this
+        # assertion is about those exact bytes never reappearing.
+        self.assertFalse(
+            any(
+                path.startswith(RETIRED_PRODUCT_SHORT_NAME + "/")
+                for path in paths
+            )
+        )
 
     def test_repository_manifest_includes_runtime_c7_contract_assets(self) -> None:
         """Catches an installed reader importing a package that deployment did not copy."""
@@ -744,16 +753,16 @@ class ManifestTests(unittest.TestCase):
         outside = self.root / "outside"
         outside.mkdir()
         (outside / "core.py").write_bytes(b"CORE\n")
-        (self.root / "slip-link").symlink_to(outside, target_is_directory=True)
+        (self.root / "outside-link").symlink_to(outside, target_is_directory=True)
         digest = hashlib.sha256((outside / "core.py").read_bytes()).hexdigest()
         self.write_manifest(
             files=[
                 self.entry("schemas/v0/record.json"),
-                {"path": "slip-link/core.py", "sha256": digest},
+                {"path": "outside-link/core.py", "sha256": digest},
             ]
         )
 
-        self.assertIn("file_symlink:slip-link/core.py", verify_manifest(self.root))
+        self.assertIn("file_symlink:outside-link/core.py", verify_manifest(self.root))
 
     def test_repository_policy_module_is_deployable_but_repository_input_is_not(self) -> None:
         manifest = json.loads(Path("bundle-manifest.v0.json").read_text(encoding="utf-8"))

@@ -25,7 +25,7 @@ from floati.identity_fence import (  # noqa: E402
     HOME_PREFIX,
     OWNER_USERNAME,
 )
-from floati.scrub import scan_generated_tree  # noqa: E402
+from floati.scrub import scan_generated_tree_by_code  # noqa: E402
 
 
 COMMAND = "public-name-fence"
@@ -493,7 +493,15 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
 
     base = Path(root).resolve()
     findings: list[dict[str, object]] = []
-    private_project_paths = set(scan_generated_tree(base))
+    # Two names, two codes. They are not interchangeable: the private project
+    # name is scrubbed, while every shipped use of the retired product name is
+    # a frozen salt or an on-disk coordinate that must keep its bytes and be
+    # hex-built instead. A single folded code would send the next reader to the
+    # wrong remedy.
+    scrub_paths = {
+        code: set(paths)
+        for code, paths in scan_generated_tree_by_code(base).items()
+    }
     token_variants = {
         code: encoded_variants(token) for code, token in FENCE_TOKENS
     }
@@ -528,8 +536,9 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
                     temp_found = True
         for line in _unallowlisted_seat_name_lines(relative, path, data):
             findings.append({"code": "seat_name", "line": line, "path": relative})
-        if relative in private_project_paths:
-            findings.append({"code": "private_project_name", "path": relative})
+        for code, paths in scrub_paths.items():
+            if relative in paths:
+                findings.append({"code": code, "path": relative})
 
     return sorted(
         findings,

@@ -20,6 +20,8 @@ from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import (
     VerifiedLedgerCursor,
+    WAKE_HOLD_DELIVERY_DOMAIN,
+    _RETIRED_NAME,
     _locked_path,
     _transact_wake_hold_records,
     read_records,
@@ -516,9 +518,19 @@ def validate_wake_decision_artifact(
 class WakeHoldController:
     """One guarded read/decision/append transaction for non-waking held work."""
 
-    _EVENT_DOMAIN = "slipway-wake-hold-events-v1"
-    _DELIVERY_DOMAIN = "slipway-wake-hold-deliveries-v1"
-    _ACK_DOMAIN = "slipway-wake-hold-acknowledgments-v1"
+    # Salts inside sha256 preimages, not copy: each one prefixes a prefix
+    # digest this controller compares against one a caller read earlier, so
+    # their bytes are a compatibility contract with every wake-hold ledger
+    # already on disk. The delivery domain is IMPORTED rather than repeated --
+    # it is also the preimage prefix in floati/jsonl.py, and it used to be two
+    # literals in two files that happened to agree. The other two are built
+    # here from the same hex-built name, which is retired everywhere a reader
+    # can see it and kept exactly here, where only a hash can.
+    # See floati/jsonl.py for why the name is built rather than spelled;
+    # tests/test_retired_name_pins.py pins all three values.
+    _EVENT_DOMAIN = _RETIRED_NAME + "-wake-hold-events-v1"
+    _DELIVERY_DOMAIN = WAKE_HOLD_DELIVERY_DOMAIN
+    _ACK_DOMAIN = _RETIRED_NAME + "-wake-hold-acknowledgments-v1"
 
     def __init__(self, root: FloatiRoot) -> None:
         if not isinstance(root, FloatiRoot):

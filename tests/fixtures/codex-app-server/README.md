@@ -13,5 +13,5 @@ repository:
 These fixtures lock only the three envelope *categories* required by the HM-1
 brief: request, response, and notification. They do not authorize an outbound
 method sequence, process launch, network request, credential read, approval,
-or worker action. The sample `clientInfo.name` is provenance, not a Slipway
+or worker action. The sample `clientInfo.name` is provenance, not a Floati
 runtime identity.

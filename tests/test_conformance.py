@@ -208,7 +208,7 @@ class LiveRootSmokeTests(unittest.TestCase):
         self.assertEqual("message_envelope", message["kind"])
         self.assertEqual("smoke-sender", message["sender"])
         self.assertEqual("smoke-recipient", message["recipient"])
-        self.assertEqual("slipway", message["repo"])
+        self.assertEqual("floati", message["repo"])
         self.assertEqual("a" * 40, message["sha"])
         self.assertEqual("docs/evidence/live-root-smoke.md", message["doc"])
         self.assertEqual([message["id"]], observed["deliveries"][0]["item_ids"])

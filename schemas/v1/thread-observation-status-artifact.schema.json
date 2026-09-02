@@ -89,7 +89,7 @@
                     "active_flags": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
                     "provider_updated_at": {"properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}}},
                     "attention": {"properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
-                    "observation_reason": {"enum": ["not_observed", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]}
+                    "observation_reason": {"enum": ["not_observed", "codex_executable_absent", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]}
                   }
                 },
                 "else": {
@@ -121,7 +121,7 @@
               "provider_updated_at": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"type": ["integer", "null"], "minimum": 0, "maximum": 253402300799}, "evidence_class": {"enum": ["measured", "unknown"]}}},
               "attention": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"enum": ["waiting_on_approval", "waiting_on_user_input", "multiple", "unknown", "none"]}, "evidence_class": {"enum": ["derived", "unknown"]}}},
               "observation_outcome": {"enum": ["observed", "unknown"]},
-              "observation_reason": {"enum": ["not_observed", "exact_thread_read", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
+              "observation_reason": {"enum": ["not_observed", "exact_thread_read", "codex_executable_absent", "provider_unavailable", "provider_timeout", "thread_missing", "protocol_invalid", "cleanup_failed"]},
               "detached": {"type": "boolean"},
               "provider": {"const": "codex_local"},
               "provider_thread_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "x-floati-terminal-unsafe": true}

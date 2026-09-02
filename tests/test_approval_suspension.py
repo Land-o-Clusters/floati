@@ -17,6 +17,7 @@ from floati.contracts import TaskContract, contract_digest
 from floati.approvals import ApprovalLedger
 from floati.errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from floati.host_paths import worker_workspace_root
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.jsonl import read_records
 from floati.planes import AuthorityGrantStore
@@ -65,7 +66,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
         contract = TaskContract.create(
             objective="park one exact approval action",
             non_goals=["no provider relaunch"],
-            areas_to_avoid=[{"path": "slip/sequencer.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/sequencer.py", "region": "all"}],
             input_hashes={"brief": DIGEST},
             acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"},
@@ -180,12 +181,12 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             "adapter": "codex",
             "approval_request_id": "approval-request-" + uuid7_hex(),
             "exact_action_digest": "b" * 64,
-            "requested_scope": "repo:slipway",
+            "requested_scope": "repo:floati",
             "resume_mode": "checkpoint_restart",
             "provider_session_or_thread_id": None,
             "workspace": str(worker_workspace_root() / state["item_id"]),
             "workspace_checkpoint": {
-                "repo": "owner/slipway",
+                "repo": "owner/floati",
                 "sha": "c" * 40,
                 "doc": "docs/checkpoints/approval-park.md",
             },
@@ -662,7 +663,7 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             ("requested_scope", "repo:other"),
             ("resume_mode", "unsupported"),
             ("workspace", str(worker_workspace_root() / f"work-{uuid7_hex()}")),
-            ("workspace_checkpoint", {"repo": "owner/slipway", "sha": "d" * 40, "doc": "other.md"}),
+            ("workspace_checkpoint", {"repo": "owner/floati", "sha": "d" * 40, "doc": "other.md"}),
             ("resume_authority_subject", "other-subject"),
             ("resume_authority_epoch", suspension["authority_epoch_at_request"]),
         )
@@ -702,7 +703,12 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
                 self.assertEqual((True, True), accepted(record))
             retired = dict(
                 record,
-                workspace=f"\x2fprivate/tmp/slipway-work/{state['item_id']}",
+                # The RETIRED governed-workspace root, built rather than
+                # spelled: this row asserts that coordinate is refused.
+                workspace=(
+                    f"\x2fprivate/tmp/{RETIRED_PRODUCT_NAME}-work/"
+                    f"{state['item_id']}"
+                ),
             )
             with self.subTest(retired_root=record["kind"]):
                 self.assertEqual((False, False), accepted(retired))
@@ -711,10 +717,10 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             dict(suspension, schema_version=0),
             dict(suspension, id="attempt-suspended-approval-bad"),
             dict(suspension, exact_action_digest="A" * 64),
-            dict(suspension, requested_scope="repo:slipway\n"),
+            dict(suspension, requested_scope="repo:floati\n"),
             dict(suspension, authority_epoch_at_request=True),
             dict(suspension, workspace=str(worker_workspace_root() / "not-a-work-id")),
-            dict(suspension, workspace_checkpoint={"repo": "owner/slipway", "sha": "c" * 39, "doc": "x"}),
+            dict(suspension, workspace_checkpoint={"repo": "owner/floati", "sha": "c" * 39, "doc": "x"}),
             dict(suspension, resume_mode="native", provider_session_or_thread_id=None),
             dict(suspension, extra=True),
             {key: value for key, value in suspension.items() if key != "approval_expiry"},
@@ -823,7 +829,7 @@ class _DirectSuspensionContext:
         self.request = self.approvals.request_for_action(
             public_ids.worker('alpha'),
             "workspace.patch",
-            "repo:slipway",
+            "repo:floati",
             300,
             "b" * 64,
             "approve-build",
@@ -833,7 +839,7 @@ class _DirectSuspensionContext:
         self.changed_action_request = self.approvals.request_for_action(
             public_ids.worker('alpha'),
             "workspace.patch",
-            "repo:slipway",
+            "repo:floati",
             300,
             "c" * 64,
             "approve-build",
@@ -855,7 +861,7 @@ class _DirectSuspensionContext:
         self.item_id = "work-" + uuid7_hex()
         self._seed_started_attempt()
         self.checkpoint = {
-            "repo": "owner/slipway",
+            "repo": "owner/floati",
             "sha": "d" * 40,
             "doc": "docs/checkpoints/approval-park.md",
         }
@@ -905,7 +911,7 @@ class _DirectSuspensionContext:
         contract = TaskContract.create(
             objective="park one exact approval action",
             non_goals=["no provider relaunch"],
-            areas_to_avoid=[{"path": "slip/sequencer.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/sequencer.py", "region": "all"}],
             input_hashes={"brief": DIGEST},
             acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"},
@@ -1025,7 +1031,7 @@ class _DirectSuspensionContext:
             public_ids.reviewer(),
             "approved",
             None,
-            granted_scope="repo:slipway",
+            granted_scope="repo:floati",
             granted_ttl_seconds=ttl_seconds,
             now=DIRECT_NOW + timedelta(seconds=3),
         )

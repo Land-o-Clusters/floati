@@ -5,11 +5,11 @@ listed, estimate stamped.
 
 ## 1. The seam
 
-- **Primary:** the `slip` CLI/TUI (HM operator surfaces) invoke
+- **Primary:** the `floati` CLI/TUI (HM operator surfaces) invoke
   `night_watch.watch.NightWatch(window_start, window_end, budget)` and fold
   each wake/delivery/mail/work event from the fleet's own delivery
   receipts + mail log at night close: exact call site is the morning-close
-  verb (`slip watch --night-report`) added beside the existing doctor verb
+  verb (`floati watch --night-report`) added beside the existing doctor verb
   in `floati/cli.py` (the `_doctor` handler pattern is the template).
 - **Secondary (read-only):** Puddle's Harbor page consumes the rendered
   morning report via the same JSON shape `floati doctor` already emits —
@@ -45,13 +45,13 @@ dev-only today.
 
 | File | release-binary? | why it changes |
 | --- | --- | --- |
-| `floati/cli.py` | **yes (Slipway)** | one new subcommand + handler (template: `_doctor`) |
-| `floati/helptext.py` | **yes (Slipway)** | help lines for the new verb |
-| `floati/night_watch/**` (5 .py files, vendored) | **yes (Slipway)** | the engine moves into the deployable set |
+| `floati/cli.py` | **yes (Floati)** | one new subcommand + handler (template: `_doctor`) |
+| `floati/helptext.py` | **yes (Floati)** | help lines for the new verb |
+| `floati/night_watch/**` (5 .py files, vendored) | **yes (Floati)** | the engine moves into the deployable set |
 | `bundle-manifest.v0.json` | n/a — regenerated mechanically | tracks the above |
 | `drafts/night-watch/**` | no | stays out of the product graph (L1 fence test) |
 
-Release-binary rows: 3 (Slipway), 7 files — rides an owner slot;
+Release-binary rows: 3 (Floati), 7 files — rides an owner slot;
 0 (Puddle) — the Puddle dial reads free.
 
 ## 5. Receipts to re-run at wiring time (L4)

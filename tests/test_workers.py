@@ -44,6 +44,18 @@ from floati.worker_bootstrap_protocol import (
 from floati.worker_isolation import cleanup_worker_isolation, prepare_worker_isolation
 from tests.test_spawn_groups import _Task2Case
 from tests.temp_roots import REAL_TEMP_ROOT
+from floati.identity_fence import RETIRED_PRODUCT_NAME as _RETIRED_NAME
+
+
+# The retired product name as ON-DISK COORDINATES the pre-rename product wrote.
+# Every use below is an ABSENCE assertion -- the Floati worker must not create
+# the legacy evidence directory, and must not fall back to the legacy probe or
+# scratch prefixes -- so renaming these would leave the assertions passing while
+# guarding nothing. They are built from the fence's own governed token instead:
+# the bytes the product would have to produce to fail, spelled nowhere.
+LEGACY_WORKSPACE_EVIDENCE_DIR = "." + _RETIRED_NAME
+LEGACY_SCRATCH_PREFIX = _RETIRED_NAME + "-effect-worker-"
+LEGACY_PROBE_PREFIX = "." + LEGACY_SCRATCH_PREFIX
 
 try:
     from floati.workers import WorkerAdapterFailure, WorkerReceipts, WorkerRefusals, WorkerRunner, _adapter_process
@@ -90,7 +102,7 @@ class _CompletingAdapter:
         return object()
 
     def drive(self, handle: object, item: dict, *, deadline_seconds: float) -> list[dict[str, str]]:
-        return [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
 class _RuntimeIdentityAdapter:
@@ -178,7 +190,7 @@ class _DeadlineAdapter:
 
     def drive(self, handle: object, item: dict, *, deadline_seconds: float) -> list[dict[str, str]]:
         self._record("drive", deadline_seconds)
-        return [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
 class _WorkspaceAdapter(_DeadlineAdapter):
@@ -237,7 +249,7 @@ class _CrashAfterCodexSpawnAdapter:
         evidence = workspace / ".floati"
         if not evidence.is_dir():
             raise AssertionError("Floati evidence must exist before adapter metadata")
-        if os.path.lexists(workspace / ".slipway"):
+        if os.path.lexists(workspace / LEGACY_WORKSPACE_EVIDENCE_DIR):
             raise AssertionError("a Floati worker must not create legacy evidence")
         (evidence / "adapter.pgid").write_text(
             str(os.getpgrp()), encoding="utf-8"
@@ -302,7 +314,7 @@ class _EffectReportingAdapter:
     ) -> list[dict[str, str]]:
         if self.report_during_drive:
             self._report()
-        return [{"repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md"}]
+        return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
 class _EffectWorkerCase:
@@ -353,7 +365,7 @@ class _EffectWorkerCase:
             "effect_type": "git_ref_update",
             "target": {
                 "kind": "git_ref",
-                "coordinate": "owner/slipway:refs/heads/main",
+                "coordinate": "owner/floati:refs/heads/main",
                 "identity_digest": "a" * 64,
             },
             "request_digest": hashlib.sha256(b"worker effect request").hexdigest(),
@@ -482,7 +494,7 @@ def _governed_two_way_success_child(connection: object) -> None:
     try:
         connection.send(("spawned", None))
         connection.send(("result", [{
-            "repo": "slipway-proof", "sha": "a" * 40, "doc": "README.md",
+            "repo": "floati-proof", "sha": "a" * 40, "doc": "README.md",
         }]))
         if connection.recv() != ("observation_closed", None):
             connection.send(("failure", "adapter_error"))
@@ -762,8 +774,8 @@ class WorkerContractTests(unittest.TestCase):
         self.work.claim(self.item["id"], public_ids.builder('a'), "work-claims", 1, now=NOW)
         receipts = WorkerReceipts(self.root)
         session = "worker-018f0f23abcd71238000000000000000"
-        binding_a = {"repo": "slipway", "sha": "a" * 40, "doc": "README.md"}
-        binding_b = {"repo": "slipway", "sha": "b" * 40, "doc": "README.md"}
+        binding_a = {"repo": "floati", "sha": "a" * 40, "doc": "README.md"}
+        binding_b = {"repo": "floati", "sha": "b" * 40, "doc": "README.md"}
         for transition in ("claim", "spawn", "drive"):
             receipts.append(
                 session, self.item["id"], public_ids.builder('a'), "fixture",
@@ -1097,7 +1109,7 @@ class WorkerContractTests(unittest.TestCase):
             self.assertEqual("process_timeout", result["outcome_code"])
             pid_path = workspace / ".floati" / "harness.pid"
             self.assertTrue(pid_path.is_file(), "Floati evidence must include the harness pid")
-            self.assertFalse(os.path.lexists(workspace / ".slipway"))
+            self.assertFalse(os.path.lexists(workspace / LEGACY_WORKSPACE_EVIDENCE_DIR))
             pid = int(pid_path.read_text(encoding="utf-8"))
             try:
                 for _ in range(20):
@@ -1150,7 +1162,7 @@ class WorkerContractTests(unittest.TestCase):
             harness_pgid_path = evidence / "harness.pgid"
             for path in (pid_path, adapter_pgid_path, harness_pgid_path):
                 self.assertTrue(path.is_file(), f"Floati evidence is missing: {path}")
-            self.assertFalse(os.path.lexists(workspace / ".slipway"))
+            self.assertFalse(os.path.lexists(workspace / LEGACY_WORKSPACE_EVIDENCE_DIR))
             pid = int(pid_path.read_text(encoding="utf-8"))
             adapter_pgid = int(adapter_pgid_path.read_text(encoding="utf-8"))
             harness_pgid = int(harness_pgid_path.read_text(encoding="utf-8"))
@@ -1841,7 +1853,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
             ordinary = {
                 "OPENAI_API_KEY": "provider-secret",
                 "CODEX_HOME": "/provider/runtime",
-                "SLIPWAY_PROVIDER_MODE": "ordinary",
+                "FLOATI_PROVIDER_MODE": "ordinary",
             }
             environment = dict(hostile)
             environment.update(ordinary)
@@ -2008,8 +2020,28 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     policy = policies[0]
                     assert policy.workspace is not None
                     if mutation == "replacement":
-                        policy.workspace.rmdir()
-                        policy.workspace.mkdir(mode=0o700)
+                        replacement = policy.workspace.with_name(
+                            policy.workspace.name + "-replacement"
+                        )
+                        replacement.mkdir(mode=0o700)
+                        replacement_identity = (
+                            replacement.stat().st_dev,
+                            replacement.stat().st_ino,
+                        )
+                        self.assertNotEqual(
+                            policy.workspace_identity,
+                            replacement_identity,
+                            "replacement fixture must change directory identity",
+                        )
+                        os.replace(replacement, policy.workspace)
+                        self.assertNotEqual(
+                            policy.workspace_identity,
+                            (
+                                policy.workspace.stat().st_dev,
+                                policy.workspace.stat().st_ino,
+                            ),
+                            "swapped workspace must retain replacement identity",
+                        )
                     else:
                         (policy.workspace / "artifact.txt").write_text(
                             "preserve", encoding="utf-8",
@@ -2694,10 +2726,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
             probe = Path(paths["probe"])
             self.assertTrue(probe.name.startswith(".floati-effect-worker-"))
             self.assertTrue(scratch.name.startswith("floati-effect-worker-"))
-            self.assertFalse(probe.name.startswith(".slipway-effect-worker-"))
-            self.assertFalse(scratch.name.startswith("slipway-effect-worker-"))
+            self.assertFalse(probe.name.startswith(LEGACY_PROBE_PREFIX))
+            self.assertFalse(scratch.name.startswith(LEGACY_SCRATCH_PREFIX))
             self.assertFalse(scratch.name.startswith("."))
-            self.assertFalse(os.path.lexists(workspace / ".slipway"))
+            self.assertFalse(os.path.lexists(workspace / LEGACY_WORKSPACE_EVIDENCE_DIR))
             self.assertEqual("complete", result["transition"])
             self.assertTrue((workspace / "PROOF.txt").is_file())
             self.assertFalse(scratch.exists())
@@ -2729,12 +2761,12 @@ class WorkerEffectPipeTests(unittest.TestCase):
             try:
                 legacy_probe = policy.write_probe.with_name(
                     policy.write_probe.name.replace(
-                        ".floati-effect-worker-", ".slipway-effect-worker-", 1,
+                        ".floati-effect-worker-", LEGACY_PROBE_PREFIX, 1,
                     ),
                 )
                 legacy_scratch = policy.scratch.with_name(
                     policy.scratch.name.replace(
-                        "floati-effect-worker-", "slipway-effect-worker-", 1,
+                        "floati-effect-worker-", LEGACY_SCRATCH_PREFIX, 1,
                     ),
                 )
                 with self.subTest("legacy hidden probe absent"):
@@ -2810,10 +2842,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
         policy = policies[0]
         self.assertTrue(policy.write_probe.name.startswith(".floati-effect-worker-"))
         self.assertTrue(policy.scratch.name.startswith("floati-effect-worker-"))
-        self.assertFalse(policy.write_probe.name.startswith(".slipway-effect-worker-"))
-        self.assertFalse(policy.scratch.name.startswith("slipway-effect-worker-"))
+        self.assertFalse(policy.write_probe.name.startswith(LEGACY_PROBE_PREFIX))
+        self.assertFalse(policy.scratch.name.startswith(LEGACY_SCRATCH_PREFIX))
         self.assertFalse(policy.scratch.name.startswith("."))
-        self.assertFalse(os.path.lexists(workspace / ".slipway"))
+        self.assertFalse(os.path.lexists(workspace / LEGACY_WORKSPACE_EVIDENCE_DIR))
         self.assertEqual("degrade", result["transition"])
         self.assertEqual("adapter_error", result["outcome_code"])
         self.assertTrue((workspace / "PROOF.txt").is_file())

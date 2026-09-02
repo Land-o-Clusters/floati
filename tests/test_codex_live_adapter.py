@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
@@ -30,12 +31,18 @@ except (ImportError, ModuleNotFoundError):
 HARNESS = Path(__file__).parent / "fixtures" / "codex-app-server" / "reference_harness.py"
 WORK_ID = "work-018f0f23abcd71238000000000000000"
 
+# The dot-prefixed workspace name the pre-rename product wrote, built from
+# the fence's own governed token rather than spelled: these fixtures drive a
+# refusal (or assert an absence) whose whole mechanism is these exact bytes.
+LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
+
+
 
 class CodexAppServerSessionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
-        self.workspace = Path(self.temp.name) / "slipway-work" / WORK_ID
+        self.workspace = Path(self.temp.name) / "floati-work" / WORK_ID
         self.workspace.mkdir(parents=True)
 
     def command(self, mode: str) -> tuple[str, ...]:
@@ -73,8 +80,8 @@ class CodexAppServerSessionTests(unittest.TestCase):
         self.assertEqual(str(self.workspace), turn["cwd"])
         self.assertEqual([{"type": "text", "text": "Create PROOF.txt"}], turn["input"])
         self.assertTrue((self.workspace / ".floati" / "transcript.jsonl").is_file())
-        self.assertFalse(os.path.lexists(self.workspace / ".slipway"))
-        self.assertEqual("slipway live worker proof\n", (self.workspace / "PROOF.txt").read_text())
+        self.assertFalse(os.path.lexists(self.workspace / LEGACY_PREFIX))
+        self.assertEqual("floati live worker proof\n", (self.workspace / "PROOF.txt").read_text())
 
     def test_session_refuses_legacy_workspace_before_evidence_or_process_start(self) -> None:
         self.assertIsNotNone(
@@ -83,7 +90,7 @@ class CodexAppServerSessionTests(unittest.TestCase):
         )
         workspace = self.workspace / "legacy-session"
         workspace.mkdir(mode=0o700)
-        legacy = workspace / ".slipway-session"
+        legacy = workspace / f"{LEGACY_PREFIX}-session"
         contents = b"Codex legacy workspace sentinel\n"
         legacy.write_bytes(contents)
         metadata = legacy.lstat()
@@ -107,7 +114,7 @@ class CodexAppServerSessionTests(unittest.TestCase):
 
         self.assertEqual("legacy_workspace_artifacts", raised.exception.code)
         self.assertEqual(
-            "workspace refused: legacy artifact '.slipway-session' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
+            f"workspace refused: legacy artifact '{LEGACY_PREFIX}-session' predates the Floati rename; nothing was read, migrated, or deleted; start a fresh root, or archive the legacy artifacts yourself and run again",
             raised.exception.detail,
         )
         current = legacy.lstat()
@@ -223,13 +230,13 @@ class CodexAppServerAdapterTests(unittest.TestCase):
             self.git(self.workspace, "show", "-s", "--format=%an <%ae>", "HEAD"),
         )
         self.assertEqual(
-            "slipway live worker proof",
+            "floati live worker proof",
             self.git(self.workspace, "show", "HEAD:PROOF.txt"),
         )
         tracked = self.git(self.workspace, "ls-tree", "-r", "--name-only", "HEAD")
         self.assertEqual("PROOF.txt", tracked)
         self.assertTrue((self.workspace / ".floati" / "transcript.jsonl").is_file())
-        self.assertFalse(os.path.lexists(self.workspace / ".slipway"))
+        self.assertFalse(os.path.lexists(self.workspace / LEGACY_PREFIX))
 
     def test_exec_adapter_provider_inherits_the_current_process_group(self) -> None:
         """Catches exec-owned Codex sessions creating a separate provider group."""
@@ -635,7 +642,7 @@ class CodexAppServerAdapterTests(unittest.TestCase):
         handle = adapter.spawn(self.item(), deadline_seconds=5)
         adapter.drive(handle, self.item(), deadline_seconds=5)
 
-        self.assertFalse(os.path.lexists(self.workspace / ".slipway"))
+        self.assertFalse(os.path.lexists(self.workspace / LEGACY_PREFIX))
 
         expected_modes = {
             self.workspace.parent: 0o700,

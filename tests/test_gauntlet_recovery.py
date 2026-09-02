@@ -81,7 +81,7 @@ class RecoveryGauntletTests(unittest.TestCase):
         EventLog(root).send(
             public_ids.worker('alpha'),
             "bob",
-            "slipway",
+            "floati",
             "a" * 40,
             "docs/evidence/HM3H-GAUNTLET.md",
             "baseline",
@@ -106,7 +106,7 @@ class RecoveryGauntletTests(unittest.TestCase):
                     EventLog(root).send(
                         public_ids.worker('alpha'),
                         "bob",
-                        "slipway",
+                        "floati",
                         "b" * 40,
                         "docs/evidence/HM3H-GAUNTLET.md",
                         "disk full",
@@ -137,7 +137,7 @@ class RecoveryGauntletTests(unittest.TestCase):
                 EventLog(root).send(
                     public_ids.worker('alpha'),
                     "bob",
-                    "slipway",
+                    "floati",
                     "b" * 40,
                     "docs/evidence/HM3H-GAUNTLET.md",
                     "read only",
@@ -180,7 +180,7 @@ class RecoveryGauntletTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": str(scan_root),
-                    "PYTHONPYCACHEPREFIX": "\x2ftmp/slipway-hm3h-recovery-pycache",
+                    "PYTHONPYCACHEPREFIX": "\x2ftmp/floati-hm3h-recovery-pycache",
                 },
             )
             try:

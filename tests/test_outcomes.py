@@ -56,7 +56,7 @@ class LogicalOutcomeTests(unittest.TestCase):
     def bind_contract(self, run_id: str, item_id: str, policy: RetryPolicy) -> dict:
         contract = TaskContract.create(
             objective="govern logical outcome attempt", non_goals=["no post-attempt amendment"],
-            areas_to_avoid=[{"path": "slip/graph.py", "region": "all"}],
+            areas_to_avoid=[{"path": "floati/graph.py", "region": "all"}],
             input_hashes={"brief": DIGEST}, acceptance_checks={"tests.unit": "python3 -m unittest"},
             constraints={"network": "dark"}, risk_class="high",
             retry_policy={"max_attempts": policy.max_attempts, "backoff": {"base_delay_ms": policy.base_delay_ms, "cap_delay_ms": policy.cap_delay_ms, "strategy": policy.strategy}}, dependencies=[],

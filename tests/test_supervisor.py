@@ -42,7 +42,7 @@ class SupervisorTests(unittest.TestCase):
         AuthorityGrantStore(self.root).claim("build", public_ids.worker('alpha'), 60, 60, NOW)
         MutualExclusionHoldStore(self.root).acquire("workspace", "bravo", 5, 5, NOW)
         EventLog(self.root).send(
-            public_ids.worker('alpha'), "bravo", "slipway", "a" * 40,
+            public_ids.worker('alpha'), "bravo", "floati", "a" * 40,
             "docs/evidence/checkpoint.md", "notice", idempotency_key="supervisor-mail",
         )
 

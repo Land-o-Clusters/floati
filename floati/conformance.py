@@ -356,7 +356,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 "send",
                 _PRIMARY_NODE,
                 "bob",
-                "slipway",
+                "floati",
                 character.lower() * 40,
                 f"docs/evidence/{character}.md",
                 f"notification {character}",
@@ -385,7 +385,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 or after_events[-1].get("id") != message.get("id")
                 or after_events[-1].get("sender") != _PRIMARY_NODE
                 or after_events[-1].get("recipient") != "bob"
-                or after_events[-1].get("repo") != "slipway"
+                or after_events[-1].get("repo") != "floati"
                 or after_events[-1].get("sha") != character.lower() * 40
                 or after_events[-1].get("doc") != f"docs/evidence/{character}.md"
                 or after_events[-1].get("note") != f"notification {character}"
@@ -429,7 +429,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 "send",
                 sender,
                 recipient,
-                "slipway",
+                "floati",
                 "d" * 40,
                 "docs/evidence/denied.md",
                 "denied",
@@ -517,7 +517,7 @@ def run_live_root_smoke() -> int:
             sent = events.send(
                 "smoke-sender",
                 "smoke-recipient",
-                "slipway",
+                "floati",
                 "a" * 40,
                 "docs/evidence/live-root-smoke.md",
                 "throwaway live-root smoke",
@@ -532,7 +532,7 @@ def run_live_root_smoke() -> int:
                 or message.get("kind") != "message_envelope"
                 or message.get("sender") != "smoke-sender"
                 or message.get("recipient") != "smoke-recipient"
-                or message.get("repo") != "slipway"
+                or message.get("repo") != "floati"
                 or message.get("sha") != "a" * 40
                 or message.get("doc") != "docs/evidence/live-root-smoke.md"
             ):
@@ -568,7 +568,7 @@ def run_live_root_smoke() -> int:
                     lambda sender=sender, recipient=recipient, key=key: events.send(
                         sender,
                         recipient,
-                        "slipway",
+                        "floati",
                         "b" * 40,
                         "docs/evidence/denied.md",
                         "denied",

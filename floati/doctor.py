@@ -67,6 +67,47 @@ def _finding(
     }
 
 
+def _role_cadences(
+    source: Path,
+    nodes: list[str],
+    registry_rows: list[Dict[str, object]],
+) -> Dict[str, str]:
+    """Resolve only digest-bound shipped cadence evidence for active nodes."""
+
+    from .role_templates import load_shipped_role_templates
+
+    latest: Dict[str, Dict[str, object]] = {}
+    for row in registry_rows:
+        if row.get("kind") == "registry_role_record":
+            latest[str(row.get("node_id"))] = row
+    assigned = {
+        node: record
+        for node in nodes
+        if (record := latest.get(node)) is not None
+        and record.get("state") == "active"
+    }
+    if not assigned:
+        return {}
+    try:
+        templates = load_shipped_role_templates(source / "roles" / "shipped")
+    except ProtocolRefusal as exc:
+        raise IntegrityFailure("role_cadence_unavailable", exc.detail) from exc
+    cadences: Dict[str, str] = {}
+    for node, record in assigned.items():
+        template = templates.get(str(record.get("template_role")))
+        if (
+            template is None
+            or record.get("template_sha256") != template.digest
+            or record.get("template_version") != template.template_version
+        ):
+            raise IntegrityFailure(
+                "role_cadence_invalid",
+                f"active role evidence for {node} does not match a shipped template",
+            )
+        cadences[node] = template.cadence
+    return cadences
+
+
 def _git(source: Path, *args: str) -> str:
     try:
         result = subprocess.run(
@@ -983,11 +1024,15 @@ class Doctor:
                     node for node, row in latest_registry.items()
                     if row.get("state") == "active"
                 )
+                cadences = _role_cadences(
+                    self.source_arg, active_nodes, registry_rows
+                )
                 report = DeliveryHealthAnalyzer.analyze(
                     events=events_snapshot,
                     root=root,
                     nodes=active_nodes,
                     now=_utc_now(),
+                    cadences=cadences,
                 )
                 findings.extend(report.findings)
                 from .wake_health import WakeHealthProjection

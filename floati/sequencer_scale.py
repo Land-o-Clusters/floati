@@ -368,7 +368,7 @@ def run_scale_fixture(config: ScaleConfig) -> Dict[str, object]:
     retry_resolutions = 0
     acknowledged_records = 0
     restart_offsets: List[int] = []
-    with tempfile.TemporaryDirectory(prefix="slipway-sequencer-scale-") as directory:
+    with tempfile.TemporaryDirectory(prefix="floati-sequencer-scale-") as directory:
         # Admission deliberately rejects any symlinked lexical parent.  macOS
         # spells its temporary root through /var -> /private/var, so bind the
         # fixture to the canonical path before writing governed plan input.

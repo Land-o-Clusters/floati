@@ -39,7 +39,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         return ApprovalLedger(self.root).request(
             public_ids.worker('alpha'),
             "workspace.patch",
-            "repo:slipway",
+            "repo:floati",
             60,
             "approve-build",
             self.grant["epoch"],
@@ -53,7 +53,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         request = ApprovalLedger(self.root).request_for_action(
             public_ids.worker('alpha'),
             "workspace.patch",
-            "repo:slipway",
+            "repo:floati",
             60,
             digest,
             "approve-build",
@@ -72,7 +72,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             public_ids.reviewer(),
             "approved",
             None,
-            granted_scope="repo:slipway",
+            granted_scope="repo:floati",
             granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
@@ -92,7 +92,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             public_ids.reviewer(),
             "approved",
             None,
-            granted_scope="repo:slipway",
+            granted_scope="repo:floati",
             granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
@@ -113,7 +113,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         denied_request = ledger.request_for_action(
             public_ids.worker('alpha'),
             "workspace.patch",
-            "repo:slipway",
+            "repo:floati",
             60,
             denied_digest,
             "approve-build",
@@ -145,7 +145,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         digest, request = self.action_request()
         decision = ledger.decide(
             request["id"], public_ids.reviewer(), "approved", None,
-            granted_scope="repo:slipway", granted_ttl_seconds=30,
+            granted_scope="repo:floati", granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
         selected_request, selected_decision = ledger.require_approved_action(
@@ -197,7 +197,7 @@ class ApprovalLedgerTests(unittest.TestCase):
                     ledger.request_for_action(
                         public_ids.worker('alpha'),
                         "workspace.patch",
-                        "repo:slipway",
+                        "repo:floati",
                         60,
                         invalid,
                         "approve-build",
@@ -212,7 +212,7 @@ class ApprovalLedgerTests(unittest.TestCase):
                 "approval_scope_broadened",
             ),
             (
-                {"granted_scope": "repo:slipway", "granted_ttl_seconds": 61},
+                {"granted_scope": "repo:floati", "granted_ttl_seconds": 61},
                 "approval_ttl_broadened",
             ),
         ):
@@ -232,7 +232,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             ledger.request_for_action(
                 public_ids.worker('alpha'),
                 "workspace.patch",
-                "repo:slipway",
+                "repo:floati",
                 60,
                 digest,
                 "approve-build",
@@ -251,7 +251,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             public_ids.reviewer(),
             "approved",
             None,
-            granted_scope="repo:slipway",
+            granted_scope="repo:floati",
             granted_ttl_seconds=30,
             now=NOW + timedelta(seconds=2),
         )
@@ -261,7 +261,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         self.assertEqual("approved", decision["decision"])
         self.assertEqual("approve-build", decision["authority_subject"])
         self.assertEqual(self.grant["epoch"], decision["authority_epoch"])
-        self.assertEqual("repo:slipway", decision["granted_scope"])
+        self.assertEqual("repo:floati", decision["granted_scope"])
         self.assertEqual(30, decision["granted_ttl_seconds"])
         with self.assertRaises(ProtocolRefusal) as duplicate:
             ledger.decide(
@@ -284,7 +284,7 @@ class ApprovalLedgerTests(unittest.TestCase):
         path = self.home / "approvals" / "decisions.jsonl"
         cases = (
             ({"granted_scope": "repo:other", "granted_ttl_seconds": 30}, "approval_scope_broadened"),
-            ({"granted_scope": "repo:slipway", "granted_ttl_seconds": 61}, "approval_ttl_broadened"),
+            ({"granted_scope": "repo:floati", "granted_ttl_seconds": 61}, "approval_ttl_broadened"),
         )
         for arguments, code in cases:
             with self.subTest(code=code):
@@ -332,7 +332,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             with self.subTest(code=code):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     ledger.request(
-                        public_ids.worker('alpha'), "workspace.patch", "repo:slipway", 60,
+                        public_ids.worker('alpha'), "workspace.patch", "repo:floati", 60,
                         subject, epoch, now=current,
                     )
                 self.assertEqual(code, caught.exception.code)
@@ -342,7 +342,7 @@ class ApprovalLedgerTests(unittest.TestCase):
 
         ledger = CapabilityLedger(self.root)
         record = ledger.declare(
-            public_ids.worker('alpha'), "workspace.patch", "read_only", "repo:slipway", 30, now=NOW
+            public_ids.worker('alpha'), "workspace.patch", "read_only", "repo:floati", 30, now=NOW
         )
 
         self.assertEqual("capability", record["kind"])
@@ -351,7 +351,7 @@ class ApprovalLedgerTests(unittest.TestCase):
             public_ids.worker('alpha'), "workspace.patch", NOW + timedelta(seconds=30)
         )["status"])
         with self.assertRaises(ProtocolRefusal) as boolean_mode:
-            ledger.declare(public_ids.worker('alpha'), "workspace.patch", True, "repo:slipway", 30, now=NOW)
+            ledger.declare(public_ids.worker('alpha'), "workspace.patch", True, "repo:floati", 30, now=NOW)
         self.assertEqual("capability_mode_invalid", boolean_mode.exception.code)
 
 

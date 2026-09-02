@@ -2,7 +2,7 @@
 
 ## Candidate identity and caveat
 
-- Worktree: `<temp>/slipway-spawn-groups`
+- Worktree: `<temp>/spawn-groups`
 - Branch: `codex/herdr-adapter-source`
 - TD-5301 feature-scope base:
   `d91d3562247db5520cdcc9f85e23e8bae8252ecd`.
@@ -46,17 +46,17 @@ docs/DESIGN.md
 docs/SPEC-DRAFT.md
 docs/superpowers/plans/2026-08-14-td5301-active-roster-refusals.md
 docs/superpowers/specs/2026-08-14-td5301-active-roster-refusals-design.md
-slip/conformance.py
-slip/demo.py
-slip/events.py
-slip/registry.py
+<retired>/conformance.py
+<retired>/demo.py
+<retired>/events.py
+<retired>/registry.py
 tests/test_cli.py
 tests/test_conformance.py
 tests/test_projection.py
 tests/test_registry_events.py
 ```
 
-Slipway has no per-recipient phantom-mailbox namespace: its fleet uses the
+Floati has no per-recipient phantom-mailbox namespace: its fleet uses the
 single `events.jsonl` ledger, so no mailbox quarantine artifact was moved or
 deleted.
 
@@ -67,7 +67,7 @@ At prior candidate `249058364cb555fc35a39a8d233ef2f5c85bb33d`,
 failure was
 `tests.test_source_scrub.SourceScrubTests.test_generated_repository_artifacts_are_scrubbed`,
 which identified the TD-5301 design file.  The standalone command
-`python3 -m slip.selftest` then exited 10 after 1,433 tests in 171.768s with
+`python3 -m <retired>.selftest` then exited 10 after 1,433 tests in 171.768s with
 the same sole source-scrub failure; it emitted no `bundle_verified` artifact.
 This is a test failure (unittest exit 1; selftest's test-failure exit 10), not
 a CLI refusal artifact exit 20.
@@ -84,14 +84,14 @@ exited 0: 1 test in 0.033s.
 ## Roster non-vacuity and focused receipts
 
 At implementation head `048796a29fc9fd433808067e40495d54f97c79c0`, the
-candidate digest for `slip/registry.py` was
+candidate digest for `<retired>/registry.py` was
 `a540af5d9a612db97d5d7618a585c5983098ec28cdaf8a1eb9fb992850c28a86`.
 
 1. Temporarily treating latest `retired` entries as active made
    `python3 -m unittest -v tests.test_registry_events.RegistryEventTests.test_retired_sender_refuses_without_root_mutation_and_lists_active_roster`
    exit 1: 1 test in 0.004s, failing because `ProtocolRefusal` was not raised.
    After restoration, the SHA-256 exactly matched the candidate digest above
-   and `git diff -- slip/registry.py` was empty.
+   and `git diff -- <retired>/registry.py` was empty.
 2. Temporarily adding `unexpected-active` to the projected roster, without
    changing the expected literal, made
    `python3 -m unittest -v tests.test_registry_events.RegistryEventTests.test_unknown_sender_refuses_without_root_mutation_and_lists_active_roster`
@@ -113,9 +113,9 @@ final-review durable-event correction below.
 
 - `python3 -m unittest -q` at the implementation head exited 0: 1,433 tests
   in 174.289s.
-- `python3 -c 'from pathlib import Path; from slip.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'`
+- `python3 -c 'from pathlib import Path; from <retired>.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'`
   exited 0 and printed `[]`.
-- `python3 -m slip.selftest` at the same head exited 0: 1,433 tests in
+- `python3 -m <retired>.selftest` at the same head exited 0: 1,433 tests in
   192.662s and emitted
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 - `git diff --check` exited 0 before evidence creation.
@@ -152,8 +152,8 @@ GREEN receipts at that candidate:
 - The named `NoEventAdapter` regression exited 0 after 1 test in 0.100s.
 - `python3 -m unittest -v tests.test_conformance` exited 0 after 16 tests in
   2.278s, including the normal adapter, repeat-root, and live-root controls.
-- `python3 -c 'from pathlib import Path; from slip.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'`
-  exited 0 and printed `[]` after refreshing the `slip/conformance.py` digest.
+- `python3 -c 'from pathlib import Path; from <retired>.manifest import verify_manifest; print(verify_manifest(Path.cwd()))'`
+  exited 0 and printed `[]` after refreshing the `<retired>/conformance.py` digest.
 - `python3 -m unittest -v tests.test_source_scrub.SourceScrubTests.test_generated_repository_artifacts_are_scrubbed`
   exited 0 after 1 test in 0.102s.
 
@@ -164,7 +164,7 @@ The exact correction delta from the prior evidence head is
 ```text
 bundle-manifest.v0.json
 docs/CONFORMANCE.md
-slip/conformance.py
+<retired>/conformance.py
 tests/fixture_adapters.py
 tests/test_conformance.py
 ```
@@ -179,7 +179,7 @@ At final tested correction/evidence candidate
   one matching durable event, fresh per-run idempotency keys, and a non-vacuous
   no-write regression.
 - `python3 -m unittest -q` exited 0 after 1,434 tests in 232.726s.
-- `python3 -m slip.selftest` exited 0 after 1,434 tests in 218.252s and emitted
+- `python3 -m <retired>.selftest` exited 0 after 1,434 tests in 218.252s and emitted
   `{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}`.
 
 The evidence-only commit following that tested candidate adds these receipts;
@@ -197,7 +197,7 @@ review after task and whole-branch review; this task sends no the architect mess
 Independently verified in a SHA-bound scratch checkout. Receipts:
 
 - **Full suite (mine, unmasked exits):** `python3 -m unittest -q` →
-  1,434 tests, OK, exit 0. `python3 -m slip.selftest` → 1,434 tests,
+  1,434 tests, OK, exit 0. `python3 -m <retired>.selftest` → 1,434 tests,
   OK, exit 0, final artifact `bundle_verified`.
   `verify_manifest(Path.cwd()) == []`.
 - **Contract verified in source, not prose:** `active_node_ids()` is

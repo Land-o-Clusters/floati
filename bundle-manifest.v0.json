@@ -87,7 +87,7 @@
     },
     {
       "path": "floati/adapters/codex_live.py",
-      "sha256": "eb27be77fc30b65b0f6d2cc1c59f889b7000c5c2d1b763cbee458a4606ca3fbf"
+      "sha256": "0c0f86688bdb51bf8f8d3839e8d3a2856125ac8ace975b743f7b254304559f44"
     },
     {
       "path": "floati/adapters/cursor.py",
@@ -199,7 +199,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "3b82cf593b3bd5b5363a6cc8947cdb1d6f4f3655c4f08f21c8481bb80f35bb95"
+      "sha256": "a8bd736a5ab5991876c914634808e3af86228b61dc47e1b06983d94dcb4f9b46"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -231,7 +231,7 @@
     },
     {
       "path": "floati/conformance.py",
-      "sha256": "223bd6b6397f3ac8b1235e39ccd7bc5dbf6c3f5cecfce4d369f44b088324e2aa"
+      "sha256": "a8161f80870ff65e4e7c737152d5267ef232a12df8cc2ece50687666a2a23773"
     },
     {
       "path": "floati/consumption.py",
@@ -271,7 +271,7 @@
     },
     {
       "path": "floati/delivery_health.py",
-      "sha256": "c5ec703087545447b0454a9e5088863841b4d03ab732c2fb29d62a4494ccd455"
+      "sha256": "5aaaf479d920d0abb0dc829178b39485cc3dc7964e3fe80123ff543a2bad7397"
     },
     {
       "path": "floati/demo.py",
@@ -283,11 +283,11 @@
     },
     {
       "path": "floati/doctor.py",
-      "sha256": "fdbe488e502fde843470a837a30ab81a1e17677d9583bf9275f2f9874e9d30c2"
+      "sha256": "99dab4d46e417648015d38f0a166ab7a2580ced71352a45c6a3f7e2755ed71bb"
     },
     {
       "path": "floati/doctor_probe.py",
-      "sha256": "fb210c3efaaddf2e26db9fc643938d2c5433866e688520ae6ee9f8352b28efeb"
+      "sha256": "cc9cd20ece72907074215396d2f9af94d634e40e05f5c4c7eae68910a5a92397"
     },
     {
       "path": "floati/effect_reconciliation_exec.py",
@@ -303,7 +303,7 @@
     },
     {
       "path": "floati/effects.py",
-      "sha256": "0fafeb551ee34fc5711e822cc9b4106ae6eec38223550b8a91658c185b2030a6"
+      "sha256": "d2ab04f4b8b110a2fb07dfc2106e93ac7f94b75ce43fec3d808ba9da1a0128c4"
     },
     {
       "path": "floati/entrypoint_contract.py",
@@ -315,7 +315,7 @@
     },
     {
       "path": "floati/events.py",
-      "sha256": "b1f5a219d7ed7ccacda70ff6838896c21ab8922901c517c4d148945c94baeceb"
+      "sha256": "48bf413b706bd90efee176879c03ac7a002367981b674d609349e7f6fc90a8a8"
     },
     {
       "path": "floati/fcd20_conformance.py",
@@ -371,7 +371,7 @@
     },
     {
       "path": "floati/helptext.py",
-      "sha256": "7e9320566c5a273dd34bc35e7dd43fb95193a77564e0273d499a8a3834edfbfa"
+      "sha256": "885c92a72c131d973cf63febf80054d8fc6c3abd04b847627c0fd0a6afffb149"
     },
     {
       "path": "floati/host_facts.py",
@@ -383,7 +383,7 @@
     },
     {
       "path": "floati/identity_fence.py",
-      "sha256": "a261741e0faae77647bf651770f44381e69fd75e880e5cf3c28ba45b6f43b49f"
+      "sha256": "6e942a5e411096ce8ecdae51e52854a367540ac1e11fd0a6e7689ac646e6594b"
     },
     {
       "path": "floati/ids.py",
@@ -403,11 +403,11 @@
     },
     {
       "path": "floati/jsonl.py",
-      "sha256": "1ac51d125309e9bf895d44aa97356b76ca907ed83a37191bffcf47ed772f6433"
+      "sha256": "8ebf3b1059776e7c518e3d770167bcf0d1b30c52e524b36be24e7ce06242d19b"
     },
     {
       "path": "floati/lane_scaling.py",
-      "sha256": "af1f09bc63170259fd63d04401644c44e890cb08a2259041e211589e9e06343e"
+      "sha256": "a4bf7d5433f3afa87e2bd3ee2e9cd5c477e1ece348d6383f2507fcaa0c6a6d62"
     },
     {
       "path": "floati/ledger_repair.py",
@@ -443,7 +443,7 @@
     },
     {
       "path": "floati/node_projections.py",
-      "sha256": "6da7ba537f260b9c8a2eb21ca03cbb4418d18585bc22387822044135fd24d768"
+      "sha256": "bf2bef65faff0152ee30238ca000e3f6e1da05c048f63df78732fe728ccea02f"
     },
     {
       "path": "floati/node_wizard.py",
@@ -491,7 +491,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "96c2639693db7929e131c06dc212f4cef18591c83c049f0d2dac0401080e2e5f"
+      "sha256": "1fd6bf7eacc940b6f02024dbfa462f095f611e1affbf8614dcacd04ec295792f"
     },
     {
       "path": "floati/registry.py",
@@ -535,7 +535,7 @@
     },
     {
       "path": "floati/runtruth.py",
-      "sha256": "fed4f595f09a24fa8b85828a34956321e0d6ec75677d94e1261097c549d062e4"
+      "sha256": "2e156b936a3f658417da59233e83bd33a21a17d8df830b058a157cb5a29a1816"
     },
     {
       "path": "floati/sandbox_probe.py",
@@ -551,7 +551,7 @@
     },
     {
       "path": "floati/scrub.py",
-      "sha256": "831b4424766bfd9e91a4d1fe3dde7d5fdac1e3cfadb390f6302204cd61999e58"
+      "sha256": "60b55389b6efb7c144af677a098fc621183c3c5d2c7e6db3470b43524a598e46"
     },
     {
       "path": "floati/seat_declaration.py",
@@ -566,8 +566,12 @@
       "sha256": "f773158da6edd1bec1610bdeddbf5eb4b706aac912b6d74577d56160ee6aeb0b"
     },
     {
+      "path": "floati/sent.py",
+      "sha256": "9c9a35624c2e6a5fbcb56a4a27aaf591e4171be534066f8007542b5d55518c7e"
+    },
+    {
       "path": "floati/sequencer.py",
-      "sha256": "284e4ddc0685b4da6c253c9c1de000693aa881ff5fa27c9fac687a2cdb425335"
+      "sha256": "a782ad3d2db79457b5d6551c87e15ba1ceb325454502b850d3b9298f3930cc45"
     },
     {
       "path": "floati/sequencer_epoch.py",
@@ -575,7 +579,7 @@
     },
     {
       "path": "floati/sequencer_scale.py",
-      "sha256": "2ffabbb36bfd3cc411c791671bea70fbf58684e6167e1eee9a4524ca5220c458"
+      "sha256": "ac59292d909b18ec6e63770e95441d3ec147543dd8f65ceadc40cf4f79c91235"
     },
     {
       "path": "floati/signing.py",
@@ -591,7 +595,7 @@
     },
     {
       "path": "floati/spawn_groups.py",
-      "sha256": "eb1910047cea18ad75f0a04871919570ae65e314a71bd9e8b0161a8329730f52"
+      "sha256": "2fa35baa8999624ea64e47e355e61b8d3dee5cdc1cffc9b6dc99ce37b911239d"
     },
     {
       "path": "floati/state_receipts.py",
@@ -599,7 +603,7 @@
     },
     {
       "path": "floati/storage_identity.py",
-      "sha256": "d17a9ea7520cd674c74b831fe9872493540d4427855b7aa268224626556697a1"
+      "sha256": "91fd8536ed5a393b7da0453a624a6204c88c76989c3a3a36dfa53895e63bfe05"
     },
     {
       "path": "floati/supervisor.py",
@@ -615,11 +619,11 @@
     },
     {
       "path": "floati/thread_observations.py",
-      "sha256": "bc060c63e713e59c1122114d5dd2406d0b8b666244b5559916d4199428dd4c5a"
+      "sha256": "44e3337248194cce43bfb59581c0c590a88b7a5a1352eebbef85ea8d53119d81"
     },
     {
       "path": "floati/thread_source.py",
-      "sha256": "0e8cae7d98e4006bb708dbdf7fdf4528ed8bfa70afc78f58e31dc2649a3dcd2b"
+      "sha256": "d1881b263dee4534e5340daa0db64a0a7f9c03545a3f9bfa2955045d81e236d5"
     },
     {
       "path": "floati/tide.py",
@@ -719,7 +723,7 @@
     },
     {
       "path": "floati/wake.py",
-      "sha256": "97353451f902ce7e686b64d099293d93dc84303282542202e1850d794f4834d7"
+      "sha256": "addf07931b31d59787ac22b7bb4c12407c2abb2e1bf18adf8ed8ed0cebacd729"
     },
     {
       "path": "floati/wake_control.py",
@@ -731,7 +735,7 @@
     },
     {
       "path": "floati/wake_daemon_adapters.py",
-      "sha256": "c1821d0c87e8b4c8b706000ca0e582bb40115117f98820893c8c710003b099d0"
+      "sha256": "10b2d8a89707497271257fbd4f8d6e172b15474a965a3067379c168e6ec0ac41"
     },
     {
       "path": "floati/wake_daemon_contract.py",
@@ -755,7 +759,7 @@
     },
     {
       "path": "floati/wake_hold.py",
-      "sha256": "1cc43453ac3a003338fd7f751b818a056300cefca21cd6445e0dc9e5a27e48c8"
+      "sha256": "6ca43545b709865c3553788dbf2e6c30cedefd886ab4ad26f866ca18382c8c30"
     },
     {
       "path": "floati/wake_timeout_forensics.py",
@@ -795,7 +799,7 @@
     },
     {
       "path": "floati/workers.py",
-      "sha256": "d3cfc5e0ed4855d3481fb7578e58318fc127a27ee5dbd27f9645e0a7cdcbccf5"
+      "sha256": "d1485b1e54e5521d0df414d34301d051141df47de93487ea2913eb3627d41d58"
     },
     {
       "path": "floati/workspace_layout.py",
@@ -1019,7 +1023,7 @@
     },
     {
       "path": "schemas/v0/node-lifecycle-projection.schema.json",
-      "sha256": "886db0283f94893c8716edd19a2ddea87e67b7bafe653bb1e381615f07175218"
+      "sha256": "be49c7725e638d83b2cb1c25f49dcae2c73969d5b9dcc79edd6ad5f1a95a9b72"
     },
     {
       "path": "schemas/v0/node-state-file-receipt.schema.json",
@@ -1267,7 +1271,7 @@
     },
     {
       "path": "schemas/v1/doctor-artifact.schema.json",
-      "sha256": "e3e145fbbb3f3acc877198ed2f246c53bedafdf65a648472060c5aa696abef2d"
+      "sha256": "3aec24fd7ec170e04adca43b1f1c81e7190b392ee948eeec4ba3015080067f81"
     },
     {
       "path": "schemas/v1/effect-acknowledged-record.schema.json",
@@ -1399,11 +1403,11 @@
     },
     {
       "path": "schemas/v1/thread-observation-recorded-record.schema.json",
-      "sha256": "202c67b38b4097dc008ae818d3d3f805c0d5e1ad1be194bb117cc16548a23a91"
+      "sha256": "cda4c739b64152269e2d0ef4b9ac43979ca513c2be48dc9fbe90398de2e1ada3"
     },
     {
       "path": "schemas/v1/thread-observation-status-artifact.schema.json",
-      "sha256": "f8d423f9ead3b1a31992724e94afa193e8cb1417e36c874c31769e5c98fdd11c"
+      "sha256": "2b94ff49e63b12b820154a3b21e1b557653da05ed6a33b36cc7cb36cefb7c9fe"
     },
     {
       "path": "schemas/v1/tide-policy-record.schema.json",
