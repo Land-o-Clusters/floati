@@ -57,6 +57,9 @@ WAKE_ATTEMPT_REFUSED_REASONS = frozenset(
         "wake_decision_missing",
         "wake_decision_mismatch",
         "wake_prompt_failed",
+        "wake_hook_untrusted",
+        "wake_hook_modified",
+        "wake_hook_disabled",
         "wake_daemon_adapter_timeout",
         "wake_daemon_adapter_unavailable",
         "wake_daemon_adapter_nonzero",
@@ -335,7 +338,15 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
             "tool_set", "workspace_base_commit", "toolchain_fingerprint",
             "budget_allocation", "approvals_consumed", "verification_commands",
             "operator_interventions", "terminal_outcome", "unknown_fields",
-            "self_reported_fields",
+            "unknown_sources", "self_reported_fields",
+        },
+    ),
+    "run_environment_observed": (
+        "run-environment-observed-",
+        _COMMON | {
+            "run_id", "item_id", "attempt_id", "adapter", "harness_version",
+            "model_observed", "provider_observed", "workspace_base_commit",
+            "toolchain_fingerprint", "unknown_fields", "self_reported_fields",
         },
     ),
     "mcp_integration_pin": (
@@ -1864,7 +1875,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     elif kind == "wake_waiter_exit_receipt":
         ident("node_id")
         _sha256(record["session_digest"], "session_digest", refuse)
-        _enum(record["reason_code"], {"exhausted", "paused", "not_claimant", "breaker", "integrity_failure"}, "reason_code", refuse)
+        _enum(record["reason_code"], {"exhausted", "paused", "not_claimant", "consent_withdrawn", "breaker", "integrity_failure"}, "reason_code", refuse)
         integer("waited_seconds", 0, 86399)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
         if _terminal_unsafe(record["idempotency_key"]):
@@ -2439,6 +2450,44 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                     "mcp_pin_unknown_contradicted",
                     f"unknown field {field} must be null",
                 )
+    elif kind == "run_environment_observed":
+        _run_id(record["run_id"], refuse)
+        _run_item_id(record["item_id"], "item_id", refuse)
+        _attempt_id(record["attempt_id"], "attempt_id", refuse)
+        _enum(record["adapter"], {"claude", "codex", "pi"}, "adapter", refuse)
+        nullable_fields = frozenset({
+            "harness_version", "model_observed", "provider_observed",
+            "workspace_base_commit", "toolchain_fingerprint",
+        })
+        for field in ("harness_version", "model_observed", "provider_observed"):
+            if record[field] is not None:
+                _bounded_string(record[field], 1, 512, field, refuse)
+        if record["workspace_base_commit"] is not None and (
+            not isinstance(record["workspace_base_commit"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", record["workspace_base_commit"]) is None
+        ):
+            refuse("workspace_base_commit_invalid", "workspace base commit must be lowercase Git SHA or null")
+        if record["toolchain_fingerprint"] is not None:
+            _sha256(record["toolchain_fingerprint"], "toolchain_fingerprint", refuse)
+        unknown = record["unknown_fields"]
+        if (
+            not isinstance(unknown, list)
+            or any(field not in nullable_fields for field in unknown)
+            or unknown != sorted(set(unknown))
+        ):
+            refuse("unknown_fields_invalid", "observation unknown fields must be a sorted nullable subset")
+        self_reported = record["self_reported_fields"]
+        if (
+            not isinstance(self_reported, list)
+            or any(field not in nullable_fields for field in self_reported)
+            or self_reported != sorted(set(self_reported))
+        ):
+            refuse("self_reported_fields_invalid", "observation self-reported fields must be a sorted observed subset")
+        for field in nullable_fields:
+            if (record[field] is None) != (field in unknown):
+                refuse("run_environment_unknown_invalid", "each absent observation must be named exactly once")
+            if record[field] is not None and field not in self_reported:
+                refuse("run_environment_provenance_missing", "each observed value must name its provenance")
     elif kind == "run_manifest_fact":
         _attempt_id(record["attempt_id"], "attempt_id", refuse)
         _run_id(record["run_id"], refuse)
@@ -2462,7 +2511,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         )
         _sha256(record["task_contract_digest"], "task_contract_digest", refuse)
         _sha256(record["policy_digest"], "policy_digest", refuse)
-        _capability_set(record["tool_set"], "tool_set", refuse)
+        if record["tool_set"] is not None:
+            _capability_set(record["tool_set"], "tool_set", refuse)
         if record["workspace_base_commit"] is not None and (
             not isinstance(record["workspace_base_commit"], str)
             or re.fullmatch(r"[0-9a-f]{40}", record["workspace_base_commit"])
@@ -2478,7 +2528,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 "toolchain_fingerprint",
                 refuse,
             )
-        _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
+        if record["budget_allocation"] is not None:
+            _budget_rows(record["budget_allocation"], "budget_allocation", refuse)
 
         approvals = record["approvals_consumed"]
         if not isinstance(approvals, list) or len(approvals) > 1024:
@@ -2499,12 +2550,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             )
 
         commands = record["verification_commands"]
-        if not isinstance(commands, list) or len(commands) > 256:
+        if commands is not None and (
+            not isinstance(commands, list) or len(commands) > 256
+        ):
             refuse(
                 "verification_commands_invalid",
                 "verification_commands must be a bounded command testimony list",
             )
-        for command in commands:
+        for command in ([] if commands is None else commands):
             if not isinstance(command, dict) or set(command) != {
                 "argv", "exit_code", "self_reported"
             }:
@@ -2537,7 +2590,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             r"[a-z][a-z0-9-]{0,126}-" + _UUID7
         )
         if (
-            not isinstance(interventions, list)
+            interventions is not None and (
+                not isinstance(interventions, list)
             or len(interventions) > 1024
             or any(
                 not isinstance(value, str)
@@ -2545,6 +2599,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 for value in interventions
             )
             or interventions != sorted(set(interventions))
+            )
         ):
             refuse(
                 "operator_interventions_invalid",
@@ -2557,6 +2612,10 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             refuse,
         )
 
+        nullable_fields = nullable_fields | frozenset({
+            "tool_set", "budget_allocation", "verification_commands",
+            "operator_interventions",
+        })
         unknown = record["unknown_fields"]
         if (
             not isinstance(unknown, list)
@@ -2578,6 +2637,26 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                     "run_manifest_unknown_contradicted",
                     f"unknown field {field} must be null",
                 )
+
+        unknown_sources = record["unknown_sources"]
+        if (
+            not isinstance(unknown_sources, list)
+            or len(unknown_sources) != len(unknown)
+            or any(
+                not isinstance(source, dict)
+                or set(source) != {"field", "reason"}
+                or source["field"] not in nullable_fields
+                or not isinstance(source["reason"], str)
+                or re.fullmatch(r"[a-z][a-z0-9_]{0,126}", source["reason"])
+                is None
+                for source in unknown_sources
+            )
+            or [source["field"] for source in unknown_sources] != unknown
+        ):
+            refuse(
+                "run_manifest_unknown_sources_invalid",
+                "unknown_sources must name every unknown field once in sorted order",
+            )
 
         self_reported = record["self_reported_fields"]
         reportable = _SPECS["run_manifest_fact"][1] - _COMMON

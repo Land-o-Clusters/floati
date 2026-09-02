@@ -15,7 +15,10 @@ from .root import FloatiRoot
 
 
 WAKE_EXIT_REASONS = frozenset(
-    {"exhausted", "paused", "not_claimant", "breaker", "integrity_failure"}
+    {
+        "exhausted", "paused", "not_claimant", "consent_withdrawn",
+        "breaker", "integrity_failure",
+    }
 )
 
 

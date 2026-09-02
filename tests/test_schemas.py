@@ -41,6 +41,7 @@ SCHEMA_NAMES = (
     "worker-receipt-record.schema.json",
     "worker-refusal-record.schema.json",
     "run-created-record.schema.json", "run-policy-bound-record.schema.json",
+    "run-environment-observed-record.schema.json",
     "run-worker-pool-bound-record.schema.json", "run-dispatch-decision-record.schema.json",
     "run-result-produced-record.schema.json", "run-result-verified-record.schema.json",
     "run-result-accepted-record.schema.json", "run-terminal-record.schema.json",

@@ -15,7 +15,9 @@ from unittest import mock
 
 from floati.adapters.headless_template import HarnessProfile, HeadlessProfileAdapter
 from floati.workers import WorkerAdapterFailure
+from tests import harness_declaration
 from tests.test_roster_adapters import ROSTER
+from tests.operator_identity import assert_source_names_no_operator
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -42,19 +44,33 @@ class AntigravityWorkAdapterTests(unittest.TestCase):
         self.assertNotEqual(bound, AGY_CASK)
 
     def test_shipped_source_has_no_owner_home_literal(self) -> None:
-        source = Path("floati/adapters/antigravity.py").read_text(encoding="utf-8")
-        self.assertNotIn("\x2fUsers/", source)
-        self.assertNotIn("penguinspecz", source.casefold())
+        assert_source_names_no_operator(self, "floati/adapters/antigravity.py")
 
     def test_antigravity_is_on_f3_roster(self) -> None:
         names = [name for name, _cls in ROSTER]
         self.assertIn("antigravity", names)
 
     def test_named_agy_binary_is_present(self) -> None:
-        """Filesystem fact only. Do not launch the live binary here."""
-        bound = Path.home() / ".local" / "bin" / "agy"
-        self.assertTrue(bound.is_file(), f"missing {bound}")
-        self.assertGreater(bound.stat().st_size, 0)
+        """Filesystem fact only. Do not launch the live binary here.
+
+        The path is operator-declared; where it is not declared or not present
+        the typed absence is asserted instead. THE DISCRIMINATION SURVIVES
+        EITHER WAY: whatever is declared must not be the Homebrew cask, which
+        is a different and older build (1.1.5, against the bound 1.1.22).
+        """
+        executable = harness_declaration.live_executable_or_typed_absence(
+            self, "agy"
+        )
+        if executable is None:
+            return
+        self.assertNotEqual(executable, AGY_CASK)
+        self.assertTrue(executable.is_file(), f"missing {executable}")
+        self.assertGreater(executable.stat().st_size, 0)
+
+    def test_declaration_file_names_no_operator(self) -> None:
+        """The declaration is the one file most likely to leak the account."""
+        assert_source_names_no_operator(self, "tests/harness_declarations.json")
+        assert_source_names_no_operator(self, "tests/harness_declaration.py")
 
     def test_adapter_deadline_exceeded_uses_fixture_slow_binary(self) -> None:
         """Suite pins the adapter's bounded timeout, not a live agy quirk."""

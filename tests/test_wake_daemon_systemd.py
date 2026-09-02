@@ -21,6 +21,8 @@ from floati.wake_daemon_contract import (
     DaemonConsentLedger,
     DaemonCoordinate,
 )
+from tests.operator_identity import assert_source_names_no_operator
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class _Systemctl:
@@ -36,8 +38,7 @@ class _Systemctl:
 
 class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
     def setUp(self) -> None:
-        tmp = "\x2fprivate/tmp" if Path("\x2fprivate/tmp").is_dir() else None
-        self.temporary = tempfile.TemporaryDirectory(dir=tmp)
+        self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "fleet-alpha", create=True)
@@ -102,9 +103,7 @@ class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
         self.assertTrue(callable(SystemdUserUnitManager.revoke))
 
     def test_shipped_source_has_no_owner_home_literal(self) -> None:
-        source = Path("floati/wake_daemon_systemd.py").read_text(encoding="utf-8")
-        self.assertNotIn("\x2fUsers/", source)
-        self.assertNotIn("penguinspecz", source.casefold())
+        assert_source_names_no_operator(self, "floati/wake_daemon_systemd.py")
 
     def test_default_user_units_directory_is_path_home(self) -> None:
         manager = self.manager()

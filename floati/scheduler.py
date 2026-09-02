@@ -131,6 +131,8 @@ class RunScheduler:
             existing = state["terminal"]
             if all(existing[field] == value for field, value in (("terminal_state", terminal_state), ("policy_class", policy_class), ("reason_code", reason_code), ("effect_safety", effect_safety))):
                 self.reconcile(now=now)
+                from .run_manifest import RunManifestStore
+                RunManifestStore(self.ledger.root).close_attempt(attempt_id)
                 return existing
             raise ProtocolRefusal("attempt_terminal_input_divergent", "terminal replay changed semantic inputs")
         opened = state["opened"]
@@ -153,6 +155,8 @@ class RunScheduler:
             reason_code=reason_code, effect_safety=effect_safety, **closure)
         terminal = self.ledger._append_scheduler(record, self.__scheduler_capability)
         self.reconcile(now=now)
+        from .run_manifest import RunManifestStore
+        RunManifestStore(self.ledger.root).close_attempt(attempt_id)
         return terminal
 
     def current_attempt_fence(self, run_id: str, item_id: str, *, now: Optional[object] = None) -> Dict[str, object]:

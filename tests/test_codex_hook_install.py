@@ -254,6 +254,8 @@ class CodexHookInstallerTests(unittest.TestCase):
         self.assertEqual(before, config_path.read_bytes())
 
     def test_install_replaces_one_prior_floati_stop_block_and_never_touches_subagent_stop(self) -> None:
+        from floati.codex_hook_trust import codex_hook_current_hash
+
         document = json.loads(self.hooks_path.read_text(encoding="utf-8"))
         old_block = {
             "hooks": [{
@@ -269,6 +271,12 @@ class CodexHookInstallerTests(unittest.TestCase):
         document["hooks"]["Stop"].insert(1, old_block)
         subagent_before = document["hooks"]["SubagentStop"]
         self.hooks_path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        trust_key = f"{self.hooks_path}:stop:1:0"
+        self.hooks_path.with_name("config.toml").write_text(
+            "[hooks.state." + json.dumps(trust_key) + "]\n"
+            "trusted_hash = " + json.dumps(codex_hook_current_hash(old_block)) + "\n",
+            encoding="utf-8",
+        )
 
         receipt = self.installer().install(
             self.workspace,
@@ -285,6 +293,9 @@ class CodexHookInstallerTests(unittest.TestCase):
         replacement = installed["hooks"]["Stop"][1]
         self.assertIn(receipt["bundle_digest"], replacement["hooks"][0]["command"])
         self.assertEqual("replaced", receipt["state"])
+        self.assertEqual("modified", receipt["hook_trust_status"])
+        self.assertIs(True, receipt.get("hook_trust_invalidated_by_install"))
+        self.assertTrue(receipt["hook_trust_remediation"])
         self.assertEqual("installer-session", receipt["acting_session_id"])
         self.assertRegex(receipt["session_receipt_id"], r"^codex-wait-session-")
 

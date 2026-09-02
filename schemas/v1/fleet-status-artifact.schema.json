@@ -37,6 +37,12 @@
           }
         },
         "blocked_entry": {"type": "string", "maxLength": 4096},
+        "skipped_entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {"type": "string", "pattern": "^/"}
+        },
+        "remedy": {"type": "string", "maxLength": 8192},
         "reason": {
           "enum": [
             "A floati ahead of the installed copy answered first on PATH.",

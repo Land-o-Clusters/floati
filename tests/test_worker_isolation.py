@@ -69,6 +69,65 @@ def _try_open_read_write(path: Path) -> Optional[int]:
     return None
 
 
+def _foreign_sticky_temp_root() -> Optional[Path]:
+    """A real canonical sticky directory this uid does not own -- Linux \x2ftmp's shape.
+
+    Every Linux host ships \x2ftmp as root:root 1777, which is the whole subject of the
+    cleanup predicate.  macOS spells the same directory \x2fprivate/tmp and makes \x2ftmp a
+    symlink to it, which ``_canonical_path`` refuses, so the symlink is skipped here.
+    """
+    for candidate in (Path("\x2ftmp"), Path("\x2fprivate/tmp")):
+        try:
+            metadata = os.lstat(candidate)
+        except OSError:
+            continue
+        if not stat.S_ISDIR(metadata.st_mode):
+            continue
+        if not metadata.st_mode & stat.S_ISVTX:
+            continue
+        if metadata.st_uid == os.getuid():
+            continue
+        try:
+            if candidate.resolve(strict=True) != candidate:
+                continue
+        except OSError:
+            continue
+        if not os.access(candidate, os.W_OK | os.X_OK):
+            continue
+        return candidate
+    return None
+
+
+def _lstat_reporting(
+    target: Path, *, uid: int, sticky: bool,
+) -> Callable[..., os.stat_result]:
+    """Report one directory with a chosen owner and sticky bit; every other path is real.
+
+    This fixture can prove which predicate the guard applies to the scratch's parent,
+    and that st_dev/st_ino survive untouched so the identity clause still sees the real
+    directory.  It cannot prove that a genuinely root-owned directory behaves the same
+    way -- only ``test_cleanup_succeeds_under_a_sticky_shared_temp_root_it_does_not_own``
+    does that, and only on a host that has one.
+    """
+    real_lstat = os.lstat
+    key = os.fspath(target)
+
+    def reporting(path: object, *args: object, **kwargs: object) -> os.stat_result:
+        metadata = real_lstat(path, *args, **kwargs)
+        try:
+            same = os.fspath(path) == key
+        except TypeError:
+            same = False
+        if not same:
+            return metadata
+        fields = list(metadata)
+        fields[0] = stat.S_IFDIR | 0o777 | (stat.S_ISVTX if sticky else 0)
+        fields[4] = uid
+        return os.stat_result(tuple(fields))
+
+    return reporting
+
+
 def _child_result(
     policy: WorkerIsolationPolicy,
     payload: Callable[[], object],
@@ -368,8 +427,15 @@ class WorkerIsolationTests(unittest.TestCase):
         self.assertFalse(matching.scratch.exists())
 
         probe_drift = self.prepare("probe-drift")
-        probe_drift.write_probe.unlink()
-        probe_drift.write_probe.write_text("foreign", encoding="utf-8")
+        # Allocate the replacement while the original probe still holds its inode:
+        # ext4 hands the same inode straight back to an unlink-then-create at the same
+        # path, which silently left this drift undetectable on Linux.
+        foreign_probe = probe_drift.write_probe.with_name(
+            probe_drift.write_probe.name + ".foreign"
+        )
+        foreign_probe.write_text("foreign", encoding="utf-8")
+        foreign_probe.replace(probe_drift.write_probe)
+        self.assertNotEqual(_identity(probe_drift.write_probe), probe_drift.probe_identity)
         self.assert_typed_refusal(lambda: cleanup_worker_isolation(probe_drift))
         self.assertEqual(probe_drift.write_probe.read_text(encoding="utf-8"), "foreign")
         self.assertFalse(probe_drift.scratch.exists())
@@ -386,6 +452,89 @@ class WorkerIsolationTests(unittest.TestCase):
         )
         shutil.rmtree(scratch_drift.scratch)
         shutil.rmtree(original_scratch)
+
+    def _use_temp_root(self, root: Path) -> None:
+        """Point tempfile -- and so both prepare and cleanup -- at one temp root."""
+        previous = tempfile.tempdir
+        tempfile.tempdir = os.fspath(root)
+        self.addCleanup(setattr, tempfile, "tempdir", previous)
+
+    def test_cleanup_succeeds_under_a_sticky_shared_temp_root_it_does_not_own(self) -> None:
+        """The Linux default TMPDIR is root:root 1777; cleanup may not demand ownership."""
+        shared_root = _foreign_sticky_temp_root()
+        if shared_root is None:
+            self.skipTest("no canonical sticky temp root owned by another uid on this host")
+        self._use_temp_root(shared_root)
+
+        policy = self.prepare("sticky-root")
+        self.addCleanup(shutil.rmtree, policy.scratch, True)
+
+        self.assertEqual(policy.scratch.parent, shared_root)
+        parent_metadata = os.lstat(shared_root)
+        self.assertNotEqual(parent_metadata.st_uid, os.getuid())
+        self.assertTrue(parent_metadata.st_mode & stat.S_ISVTX)
+        self.assertEqual(os.lstat(policy.scratch).st_uid, os.getuid())
+        self.assertEqual(_mode(policy.scratch), 0o700)
+
+        (policy.scratch / "nested").mkdir()
+        (policy.scratch / "nested" / "data").write_text("owned", encoding="utf-8")
+
+        cleanup_worker_isolation(policy)
+
+        self.assertFalse(policy.write_probe.exists())
+        self.assertFalse(policy.scratch.exists())
+
+    def test_cleanup_refuses_a_shared_temp_root_that_is_neither_owned_nor_sticky(self) -> None:
+        """Control: dropping the ownership demand may not admit a plain foreign parent."""
+        temp_root = self.root / "temp-root"
+        temp_root.mkdir(mode=0o700)
+        self._use_temp_root(temp_root)
+
+        policy = self.prepare("foreign-parent")
+        self.assertEqual(policy.scratch.parent, temp_root)
+
+        with patch(
+            "floati.worker_isolation.os.lstat",
+            side_effect=_lstat_reporting(temp_root, uid=os.getuid() + 1, sticky=False),
+        ):
+            self.assert_typed_refusal(lambda: cleanup_worker_isolation(policy))
+
+        self.assertTrue(policy.scratch.is_dir())
+
+    def test_cleanup_refuses_a_shared_temp_root_whose_identity_changed(self) -> None:
+        """The parent recorded at prepare must still be the directory cleanup resolves."""
+        temp_root = self.root / "swapped-root"
+        temp_root.mkdir(mode=0o700)
+        self._use_temp_root(temp_root)
+
+        policy = self.prepare("swapped-parent")
+        self.assertEqual(policy.scratch.parent, temp_root)
+
+        moved_scratch = self.root / "carried-scratch"
+        # Same inode-reuse trap: rmdir-then-mkdir at one path returns the SAME inode on
+        # ext4, so the swap must be built from a directory allocated while the original
+        # still exists, then renamed over it.
+        replacement_root = self.root / "replacement-root"
+        replacement_root.mkdir(mode=0o700)
+        shutil.move(os.fspath(policy.scratch), os.fspath(moved_scratch))
+        temp_root.rmdir()
+        replacement_root.rename(temp_root)
+        shutil.move(os.fspath(moved_scratch), os.fspath(policy.scratch))
+        self.assertNotEqual(_identity(temp_root), policy.scratch_parent_identity)
+        self.assertEqual(_identity(policy.scratch), policy.scratch_identity)
+
+        self.assert_typed_refusal(lambda: cleanup_worker_isolation(policy))
+
+        self.assertTrue(policy.scratch.is_dir())
+
+    def test_cleanup_refuses_a_policy_with_no_recorded_temp_root(self) -> None:
+        """Fail closed: relaxing ownership may not let an unrecorded parent through."""
+        policy = self.prepare("no-recorded-parent")
+        stripped = dataclasses.replace(policy, scratch_parent_identity=None)
+
+        self.assert_typed_refusal(lambda: cleanup_worker_isolation(stripped))
+
+        self.assertTrue(policy.scratch.is_dir())
 
     def test_cleanup_low_level_failure_is_typed_and_retryable(self) -> None:
         """Catches unlink failure being treated as successful cleanup."""
@@ -618,6 +767,12 @@ with tempfile.TemporaryDirectory() as temporary:
             lambda: {
                 "tenant_errno": _try_write(tenant_target, create=True),
                 "scratch_errno": _try_write(scratch_target, create=True),
+                # The clause this twin was missing.  Its macOS counterpart has asserted
+                # this since the 2026-08-14 Seatbelt carve-out; adding it to only one
+                # twin is what let the Linux backend go without the rule and kept every
+                # instrument silent about it.  git opens /dev/null O_RDWR at startup
+                # (sanitize_stdfds), so a denial here kills every git in the boundary.
+                "dev_null_errno": _try_open_read_write(Path(os.devnull)),
             },
         )
         self.assert_real_backend_result(result, "linux-landlock-v")
@@ -625,8 +780,39 @@ with tempfile.TemporaryDirectory() as temporary:
             payload = result["payload"]
             self.assertIn(payload["tenant_errno"], _DENIED)
             self.assertIsNone(payload["scratch_errno"])
+            self.assertIsNone(payload["dev_null_errno"])
             self.assertFalse(tenant_target.exists())
             self.assertEqual(scratch_target.read_bytes(), b"changed")
+
+            # The second clause this twin was missing.  Its macOS counterpart has run
+            # a workspace-less policy since the twin was written; the Linux twin never
+            # did, so `if allowed_path is None: continue` in _apply_linux -- the branch
+            # deciding whether a workspace-less Worker gets a one-rule ruleset instead
+            # of two -- had never executed on Linux.  Same shape as the /dev/null gap:
+            # a case asserted in one twin only leaves the other backend free to be
+            # wrong with no instrument to say so.
+            workspace_less = self.prepare("linux-no-workspace", workspace=False)
+            workspace_less_result = _child_result(
+                workspace_less,
+                lambda: {
+                    "tenant_errno": _try_write(tenant_target, create=True),
+                    "scratch_errno": _try_write(
+                        workspace_less.scratch / "workspace-less-write", create=True
+                    ),
+                },
+            )
+            self.assertEqual(workspace_less_result["status"], "ready", workspace_less_result)
+            workspace_less_backend = str(workspace_less_result["backend"])
+            self.assertTrue(
+                workspace_less_backend.startswith("linux-landlock-v"),
+                workspace_less_result,
+            )
+            self.assertGreaterEqual(
+                int(workspace_less_backend[len("linux-landlock-v") :]), 3
+            )
+            self.assertIn(workspace_less_result["payload"]["tenant_errno"], _DENIED)
+            self.assertIsNone(workspace_less_result["payload"]["scratch_errno"])
+            self.assertFalse(tenant_target.exists())
 
     def test_backend_policy_is_inherited_by_thread_subprocess_and_nested_fork(self) -> None:
         policy = self.prepare("inheritance")

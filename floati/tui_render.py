@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Mapping, Sequence
 
@@ -12,7 +13,49 @@ from .tui_activity import activity_braille
 
 BUOY_ORANGE = "\x1b[38;5;208m"
 BUOY_ORANGE_16 = "\x1b[93m"
+STRUCTURE_INK = "\x1b[38;5;240m"
+BODY_INK = "\x1b[38;5;252m"
+DIM_INK = "\x1b[38;5;245m"
+WATERLINE_INK = "\x1b[38;5;37m"
+WARNING_AMBER = "\x1b[38;5;214m"
+VIOLATION_RED = "\x1b[38;5;196m"
+ACTIVITY_CYAN = "\x1b[38;5;45m"
+HEALTH_GREEN = "\x1b[38;5;42m"
 RESET = "\x1b[0m"
+
+_PALETTE_16 = {
+    "brand": BUOY_ORANGE_16,
+    "structure": "\x1b[90m",
+    "body": "\x1b[97m",
+    "dim": "\x1b[37m",
+    "waterline": "\x1b[36m",
+    "warning": "\x1b[33m",
+    "violation": "\x1b[31m",
+    "activity": "\x1b[96m",
+    "healthy": "\x1b[32m",
+}
+_PALETTE_256 = {
+    "brand": BUOY_ORANGE,
+    "structure": STRUCTURE_INK,
+    "body": BODY_INK,
+    "dim": DIM_INK,
+    "waterline": WATERLINE_INK,
+    "warning": WARNING_AMBER,
+    "violation": VIOLATION_RED,
+    "activity": ACTIVITY_CYAN,
+    "healthy": HEALTH_GREEN,
+}
+_RED_WORKER_OUTCOMES = frozenset(
+    {
+        "process_died",
+        "process_start_failed",
+        "adapter_error",
+        "adapter_malformed_output",
+        "credential_network_boundary_unruled",
+    }
+)
+_RECEIPT_ID = re.compile(r"(?:worker-receipt|worker-refusal)-[a-zA-Z0-9-]+")
+_VISIBLE_INBOX_COUNT = re.compile(r"(?<!\d)([1-9]\d*)(?=\s{2}\d{2}:\d{2}:\d{2})")
 
 HEADER = register("tui.header", "FLOATI // HARBOR BOARD", "TUI header")
 PLAIN_PREFIX = register("tui.plain_prefix", "PLAIN DUMP", "TUI degraded mode")
@@ -36,6 +79,7 @@ DETAIL_LABEL = register("tui.detail", "DETAIL", "TUI selected node detail")
 ROLE_LABEL = register("tui.role", "ROLE", "TUI node role label")
 VISIBLE_MAIL_LABEL = register("tui.visible_mail", "VISIBLE MAIL", "TUI visible mail label")
 UNKNOWN_LABEL = register("tui.unknown", "UNKNOWN", "TUI unknown value")
+VIOLATION_PREFIX = register("tui.violation_prefix", "x ", "TUI violation fallback prefix")
 LIVE_MAP_HEADER = register(
     "tui.live_map.header",
     "FLOATI // LIVE HARBOR MAP",
@@ -308,6 +352,46 @@ def _node_line(
     return _clip(line, width)
 
 
+def _lamp(value: object) -> str:
+    state = str(value).casefold()
+    if state in {"present", "active", "held", "owned", "valid"}:
+        return "●"
+    if state in {"stale", "expiring", "degraded", "uncertain", "unknown"}:
+        return "◐"
+    return "○"
+
+
+def _interactive_node_line(
+    node: Mapping[str, object],
+    selected: bool,
+    width: int,
+    node_width: int,
+    activity_by_node: Mapping[str, Sequence[int]] | None = None,
+) -> str:
+    marker = ">" if selected else " "
+    node_id = str(node.get("node_id", UNKNOWN_LABEL))
+    last = str(node.get("last_activity", UNKNOWN_LABEL))
+    if "T" in last:
+        last = last.split("T", 1)[1].removesuffix("Z")
+    tide = node.get("tide")
+    tide_flag = ""
+    if isinstance(tide, Mapping) and tide.get("turnover_state") in {
+        "directed", "state_flushed"
+    }:
+        tide_flag = f"  {TIDE_LABEL} {str(tide['turnover_state']).upper()}"
+    activity = ""
+    if activity_by_node is not None and node_id in activity_by_node:
+        activity = "  " + activity_braille(activity_by_node[node_id])
+    return _clip(
+        f"{marker} {node_id:<{node_width}} "
+        f"{_lamp(node.get('liveness')):^10} "
+        f"{_lamp(node.get('authority', 'none')):^10} "
+        f"{_lamp(node.get('mutex', 'none')):^10} "
+        f"{int(node.get('inbox_depth', 0)):>5}  {last}{tide_flag}{activity}",
+        width,
+    )
+
+
 def _work_lines(model: HarborBoardModel, width: int, animation_progress: float) -> List[str]:
     total = len(model.work_items)
     completed = sum(
@@ -423,6 +507,91 @@ def _worker_lines(model: HarborBoardModel, width: int) -> List[str]:
     return lines
 
 
+def _latest_worker_receipts(
+    model: HarborBoardModel,
+) -> Dict[str, Mapping[str, object]]:
+    latest: Dict[str, Mapping[str, object]] = {}
+    for receipt in model.worker_receipts:
+        session_id = receipt.get("session_id")
+        if isinstance(session_id, str):
+            latest[session_id] = receipt
+    return latest
+
+
+def _interactive_worker_lines(model: HarborBoardModel, width: int) -> List[str]:
+    labels = {
+        "claim": WORKER_CLAIM,
+        "driving": WORKER_DRIVING,
+        "degraded": WORKER_DEGRADED,
+        "complete": WORKER_COMPLETE,
+    }
+    outcomes = {
+        "process_died": WORKER_PROCESS_DIED,
+        "process_timeout": WORKER_PROCESS_TIMEOUT,
+        "process_start_failed": WORKER_PROCESS_START_FAILED,
+        "adapter_error": WORKER_ADAPTER_ERROR,
+        "adapter_malformed_output": WORKER_ADAPTER_MALFORMED,
+        "credential_network_boundary_unruled": WORKER_BOUNDARY_UNRULED,
+        "process_cancelled": WORKER_PROCESS_CANCELLED,
+        "worker_authority_changed": WORKER_AUTHORITY_CHANGED,
+        "authority_expired_mid_claim": WORKER_AUTHORITY_EXPIRED,
+    }
+    titles = {
+        str(item.get("id")): str(item.get("title", ""))
+        for item in model.work_items
+        if item.get("id") is not None
+    }
+    latest = _latest_worker_receipts(model)
+    ordered = sorted(
+        enumerate(model.workers),
+        key=lambda pair: (0 if pair[1].get("state") == "degraded" else 1, pair[0]),
+    )
+    lines = []
+    for refusal in reversed(model.worker_refusals):
+        reason = str(refusal.get("reason_code", UNKNOWN_LABEL)).replace("_", " ").upper()
+        receipt_id = str(refusal.get("id", UNKNOWN_LABEL))
+        lines.append(
+            _clip(
+                f"  {VIOLATION_PREFIX}{reason} · {receipt_id} "
+                f"{refusal.get('node_id', UNKNOWN_LABEL)} "
+                f"{refusal.get('adapter', UNKNOWN_LABEL)}",
+                width,
+            )
+        )
+    for _index, worker in ordered:
+        state = str(worker.get("state", "unknown"))
+        label = labels.get(state, UNKNOWN_LABEL)
+        outcome = worker.get("outcome_code")
+        outcome_text = "" if outcome is None else outcomes.get(
+            str(outcome), str(outcome).replace("_", " ").upper()
+        )
+        if outcome_text and str(outcome) in _RED_WORKER_OUTCOMES:
+            outcome_text = VIOLATION_PREFIX + outcome_text
+        work_id = worker.get("work_item_id", UNKNOWN_LABEL)
+        title = titles.get(str(work_id), "")
+        work = _short_work_id(work_id)
+        pairing = f"{title} [{work}]" if title else work
+        suffix = "" if not outcome_text else " " + outcome_text
+        receipt = latest.get(str(worker.get("session_id")))
+        coordinate = ""
+        if state == "degraded" and receipt is not None:
+            coordinate = f" · {receipt.get('id', UNKNOWN_LABEL)}"
+        prefix = (
+            f"  {label:<9}{suffix}{coordinate} "
+            if state == "degraded"
+            else f"  {label:<9}"
+        )
+        trailing_outcome = "" if state == "degraded" else suffix
+        lines.append(
+            _clip(
+                f"{prefix}{worker.get('node_id', UNKNOWN_LABEL)} "
+                f"{worker.get('adapter', UNKNOWN_LABEL)} {pairing}{trailing_outcome}",
+                width,
+            )
+        )
+    return lines or ["  " + NONE_LABEL]
+
+
 def _consumption_lines(model: HarborBoardModel, width: int) -> List[str]:
     state = str(model.consumption.get("state", UNKNOWN_LABEL)).replace("_", " ").upper()
     coordinate = str(model.consumption.get("coordinate", UNKNOWN_LABEL))
@@ -528,6 +697,204 @@ def _denial_lines(model: HarborBoardModel, width: int) -> List[str]:
     return lines
 
 
+def _work_health(model: HarborBoardModel) -> str:
+    degraded = [worker for worker in model.workers if worker.get("state") == "degraded"]
+    if any(worker.get("outcome_code") == "process_died" for worker in degraded):
+        return "died"
+    if degraded:
+        return "degraded"
+    return "healthy"
+
+
+def _interactive_work_lines(
+    model: HarborBoardModel, width: int, animation_progress: float
+) -> List[str]:
+    total = len(model.work_items)
+    lines: List[str] = []
+    if total:
+        completed = sum(
+            1
+            for item in model.work_items
+            if item.get("readiness") == "done" or item.get("state") == "completed"
+        )
+        target = completed / total
+        geometry = settle_geometry(target, animation_progress)
+        cells = 10
+        filled = min(cells, round(geometry * cells))
+        gauge = "▰" * filled + "▱" * (cells - filled)
+        lines.append(_clip(f"[{gauge}] {honest_percent(target):>3}%", width))
+    else:
+        lines.append(NONE_LABEL)
+    states = {
+        "ready": WORK_READY,
+        "blocked": WORK_BLOCKED,
+        "claimed": WORK_CLAIMED,
+        "done": WORK_DONE,
+        "open": WORK_READY,
+        "completed": WORK_DONE,
+    }
+    for item in model.work_items:
+        holder = item.get("holder") or "-"
+        readiness = str(item.get("readiness", item.get("state", "unknown")))
+        label = states.get(readiness, UNKNOWN_LABEL)
+        needs = item.get("needs", [])
+        edges = "" if not needs else f"  {NEEDS_LABEL}{','.join(str(value) for value in needs)}"
+        lines.append(
+            _clip(
+                f"  {label:<9} {item.get('title', '')}  {HOLDER_LABEL}{holder}{edges}",
+                width,
+            )
+        )
+    return lines
+
+
+def _panel(title: str, rows: Sequence[str], width: int) -> List[str]:
+    panel_width = max(20, width)
+    interior = panel_width - 2
+    title_text = _clip(f" {title} ", interior)
+    top = "╭" + title_text + "─" * (interior - len(title_text)) + "╮"
+    body = ["│" + _clip(row, interior).ljust(interior) + "│" for row in rows]
+    bottom = "╰" + "─" * interior + "╯"
+    return [top, *body, bottom]
+
+
+def _interactive_lines(
+    model: HarborBoardModel,
+    width: int,
+    selected: int,
+    animation_progress: float,
+    detail_open: bool,
+    activity_by_node: Mapping[str, Sequence[int]] | None = None,
+) -> List[str]:
+    panel_content_width = max(18, width - 2)
+    alerts = [_clip(f"{OBSERVED_LABEL} {model.observed_at}", panel_content_width)]
+    effects = _effect_lines(model, panel_content_width)
+    alerts.extend(
+        line.replace(
+            EFFECT_FAILED_ALERT,
+            VIOLATION_PREFIX + EFFECT_FAILED_ALERT.removeprefix("! "),
+            1,
+        )
+        if line.startswith(EFFECT_FAILED_ALERT)
+        else line
+        for line in effects
+    )
+    alerts.extend(_denial_lines(model, panel_content_width))
+    if model.consumption.get("wake_state") == "unsatisfied_wake":
+        alerts.append(_clip(UNSATISFIED_WAKE_LABEL, panel_content_width))
+    for lease in model.stale_leases[:3]:
+        alerts.append(
+            _clip(
+                f"{STALE_LABEL} {str(lease.get('plane', 'plane')).upper()} "
+                f"{lease.get('subject_id', '?')} {HOLDER_LABEL}{lease.get('holder', '?')}",
+                panel_content_width,
+            )
+        )
+    node_width = _node_width(model)
+    node_rows = [_node_columns(node_width, panel_content_width)]
+    if model.nodes:
+        node_rows.extend(
+            _interactive_node_line(
+                node,
+                index == selected,
+                panel_content_width,
+                node_width,
+                activity_by_node,
+            )
+            for index, node in enumerate(model.nodes)
+        )
+    else:
+        node_rows.append("  " + NO_NODES_LABEL)
+
+    lines = [_clip("⊙ " + HEADER, width), _clip("~ ≈ ~", width), ""]
+    lines.extend(_panel(NODE_COLUMN, [*alerts, "", *node_rows], width))
+    if detail_open:
+        lines.extend(("", *_panel(DETAIL_LABEL, _detail_lines(model, panel_content_width, selected), width)))
+    lines.extend(("", *_panel(WORKERS_HEADER, _interactive_worker_lines(model, panel_content_width), width)))
+    lines.extend(("", *_panel(WORK_HEADER, _interactive_work_lines(model, panel_content_width, animation_progress), width)))
+    lines.extend(("", *_panel(CONSUMPTION_HEADER, _consumption_lines(model, panel_content_width)[1:], width)))
+    lines.extend(("", *_panel(RECEIPTS_HEADER, _receipt_lines(model, panel_content_width)[1:], width)))
+    return lines
+
+
+def _replace_signal(text: str, token: str, color: str, body: str) -> str:
+    return text.replace(token, color + token + RESET + body)
+
+
+def _style_panel_body(text: str, palette: Mapping[str, str], health: str) -> str:
+    body = palette["body"]
+    styled = body + text + RESET
+    styled = _VISIBLE_INBOX_COUNT.sub(
+        lambda match: palette["activity"] + match.group(1) + RESET + body,
+        styled,
+    )
+    replacements = (
+        ("! DENIAL", palette["warning"]),
+        ("! STALE", palette["warning"]),
+        ("UNSATISFIED WAKE", palette["warning"]),
+        ("DEGRADED", palette["warning"]),
+        ("EXPIRED", palette["warning"]),
+        ("SILENT", palette["warning"]),
+        (VIOLATION_PREFIX + EFFECT_FAILED_ALERT.removeprefix("! "), palette["violation"]),
+        (VIOLATION_PREFIX + WORKER_PROCESS_DIED, palette["violation"]),
+        (VIOLATION_PREFIX + WORKER_PROCESS_START_FAILED, palette["violation"]),
+        (VIOLATION_PREFIX + WORKER_ADAPTER_ERROR, palette["violation"]),
+        (VIOLATION_PREFIX + WORKER_ADAPTER_MALFORMED, palette["violation"]),
+        (VIOLATION_PREFIX + WORKER_BOUNDARY_UNRULED, palette["violation"]),
+        (VIOLATION_PREFIX + "WORKER WORK ABSENT", palette["violation"]),
+        ("DRIVING", palette["activity"]),
+        ("COMPLETE", palette["healthy"]),
+        ("●", palette["healthy"]),
+        ("◐", palette["warning"]),
+        ("○", palette["dim"]),
+    )
+    for token, color in replacements:
+        styled = _replace_signal(styled, token, color, body)
+    gauge_color = {
+        "died": palette["violation"],
+        "degraded": palette["warning"],
+        "healthy": palette["healthy"],
+    }[health]
+    for glyph in ("▰", "▱"):
+        styled = _replace_signal(styled, glyph, gauge_color, body)
+    styled = _RECEIPT_ID.sub(
+        lambda match: palette["dim"] + match.group(0) + RESET + body,
+        styled,
+    )
+    if text.startswith(OBSERVED_LABEL):
+        return palette["dim"] + text + RESET
+    return styled
+
+
+def _style_interactive_line(
+    line: str, palette: Mapping[str, str], health: str
+) -> str:
+    if not line:
+        return ""
+    if line.startswith("⊙ "):
+        body = palette["body"]
+        styled = body + line + RESET
+        styled = _replace_signal(styled, "⊙", palette["brand"], body)
+        styled = _replace_signal(styled, "//", palette["brand"], body)
+        return styled
+    if line == "~ ≈ ~":
+        return palette["waterline"] + line + RESET
+    if line.startswith(("╭", "╰")):
+        return palette["structure"] + line + RESET
+    if line.startswith("│") and line.endswith("│"):
+        inside = line[1:-1]
+        return (
+            palette["structure"]
+            + "│"
+            + RESET
+            + _style_panel_body(inside, palette, health)
+            + palette["structure"]
+            + "│"
+            + RESET
+        )
+    return _style_panel_body(line, palette, health)
+
+
 def _raw_lines(
     model: HarborBoardModel,
     width: int,
@@ -597,27 +964,6 @@ def _raw_lines(
     return lines
 
 
-def _accent_line(line: str, accent: str) -> str:
-    if line.startswith((
-        DENIAL_LABEL,
-        STALE_LABEL,
-        EFFECT_UNKNOWN_ALERT,
-        EFFECT_INCOMPLETE_ALERT,
-        EFFECT_FAILED_ALERT,
-        "+",
-    )):
-        return accent + line + RESET
-    if line.startswith((f"  {WORKER_DRIVING} ", f"  {WORKER_DEGRADED} ")):
-        return accent + line + RESET
-    if line.startswith("> "):
-        line = accent + ">" + RESET + line[1:]
-    for token in ("EXPIRED", "SILENT"):
-        line = line.replace(token, accent + token + RESET)
-    if "▓" in line:
-        line = line.replace("▓", accent + "▓" + RESET)
-    return line
-
-
 def render_frame(
     model: HarborBoardModel,
     width: int,
@@ -632,7 +978,7 @@ def render_frame(
 ) -> str:
     viewport_width = max(20, int(width))
     viewport_height = max(4, int(height))
-    content = _raw_lines(
+    content = _interactive_lines(
         model,
         viewport_width,
         selected,
@@ -640,13 +986,14 @@ def render_frame(
         detail_open,
         activity_by_node,
     )
-    if content:
-        content[0] = _clip("⊙ " + content[0], viewport_width)
     content = content[: max(0, viewport_height - 1)]
     content.append(_clip(HINT_BAR, viewport_width))
     if color:
-        accent = BUOY_ORANGE_16 if color_tier == "16" else BUOY_ORANGE
-        content = [_accent_line(line, accent) for line in content]
+        palette = _PALETTE_16 if color_tier == "16" else _PALETTE_256
+        health = _work_health(model)
+        content = [
+            _style_interactive_line(line, palette, health) for line in content
+        ]
     return "\n".join(content)
 
 
@@ -656,13 +1003,19 @@ def node_row_positions(
     """Return one-based terminal rows occupied by vessel records."""
 
     viewport_width = max(20, int(width))
-    raw = _raw_lines(model, viewport_width, 0, 1.0, False)
+    raw = _interactive_lines(model, viewport_width, 0, 1.0, False)
     node_width = _node_width(model)
     positions = []
     cursor = 0
     for index, node in enumerate(model.nodes):
-        target = _node_line(node, index == 0, viewport_width, node_width)
-        cursor = raw.index(target, cursor)
+        target = _interactive_node_line(
+            node, index == 0, viewport_width - 2, node_width
+        )
+        cursor = next(
+            row
+            for row in range(cursor, len(raw))
+            if target in raw[row]
+        )
         row = cursor + 1
         if height is None or row <= max(0, int(height) - 1):
             positions.append(row)
@@ -680,7 +1033,7 @@ def node_activity_positions(
 
     viewport_width = max(20, int(width))
     viewport_height = max(4, int(height))
-    raw = _raw_lines(
+    raw = _interactive_lines(
         model,
         viewport_width,
         0,
@@ -695,17 +1048,21 @@ def node_activity_positions(
         node_id = str(node.get("node_id", UNKNOWN_LABEL))
         if node_id not in activity_by_node:
             continue
-        target = _node_line(
+        target = _interactive_node_line(
             node,
             index == 0,
-            viewport_width,
+            viewport_width - 2,
             node_width,
             activity_by_node,
         )
-        cursor = raw.index(target, cursor)
+        cursor = next(
+            row
+            for row in range(cursor, len(raw))
+            if target in raw[row]
+        )
         row = cursor + 1
         glyphs = activity_braille(activity_by_node[node_id])
-        column = target.find(glyphs) + 1
+        column = raw[cursor].find(glyphs) + 1
         if row <= viewport_height - 1 and column > 0:
             positions[node_id] = (row, column)
         cursor += 1

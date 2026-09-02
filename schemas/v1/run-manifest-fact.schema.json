@@ -30,6 +30,7 @@
     "operator_interventions",
     "terminal_outcome",
     "unknown_fields",
+    "unknown_sources",
     "self_reported_fields"
   ],
   "properties": {
@@ -50,15 +51,14 @@
     "task_contract_digest": {"$ref": "#/$defs/sha256"},
     "policy_digest": {"$ref": "#/$defs/sha256"},
     "tool_set": {
-      "type": "array",
-      "maxItems": 64,
-      "uniqueItems": true,
-      "x-floati-sorted-unique": true,
-      "items": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$", "minLength": 1, "maxLength": 128}
+      "anyOf": [
+        {"type": "null"},
+        {"type": "array", "maxItems": 64, "uniqueItems": true, "x-floati-sorted-unique": true, "items": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$", "minLength": 1, "maxLength": 128}}
+      ]
     },
     "workspace_base_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
     "toolchain_fingerprint": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
-    "budget_allocation": {"$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"},
+    "budget_allocation": {"anyOf": [{"$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"}, {"type": "null"}]},
     "approvals_consumed": {
       "type": "array",
       "maxItems": 1024,
@@ -67,9 +67,8 @@
       "items": {"type": "string", "pattern": "^(?:approval-request|approval-decision|approval-consumed-resume)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
     },
     "verification_commands": {
-      "type": "array",
-      "maxItems": 256,
-      "items": {
+      "anyOf": [{"type": "null"}, {"type": "array",
+      "maxItems": 256, "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["argv", "exit_code", "self_reported"],
@@ -78,22 +77,31 @@
           "exit_code": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
           "self_reported": {"type": "boolean"}
         }
-      }
+      }}]
     },
     "operator_interventions": {
-      "type": "array",
-      "maxItems": 1024,
-      "uniqueItems": true,
-      "x-floati-sorted-unique": true,
-      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,126}-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+      "anyOf": [{"type": "null"}, {"type": "array", "maxItems": 1024,
+      "uniqueItems": true, "x-floati-sorted-unique": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,126}-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}}]
     },
     "terminal_outcome": {"enum": ["succeeded", "failed", "cancelled", "skipped", "needs_operator", "uncertain"]},
     "unknown_fields": {
       "type": "array",
-      "maxItems": 5,
+      "maxItems": 9,
       "uniqueItems": true,
       "x-floati-sorted-unique": true,
-      "items": {"enum": ["harness_version", "model_observed", "provider_observed", "toolchain_fingerprint", "workspace_base_commit"]}
+      "items": {"enum": ["budget_allocation", "harness_version", "model_observed", "operator_interventions", "provider_observed", "tool_set", "toolchain_fingerprint", "verification_commands", "workspace_base_commit"]}
+    },
+    "unknown_sources": {
+      "type": "array", "maxItems": 9, "x-floati-sorted-unique-key": "field",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["field", "reason"],
+        "properties": {
+          "field": {"enum": ["budget_allocation", "harness_version", "model_observed", "operator_interventions", "provider_observed", "tool_set", "toolchain_fingerprint", "verification_commands", "workspace_base_commit"]},
+          "reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,126}$"}
+        }
+      }
     },
     "self_reported_fields": {
       "type": "array",
@@ -107,7 +115,7 @@
           "operator_interventions", "policy_digest", "provider_observed", "run_id",
           "self_reported_fields", "task_contract_digest", "task_contract_id",
           "terminal_outcome", "tool_set", "toolchain_fingerprint", "unknown_fields",
-          "verification_commands", "workspace_base_commit"
+          "unknown_sources", "verification_commands", "workspace_base_commit"
         ]
       }
     }
@@ -137,6 +145,26 @@
       "if": {"properties": {"workspace_base_commit": {"type": "null"}}, "required": ["workspace_base_commit"]},
       "then": {"properties": {"unknown_fields": {"contains": {"const": "workspace_base_commit"}, "minContains": 1}}},
       "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "workspace_base_commit"}}}}}
+    },
+    {
+      "if": {"properties": {"tool_set": {"type": "null"}}, "required": ["tool_set"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "tool_set"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "tool_set"}}}}}
+    },
+    {
+      "if": {"properties": {"budget_allocation": {"type": "null"}}, "required": ["budget_allocation"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "budget_allocation"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "budget_allocation"}}}}}
+    },
+    {
+      "if": {"properties": {"verification_commands": {"type": "null"}}, "required": ["verification_commands"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "verification_commands"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "verification_commands"}}}}}
+    },
+    {
+      "if": {"properties": {"operator_interventions": {"type": "null"}}, "required": ["operator_interventions"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "operator_interventions"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "operator_interventions"}}}}}
     }
   ],
   "$defs": {

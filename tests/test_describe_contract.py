@@ -3,16 +3,33 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
 from floati.cli import _parser
-from floati.helptext import HELP
+from floati.helptext import HELP, _RAW, help_for
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _agents_exit_code_rows(text: str) -> dict[int, str]:
+    rows: dict[int, str] = {}
+    inside = False
+    for line in text.splitlines():
+        if line.startswith("## Exit codes"):
+            inside = True
+            continue
+        if inside and line.startswith("## "):
+            break
+        if inside and line.startswith("|"):
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if cells and cells[0].isdigit():
+                rows[int(cells[0])] = cells[1]
+    return rows
 
 
 def _registered_paths(parser: argparse.ArgumentParser) -> set[tuple[str, ...]]:
@@ -76,9 +93,9 @@ class DescribeContractTests(unittest.TestCase):
         hidden = described - public
 
         self.assertEqual(_registered_paths(parser), described)
-        self.assertEqual(128, contract["command_count"])
+        self.assertEqual(130, contract["command_count"])
         self.assertEqual(len(described), contract["command_count"])
-        self.assertEqual(119, len(public))
+        self.assertEqual(121, len(public))
         self.assertEqual({
             ("wake-evaluate",),
             ("wake-record",),
@@ -159,6 +176,78 @@ class DescribeContractTests(unittest.TestCase):
 
         self.assertIsNone(schema_version_for_arguments(parser, []))
         self.assertIsNone(schema_version_for_arguments(parser, ["status"]))
+
+    def test_every_described_option_appears_in_the_rendered_help(self) -> None:
+        """DOC-2: AGENTS.md promises `COMMAND --help` prints the full contract."""
+
+        completed = self.run_cli("describe", "--json")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        commands = json.loads(completed.stdout)["evidence"]["commands"]
+        missing: list[str] = []
+        unrouted: list[str] = []
+        for command in commands:
+            if not command.get("public") or not command.get("executable"):
+                continue
+            topic = " ".join(command["path"])
+            page = help_for([*command["path"], "--help"])
+            if page is None:
+                missing.append(f"{topic}: --help renders nothing")
+                continue
+            for argument in command["arguments"]:
+                for option in argument["option_strings"]:
+                    if option not in page:
+                        missing.append(f"{topic}: {option}")
+            dedicated = _RAW.get(topic)
+            if dedicated is not None and page.splitlines()[1] != dedicated.splitlines()[1]:
+                unrouted.append(
+                    f"{topic}: --help serves '{dedicated.splitlines()[1].strip()}'"
+                )
+        self.assertEqual(
+            [],
+            missing,
+            "options describe lists that the verb's --help never prints:\n"
+            + "\n".join(missing),
+        )
+        self.assertEqual(
+            [],
+            unrouted,
+            "dedicated help pages help_for never routes to:\n" + "\n".join(unrouted),
+        )
+
+    def test_agents_md_exit_code_table_agrees_with_the_describe_vocabulary(self) -> None:
+        """DOC-2: the manual's exit codes are pinned to the projected vocabulary."""
+
+        completed = self.run_cli("describe", "--json")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        vocabulary = json.loads(completed.stdout)["evidence"]["exit_codes"]
+        text = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        rows = _agents_exit_code_rows(text)
+        expected = {int(row["code"]): row["status"] for row in vocabulary}
+        self.assertEqual(
+            sorted(expected),
+            sorted(rows),
+            "AGENTS.md exit-code table codes disagree with describe --json",
+        )
+        for code, status in expected.items():
+            self.assertIn(status, rows[code], f"AGENTS.md exit {code} row must name its status")
+        status_list = re.search(r"`status` is (.*?)\.", text, re.DOTALL)
+        self.assertIsNotNone(status_list, "AGENTS.md must enumerate the status vocabulary")
+        for status in sorted({row["status"] for row in vocabulary}):
+            self.assertIn(status, status_list.group(1), f"AGENTS.md status list omits {status}")
+
+    def test_agents_md_documents_the_install_destination_variable_beside_destination(
+        self,
+    ) -> None:
+        """DOC-2: FLOATI_INSTALL_DESTINATION is documented where --destination is."""
+
+        text = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        section = text.split("## Install", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("--destination", section)
+        self.assertIn(
+            "FLOATI_INSTALL_DESTINATION",
+            section,
+            "the installer-shadow destination variable is undocumented where --destination is",
+        )
 
 
 if __name__ == "__main__":

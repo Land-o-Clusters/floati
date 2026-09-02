@@ -1,30 +1,30 @@
 ⊙ FLOATI // HARBOR BOARD
-OBSERVED 2026-07-31T12:00:10.000Z
-! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core
-! STALE AUTHORITY app-build holder:builder-app
-! STALE MUTEX builder-review-workspace holder:builder-review
+~ ≈ ~
 
-NODE               LIVE       AUTH       MUTEX      INBOX  LAST
-> builder-review     EXPIRED    NONE       EXPIRED        0  12:00:06.000
-  builder-app        SILENT     EXPIRED    ACTIVE         0  11:59:40.000
-  builder-core       PRESENT    ACTIVE     NONE           1  12:00:09.000
+╭ NODE ────────────────────────────────────────────────────────────────────────────────────────────╮
+│OBSERVED 2026-07-31T12:00:10.000Z                                                                 │
+│! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core                                       │
+│! STALE AUTHORITY app-build holder:builder-app                                                    │
+│! STALE MUTEX builder-review-workspace holder:builder-review                                      │
+│                                                                                                  │
+│NODE               LIVE       AUTH       MUTEX      INBOX  LAST                                   │
+│> builder-review         ○          ○          ○          0  12:00:06.000                         │
+│  builder-app            ○          ○          ●          0  11:59:40.000                         │
+│  builder-core           ●          ●          ○          1  12:00:09.000                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-WORK DAG  [▓▓░░░░░░░░]  20%
-  READY     review provisional copy  holder:-
-  CLAIMED   polish harbor board  holder:builder-core
-  DONE      verify protocol gate  holder:builder-core
-  CLAIMED   claim worker item  holder:builder-core
-  CLAIMED   drive worker item  holder:builder-core
+╭ WORKERS ─────────────────────────────────────────────────────────────────────────────────────────╮
+│  DEGRADED  x PROCESS DIED · demo-worker-receipt-4 builder-core codex demo-work-2                 │
+│  COMPLETE builder-core acp demo-work-3                                                           │
+│  CLAIM    builder-core codex demo-work-4                                                         │
+│  DRIVING  builder-core codex demo-work-5                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-CONSUMPTION  WORK AVAILABLE
-  coordinate: work/items.jsonl
-
-WORKERS
-  DEGRADED  builder-core codex demo-work-2 PROCESS DIED
-  COMPLETE  builder-core acp demo-work-3
-  CLAIM     builder-core codex demo-work-4
-  DRIVING   builder-core codex demo-work-5
-
-RECEIPTS
-  DELIVERY 1 ITEM
+╭ WORK DAG ────────────────────────────────────────────────────────────────────────────────────────╮
+│[▰▰▱▱▱▱▱▱▱▱]  20%                                                                                 │
+│  READY     review provisional copy  holder:-                                                     │
+│  CLAIMED   polish harbor board  holder:builder-core                                              │
+│  DONE      verify protocol gate  holder:builder-core                                             │
+│  CLAIMED   claim worker item  holder:builder-core                                                │
+│  CLAIMED   drive worker item  holder:builder-core                                                │
 ↑/k ↓/j select  enter detail  a ack  q quit

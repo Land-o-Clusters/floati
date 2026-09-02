@@ -18,7 +18,7 @@ from .copy import (
     DOCTOR_PROFILE_INVALID_DETAIL,
 )
 from .delivery_health import DeliveryHealthAnalyzer
-from .errors import IntegrityFailure, ProtocolRefusal
+from .errors import DOCTOR_CURRENCY_REMEDY, IntegrityFailure, ProtocolRefusal
 from .gateway import GatewayConfig
 from .jsonl import read_records_compatible_snapshot, read_records_snapshot
 from .installer_shadow import observe_installer_shadow, observation_exit_code
@@ -79,11 +79,16 @@ def _git(source: Path, *args: str) -> str:
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ProtocolRefusal("deployment_currency_unavailable", str(exc)) from exc
+        raise ProtocolRefusal(
+            "deployment_currency_unavailable",
+            str(exc),
+            remedy=DOCTOR_CURRENCY_REMEDY,
+        ) from exc
     if result.returncode != 0:
         raise ProtocolRefusal(
             "deployment_currency_unavailable",
             result.stderr.strip() or "git inspection failed",
+            remedy=DOCTOR_CURRENCY_REMEDY,
         )
     return result.stdout.strip()
 
@@ -711,7 +716,12 @@ class Doctor:
             None if gateway_config is None else Path(gateway_config).expanduser()
         )
         self.destination_arg = destination
-        self.codex_hooks_arg = None if codex_hooks is None else Path(codex_hooks).expanduser()
+        self.codex_hooks_defaulted = codex_hooks is None
+        self.codex_hooks_arg = (
+            Path.home() / ".codex" / "hooks.json"
+            if codex_hooks is None
+            else Path(codex_hooks).expanduser()
+        )
         self.codex_config_arg = None if codex_config is None else Path(codex_config).expanduser()
         self.codex_gateway_host_arg = (
             CODEX_GATEWAY_HOST
@@ -1201,9 +1211,17 @@ class Doctor:
             ),
         )
         findings.append(pin_finding)
-        if self.codex_hooks_arg is not None:
-            from .codex_hook_trust import observe_codex_waiter_hooks
+        from .codex_hook_trust import observe_codex_waiter_hooks
 
+        if self.codex_hooks_defaulted and not self.codex_hooks_arg.exists():
+            findings.append(_finding(
+                "codex_wait_hook_trust",
+                "warning",
+                str(self.codex_hooks_arg),
+                "Codex hooks are absent; no Floati Stop waiter is configured.",
+                "Install the waiter through the governed path when this host uses Codex.",
+            ))
+        else:
             try:
                 trust_rows = observe_codex_waiter_hooks(
                     self.codex_hooks_arg, self.codex_config_arg
@@ -1321,6 +1339,7 @@ class Doctor:
                 "state": "healthy" if report.rc == 0 else "degraded",
                 "root": str(self.root_arg),
                 "budget_seconds": budget_seconds,
+                "total_budget_seconds": budget_seconds * len(active_nodes),
                 "nodes": [
                     {
                         "node": result.node,

@@ -99,17 +99,16 @@ def enumerate_installer_shadow(
     )
     roots: list[str] = []
     found: list[dict[str, str]] = []
+    skipped_entries: list[str] = []
     authoritative_seen = False
 
     for raw_entry in supplied_path.split(os.pathsep):
-        entry, _entry_reason = _path_entry(raw_entry)
+        entry, entry_outcome = _path_entry(raw_entry)
         if entry is None:
-            return _artifact(
-                "unknown",
-                roots,
-                found,
-                blocked_entry=raw_entry,
-            )
+            if entry_outcome == "missing":
+                skipped_entries.append(raw_entry)
+                continue
+            return _blocked_path_artifact(roots, found, raw_entry, skipped_entries)
         roots.append(str(entry))
         if has_installed_command and entry == authoritative:
             authoritative_seen = True
@@ -120,24 +119,14 @@ def enumerate_installer_shadow(
         except FileNotFoundError:
             continue
         except (OSError, ValueError, UnicodeError):
-            return _artifact(
-                "unknown",
-                roots,
-                found,
-                blocked_entry=raw_entry,
-            )
+            return _blocked_path_artifact(roots, found, raw_entry, skipped_entries)
         if not stat.S_ISREG(candidate_stat.st_mode):
             continue
         try:
             resolved_candidate = candidate.resolve(strict=True)
             payload = resolved_candidate.read_bytes()
         except (OSError, ValueError, UnicodeError):
-            return _artifact(
-                "unknown",
-                roots,
-                found,
-                blocked_entry=raw_entry,
-            )
+            return _blocked_path_artifact(roots, found, raw_entry, skipped_entries)
         if authoritative_seen or resolved_candidate == excluded_source:
             continue
         found.append(
@@ -153,17 +142,20 @@ def enumerate_installer_shadow(
             roots,
             found,
             blocked_entry=str(authoritative),
+            skipped_entries=skipped_entries,
         )
     if found:
         return _artifact(
             "found",
             roots,
             found,
+            skipped_entries=skipped_entries,
         )
     return _artifact(
         "affirmative_none",
         roots,
         found,
+        skipped_entries=skipped_entries,
     )
 
 
@@ -173,6 +165,8 @@ def _artifact(
     found: Optional[list[dict[str, str]]] = None,
     *,
     blocked_entry: Optional[str] = None,
+    skipped_entries: Optional[list[str]] = None,
+    remedy: Optional[str] = None,
 ) -> dict[str, Any]:
     artifact: dict[str, Any] = {
         "outcome": outcome,
@@ -181,6 +175,10 @@ def _artifact(
     }
     if blocked_entry is not None:
         artifact["blocked_entry"] = blocked_entry
+    if skipped_entries:
+        artifact["skipped_entries"] = skipped_entries
+    if remedy is not None:
+        artifact["remedy"] = remedy
     if outcome in _COLD_READ:
         artifact["reason"] = _COLD_READ[outcome]
     return artifact
@@ -265,13 +263,37 @@ def _path_entry(raw_entry: str) -> tuple[Optional[Path], str]:
     if not candidate.is_absolute():
         return None, "Checked PATH entries in order until one entry was not absolute."
     try:
+        candidate.lstat()
+    except FileNotFoundError:
+        return None, "missing"
+    except (OSError, ValueError, UnicodeError):
+        return None, "unreadable"
+    try:
         resolved = candidate.resolve(strict=True)
         mode = resolved.stat().st_mode
+    except FileNotFoundError:
+        return None, "missing"
     except (OSError, ValueError, UnicodeError):
-        return None, "Checked PATH entries in order until one entry could not be enumerated."
+        return None, "unreadable"
     if not stat.S_ISDIR(mode):
         return None, "Checked PATH entries in order until one entry was not a directory."
     return resolved, ""
+
+
+def _blocked_path_artifact(
+    roots: list[str],
+    found: list[dict[str, str]],
+    blocked_entry: str,
+    skipped_entries: list[str],
+) -> dict[str, Any]:
+    return _artifact(
+        "unknown",
+        roots,
+        found,
+        blocked_entry=blocked_entry,
+        skipped_entries=skipped_entries,
+        remedy=f"Fix or drop PATH entry {blocked_entry}, or pass a clean PATH.",
+    )
 
 
 def _resolved_regular_file(value: Optional[Union[Path, str]]) -> Optional[Path]:

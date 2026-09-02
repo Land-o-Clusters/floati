@@ -17,9 +17,49 @@ from floati.root import FloatiRoot
 NOW = datetime(2026, 8, 31, 0, 30, 0, tzinfo=timezone.utc)
 
 
+# The probe under test needs a real repository, so this fixture drives real
+# git — and a bare `git commit` reads the COMMITTER IDENTITY off the host. A
+# developer machine has one in ~/.gitconfig; the CI runner has none and cannot
+# auto-derive one (its guessed address is `runner@fv-az…(none)`, which git
+# refuses), so `git commit --allow-empty` exits 128 there and one test errored
+# on the runner while passing everywhere it was written.
+#
+#   $ git -c user.useConfigOnly=true commit --allow-empty -m root
+#   fatal: no email was given and auto-detection is disabled  (exit 128)
+#
+# ⇒ A FIXTURE THAT BORROWS AN IDENTITY FROM THE HOST IS TESTING THE HOST.
+#
+# So the fixture brings its own: an identity and a config environment declared
+# here, never inherited. `user.useConfigOnly` makes the absence of a declared
+# identity an error rather than a silent host-derived one, so this fixture
+# cannot quietly start reading the machine again. The environment shape is the
+# one tests/test_effect_reconciliation_observer.py already uses for hermetic
+# git subprocesses in this repository.
+_HERMETIC_GIT_ENVIRONMENT = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "HOME": "/var/empty",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/bin:/bin",
+}
+
+_HERMETIC_GIT_IDENTITY = (
+    "-c", "user.useConfigOnly=true",
+    "-c", "user.name=floati-selftest",
+    "-c", "user.email=floati-selftest@localhost",
+)
+
+
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+        ["/usr/bin/git", *_HERMETIC_GIT_IDENTITY, *args],
+        cwd=cwd,
+        env=_HERMETIC_GIT_ENVIRONMENT,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 

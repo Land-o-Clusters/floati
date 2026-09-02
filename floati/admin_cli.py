@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, Mapping, Tuple
 from .admin_registry import RegistryAdminBackend
 from .foreign_bus_survey import ForeignBusSurvey
 from .ids import uuid7_hex
-from .multi_bus_chart import MultiBusHarborChart
+from .multi_bus_chart import MultiBusHarborChart, render_multi_bus_chart
 from .multi_bus_chart import DeclaredRoots
 from .node_explain import NodeExplainProjection
 from .node_projections import (
@@ -282,7 +282,21 @@ def _quota_provider_choices() -> Tuple[str, ...]:
 
 
 def _chart(args: argparse.Namespace) -> HandlerResult:
-    return "ok", MultiBusHarborChart(args.declared_roots).artifact(), OK
+    chart = MultiBusHarborChart(args.declared_roots)
+    artifact = chart.artifact()
+    if not args.json:
+        if args.live:
+            from .tui_chart import run_live_harbor_map
+
+            run_live_harbor_map(
+                snapshot_loader=chart.artifact,
+                input_stream=sys.stdin,
+                output_stream=sys.stderr,
+            )
+        else:
+            sys.stderr.write(render_multi_bus_chart(artifact))
+            sys.stderr.flush()
+    return "ok", artifact, OK
 
 
 def _survey(args: argparse.Namespace) -> HandlerResult:
@@ -824,6 +838,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
 
     chart = commands.add_parser("chart")
     chart.add_argument("--declared-roots", required=True)
+    chart.add_argument("--live", action="store_true")
     chart.add_argument("--json", action="store_true")
     chart.set_defaults(handler=_chart)
 

@@ -328,7 +328,10 @@ class GitHubProcessContractTests(unittest.TestCase):
 
         self.assertEqual("gh_invocation_failed", caught.exception.code)
         self.assertIn("no oauth token found", caught.exception.detail)
-        self.assertIsNone(caught.exception.remedy)
+        self.assertEqual(
+            {"kind": "none", "why": "no action was named for this refusal"},
+            caught.exception.remedy,
+        )
 
     def test_public_issue_can_succeed_without_ambient_token(self) -> None:
         from floati.gh_process import read_github_issue

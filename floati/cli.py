@@ -9,6 +9,7 @@ import os
 import re
 import signal
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -353,8 +354,75 @@ def _signature_verify(args: argparse.Namespace) -> HandlerResult:
     return "ok", evidence, OK
 
 
+def _require_banked_sha(sha: str) -> None:
+    """RB-1: refuse a sha committed here but reachable from no remote ref.
+
+    Same instrument and trust posture as the verify path (`verification.py:
+    _require_banked`), on the send side: the incident is the sender reporting
+    work that was never pushed. A sha absent from this checkout is not this
+    fence's case — the verify path's `sha_absent` fence still owns it — so the
+    send passes it through; the checked ref set is named in the refusal.
+    """
+    hardened = ("/usr/bin/git", "--no-optional-locks", "--no-replace-objects",
+                "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false")
+    try:
+        toplevel = subprocess.run(
+            [*hardened, "-C", os.getcwd(), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        raise ProtocolRefusal(
+            "repository_invalid",
+            f"git did not answer within 10s from {os.getcwd()}",
+            "retry once git is responsive, from the checkout that holds the commit",
+        )
+    if toplevel.returncode != 0:
+        return
+    repository = toplevel.stdout.strip()
+    try:
+        exists = subprocess.run(
+            [*hardened, "-C", repository, "cat-file", "-e", sha + "^{commit}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if exists.returncode != 0:
+            return
+        checked = subprocess.run(
+            [*hardened, "-C", repository, "for-each-ref",
+             "--format=%(refname)", "refs/remotes"],
+            capture_output=True, text=True, timeout=10,
+        )
+        banked = subprocess.run(
+            [*hardened, "-C", repository, "for-each-ref",
+             "--format=%(refname)", "--contains", sha, "refs/remotes"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        raise ProtocolRefusal(
+            "repository_invalid",
+            f"git did not answer within 10s in {repository}",
+            "retry once git is responsive, from the checkout that holds the commit",
+        )
+    refs = [line for line in banked.stdout.splitlines() if line]
+    if refs:
+        return
+    checked_refs = [line for line in checked.stdout.splitlines() if line]
+    shown = (
+        ", ".join(checked_refs[:12])
+        + (f", +{len(checked_refs) - 12} more" if len(checked_refs) > 12 else "")
+        if checked_refs
+        else "(none fetched)"
+    )
+    raise ProtocolRefusal(
+        "sha_unbanked",
+        f"{sha} is reachable from no ref in refs/remotes of {repository} "
+        f"(checked: {shown})",
+        f"push the commit, run git fetch --all in {repository}, then send again",
+    )
+
+
 def _send(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
+    _require_banked_sha(args.sha)
     claim = None
     if args.claim is not None:
         from .verification import load_claim_document
@@ -728,6 +796,13 @@ def _doctor(args: argparse.Namespace) -> HandlerResult:
             getattr(args, "probe_budget", 60.0) or 60.0
         )
         artifact["probe"] = probe_artifact
+        # PROBE-1: a reader of the obvious key sees the DEAF verdict too,
+        # with the remediation it already carries.
+        artifact["findings"].extend(
+            row
+            for row in probe_artifact.get("findings", [])
+            if row.get("severity") == "error"
+        )
         if probe_rc != 0 and return_code == 0:
             return_code = 35
         artifact["state"] = {0: "healthy", 20: "refused", 33: "malformed_evidence",
@@ -1211,6 +1286,7 @@ def _board(args: argparse.Namespace) -> int:
             root = seed_demo(Path(temporary) / "synthetic-fleet")
             return run_board(
                 model_loader=demo_model_loader(root),
+                model_root=root.tenant_home,
                 ack_callback=lambda action: acknowledge_visible(
                     root, action, acting_session_id="demo-session"
                 ),
@@ -1228,6 +1304,7 @@ def _board(args: argparse.Namespace) -> int:
 
     return run_board(
         model_loader=lambda: model_from_root(root),
+        model_root=root.tenant_home,
         ack_callback=acknowledge_live,
         no_animation=args.no_animation,
     )
@@ -1412,6 +1489,20 @@ def _describe(args: argparse.Namespace) -> HandlerResult:
     return "ok", describe_parser(_parser()), OK
 
 
+def _overlap_report(args: argparse.Namespace) -> HandlerResult:
+    """Emit the existing local overlap fact through one read-only product verb."""
+
+    from .overlap_radar import derive_overlap_report
+
+    report = derive_overlap_report(
+        Path(args.repository),
+        args.base_ref,
+        args.left_ref,
+        args.right_ref,
+    )
+    return "ok", report, OK
+
+
 def _mcp_serve(args: argparse.Namespace) -> int:
     from .mcp import serve_bound_stdio
 
@@ -1426,6 +1517,17 @@ def _parser() -> _ArtifactParser:
     describe = commands.add_parser("describe", floati_mcp_exposure="read")
     describe.add_argument("--json", action="store_true", required=True)
     describe.set_defaults(handler=_describe)
+
+    overlap = commands.add_parser("overlap")
+    overlap_commands = overlap.add_subparsers(
+        dest="overlap_command", required=True
+    )
+    overlap_report = overlap_commands.add_parser("report")
+    overlap_report.add_argument("--repository", required=True)
+    overlap_report.add_argument("--base-ref", required=True)
+    overlap_report.add_argument("--left-ref", required=True)
+    overlap_report.add_argument("--right-ref", required=True)
+    overlap_report.set_defaults(handler=_overlap_report)
 
     init = commands.add_parser("init")
     init.add_argument("--root")
@@ -1446,7 +1548,7 @@ def _parser() -> _ArtifactParser:
         dest="confluence_command", required=True
     )
     confluence_grant = confluence_commands.add_parser(
-        "grant", floati_mcp_exposure="read"
+        "grant", floati_mcp_exposure="governed"
     )
     confluence_grant.add_argument("--root", required=True)
     confluence_grant.add_argument("--consumer", required=True)
@@ -1454,7 +1556,7 @@ def _parser() -> _ArtifactParser:
     confluence_grant.set_defaults(handler=_confluence_grant)
 
     confluence_revoke = confluence_commands.add_parser(
-        "revoke", floati_mcp_exposure="read"
+        "revoke", floati_mcp_exposure="governed"
     )
     confluence_revoke.add_argument("--root", required=True)
     confluence_revoke.add_argument("--consumer", required=True)
@@ -1996,7 +2098,16 @@ def _emit(
     }
     if schema_version is not None:
         artifact["schema_version"] = schema_version
-    stream = sys.stdout if exit_code == OK else sys.stderr
+    # PROBE-1: doctor's completed measurement prints its artifact on stdout
+    # whatever it measured (34 deadline, 35 degraded) — a script redirecting
+    # stdout captures the probe verdict. Every other verb keeps the stock
+    # channel: ok on stdout, silence/no-result/refusal-class on stderr.
+    if exit_code == OK:
+        stream = sys.stdout
+    elif command == "doctor" and exit_code in (34, DEGRADED):
+        stream = sys.stdout
+    else:
+        stream = sys.stderr
     if command == "install" and exit_code == OK and stream.isatty():
         from .brand import render_buoy_mark
 
@@ -2011,7 +2122,7 @@ def _protocol_refusal_evidence(exc: ProtocolRefusal) -> Dict[str, object]:
     evidence: Dict[str, object] = {
         "code": exc.code,
         "detail": exc.detail,
-        "remedy": exc.remedy or None,
+        "remedy": exc.remedy,
     }
     context = getattr(exc, "artifact_context", None)
     if isinstance(context, dict) and set(context) == {"root", "tenant_id"}:

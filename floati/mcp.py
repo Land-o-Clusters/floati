@@ -85,15 +85,24 @@ def _compact(value: object) -> str:
     )
 
 
+_INVALID_PARAMS_REMEDY = (
+    "pass JSON-RPC params that match this method: "
+    "initialize needs protocolVersion; tools/call needs name and arguments"
+)
+
+
 def _error(
     request_id: object,
     code: int,
     message: str,
 ) -> Dict[str, object]:
+    error: Dict[str, object] = {"code": code, "message": message}
+    if code == _INVALID_PARAMS:
+        error["data"] = {"remedy": _INVALID_PARAMS_REMEDY}
     return {
         "jsonrpc": "2.0",
         "id": request_id,
-        "error": {"code": code, "message": message},
+        "error": error,
     }
 
 
@@ -193,17 +202,34 @@ class McpServer:
         return tool["_meta"]["floati"]
 
     def list_tools(self) -> List[Dict[str, object]]:
-        try:
-            Registry(self.root).require_active(self.node)
-            active = True
-        except ProtocolRefusal:
-            active = False
+        active = self._node_is_active()
         selected = [
             tool
             for tool in self._catalog.values()
             if self._metadata(tool)["exposure"] == "read" or active
         ]
         return json.loads(json.dumps(selected, ensure_ascii=False))
+
+    def _node_is_active(self) -> bool:
+        try:
+            Registry(self.root).require_active(self.node)
+        except ProtocolRefusal:
+            return False
+        return True
+
+    def _inactive_node_refusal(self, exc: ProtocolRefusal) -> Dict[str, object]:
+        refusal = ProtocolRefusal(
+            exc.code,
+            exc.detail,
+            remedy="run node add for this node and keep it active",
+        )
+        artifact = {
+            "artifact_version": 0,
+            "command": "mcp",
+            "status": "refused",
+            "evidence": cli._protocol_refusal_evidence(refusal),
+        }
+        return _tool_result(artifact)
 
     def has_tool(self, name: str) -> bool:
         return isinstance(name, str) and name in self._catalog
@@ -279,6 +305,11 @@ class McpServer:
         if tool is None:
             _, artifact = run_cli_artifact(["mcp-unknown-tool"])
             return _tool_result(artifact)
+        if self._metadata(tool)["exposure"] != "read":
+            try:
+                Registry(self.root).require_active(self.node)
+            except ProtocolRefusal as exc:
+                return self._inactive_node_refusal(exc)
         metadata = self._metadata(tool)
         path = tuple(str(part) for part in metadata["commandPath"])
         argv = self._argv(tool, arguments)

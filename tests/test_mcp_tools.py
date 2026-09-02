@@ -31,8 +31,6 @@ from tests.temp_roots import REAL_TEMP_ROOT
 SHA = "a" * 40
 READ_TOOLS = {
     "confluence_bundle",
-    "confluence_grant",
-    "confluence_revoke",
     "confluence_status",
     "describe",
     "doctor",
@@ -48,6 +46,8 @@ READ_TOOLS = {
 }
 GOVERNED_TOOLS = {
     "ack",
+    "confluence_grant",
+    "confluence_revoke",
     "send",
     "wake_pause",
     "wake_resume",
@@ -376,8 +376,9 @@ class McpToolSurfaceTests(unittest.TestCase):
             {"idempotency_key": "retired-wake"},
         )
         self.assertEqual(20, wake_exit)
-        self.assertEqual(wake_artifact, wake_result["structuredContent"])
+        self.assertEqual("unknown_node", wake_artifact["evidence"]["code"])
         self.assert_tool_error(wake_result, "unknown_node")
+        self.assertIn("node add", str(wake_result["structuredContent"]["evidence"]["remedy"]))
         arguments = self.send_arguments(
             note="after retirement",
             key="retired-send",
@@ -398,9 +399,61 @@ class McpToolSurfaceTests(unittest.TestCase):
             arguments,
         )
         self.assertEqual(20, direct_exit)
-        self.assertEqual(direct_artifact, result["structuredContent"])
-        self.assert_tool_error(result, direct_artifact["evidence"]["code"])
+        self.assertEqual("refused", direct_artifact["status"])
+        self.assert_tool_error(result, "unknown_node")
+        self.assertIn("node add", str(result["structuredContent"]["evidence"]["remedy"]))
         self.assertEqual([], EventLog(self.root).records())
+
+    def _root_record_bytes(self) -> dict[str, bytes]:
+        records: dict[str, bytes] = {}
+        for path in self.root.path.rglob("*"):
+            if not path.is_file() or path.suffix != ".jsonl":
+                continue
+            records[path.relative_to(self.root.path).as_posix()] = path.read_bytes()
+        return records
+
+    def _listed_tool_arguments(self, tool: dict[str, object]) -> dict[str, object]:
+        name = str(tool["name"])
+        required = list(tool["inputSchema"].get("required") or [])
+        values = {
+            "consumer": "reader-a",
+            "idempotency_key": f"expo-{name}",
+            "out": str(Path(self.temporary.name) / "confluence-bundle.json"),
+            "source": str(self.root.path),
+            "directory": str(self.temporary.name),
+            "snapshot_id": "snap-00000000000000000000000000000000",
+            "operation": "comment",
+            "node": public_ids.builder("a"),
+        }
+        return {field: values[field] for field in required}
+
+    def test_inactive_listed_tools_leave_the_root_record_set_unmoved(self) -> None:
+        """Catches a writer remaining on the inactive list_tools surface."""
+
+        self.registry.retire(public_ids.builder("a"))
+        server = self.server()
+        mutated: list[str] = []
+        for tool in server.list_tools():
+            before = self._root_record_bytes()
+            server.call_tool(str(tool["name"]), self._listed_tool_arguments(tool))
+            after = self._root_record_bytes()
+            if after != before:
+                mutated.append(str(tool["name"]))
+        self.assertEqual([], mutated)
+
+    def test_inactive_call_tool_refuses_every_tool_absent_from_list_tools(self) -> None:
+        """Catches list_tools filtering a name that call_tool still runs."""
+
+        server = self.server()
+        catalog = {str(tool["name"]) for tool in server.list_tools()}
+        self.registry.retire(public_ids.builder("a"))
+        listed = {str(tool["name"]) for tool in server.list_tools()}
+        absent = catalog - listed
+        self.assertTrue(absent)
+        for name in sorted(absent):
+            with self.subTest(tool=name):
+                artifact = self.assert_tool_error(server.call_tool(name, {}), "unknown_node")
+                self.assertIn("node add", str(artifact["evidence"]["remedy"]))
 
     def test_expired_lease_refuses_at_the_cli_boundary_without_hiding_tool(self) -> None:
         """Catches MCP caching lease state or replacing the CLI's typed refusal."""
@@ -435,7 +488,10 @@ class McpToolSurfaceTests(unittest.TestCase):
         )
 
         artifact = self.assert_tool_error(result, "node_lease_expired")
-        self.assertIsNone(artifact["evidence"]["remedy"])
+        self.assertEqual(
+            {"kind": "none", "why": "no action was named for this refusal"},
+            artifact["evidence"]["remedy"],
+        )
         self.assertEqual([], EventLog(self.root).records())
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import atexit
 import json
 import hashlib
 import inspect
@@ -20,8 +21,59 @@ from floati.fleet_update_receipts import FleetUpdateReceiptLedger, authenticate_
 from floati.jsonl import append_record
 from floati.records import validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 from tests.test_fu1_g0 import REPOSITORY_ROOT, _tree_bytes
 from tests.test_fu1_g1 import FU1G1Tests
+
+
+_CANONICAL_EXECUTABLE: str | None = None
+
+
+def canonical_executable() -> str:
+    """One real, non-symlinked, already-resolved executable file for the G2 seam.
+
+    `_explicit_executable` (floati/fleet_update.py:794) accepts exactly ONE
+    caller-supplied executable and refuses anything that is not absolute, is a
+    symlink, is not a regular file, does not resolve to itself, or is not
+    executable — fleet updates never resolve PATH.
+
+    These fixtures used to name `/usr/bin/python3`. That is a real file on
+    macOS and a SYMLINK to a versioned interpreter on Debian and Ubuntu, so on
+    the ubuntu runner the product refused it exactly as designed, and fifty
+    tests in this module plus one in test_fu1_g4 died at the fixture's own
+    first argument:
+
+      ProtocolRefusal: fleet_update_installer_invalid:
+        executable must be an explicit canonical executable
+
+    ⇒ A FIXTURE THAT NAMES A SYSTEM PATH IS ASSERTING A HOST FACT, NOT THE
+    CONTRACT IT MEANT TO EXERCISE.
+
+    The predicate is right and is not touched (see ruling R-C: the product is
+    right about symlinked system binaries). The fixture MAKES what the seam
+    requires instead of hoping the host has one lying around: a regular,
+    executable file under the platform's real temporary root, resolved at
+    creation so `path.resolve(strict=True) == path` holds on a host whose temp
+    root is reached through a symlink.
+
+    It is deliberately NOT named `floati`: the installer's parent directory
+    becomes a PATH component for the deployment writer's installer-shadow
+    enumeration, and a file with that name there would be a shadow.
+
+    One per process, shared by every fixture that needs it, removed at exit.
+    """
+
+    global _CANONICAL_EXECUTABLE
+    if _CANONICAL_EXECUTABLE is None:
+        directory = Path(
+            tempfile.mkdtemp(prefix="fu1-g2-canonical-", dir=REAL_TEMP_ROOT)
+        ).resolve(strict=True)
+        atexit.register(shutil.rmtree, str(directory), True)
+        executable = directory / "installer"
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
+        _CANONICAL_EXECUTABLE = str(executable)
+    return _CANONICAL_EXECUTABLE
 
 
 def _release_inherited_fleet_update_guard(guard: object, sender: object) -> None:
@@ -258,7 +310,7 @@ class FU1G2Tests(FU1G1Tests):
             actor=self.actor,
             idempotency_key=key,
             target_source=self.target_source,
-            installer_executable="/usr/bin/python3",
+            installer_executable=canonical_executable(),
             git_executable="/usr/bin/git",
             _fault_hook=fault_hook,
         )
@@ -819,7 +871,7 @@ class FU1G2Tests(FU1G1Tests):
         before = self._zero_write_snapshot(self.base)
         staged = {
             "source": str(self.target_source),
-            "installer_executable": "/usr/bin/python3",
+            "installer_executable": canonical_executable(),
             "git_executable": "/usr/bin/git",
             "install": {"pre_digest": plan["current_manifest_sha256"], "post_digest": plan["target_manifest_sha256"]},
             "waiters": [],
@@ -829,7 +881,7 @@ class FU1G2Tests(FU1G1Tests):
             with self.assertRaises(ProtocolRefusal) as caught:
                 commit_fleet_update_g2(
                     plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
-                    target_source=self.target_source, installer_executable="/usr/bin/python3",
+                    target_source=self.target_source, installer_executable=canonical_executable(),
                     git_executable="/usr/bin/git",
                 )
         self.assertEqual(expected_code, caught.exception.code)
@@ -861,7 +913,7 @@ class FU1G2Tests(FU1G1Tests):
             commit_fleet_update_g2(
                 plan=plan, root=self.root, actor=self.actor,
                 idempotency_key="fu1-g2-stale-removal", target_source=self.target_source,
-                installer_executable="/usr/bin/python3", git_executable="/usr/bin/git",
+                installer_executable=canonical_executable(), git_executable="/usr/bin/git",
             )
 
         self.assertEqual("fleet_update_install_stale_removal_unsupported", caught.exception.code)
@@ -1068,7 +1120,7 @@ class FU1G2Tests(FU1G1Tests):
             "last_ordinal": len(plan["shared_install_intents"]),
             "entry_hashes": ["e" * 64] * len(plan["shared_install_intents"]),
         }
-        staged = {"source": str(self.target_source), "installer_executable": "/usr/bin/python3", "git_executable": "/usr/bin/git", "waiters": [staged_waiter]}
+        staged = {"source": str(self.target_source), "installer_executable": canonical_executable(), "git_executable": "/usr/bin/git", "waiters": [staged_waiter]}
         calls = {"shared_writer": 0, "generation": 0, "hook": 0, "atomic": 0}
         original_stage, original_commit, original_atomic = stage_waiter_runtime, commit_waiter_rebind, codex_hook_install._write_atomic
 
@@ -1093,10 +1145,10 @@ class FU1G2Tests(FU1G1Tests):
             mock.patch("floati.codex_hook_install._write_atomic", side_effect=counted_atomic),
         ):
             writer.return_value.run.side_effect = lambda: calls.__setitem__("shared_writer", calls["shared_writer"] + 1)
-            first = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable="/usr/bin/python3", git_executable="/usr/bin/git")
+            first = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
             receipt_path = self.root.path / FleetUpdateReceiptLedger.relative(self.actor)
             first_receipt_bytes = receipt_path.read_bytes()
-            second = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable="/usr/bin/python3", git_executable="/usr/bin/git")
+            second = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
         self.assertEqual(first["last_receipt_id"], second["last_receipt_id"])
         self.assertEqual(first, second)
         self.assertEqual({"shared_writer": 1, "generation": 1, "hook": 1, "atomic": 1}, calls)
@@ -1154,7 +1206,7 @@ class FU1G2Tests(FU1G1Tests):
             "last_ordinal": len(plan["shared_install_intents"]),
             "entry_hashes": ["d" * 64] * len(plan["shared_install_intents"]),
         }
-        staged = {"source": str(self.target_source), "installer_executable": "/usr/bin/python3", "git_executable": "/usr/bin/git", "waiters": [staged_waiter]}
+        staged = {"source": str(self.target_source), "installer_executable": canonical_executable(), "git_executable": "/usr/bin/git", "waiters": [staged_waiter]}
         original_step = FleetUpdateReceiptLedger._step_guarded
         original_atomic = codex_hook_install._write_atomic
         calls = {"step": 0, "atomic": 0}
@@ -1186,9 +1238,9 @@ class FU1G2Tests(FU1G1Tests):
             mock.patch("floati.codex_hook_install._write_atomic", side_effect=counted_atomic),
         ):
             with self.assertRaises(OSError):
-                commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable="/usr/bin/python3", git_executable="/usr/bin/git")
+                commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
             self.assertEqual(staged_waiter["after"], self.hooks_path.read_bytes())
-            recovered = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable="/usr/bin/python3", git_executable="/usr/bin/git")
+            recovered = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
         self.assertEqual("g2_committed_pending_later_gates", recovered["state"])
         self.assertEqual(1, calls["atomic"], "post-write retry must append evidence without a second hook rewrite")
         rows = [row for row in FleetUpdateReceiptLedger(self.root).rows(self.actor) if row["kind"] == "fleet_update_step"]
@@ -1967,7 +2019,7 @@ class FU1G2Tests(FU1G1Tests):
             stage_fleet_update(
                 plan=forged,
                 target_source=self.target_source,
-                installer_executable="/usr/bin/python3",
+                installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
             )
         self.assertEqual("fleet_update_owner_review_invalid", caught.exception.code)
@@ -2161,7 +2213,7 @@ class FU1G2Tests(FU1G1Tests):
                     actor=other_actor,
                     idempotency_key="fu1-g2-fix4-second-actor",
                     target_source=self.target_source,
-                    installer_executable="/usr/bin/python3",
+                    installer_executable=canonical_executable(),
                     git_executable="/usr/bin/git",
                     _fault_hook=reject_overlap,
                 )
@@ -2900,7 +2952,7 @@ class FU1G2Tests(FU1G1Tests):
             stage_fleet_update(
                 plan=plan,
                 target_source=self.target_source,
-                installer_executable="/usr/bin/python3",
+                installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
             )
         self.assertEqual("fleet_update_waiter_invalid", caught.exception.code)
@@ -2948,7 +3000,7 @@ class FU1G2Tests(FU1G1Tests):
                 actor=self.actor,
                 idempotency_key="fu1-g2-fix3-final-target",
                 target_source=self.target_source,
-                installer_executable="/usr/bin/python3",
+                installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
             )
         self.assertEqual("fleet_update_waiter_invalid", caught.exception.code)
@@ -3005,7 +3057,7 @@ class FU1G2Tests(FU1G1Tests):
             mock.patch.object(DeploymentWriter, "stage", return_value={"source_sha": "b" * 40}),
             self.assertRaises(ProtocolRefusal) as caught,
         ):
-            stage_fleet_update(plan=plan, target_source=self.target_source, installer_executable="/usr/bin/python3", git_executable="/usr/bin/git")
+            stage_fleet_update(plan=plan, target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
         self.assertEqual("fleet_update_waiter_invalid", caught.exception.code)
         self.assertEqual(first_before, self._zero_write_snapshot(first))
         self.assertFalse((first / target).exists())
@@ -3235,19 +3287,19 @@ class FU1G2Tests(FU1G1Tests):
             }),
             mock.patch("floati.fleet_update.stage_fleet_update", return_value={
                 "source": str(self.target_source), "git_executable": "/usr/bin/git",
-                "installer_executable": "/usr/bin/python3", "waiters": [],
+                "installer_executable": canonical_executable(), "waiters": [],
             }),
             mock.patch("floati.fleet_update.stage_waiter_runtime"),
             mock.patch("floati.fleet_update.commit_waiter_rebind", return_value=waiter_result),
         ):
             first = commit_fleet_update_g2(
                 plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
-                target_source=self.target_source, installer_executable="/usr/bin/python3",
+                target_source=self.target_source, installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
             )
             second = commit_fleet_update_g2(
                 plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
-                target_source=self.target_source, installer_executable="/usr/bin/python3",
+                target_source=self.target_source, installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
             )
 
@@ -3351,7 +3403,7 @@ class FU1G2Tests(FU1G1Tests):
         ):
             stage_fleet_update(
                 plan=plan, target_source=self.target_source,
-                installer_executable="/usr/bin/python3", git_executable="/usr/bin/git",
+                installer_executable=canonical_executable(), git_executable="/usr/bin/git",
             )
         self.assertEqual("fleet_update_waiter_binding_invalid", caught.exception.code)
         for store, entries in before.items():

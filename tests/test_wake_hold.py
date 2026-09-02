@@ -541,6 +541,49 @@ class WakeAttemptReceiptTests(unittest.TestCase):
                 self.assertEqual(1, len(matching))
                 self.assertEqual("refused", matching[0]["outcome"])
 
+    def test_hook_trust_lapse_reasons_survive_in_the_wake_attempt_ledger(self) -> None:
+        """Catches three actionable hook causes collapsing into wake_prompt_failed."""
+        from floati.jsonl import read_records
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        for code in (
+            "wake_hook_untrusted",
+            "wake_hook_modified",
+            "wake_hook_disabled",
+        ):
+            with self.subTest(code=code):
+                message = self.events.send(
+                    public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                    "docs/evidence/wake-attempt.md", f"wake attempt {code}",
+                    idempotency_key=f"wake-attempt-{code}-message",
+                )
+                decision = WakeHoldController(self.root).evaluate(
+                    "bob", idempotency_key=f"wake-attempt-{code}-decision",
+                )
+                with self.assertRaises(ProtocolRefusal) as caught:
+                    WakeAttemptLedger(self.root).record(
+                        recipient="bob",
+                        acting_session_id="session-018f7e9b3c137abc8def0123456789ab",
+                        item_ids=[message["id"]],
+                        decision_receipt_id=decision["receipt"]["id"],
+                        message_worker_session_id=None,
+                        idempotency_key=f"wake-attempt-{code}-action",
+                        outcome="refused",
+                        reason_code=code,
+                    )
+                self.assertEqual(code, caught.exception.code)
+                durable = read_records(
+                    self.root, "receipts/wakes/bob.jsonl",
+                    allowed_kinds={"wake_attempt_receipt"},
+                )
+                matching = [row for row in durable if row["reason_code"] == code]
+                self.assertEqual(1, len(matching))
+                validate_json_schema(
+                    matching[0],
+                    Path(__file__).parents[1]
+                    / "schemas/v1/wake-attempt-record.schema.json",
+                )
+
     def test_zcode_output_codes_record_as_themselves_not_wake_prompt_failed(self) -> None:
         """WD-R2-F1: zcode adapter reasons join the refused set; they are not rewritten."""
         from floati.jsonl import read_records

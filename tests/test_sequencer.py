@@ -36,6 +36,33 @@ except ModuleNotFoundError:
 NOW = "2026-08-09T12:00:00.000Z"
 
 
+def peer_closure(channel: socket.socket) -> str:
+    """Report the ONE fact 'the peer closed', in whichever spelling the host uses.
+
+    When a peer closes a connection that still has UNREAD data queued toward
+    it, the two kernels answer differently: macOS lets the next `recv` return
+    `b""`, Linux sends an RST and the next `recv` raises `ConnectionResetError`
+    (ECONNRESET, errno 104). Measured, not assumed — a socketpair whose peer
+    closes over an unread payload returns `b""` here on darwin, and public run
+    33565717088 shows the reset on ubuntu at tests/test_sequencer.py:403.
+
+    ⇒ ASSERTING ONE PLATFORM'S SPELLING OF A FACT IS NOT ASSERTING THE FACT.
+
+    The fact under test was never "recv returns b''" — it is that the service
+    hung up on the refused client. So this returns `"closed"` for either
+    spelling and NAMES whatever else arrives, which keeps a delivered byte a
+    failure rather than folding it into a widened predicate.
+    """
+
+    try:
+        received = channel.recv(1)
+    except ConnectionResetError:
+        return "closed"
+    if received == b"":
+        return "closed"
+    return "delivered " + repr(received)
+
+
 def run_created(tenant: str, *, record_id: Optional[str] = None) -> dict[str, object]:
     return {
         "schema_version": 0,
@@ -400,7 +427,7 @@ class SequencerTests(unittest.TestCase):
                 (refused["status"], refused["code"]),
             )
             self.assertEqual({"status", "code", "detail"}, set(refused))
-            self.assertEqual(b"", excess.recv(1))
+            self.assertEqual("closed", peer_closure(excess))
             self.assertLessEqual(service._request_buffer_bytes, aggregate_cap)
             self.assertEqual(
                 maximum_frame + 2 * read_quantum,

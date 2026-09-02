@@ -59,8 +59,8 @@ class TuiRenderTests(unittest.TestCase):
         self.assertIn("AUTH", frame)
         self.assertIn("MUTEX", frame)
         self.assertIn(public_ids.builder('a'), frame)
-        self.assertIn("PRESENT", frame)
-        self.assertIn("ACTIVE", frame)
+        self.assertIn("●", frame)
+        self.assertIn("○", frame)
         self.assertIn("UNKNOWN_SENDER", frame)
         self.assertLess(frame.index("! DENIAL"), frame.index("WORK DAG"))
         self.assertIn("↑/k ↓/j select", frame)
@@ -78,23 +78,142 @@ class TuiRenderTests(unittest.TestCase):
         self.assertNotIn("\x1b", mono)
         self.assertEqual(mono, strip_ansi(color))
 
-    def test_semantic_accent_marks_attention_and_activity_not_the_brand(self) -> None:
-        from floati.tui_render import BUOY_ORANGE, RESET, render_frame
+    def test_harbor_palette_keeps_brand_orange_off_warning_lines(self) -> None:
+        """Catches identity orange being reused as warning or activity ink."""
+        from floati.tui_render import render_frame
 
-        frame = render_frame(self.model(), 120, 40, selected=0, color=True)
+        frame = render_frame(self.model(), 140, 100, selected=0, color=True)
         lines = frame.splitlines()
 
-        self.assertEqual("⊙ FLOATI // HARBOR BOARD", lines[0])
-        self.assertTrue(next(line for line in lines if "! DENIAL" in line).startswith(BUOY_ORANGE))
+        self.assertIn("\x1b[38;5;208m⊙", lines[0])
+        self.assertIn("\x1b[38;5;208m//", lines[0])
+        self.assertIn("\x1b[38;5;240m", frame)
+        self.assertIn("\x1b[38;5;252m", frame)
+        self.assertIn("\x1b[38;5;245m", frame)
+        denial = next(line for line in lines if "! DENIAL" in line)
         degraded = next(line for line in lines if "DEGRADED" in line)
         driving = next(line for line in lines if "DRIVING" in line)
-        self.assertTrue(degraded.startswith(BUOY_ORANGE))
-        self.assertTrue(degraded.endswith(RESET))
-        self.assertTrue(driving.startswith(BUOY_ORANGE))
-        self.assertTrue(driving.endswith(RESET))
-        self.assertIn(BUOY_ORANGE + "▓", next(line for line in lines if "WORK DAG" in line))
-        self.assertTrue(next(line for line in lines if strip_ansi(line).startswith("> ")).startswith(BUOY_ORANGE))
-        self.assertTrue(next(line for line in lines if "! DENIAL" in line).endswith(RESET))
+        arriving_mail = next(line for line in lines if public_ids.builder('a') in line and "●" in line)
+        self.assertIn("\x1b[38;5;214m! DENIAL", denial)
+        self.assertIn("\x1b[38;5;214mDEGRADED", degraded)
+        self.assertIn("\x1b[38;5;45mDRIVING", driving)
+        self.assertIn("\x1b[38;5;45m2", arriving_mail)
+        for warning in (denial, degraded, driving):
+            self.assertNotIn("\x1b[38;5;208m", warning)
+
+    def test_interactive_board_has_lamps_rounded_panels_and_waterline(self) -> None:
+        """Catches the reachable Board remaining an unframed word-only table."""
+        from floati.tui_render import HarborBoardModel, render_frame, render_plain_dump
+
+        snapshot = dict(SNAPSHOT)
+        nodes = [dict(node) for node in SNAPSHOT["nodes"]]
+        nodes[1]["liveness"] = "stale"
+        snapshot["nodes"] = nodes
+        model = HarborBoardModel.from_projection(snapshot, WORK, RECEIPTS)
+
+        mono = render_frame(model, 140, 100, selected=0, color=False)
+        color = render_frame(model, 140, 100, selected=0, color=True)
+        plain = render_plain_dump(model, width=140)
+
+        for glyph in ("●", "◐", "○", "╭", "╮", "│", "╰", "╯", "~ ≈ ~"):
+            self.assertIn(glyph, mono)
+        self.assertIn("\x1b[38;5;37m~ ≈ ~", color)
+        self.assertEqual(mono, strip_ansi(color))
+        for glyph in ("●", "◐", "○", "╭", "╮", "╰", "╯", "~ ≈ ~"):
+            self.assertNotIn(glyph, plain)
+        self.assertIn("PRESENT", plain)
+        self.assertIn("ACTIVE", plain)
+        self.assertIn("NONE", plain)
+
+    def test_work_dag_uses_bar_glyphs_and_worker_health_color(self) -> None:
+        """Catches a completion gauge staying orange or ignoring worker death."""
+        from floati.tui_render import render_frame
+
+        model = self.model()
+        died = render_frame(model, 140, 100, selected=0, color=True)
+        degraded_workers = tuple(
+            {**worker, "outcome_code": "process_cancelled"}
+            if worker.get("state") == "degraded"
+            else worker
+            for worker in model.workers
+        )
+        degraded = render_frame(
+            replace(model, workers=degraded_workers),
+            140,
+            100,
+            selected=0,
+            color=True,
+        )
+        healthy = render_frame(
+            replace(
+                model,
+                workers=tuple(
+                    {**worker, "state": "complete", "outcome_code": None}
+                    for worker in model.workers
+                ),
+            ),
+            140,
+            100,
+            selected=0,
+            color=True,
+        )
+
+        self.assertIn("▰", strip_ansi(died))
+        self.assertIn("▱", strip_ansi(died))
+        self.assertIn("\x1b[38;5;196m▰", died)
+        self.assertIn("\x1b[38;5;214m▰", degraded)
+        self.assertIn("\x1b[38;5;42m▰", healthy)
+        self.assertNotIn("▓", strip_ansi(died))
+        self.assertNotIn("░", strip_ansi(died))
+
+    def test_degraded_workers_lead_and_red_rows_name_the_receipt(self) -> None:
+        """Catches degraded work arriving late or losing its durable coordinate."""
+        from floati.tui_render import render_frame
+
+        model = self.model()
+        receipts = (
+            *model.worker_receipts,
+            {
+                "kind": "worker_receipt",
+                "id": "worker-receipt-died",
+                "session_id": "worker-c",
+                "timestamp": "2026-07-31T12:00:08.000Z",
+                "node_id": public_ids.builder('b'),
+                "transition": "degrade",
+                "outcome_code": "process_died",
+            },
+        )
+        refusal = {
+            "kind": "worker_refusal",
+            "id": "worker-refusal-1",
+            "node_id": public_ids.builder('c'),
+            "adapter": "codex",
+            "work_item_id": None,
+            "reason_code": "worker_work_absent",
+        }
+        frame = render_frame(
+            replace(
+                model,
+                worker_receipts=receipts,
+                worker_refusals=(refusal,),
+            ),
+            140,
+            100,
+            selected=0,
+            color=True,
+        )
+        visible = strip_ansi(frame)
+
+        workers = visible.split("╭ WORKERS", 1)[1].split("╰", 1)[0]
+        self.assertLess(workers.index("DEGRADED"), workers.index("CLAIM"))
+        died_line = next(line for line in frame.splitlines() if "PROCESS DIED" in line)
+        refusal_line = next(line for line in frame.splitlines() if "WORKER WORK ABSENT" in line)
+        self.assertIn("x PROCESS DIED", strip_ansi(died_line))
+        self.assertIn("worker-receipt-died", strip_ansi(died_line))
+        self.assertIn("\x1b[38;5;245mworker-receipt-died", died_line)
+        self.assertIn("x WORKER WORK ABSENT", strip_ansi(refusal_line))
+        self.assertIn("worker-refusal-1", strip_ansi(refusal_line))
+        self.assertIn("\x1b[38;5;196mx", refusal_line)
 
     def test_frame_is_viewport_bounded_and_plain_dump_is_distinguishable(self) -> None:
         from floati.tui_render import render_frame, render_plain_dump
@@ -182,12 +301,12 @@ class TuiRenderTests(unittest.TestCase):
             consumption={"coordinate": "work/items.jsonl", "state": "caught_up"},
         )
         frame = render_frame(idle, 120, 34, selected=0, color=False)
-        summary = next(line for line in frame.splitlines() if line.startswith("WORK DAG"))
-
-        self.assertIn("CONSUMPTION", summary)
-        self.assertIn("WORKERS NONE", summary)
-        self.assertIn("RECEIPTS NONE", summary)
-        self.assertLessEqual(len(frame.splitlines()), 9)
+        self.assertIn("╭ WORK DAG", frame)
+        self.assertIn("│NONE", frame)
+        self.assertNotIn("%", frame)
+        self.assertIn("╭ CONSUMPTION", frame)
+        self.assertIn("╭ WORKERS", frame)
+        self.assertIn("╭ RECEIPTS", frame)
 
     def test_worker_rows_pair_title_before_a_deterministically_shortened_work_id(self) -> None:
         from floati.tui_render import render_plain_dump

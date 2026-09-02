@@ -29,6 +29,7 @@ from floati.worker_bootstrap_protocol import (
     BootstrapChannel,
     BuiltInAdapterSpec,
     isolation_policy_to_payload,
+    validate_isolation_backend,
 )
 from floati.worker_isolation import (
     WorkerIsolationPolicy,
@@ -37,6 +38,30 @@ from floati.worker_isolation import (
 )
 from tests.temp_roots import REAL_TEMP_ROOT
 
+
+# The backend a Worker reports is chosen BY PLATFORM inside the product
+# (floati/worker_isolation.py:674): darwin applies the macOS sandbox and names
+# it "macos-sandbox" (:560), Linux applies Landlock and names it
+# f"linux-landlock-v{abi}" (:644) where the ABI is whatever the RUNNING KERNEL
+# reports — v7 on the CI runner today and some other integer on its next
+# kernel. A fixture that accepts one host's answer as a literal rejects the
+# other host, and would reject this one's own next kernel too.
+#
+# ⇒ AN ALLOW-LIST THAT NAMES ONE HOST'S ANSWER IS A HOST FACT, NOT A CONTRACT.
+#
+# So the vocabulary is not invented here: `validate_isolation_backend` in
+# floati/worker_bootstrap_protocol.py is the product's own allow-list and every
+# reported backend is put through it. Only the platform→family choice is
+# mirrored, from the same branch the product applies. A platform the product
+# has no backend for is None: there the ONLY lawful first frame is the typed
+# failure, which is what apply_worker_isolation's ENOTSUP produces.
+HOST_ISOLATION_BACKEND_PREFIX = (
+    "macos-sandbox"
+    if sys.platform == "darwin"
+    else "linux-landlock-v"
+    if sys.platform.startswith("linux")
+    else None
+)
 
 BOOTSTRAP = (Path(__file__).parents[1] / "floati" / "worker_bootstrap.py").resolve()
 PYTHON = str(Path(sys.executable).resolve())
@@ -317,15 +342,27 @@ class WorkerBootstrapTests(unittest.TestCase):
 
             self.assertFalse(multiprocessing_proof.exists())
             self.assertFalse(os_proof.exists())
-            self.assertIn(
-                frames[:1],
-                (
-                    [("failure", "effect_worker_isolation_unavailable")],
-                    [("isolation_ready", {"backend": "macos-sandbox"})],
-                ),
-            )
-            if frames[:1] == [("failure", "effect_worker_isolation_unavailable")]:
+            self.assertEqual(1, len(frames[:1]), frames[:1])
+            kind, payload = frames[0]
+            if kind == "failure":
+                self.assertEqual("effect_worker_isolation_unavailable", payload)
                 self.assertNotEqual(0, exit_code)
+            else:
+                self.assertEqual("isolation_ready", kind)
+                self.assertEqual({"backend"}, set(payload))
+                backend = payload["backend"]
+                # The product's own allow-list decides whether the NAME is
+                # lawful; this host's platform decides which family it must be
+                # in. Neither is spelled out per-kernel here.
+                self.assertEqual(backend, validate_isolation_backend(backend))
+                self.assertIsNotNone(
+                    HOST_ISOLATION_BACKEND_PREFIX,
+                    "the product has no isolation backend for this platform, so "
+                    "the only lawful first frame is the typed failure",
+                )
+                self.assertTrue(
+                    backend.startswith(HOST_ISOLATION_BACKEND_PREFIX), backend
+                )
 
     def test_fresh_exec_ignores_pythonpath_sitecustomize_usercustomize_and_pth(self) -> None:
         """Catches Python startup hooks executing before the isolation boundary."""

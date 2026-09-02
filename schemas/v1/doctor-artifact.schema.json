@@ -14,6 +14,7 @@
     "ref": {"type": "string", "minLength": 1, "maxLength": 1024},
     "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unrecognized_kind"}},
     "fleet_update": {"$ref": "#/$defs/fleet_update"},
+    "probe": {"$ref": "#/$defs/probe_report"},
     "findings": {
       "type": "array",
       "minItems": 1,
@@ -22,6 +23,61 @@
     }
   },
   "$defs": {
+    "probe_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_version", "state", "root"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "probe_version": {"const": "0"},
+        "state": {"enum": ["healthy", "degraded", "refused"]},
+        "root": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "detail": {"type": "string", "minLength": 1},
+        "budget_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "total_budget_seconds": {"type": "number", "minimum": 0},
+        "nodes": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node", "verdict", "elapsed_ticks"],
+            "properties": {
+              "node": {"$ref": "#/$defs/identifier"},
+              "verdict": {"enum": ["PASS", "DEAF"]},
+              "elapsed_ticks": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {"$ref": "#/$defs/probe_finding"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "refused"}}},
+          "then": {"required": ["detail"]},
+          "else": {
+            "required": ["budget_seconds", "total_budget_seconds", "nodes", "findings"],
+            "not": {"required": ["detail"]}
+          }
+        }
+      ]
+    },
+    "probe_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "subject", "detail"],
+      "properties": {
+        "code": {"const": "delivery_probe"},
+        "severity": {"enum": ["ok", "error"]},
+        "subject": {"$ref": "#/$defs/identifier"},
+        "detail": {"type": "string", "minLength": 1},
+        "remediation": {"type": "string", "minLength": 1}
+      }
+    },
     "fleet_update": {
       "oneOf": [
         {"type": "object", "additionalProperties": false, "required": ["state", "actors"], "properties": {"state": {"const": "absent"}, "actors": {"$ref": "#/$defs/actors"}}},
@@ -122,6 +178,35 @@
           },
           "then": {"required": ["interpreter_trust"]},
           "else": {"not": {"required": ["interpreter_trust"]}}
+        },
+        {
+          "if": {"required": ["hook_trust"]},
+          "then": {
+            "properties": {"code": {"const": "codex_wait_hook_trust"}},
+            "required": [
+              "hook_trust_key",
+              "hook_trust",
+              "hook_trust_status",
+              "hook_trust_current_hash",
+              "hook_trust_observed_hash",
+              "hook_enabled",
+              "hook_armed",
+              "hook_trust_remediation"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {"required": ["hook_trust_key"]},
+                {"required": ["hook_trust_status"]},
+                {"required": ["hook_trust_current_hash"]},
+                {"required": ["hook_trust_observed_hash"]},
+                {"required": ["hook_enabled"]},
+                {"required": ["hook_armed"]},
+                {"required": ["hook_trust_remediation"]}
+              ]
+            }
+          }
         }
       ],
       "properties": {
@@ -135,7 +220,20 @@
         "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},
         "epoch_roll": {"$ref": "#/$defs/epoch_roll"},
         "wake_health": {"$ref": "wake-health-fact.schema.json"},
-        "interpreter_trust": {"$ref": "#/$defs/interpreter_trust"}
+        "interpreter_trust": {"$ref": "#/$defs/interpreter_trust"},
+        "hook_trust_key": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "hook_trust": {"enum": ["trusted", "untrusted_pending_user"]},
+        "hook_trust_status": {"enum": ["trusted", "modified", "untrusted"]},
+        "hook_trust_current_hash": {"$ref": "#/$defs/sha256"},
+        "hook_trust_observed_hash": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/sha256"}
+          ]
+        },
+        "hook_enabled": {"type": ["boolean", "null"]},
+        "hook_armed": {"type": "boolean"},
+        "hook_trust_remediation": {"type": ["string", "null"], "maxLength": 4096}
       }
     },
     "interpreter_trust": {

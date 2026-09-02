@@ -103,6 +103,11 @@ class WorkerIsolationPolicy:
     workspace_identity: Optional[tuple[int, int]]
     scratch_identity: tuple[int, int]
     probe_identity: tuple[int, int]
+    # The temp root the scratch was created in, frozen at preparation.  It defaults to
+    # None so that a policy rebuilt from a bootstrap payload -- which applies isolation
+    # and never cleans up -- keeps its existing seven-field shape.  Cleanup refuses a
+    # policy that reaches it without one.
+    scratch_parent_identity: Optional[tuple[int, int]] = None
 
 
 class _LandlockRulesetAttr(ctypes.Structure):
@@ -163,6 +168,24 @@ def _owned_metadata(path: Path, file_type: str) -> os.stat_result:
         raise ValueError("path is not a directory")
     if file_type == "regular" and not stat.S_ISREG(metadata.st_mode):
         raise ValueError("path is not a regular file")
+    return metadata
+
+
+def _shared_parent_metadata(path: Path) -> os.stat_result:
+    """Accept a directory we created something in but do not own the container of.
+
+    A multi-tenant temp root -- \x2ftmp is root:root 1777 on every Linux host -- is never
+    owned by the Worker uid, and demanding ownership of it refuses every default
+    TMPDIR.  The sticky bit is what makes such a root safe: it is the kernel's promise
+    that only an entry's own owner may remove or rename it.  A parent that is neither
+    ours nor sticky carries no such promise and is still refused.  os.lstat keeps a
+    symlink from passing as its target.
+    """
+    metadata = os.lstat(path)
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError("path is not a directory")
+    if metadata.st_uid != os.getuid() and not metadata.st_mode & stat.S_ISVTX:
+        raise PermissionError("shared parent is neither owned by the Worker uid nor sticky")
     return metadata
 
 
@@ -262,6 +285,8 @@ def _remove_matching_scratch(policy: WorkerIsolationPolicy) -> None:
         Path(tempfile.gettempdir()).resolve(strict=True),
         name_prefix=_SCRATCH_PREFIX,
         recursive=True,
+        parent_identity=policy.scratch_parent_identity,
+        shared_parent=True,
     )
 
 
@@ -272,6 +297,8 @@ def _remove_created_directory(
     *,
     name_prefix: Optional[str] = None,
     recursive: bool = False,
+    parent_identity: Optional[tuple[int, int]] = None,
+    shared_parent: bool = False,
 ) -> None:
     if path is None or identity is None or parent is None:
         return
@@ -282,7 +309,14 @@ def _remove_created_directory(
     try:
         canonical = _canonical_path(path, must_exist=True)
         canonical_parent = _canonical_path(parent, must_exist=True)
-        _owned_metadata(canonical_parent, "directory")
+        if shared_parent:
+            parent_metadata = _shared_parent_metadata(canonical_parent)
+            if parent_identity is None:
+                raise ValueError("shared parent identity was not recorded")
+            if _identity(parent_metadata) != parent_identity:
+                raise ValueError("shared parent identity changed")
+        else:
+            _owned_metadata(canonical_parent, "directory")
         if canonical.parent != canonical_parent:
             raise ValueError("created directory escaped its parent")
         if name_prefix is not None and not canonical.name.startswith(name_prefix):
@@ -324,6 +358,7 @@ def prepare_worker_isolation(
     workspace_parent: Optional[Path] = None
     scratch_path: Optional[Path] = None
     scratch_identity: Optional[tuple[int, int]] = None
+    scratch_parent_identity: Optional[tuple[int, int]] = None
     probe_path: Optional[Path] = None
     probe_identity: Optional[tuple[int, int]] = None
     effects_path: Optional[Path] = None
@@ -357,6 +392,9 @@ def prepare_worker_isolation(
         scratch_metadata = _owned_metadata(raw_scratch_path, "directory")
         scratch_identity = _identity(scratch_metadata)
         scratch_path = raw_scratch_path.resolve(strict=True)
+        # Freeze the temp root we actually landed in, so cleanup compares against the
+        # directory of record rather than whatever TMPDIR resolves to by then.
+        scratch_parent_identity = _identity(os.lstat(scratch_path.parent))
         os.chmod(scratch_path, 0o700)
         scratch_metadata = _owned_metadata(scratch_path, "directory")
         if _identity(scratch_metadata) != scratch_identity:
@@ -402,6 +440,7 @@ def prepare_worker_isolation(
             workspace_identity=workspace_identity,
             scratch_identity=scratch_identity,
             probe_identity=probe_identity,
+            scratch_parent_identity=scratch_parent_identity,
         )
     except Exception as exc:
         try:
@@ -414,6 +453,8 @@ def prepare_worker_isolation(
                     scratch_identity,
                     Path(tempfile.gettempdir()).resolve(strict=True),
                     name_prefix=_SCRATCH_PREFIX,
+                    parent_identity=scratch_parent_identity,
+                    shared_parent=True,
                 ),
                 lambda: _remove_created_directory(
                     workspace_path,
@@ -619,6 +660,38 @@ def _apply_linux(policy: WorkerIsolationPolicy) -> str:
             finally:
                 if path_descriptor >= 0:
                     os.close(path_descriptor)
+
+        # Every git process opens /dev/null O_RDWR at startup (git's sanitize_stdfds),
+        # so without this rule the first git inside an activated boundary dies rc 128
+        # and the receipt reads git_finalize_failed.  The macOS profile has carved the
+        # same device out of its write-deny since 2026-08-14; this is that fix's Linux
+        # half, not a new authority -- /dev/null is writable to this uid on any host and
+        # discards everything written to it.  It cannot join the loop above: that passes
+        # allowed_access=WRITE_RIGHTS, and Landlock refuses directory-only rights on a
+        # non-directory.
+        device_descriptor = -1
+        try:
+            device_descriptor = os.open(
+                os.devnull,
+                os.O_PATH | getattr(os, "O_CLOEXEC", 0),
+            )
+            device_attr = _LandlockPathBeneathAttr(
+                allowed_access=(
+                    _LANDLOCK_ACCESS_FS_WRITE_FILE | _LANDLOCK_ACCESS_FS_TRUNCATE
+                ),
+                parent_fd=device_descriptor,
+            )
+            _linux_syscall(
+                library,
+                add_rule_number,
+                ctypes.c_int(ruleset_descriptor),
+                ctypes.c_int(_LANDLOCK_RULE_PATH_BENEATH),
+                ctypes.byref(device_attr),
+                ctypes.c_uint(0),
+            )
+        finally:
+            if device_descriptor >= 0:
+                os.close(device_descriptor)
 
         library.prctl.argtypes = [
             ctypes.c_int,

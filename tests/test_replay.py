@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from floati.errors import IntegrityFailure
 from floati.jsonl import append_record
@@ -197,6 +198,27 @@ class ReplayProjectionTests(unittest.TestCase):
             artifact["sources"],
         )
         self.assertTrue(all(row.get("process_id") is None for row in events))
+        self.assertTrue(
+            all(
+                all(key in row for key in ("source_bus", "sender", "target_bus", "recipient"))
+                for row in events
+            )
+        )
+        self.assertEqual(
+            (self.root.tenant_id, "solo", self.root.tenant_id, "solo"),
+            tuple(
+                events[0][key]
+                for key in ("source_bus", "sender", "target_bus", "recipient")
+            ),
+        )
+        denial = next(row for row in events if row["record_kind"] == "denial_receipt")
+        self.assertEqual(
+            (self.root.tenant_id, "solo", self.root.tenant_id, "missing"),
+            tuple(
+                denial[key]
+                for key in ("source_bus", "sender", "target_bus", "recipient")
+            ),
+        )
 
     def test_empty_root_yields_a_stable_empty_artifact(self) -> None:
         from floati.replay import ReplayTimeline
@@ -208,6 +230,32 @@ class ReplayProjectionTests(unittest.TestCase):
         self.assertEqual(
             {"claim": 0, "turn": 0, "degradation": 0, "denial": 0, "completion": 0},
             artifact["counts"],
+        )
+
+    def test_production_route_facts_derive_a_real_replay_harbor(self) -> None:
+        """Catches production replay routes remaining dark behind an UNKNOWN harbor."""
+        from floati.replay import ReplayTimeline
+        from floati.tui_replay import ReplayCinemaController
+
+        self._seed_completed_turn()
+        artifact = ReplayTimeline.from_root(self.root).artifact()
+        state = ReplayCinemaController(artifact).state(2)
+
+        self.assertEqual([self.root.tenant_id], [bus["bus_id"] for bus in state.buses])
+        self.assertEqual(
+            ["solo"],
+            [node["id"] for node in state.buses[0]["nodes"]],
+        )
+        self.assertEqual((), state.relationships)
+        self.assertIsNotNone(state.pulse)
+        self.assertEqual(
+            (self.root.tenant_id, "solo", self.root.tenant_id, "solo"),
+            (
+                state.pulse.source_bus,
+                state.pulse.sender,
+                state.pulse.target_bus,
+                state.pulse.recipient,
+            ),
         )
 
     def test_malformed_allowlisted_ledger_is_not_skipped(self) -> None:
@@ -229,23 +277,31 @@ class ReplayProjectionTests(unittest.TestCase):
         plain = render_replay_plain(artifact)
         plain_stream = io.StringIO()
         plain_delays: list[float] = []
-        play_replay(
-            artifact,
-            speed=2.0,
-            stream=plain_stream,
-            plain=True,
-            sleeper=plain_delays.append,
-        )
-        tty_stream = _Tty()
-        tty_delays: list[float] = []
-        play_replay(
-            artifact,
-            speed=2.0,
-            stream=tty_stream,
-            plain=False,
-            sleeper=tty_delays.append,
-            term="xterm-256color",
-        )
+        # This test measures INTERACTIVE motion: one sleep per event on a tty.
+        # `play_replay` reads `CI` from the ambient environment and renders one
+        # settled frame with no sleeps when it is set, so on any CI host this
+        # test used to measure the settled path while claiming to measure the
+        # moving one. The environment it needs is declared here, exactly as its
+        # sibling test_ci_pty_renders_one_settled_frame_without_sleeping
+        # declares the opposite one — no predicate moves.
+        with patch.dict("os.environ", {"TERM": "xterm-256color"}, clear=True):
+            play_replay(
+                artifact,
+                speed=2.0,
+                stream=plain_stream,
+                plain=True,
+                sleeper=plain_delays.append,
+            )
+            tty_stream = _Tty()
+            tty_delays: list[float] = []
+            play_replay(
+                artifact,
+                speed=2.0,
+                stream=tty_stream,
+                plain=False,
+                sleeper=tty_delays.append,
+                term="xterm-256color",
+            )
 
         self.assertEqual(plain, plain_stream.getvalue())
         self.assertEqual([], plain_delays)
@@ -330,6 +386,76 @@ class ReplayProjectionTests(unittest.TestCase):
         self.assertTrue(
             all(call.kwargs["height"] == 24 for call in render.call_args_list)
         )
+
+    def test_interactive_playback_scopes_mouse_and_kitty_modes_in_lifo_order(self) -> None:
+        """Catches replay leaking mouse or kitty keyboard modes past playback."""
+        from tests.test_regatta_spike import FULL_CAPABILITY_RESPONSE
+
+        from floati.replay import ReplayTimeline
+        from floati.replay_render import play_replay
+
+        self._seed_completed_turn()
+        artifact = ReplayTimeline.from_root(self.root).artifact()
+        output = _Tty()
+        try:
+            play_replay(
+                artifact,
+                speed=100,
+                stream=output,
+                input_stream=_Tty(),
+                sleeper=lambda _: None,
+                term="xterm-256color",
+                terminal_size=os.terminal_size((80, 24)),
+                terminal_response=FULL_CAPABILITY_RESPONSE,
+            )
+        except TypeError as exc:
+            self.fail(f"interactive replay lacks its terminal lifecycle seam: {exc}")
+
+        rendered = output.getvalue()
+        mouse_enable = "\x1b[?1000h\x1b[?1006h"
+        mouse_disable = "\x1b[?1000l\x1b[?1006l"
+        kitty_push = "\x1b[>1u"
+        kitty_pop = "\x1b[<u"
+        self.assertEqual(1, rendered.count(mouse_enable))
+        self.assertEqual(1, rendered.count(mouse_disable))
+        self.assertEqual(1, rendered.count(kitty_push))
+        self.assertEqual(1, rendered.count(kitty_pop))
+        self.assertLess(rendered.index(mouse_enable), rendered.index(kitty_push))
+        self.assertLess(rendered.rindex("\x1b[?2026l"), rendered.index(kitty_pop))
+        self.assertLess(rendered.index(kitty_pop), rendered.index(mouse_disable))
+
+    def test_interactive_playback_unwinds_terminal_modes_after_render_failure(self) -> None:
+        """Catches a renderer failure leaking replay's terminal protocol modes."""
+        from tests.test_regatta_spike import FULL_CAPABILITY_RESPONSE
+
+        from floati.replay import ReplayTimeline
+        from floati.replay_render import play_replay
+
+        self._seed_completed_turn()
+        artifact = ReplayTimeline.from_root(self.root).artifact()
+        output = _Tty()
+        with patch(
+            "floati.replay_render.render_replay_cinema_frame",
+            side_effect=RuntimeError("render failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "render failed"):
+                play_replay(
+                    artifact,
+                    speed=100,
+                    stream=output,
+                    input_stream=_Tty(),
+                    sleeper=lambda _: None,
+                    term="xterm-256color",
+                    terminal_size=os.terminal_size((80, 24)),
+                    terminal_response=FULL_CAPABILITY_RESPONSE,
+                )
+
+        rendered = output.getvalue()
+        kitty_pop = "\x1b[<u"
+        mouse_disable = "\x1b[?1000l\x1b[?1006l"
+        self.assertEqual(1, rendered.count(kitty_pop))
+        self.assertEqual(1, rendered.count(mouse_disable))
+        self.assertLess(rendered.index(kitty_pop), rendered.index(mouse_disable))
 
     def test_cli_replay_emits_plain_frames_and_one_final_artifact(self) -> None:
         self._seed_completed_turn()

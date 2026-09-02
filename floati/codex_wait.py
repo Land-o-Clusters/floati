@@ -14,7 +14,10 @@ from typing import Callable, Mapping, Optional, Sequence, TextIO
 from .codex_wait_contract import (
     CodexWaitConsentLedger,
     CodexWaitReceiptLedger,
+    CodexWaitReopenLedger,
     CodexWaitSessionLedger,
+    WatchedLedger,
+    consent_ledger_relative,
     resolve_participant,
 )
 from .ids import uuid7_hex
@@ -47,6 +50,56 @@ def _record_exit(
         )
     except Exception:
         pass
+
+
+def _reopen_consent(
+    participant: object,
+    replacement: tuple,
+    *,
+    consent_relative: Path,
+    session_digest: str,
+    invocation_id: str,
+    waited_seconds: int,
+) -> Optional[tuple]:
+    """Reopen the consent ledger at the file its PATH names now.
+
+    The waiter decides from a consent receipt it read once.  When a repair,
+    rotation or restore replaces that file the snapshot is stale, so the ledger
+    is read again at the new inode and the reopen is recorded with the position
+    the wait continues from.  ``None`` means the waiter may no longer hold the
+    turn: the exit is already recorded.
+    """
+
+    before, after = replacement
+    try:
+        reopened = CodexWaitConsentLedger(participant.root).require_armed(
+            participant.binding
+        )
+    except Exception:
+        reopened = None
+    deadline_seconds = None if reopened is None else reopened.get("wait_deadline_seconds")
+    usable = isinstance(deadline_seconds, int) and not isinstance(deadline_seconds, bool)
+    try:
+        CodexWaitReopenLedger(participant.root).record(
+            node_id=participant.binding.node_id,
+            session_digest=session_digest,
+            ledger=consent_relative.as_posix(),
+            before=before,
+            after=after,
+            waited_seconds=waited_seconds,
+            outcome="rearmed" if usable else "consent_withdrawn",
+            invocation_id=invocation_id,
+        )
+    except Exception:
+        pass
+    if not usable:
+        _record_exit(
+            participant, session_digest=session_digest,
+            reason_code="consent_withdrawn", waited_seconds=waited_seconds,
+            invocation_id=invocation_id,
+        )
+        return None
+    return reopened, deadline_seconds
 
 
 def _breaker_tripped(root: object, node_id: str, *, now: float) -> bool:
@@ -181,7 +234,25 @@ def run_stop_waiter(
     started = monotonic()
     deadline = started + deadline_seconds
     controller = WakeHoldController(participant.root)
+    consent_relative = consent_ledger_relative(participant.binding.node_id)
+    consent_watch = WatchedLedger(participant.root.resolve_relative(consent_relative))
     while True:
+        replacement = consent_watch.poll()
+        if replacement is not None:
+            reopened = _reopen_consent(
+                participant,
+                replacement,
+                consent_relative=consent_relative,
+                session_digest=session_digest,
+                invocation_id=invocation_id,
+                waited_seconds=max(0, int(monotonic() - started)),
+            )
+            if reopened is None:
+                return 0
+            # Continue the same wait from where it stood: the start instant is
+            # never reset, so a reopen neither restarts nor extends the clock.
+            consent, deadline_seconds = reopened
+            deadline = started + deadline_seconds
         try:
             current_authority = CodexWaitSessionLedger(
                 participant.root

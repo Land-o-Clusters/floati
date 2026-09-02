@@ -5,6 +5,7 @@ from floati import fixture_ids as public_ids
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,8 +78,11 @@ class DoctorContractTests(unittest.TestCase):
         self.shadow = self.base / "shadow"
         self.shadow.mkdir()
         (self.shadow / "floati").write_bytes(b"shadow\n")
-        git_directory = Path(shutil.which("git") or "").parent
-        self.assertTrue((git_directory / "git").is_file())
+        # CI-GREEN-6(b)/F18: the system components are named /usr/bin explicitly.
+        # Deriving a directory from which("git") puts a Homebrew bin (which has
+        # no dirname) on the subprocess PATH, where python3 resolves to
+        # Homebrew 3.14 on the macOS runner instead of /usr/bin/python3.
+        self.assertTrue(Path("/usr/bin/git").is_file())
         self._path_patch = patch.dict(
             os.environ,
             {
@@ -87,7 +91,7 @@ class DoctorContractTests(unittest.TestCase):
                     str(self.shadow),
                     str(self.source / "scripts"),
                     str(destination_scripts),
-                    str(git_directory),
+                    "/usr/bin",
                 )),
             },
             clear=False,
@@ -487,6 +491,67 @@ class DoctorContractTests(unittest.TestCase):
         self.assertTrue(degraded_row["remediation"])
         self.assertNotIn("DRAFT - ", degraded_row["remediation"])
         self.assertEqual(before, config_path.read_bytes())
+
+    def test_codex_hook_trust_runs_by_default_from_the_codex_home(self) -> None:
+        """Catches bare doctor omitting the only check that can name a trust lapse."""
+        from floati.codex_hook_trust import codex_hook_current_hash
+
+        codex_home = self.base / "default-codex-home"
+        hooks_path = codex_home / ".codex" / "hooks.json"
+        hooks_path.parent.mkdir(parents=True)
+        block = {
+            "hooks": [{
+                "type": "command",
+                "command": "/usr/bin/python3 /opt/floati-codex-wait --root \x2ftmp/fleet",
+                "timeout": 1800,
+                "statusMessage": "Watching Floati bus",
+            }]
+        }
+        hooks_path.write_text(
+            json.dumps({"hooks": {"Stop": [block]}}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        key = f"{hooks_path}:stop:0:0"
+        hooks_path.with_name("config.toml").write_text(
+            "[hooks.state." + json.dumps(key) + "]\n"
+            "trusted_hash = " + json.dumps(codex_hook_current_hash(block)) + "\n",
+            encoding="utf-8",
+        )
+
+        with mock.patch("floati.doctor.Path.home", return_value=codex_home):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(0, rc)
+        rows = [
+            row for row in artifact["findings"]
+            if row["code"] == "codex_wait_hook_trust"
+        ]
+        self.assertEqual(1, len(rows))
+        self.assertEqual("trusted", rows[0]["hook_trust"])
+        self.assertEqual(key, rows[0]["hook_trust_key"])
+        validate_json_schema(
+            artifact,
+            Path("schemas/v1/doctor-artifact.schema.json"),
+        )
+
+    def test_default_codex_hook_absence_is_visible_without_degrading_doctor(self) -> None:
+        """Catches a non-Codex host becoming either silent or spuriously unhealthy."""
+        codex_home = self.base / "codex-not-installed"
+        codex_home.mkdir()
+
+        with mock.patch("floati.doctor.Path.home", return_value=codex_home):
+            artifact, rc = self.doctor().artifact()
+
+        self.assertEqual(0, rc)
+        rows = [
+            item for item in artifact["findings"]
+            if item["code"] == "codex_wait_hook_trust"
+        ]
+        self.assertEqual(1, len(rows))
+        row = rows[0]
+        self.assertEqual("warning", row["severity"])
+        self.assertIn(str(codex_home / ".codex" / "hooks.json"), row["subject"])
+        self.assertIsNotNone(row["remediation"])
 
     def test_cli_requires_the_explicit_profile_flag_and_refuses_an_unruled_value(self) -> None:
         self._remove_presence()
@@ -1150,18 +1215,21 @@ class DoctorContractTests(unittest.TestCase):
                 "consumption_coordinate_valid",
                 "installer_shadow",
                 "herdr_protocol_pins",
+                "codex_wait_hook_trust",
             ],
             [finding["code"] for finding in artifact["findings"]],
         )
         self.assertTrue(all(
             finding["severity"] == "ok"
             for finding in artifact["findings"]
-            if finding["code"] not in {"installer_shadow", "sandbox_write"}
+            if finding["code"] not in {
+                "installer_shadow", "sandbox_write", "codex_wait_hook_trust",
+            }
         ))
         self.assertTrue(all(
             finding["remediation"] is None
             for finding in artifact["findings"]
-            if finding["code"] != "sandbox_write"
+            if finding["code"] not in {"sandbox_write", "codex_wait_hook_trust"}
         ))
         shadow = next(row for row in artifact["findings"] if row["code"] == "installer_shadow")
         self.assertEqual("warning", shadow["severity"])
@@ -1282,6 +1350,166 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         evidence = json.loads(result.stdout)["evidence"]
         self.assertIn("gateway_config_valid", [row["code"] for row in evidence["findings"]])
+
+    def test_the_health_check_line_printed_in_agents_md_executes_without_refusal(self) -> None:
+        """DOC-2: the manual's printed health-check line must run as written."""
+
+        agents_md = Path(__file__).resolve().parents[1] / "AGENTS.md"
+        text = agents_md.read_text(encoding="utf-8")
+        printed = re.search(r"\*\*Health check:\*\* `([^`]+)`", text)
+        self.assertIsNotNone(printed, "AGENTS.md must print a doctor health-check line")
+        words = printed.group(1).split()
+        fixtures = {"--root": str(self.home), "--source": str(self.source)}
+        command: list[str] = []
+        index = 0
+        while index < len(words):
+            word = words[index]
+            if word in fixtures and index + 1 < len(words):
+                command.extend([word, fixtures[word]])
+                index += 2
+                continue
+            command.append(word)
+            index += 1
+        completed = subprocess.run(
+            ["python3", "-m", "floati", *command],
+            cwd=str(agents_md.parent),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    def test_doctor_accepts_the_interpreter_trust_warning_as_a_typed_outcome(self) -> None:
+        """CI-GREEN-6(a)/G0-9: the trust warning is a typed finding, not a crash.
+
+        The assertion names the finding, not the exit code: a run whose
+        interpreter fails the trust fence completes with the warning row and
+        its observation attached, whatever exit code the severity maps to.
+        """
+
+        from floati.effect_reconciliation_exec import _InterpreterTrustFailure
+
+        observation = {
+            "interpreter_path": "/test-fixture/python3",
+            "failing_component": "/test-fixture/python3",
+            "component_uid": 501,
+            "component_mode": 0o100755,
+        }
+        self._interpreter_trust_projection_patch.stop()
+        self.addCleanup(self._interpreter_trust_projection_patch.start)
+        with mock.patch(
+            "floati.effect_reconciliation_exec._freeze_trusted_interpreter",
+            side_effect=_InterpreterTrustFailure(observation),
+        ):
+            artifact, return_code = self.doctor(no_sandbox=True).artifact()
+
+        self.assertNotEqual(20, return_code)
+        warning = self._interpreter_trust_finding(artifact)
+        self.assertEqual("warning", warning["severity"])
+        self.assertEqual(observation, warning["interpreter_trust"])
+        self.assertTrue(warning["remediation"])
+
+    def test_fixture_names_usr_bin_for_the_system_components(self) -> None:
+        """CI-GREEN-6(b)/F18: the subprocess PATH never derives from which(git)."""
+
+        path_entries = os.environ["PATH"].split(os.pathsep)
+        self.assertIn(
+            "/usr/bin",
+            path_entries,
+            "the fixture PATH must name /usr/bin for the system components",
+        )
+        self.assertNotIn(
+            "/opt/homebrew",
+            os.environ["PATH"],
+            "a Homebrew bin on the fixture PATH is the F18 defect",
+        )
+
+
+    def test_probe_artifact_prints_on_stdout_like_every_other_verb(self) -> None:
+        """PROBE-1(a): a script redirecting stdout captures the probe artifact."""
+
+        completed = subprocess.run(
+            [
+                "python3", "-m", "floati", "doctor",
+                "--root", str(self.home),
+                "--source", str(self.source),
+                "--probe", "--probe-budget", "2",
+            ],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(35, completed.returncode, completed.stderr)
+        self.assertEqual("", completed.stderr)
+        artifact = json.loads(completed.stdout)
+        self.assertEqual("degraded", artifact["status"])
+        self.assertIn("probe", artifact["evidence"])
+
+    def test_probe_artifact_carries_total_budget_seconds(self) -> None:
+        """PROBE-1(b): the artifact states the total budget the reader waited for."""
+
+        with mock.patch("floati.doctor_probe.time.sleep", lambda _seconds: None):
+            artifact, return_code = self.doctor().probe(budget_seconds=2.0)
+        self.assertEqual(35, return_code)
+        self.assertEqual(2.0, artifact["budget_seconds"])
+        self.assertEqual(1, len(artifact["nodes"]))
+        self.assertEqual("DEAF", artifact["nodes"][0]["verdict"])
+        self.assertEqual(
+            2.0,
+            artifact["total_budget_seconds"],
+            "probe block must carry budget_seconds x node count",
+        )
+
+    def test_probe_run_mirrors_the_deaf_verdict_into_findings_and_validates(
+        self,
+    ) -> None:
+        """PROBE-1(c): the obvious key carries the DEAF verdict and its remedy."""
+
+        completed = subprocess.run(
+            [
+                "python3", "-m", "floati", "doctor",
+                "--root", str(self.home),
+                "--source", str(self.source),
+                "--probe", "--probe-budget", "2",
+            ],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(35, completed.returncode, completed.stderr)
+        evidence = json.loads(completed.stdout)["evidence"]
+        validate_json_schema(evidence, Path("schemas/v1/doctor-artifact.schema.json"))
+        deaf = [
+            row
+            for row in evidence["findings"]
+            if row["code"] == "delivery_probe" and row["severity"] == "error"
+        ]
+        self.assertEqual(1, len(deaf), "DEAF verdict must be mirrored into findings")
+        self.assertTrue(deaf[0]["remediation"])
+        self.assertEqual("DEAF", evidence["probe"]["nodes"][0]["verdict"])
+
+    def test_readme_cost_table_distinguishes_probe_and_names_the_deaf_definition(
+        self,
+    ) -> None:
+        """PROBE-1(d): the table separates the probe's budget shape; the copy landed."""
+
+        readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(
+            encoding="utf-8"
+        )
+        table_rows = [line for line in readme.splitlines() if line.startswith("| doctor")]
+        self.assertTrue(
+            any(row.startswith("| doctor |") for row in table_rows),
+            "cost table must keep the plain doctor row: " + repr(table_rows),
+        )
+        self.assertTrue(
+            any(row.startswith("| doctor --probe |") for row in table_rows),
+            "cost table must distinguish doctor --probe from doctor: " + repr(table_rows),
+        )
+        self.assertIn(
+            "DEAF by definition",
+            readme,
+            "the probe prose must say a fleet with no waiter armed is DEAF by definition",
+        )
 
 
 if __name__ == "__main__":
