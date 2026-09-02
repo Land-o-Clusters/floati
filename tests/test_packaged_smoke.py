@@ -17,6 +17,7 @@ stdout, or a wrong exit fails the battery.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -135,6 +136,117 @@ class PackagedSmokeBattery(unittest.TestCase):
             self.assertTrue(
                 artifact["evidence"].get("code"),
                 "a typed refusal must name its code")
+        self._assert_readme_first_run_path_is_clean()
+
+    def _assert_readme_first_run_path_is_clean(self) -> None:
+        """REL-1: the three printed coordinates work from one local fresh clone."""
+
+        python = Path("/usr/bin/python3")
+        git = Path("/usr/bin/git")
+        for tool in (python, git):
+            if not tool.is_file():
+                self.fail(json.dumps({
+                    "status": "typed_absence",
+                    "tool": str(tool),
+                }, sort_keys=True))
+
+        seed = Path(self.temp.name) / "readme-seed"
+        seed.mkdir()
+        manifest = json.loads(
+            (REPOSITORY_ROOT / "bundle-manifest.v0.json").read_text(encoding="utf-8")
+        )
+        for entry in manifest["files"]:
+            target = seed / entry["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPOSITORY_ROOT / entry["path"], target)
+            target.chmod(0o755 if entry["path"].startswith("scripts/") else 0o644)
+        shutil.copyfile(
+            REPOSITORY_ROOT / "bundle-manifest.v0.json",
+            seed / "bundle-manifest.v0.json",
+        )
+        shutil.copyfile(REPOSITORY_ROOT / "README.md", seed / "README.md")
+
+        def run_git(cwd: Path, *arguments: str) -> None:
+            completed = subprocess.run(
+                [str(git), *arguments], cwd=str(cwd), capture_output=True,
+                text=True, check=False, timeout=120,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+
+        run_git(seed, "init", "--quiet", "--initial-branch=main")
+        run_git(seed, "config", "user.name", "Release Acceptance")
+        run_git(seed, "config", "user.email", "release@example.invalid")
+        run_git(seed, "add", ".")
+        run_git(seed, "commit", "--quiet", "-m", "release fixture")
+        source = Path(self.temp.name) / "readme-clone"
+        run_git(Path(self.temp.name), "clone", "--quiet", "--no-local", str(seed), str(source))
+
+        destination = Path(self.temp.name) / "readme-install"
+        fleet = Path(self.temp.name) / "readme-sessions"
+        clean_home = Path(self.temp.name) / "readme-home"
+        clean_home.mkdir()
+        readme = (source / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "python3 -m floati install --source /absolute/floati --destination /absolute/install",
+            readme,
+        )
+        self.assertIn(
+            "floati init --root /absolute/my-sessions --solo me --harness Codex",
+            readme,
+        )
+        self.assertIn(
+            "floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install",
+            readme,
+        )
+
+        environment = {
+            **os.environ,
+            "HOME": str(clean_home),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+        def run_artifact(arguments: list[str], cwd: Path) -> tuple[int, dict]:
+            completed = subprocess.run(
+                arguments, cwd=str(cwd), env=environment, capture_output=True,
+                text=True, check=False, timeout=120,
+            )
+            stream = completed.stdout or completed.stderr
+            try:
+                artifact = json.loads(stream)
+            except json.JSONDecodeError:
+                self.fail(
+                    f"rc={completed.returncode} produced no JSON artifact; "
+                    f"stderr={completed.stderr[-400:]}"
+                )
+            return completed.returncode, artifact
+
+        install_rc, install = run_artifact([
+            str(python), "-m", "floati", "install", "--source", str(source),
+            "--destination", str(destination),
+        ], source)
+        self.assertEqual(0, install_rc, install)
+        self.assertEqual("ok", install["status"], install)
+        environment["PATH"] = os.pathsep.join((
+            str(destination / "scripts"), "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+        ))
+        command = str(destination / "scripts" / "floati")
+        init_rc, initialized = run_artifact([
+            command, "init", "--root", str(fleet), "--solo", "me", "--harness", "Codex",
+        ], source)
+        self.assertEqual(0, init_rc, initialized)
+        self.assertEqual("ok", initialized["status"], initialized)
+        doctor_rc, doctor = run_artifact([
+            command, "doctor", "--root", str(fleet), "--source", str(source),
+            "--destination", str(destination),
+        ], source)
+        self.assertEqual(0, doctor_rc, doctor)
+        self.assertEqual("healthy", doctor["status"], doctor)
+        unresolved = [
+            row for row in doctor["evidence"]["findings"]
+            if row["severity"] != "ok" and row["remediation"] is None
+        ]
+        self.assertEqual([], unresolved, doctor)
 
 
 if __name__ == "__main__":

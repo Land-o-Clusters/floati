@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import re
-import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Iterator, Optional, Tuple
 from urllib.parse import urlsplit
 
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
+from .jsonl import _locked_path
 
 
 INSTALL_DIRECTORY = ".floati-install"
@@ -119,44 +118,79 @@ def _timestamp() -> str:
     )
 
 
+def _install_coordinate(path: Path) -> str:
+    """Render one install-metadata file as its DESTINATION-RELATIVE coordinate.
+
+    Every ledger this module reads, appends or locks lives at
+    `<destination>/INSTALL_DIRECTORY/<name>` — `UpdateConsentLedger.__init__`,
+    `update_apply` and `update_check` all build the path that way, and
+    `canonical_destination` has already refused a destination whose install
+    directory is missing. So the coordinate is exactly those two components.
+
+    It is RELATIVE BY CONSTRUCTION rather than by subtraction: the constant
+    and the bare filename are joined, so there is no branch on which an
+    absolute path can be returned. That matters because these details do not
+    stay on the operator's terminal — `doctor.py` catches both
+    `IntegrityFailure` and `ProtocolRefusal` from `project_update_findings`
+    and copies `exc.detail` verbatim into a finding, the doctor artifact is a
+    `support_bundle` collector, and the bundle's scrubber and its
+    `identity_gate` know only the governed home and temp prefixes. A
+    destination on a path shape they have not met survives both.
+    """
+
+    return PurePosixPath(INSTALL_DIRECTORY, path.name).as_posix()
+
+
 def _durability(exc: OSError, path: Path) -> DurabilityFailure:
     return DurabilityFailure(
         "storage_unavailable",
-        _draft(f"{path} could not be read or written: {exc.strerror or str(exc)}"),
+        _draft(
+            f"{_install_coordinate(path)} could not be read or written: "
+            f"{exc.strerror or str(exc)}"
+        ),
     )
 
 
 @contextmanager
 def _locked(path: Path) -> Iterator[None]:
+    """Hold the update ledger under the SHARED ledger lock.
+
+    This module used to carry its own `fcntl.flock` loop. Two identical lock
+    implementations meant LOCK-1's census — which sweeps `_locked_path` call
+    sites — could not see this one, and it rendered the absolute lock path
+    into its refusal. ⇒ A SECOND IMPLEMENTATION OF A FENCED MECHANISM IS A
+    HOLE IN THE FENCE, AND THE FENCE CANNOT REPORT IT.
+
+    `order_tracked=False` is deliberate and preserves today's behaviour: the
+    bus lock-order guard governs the tenant ledger planes, and this ledger
+    lives under the INSTALL DESTINATION rather than under a root. Enrolling it
+    in that ordering domain would newly refuse orderings that are lawful now,
+    which is a behaviour change this row did not measure and must not smuggle.
+
+    The refusal code folds from `update_ledger_lock_timeout` into the shared
+    `ledger_lock_timeout`. Nothing referenced the old code — swept across
+    `floati/`, `tests/`, `scripts/` and the refusal-code registries — and the
+    coordinate the shared lock now prints
+    (`.floati-install/update-consent.v0.jsonl.lock`) names the ledger more
+    precisely than the retired code ever did.
+    """
+
     lock = path.with_name(path.name + ".lock")
     if path.is_symlink() or lock.is_symlink() or path.parent.is_symlink():
         raise ProtocolRefusal(
             "update_ledger_invalid",
-            _draft(f"update ledger path is symlinked at {path}"),
+            _draft(
+                f"update ledger path is symlinked at {_install_coordinate(path)}"
+            ),
         )
-    try:
-        handle = lock.open("a+b")
-    except OSError as exc:
-        raise _durability(exc, lock) from exc
-    with handle:
-        deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
-        while True:
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError as exc:
-                if time.monotonic() >= deadline:
-                    raise ProtocolRefusal(
-                        "update_ledger_lock_timeout",
-                        _draft(f"update ledger lock remained contended at {lock}"),
-                    ) from exc
-                time.sleep(0.01)
-            except OSError as exc:
-                raise _durability(exc, lock) from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with _locked_path(
+        lock,
+        exclusive=True,
+        relative=_install_coordinate(lock),
+        timeout_seconds=_LOCK_TIMEOUT_SECONDS,
+        order_tracked=False,
+    ):
+        yield
 
 
 def _read_jsonl(path: Path) -> list[Dict[str, object]]:
@@ -168,11 +202,11 @@ def _read_jsonl(path: Path) -> list[Dict[str, object]]:
         raise _durability(exc, path) from exc
     if len(payload) > _MAX_LEDGER_BYTES:
         raise IntegrityFailure(
-            "update_ledger_too_large", _draft(f"update ledger exceeds its bound at {path}")
+            "update_ledger_too_large", _draft(f"update ledger exceeds its bound at {_install_coordinate(path)}")
         )
     if payload and not payload.endswith(b"\n"):
         raise IntegrityFailure(
-            "update_ledger_incomplete", _draft(f"update ledger has an incomplete line at {path}")
+            "update_ledger_incomplete", _draft(f"update ledger has an incomplete line at {_install_coordinate(path)}")
         )
     rows: list[Dict[str, object]] = []
     seen: set[str] = set()
@@ -180,24 +214,36 @@ def _read_jsonl(path: Path) -> list[Dict[str, object]]:
         if not raw or len(raw) + 1 > _MAX_RECORD_BYTES:
             raise IntegrityFailure(
                 "update_ledger_record_invalid",
-                _draft(f"update ledger line {number} is empty or oversized at {path}"),
+                _draft(
+                    f"update ledger line {number} is empty or oversized "
+                    f"at {_install_coordinate(path)}"
+                ),
             )
         try:
             row = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise IntegrityFailure(
                 "update_ledger_record_invalid",
-                _draft(f"update ledger line {number} is not strict JSON at {path}"),
+                _draft(
+                    f"update ledger line {number} is not strict JSON "
+                    f"at {_install_coordinate(path)}"
+                ),
             ) from exc
         if not isinstance(row, dict) or not isinstance(row.get("id"), str):
             raise IntegrityFailure(
                 "update_ledger_record_invalid",
-                _draft(f"update ledger line {number} has no record identity at {path}"),
+                _draft(
+                    f"update ledger line {number} has no record identity "
+                    f"at {_install_coordinate(path)}"
+                ),
             )
         if row["id"] in seen:
             raise IntegrityFailure(
                 "update_ledger_record_invalid",
-                _draft(f"update ledger repeats record {row['id']} at {path}"),
+                _draft(
+                    f"update ledger repeats record {row['id']} "
+                    f"at {_install_coordinate(path)}"
+                ),
             )
         seen.add(str(row["id"]))
         rows.append(dict(row))

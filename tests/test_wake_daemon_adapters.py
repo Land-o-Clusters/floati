@@ -630,6 +630,64 @@ class WakeDaemonAdapterTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(raised.exception.remedy)
 
+    def test_zcode_factory_threads_operator_node_and_entry_declarations(self) -> None:
+        """HB-1-F2: the public factory must not discard either operator path."""
+        from floati import wake_daemon_adapters as adapters
+
+        runner = _Runner(
+            stdout='{"sessionId":"session-1","response":"woke"}\n'
+        )
+        adapter = adapters.wake_adapter_for(
+            self.root,
+            public_ids.builder("a"),
+            "zcode",
+            runner=runner,
+            zcode_node_executable=self.node,
+            zcode_entry_executable=self.target,
+        )
+
+        result = adapter.request_wake(self.binding("zcode"), "wake", 30)
+
+        self.assertEqual("woke", result.outcome)
+        self.assertEqual(str(self.node), runner.calls[0][0][0])
+        self.assertEqual(str(self.target), runner.calls[0][0][1])
+
+    def test_zcode_entry_declaration_is_validated_and_absence_is_typed(self) -> None:
+        """HB-1-F2: entry policy is the node policy, never a module reassignment."""
+        from floati import wake_daemon_adapters as adapters
+
+        coordinate = DaemonCoordinate(self.root, public_ids.builder("a"), "zcode")
+        not_executable = self.base / "entry-not-executable"
+        not_executable.write_text("// fixture\n", encoding="utf-8")
+        not_executable.chmod(0o600)
+        with self.assertRaises(ProtocolRefusal) as invalid:
+            adapters.ZcodeResumeWakeAdapter(
+                coordinate,
+                runner=_Runner(),
+                node_executable=self.node,
+                entry_executable=not_executable,
+            )
+        self.assertEqual(
+            "wake_daemon_zcode_entry_invalid", invalid.exception.code
+        )
+        self.assertIsNotNone(invalid.exception.remedy)
+
+        absent = self.base / "absent-zcode-entry"
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = absent
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        adapter = adapters.ZcodeResumeWakeAdapter(
+            coordinate, runner=_Runner(), node_executable=self.node
+        )
+        with self.assertRaises(ProtocolRefusal) as missing:
+            adapter.request_wake(self.binding("zcode"), "wake", 30)
+        self.assertEqual(
+            "wake_daemon_zcode_entry_absent", missing.exception.code
+        )
+        self.assertIn(str(absent), missing.exception.detail)
+        self.assertIsNotNone(missing.exception.remedy)
+        self.assertIn(str(absent), missing.exception.remedy)
+
 
 def _emitted_wake_adapter_reasons() -> set[str]:
     """Derive refused reasons from WakeAdapterResult literals in the adapter module."""

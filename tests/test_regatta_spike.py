@@ -109,6 +109,27 @@ class RegattaTerminalProtocolTests(unittest.TestCase):
         )
         self.assertEqual(("KEY_DOWN", "KEY_DOWN"), decoder.feed(b"\x1b[B\x1b[B"))
 
+    def test_terminal_decoder_resolves_only_a_standalone_legacy_escape(self) -> None:
+        """Catches an old terminal's lone Escape waiting forever or truncating a sequence."""
+        from floati.tui_protocol import TerminalInputDecoder
+
+        standalone = TerminalInputDecoder()
+        self.assertEqual((), standalone.feed(b"\x1b"))
+        self.assertEqual(("\x1b",), standalone.resolve_standalone_escape())
+        self.assertEqual((), standalone.resolve_standalone_escape())
+
+        arrow = TerminalInputDecoder()
+        self.assertEqual((), arrow.feed(b"\x1b"))
+        self.assertEqual(("KEY_UP",), arrow.feed(b"[A"))
+        self.assertEqual((), arrow.resolve_standalone_escape())
+
+    def test_kitty_backspace_decodes_to_the_shared_text_edit_key(self) -> None:
+        """Catches Kitty CSI 127u becoming printable input instead of Backspace."""
+        from floati.tui_protocol import TerminalInputDecoder, decode_terminal_input
+
+        self.assertEqual("\x7f", decode_terminal_input(b"\x1b[127u"))
+        self.assertEqual(("\x7f",), TerminalInputDecoder().feed(b"\x1b[127u"))
+
     def test_terminal_input_decoder_recovers_after_a_malformed_sgr_prefix(self) -> None:
         """Catches a malformed control prefix swallowing later keyboard input."""
         from floati.tui_protocol import TerminalInputDecoder

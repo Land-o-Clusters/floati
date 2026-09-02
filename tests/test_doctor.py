@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from floati import fixture_ids as public_ids
 
+import ast
 import hashlib
 import json
 import os
@@ -76,8 +77,10 @@ class DoctorContractTests(unittest.TestCase):
 
         self.home = self.base / "alpha"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
-        Registry(self.root).register(public_ids.builder('a'), "Codex")
-        LivenessPresenceStore(self.root).observe(public_ids.builder('a'), 120, NOW)
+        self.node = public_ids.builder('a')
+        Registry(self.root).register(self.node, "Codex")
+        LivenessPresenceStore(self.root).observe(self.node, 120, NOW)
+        (self.home / "nodes" / self.node).mkdir(parents=True)
         self.destination = self.base / "installed"
         destination_scripts = self.destination / "scripts"
         destination_scripts.mkdir(parents=True)
@@ -174,6 +177,260 @@ class DoctorContractTests(unittest.TestCase):
             codex_gateway_host=codex_gateway_host,
             no_sandbox=no_sandbox,
         )
+
+    def test_workspace_layout_findings_are_wired_and_read_only(self) -> None:
+        """WSL-1: doctor is the product caller for every detected layout defect."""
+
+        workspace = self.home / "nodes" / self.node
+        workspace.rmdir()
+        orphan = self.home / "nodes" / "orphan"
+        orphan.mkdir()
+        before = root_entries(self.home)
+
+        artifact, rc = self.doctor(no_sandbox=True).artifact()
+
+        rows = [
+            row
+            for row in artifact["findings"]
+            if row["code"].startswith("node_workspace_")
+        ]
+        self.assertEqual(
+            [
+                {
+                    "code": "node_workspace_missing",
+                    "severity": "warning",
+                    "subject": str(workspace.resolve(strict=False)),
+                    "detail": f"{self.node}: node workspace missing",
+                    "remediation": None,
+                },
+                {
+                    "code": "node_workspace_orphan",
+                    "severity": "ok",
+                    "subject": str(orphan.resolve()),
+                    "detail": "orphan: node workspace orphan",
+                    "remediation": None,
+                },
+            ],
+            rows,
+        )
+        self.assertEqual(35, rc)
+        self.assertEqual(before, root_entries(self.home))
+        validate_json_schema(
+            artifact,
+            Path("schemas/v1/doctor-artifact.schema.json"),
+        )
+
+    def test_workspace_layout_empty_result_adds_no_json_finding(self) -> None:
+        """WSL-1: a conforming layout leaves the doctor finding bytes unchanged."""
+
+        with mock.patch(
+            "floati.workspace_layout.inspect_workspace_layout",
+            return_value=[],
+        ) as inspect:
+            artifact, _rc = self.doctor(no_sandbox=True).artifact()
+
+        inspect.assert_called_once_with(self.root)
+        self.assertEqual(
+            [],
+            [
+                row
+                for row in artifact["findings"]
+                if row["code"].startswith("node_workspace_")
+                or row["code"] == "nodes_root_invalid"
+            ],
+        )
+
+    def test_workspace_layout_registry_integrity_failure_stays_typed(self) -> None:
+        """WSL-1: wiring the inspector must not turn malformed evidence into a crash."""
+
+        registry = self.home / "registry" / "entries.jsonl"
+        registry.write_bytes(b"not a framed ledger\n")
+
+        artifact, rc = self.doctor(no_sandbox=True).artifact()
+
+        self.assertEqual(33, rc)
+        self.assertTrue(
+            any(row["severity"] == "error" for row in artifact["findings"]),
+            artifact["findings"],
+        )
+
+    def test_bundle_subjects_collapse_the_fake_operator_home_at_write_time(self) -> None:
+        """BUNDLE-1: a doctor artifact must not expose its operator-home prefix."""
+
+        fake_home = self.base / "home" / "operator"
+        destination = fake_home / "floati-work" / "work-01a00000000070008000000000000000"
+        entrypoint = destination / "scripts" / "floati"
+        entrypoint.parent.mkdir(parents=True)
+        entrypoint.write_bytes(b"installed\n")
+
+        with mock.patch.object(Path, "home", return_value=fake_home):
+            artifact, _return_code = Doctor(
+                self.source,
+                self.home,
+                ref="origin/lane/hm0",
+                destination=destination,
+            ).artifact()
+
+        path_codes = {
+            "installer_shadow",
+            "update_ownership",
+            "update_consent",
+            "update_last_check",
+            "update_last_apply",
+        }
+        path_subjects = [
+            str(row["subject"])
+            for row in artifact["findings"]
+            if row["code"] in path_codes
+        ]
+        self.assertTrue(path_subjects)
+        self.assertEqual(
+            [],
+            [subject for subject in path_subjects if not subject.startswith("~/")],
+        )
+        encoded = json.dumps(
+            [str(row["subject"]) for row in artifact["findings"]],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self.assertIn("~/floati-work/work-01a00000000070008000000000000000", encoded)
+        self.assertNotIn(str(fake_home), encoded)
+        self.assertNotIn("\x2fUsers/", encoded)
+        self.assertNotIn("/home/", encoded)
+
+    def test_non_home_subject_json_bytes_are_unchanged(self) -> None:
+        """BUNDLE-1: redaction must not rewrite a destination outside HOME."""
+
+        from floati.doctor import _finding as doctor_finding
+        from floati.update_status import _finding as update_finding
+
+        expected = (
+            b'{"code":"outside","detail":"unchanged","remediation":null,'
+            b'"severity":"ok","subject":"/opt/floati"}'
+        )
+        findings = (
+            doctor_finding("outside", "ok", "/opt/floati", "unchanged"),
+            update_finding("outside", Path("/opt/floati"), "unchanged"),
+        )
+        for finding in findings:
+            with self.subTest(finding=finding):
+                self.assertEqual(
+                    expected,
+                    json.dumps(
+                        finding,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("ascii"),
+                )
+
+    def test_subject_writer_census_pins_the_two_path_capable_helpers(self) -> None:
+        """BUNDLE-1: a new subject writer cannot bypass the artifact path fence."""
+
+        production = Path(__file__).resolve().parents[1] / "floati"
+        writers: list[tuple[str, str, bool]] = []
+
+        class SubjectWriterVisitor(ast.NodeVisitor):
+            def __init__(self, relative: str) -> None:
+                self.relative = relative
+                self.functions: list[str] = []
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                self.functions.append(node.name)
+                self.generic_visit(node)
+                self.functions.pop()
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_Dict(self, node: ast.Dict) -> None:
+                for key, value in zip(node.keys, node.values):
+                    if not (
+                        isinstance(key, ast.Constant)
+                        and key.value == "subject"
+                    ):
+                        continue
+                    helper_call = (
+                        isinstance(value, ast.Call)
+                        and isinstance(value.func, ast.Name)
+                        and value.func.id == "artifact_subject"
+                    )
+                    writers.append(
+                        (
+                            self.relative,
+                            self.functions[-1] if self.functions else "<module>",
+                            helper_call,
+                        )
+                    )
+                self.generic_visit(node)
+
+        for path in sorted(production.glob("*.py")):
+            relative = path.relative_to(production.parent).as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+            SubjectWriterVisitor(relative).visit(tree)
+
+        self.assertEqual(
+            [
+                ("floati/delivery_health.py", "analyze", False),
+                ("floati/delivery_health.py", "analyze", False),
+                ("floati/doctor.py", "_finding", True),
+                ("floati/doctor_probe.py", "run", False),
+                ("floati/doctor_probe.py", "run", False),
+                ("floati/update_status.py", "_finding", True),
+            ],
+            sorted(writers),
+        )
+
+        workspace_tree = ast.parse(
+            (production / "workspace_layout.py").read_text(encoding="utf-8"),
+            filename="floati/workspace_layout.py",
+        )
+        workspace_path_codes = sorted(
+            {
+                node.value
+                for node in ast.walk(workspace_tree)
+                if isinstance(node, ast.Constant)
+                and node.value in {
+                    "node_workspace_missing",
+                    "node_workspace_orphan",
+                }
+            }
+        )
+        self.assertEqual(
+            ["node_workspace_missing", "node_workspace_orphan"],
+            workspace_path_codes,
+        )
+
+        doctor_tree = ast.parse(
+            (production / "doctor.py").read_text(encoding="utf-8"),
+            filename="floati/doctor.py",
+        )
+        workspace_projections = [
+            node
+            for node in doctor_tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_workspace_layout_finding"
+        ]
+        self.assertIn(len(workspace_projections), (0, 1))
+        if workspace_projections:
+            projection_calls = [
+                node
+                for node in ast.walk(workspace_projections[0])
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_finding"
+            ]
+            self.assertEqual(1, len(projection_calls))
+            subject = projection_calls[0].args[2]
+            # Compare unparse to unparse: ast.unparse renders string constants
+            # with single quotes, so a hand-typed double-quoted literal never
+            # matches and this branch reds on every composition that reaches it
+            # (it did, in train 0902x). The expected form is derived from the
+            # same renderer, so the pin is about the CALL and not about quoting.
+            expected_subject = ast.unparse(
+                ast.parse('str(row["path"])', mode="eval").body
+            )
+            self.assertEqual(expected_subject, ast.unparse(subject))
 
     def _assert_typed_launcher_doctor_outcome(self, result) -> dict:
         """LAUNCH-1: a doctor started through scripts/floati is asserted by TYPE.
@@ -392,7 +649,23 @@ class DoctorContractTests(unittest.TestCase):
         )
         self.assertEqual("warning", finding["severity"])
         self.assertIn("gateway drifted from vendored source", finding["detail"])
-        self.assertIn("scripts/install-codex-gateway.sh", finding["remediation"])
+        self.assertIn("complete source tree", finding["remediation"])
+
+    def test_absent_optional_codex_gateway_is_a_typed_ok_absence(self) -> None:
+        """A clean host has not installed an optional harness integration yet."""
+
+        self._vendor_codex_gateway(b"governed gateway\n")
+        host = self.base / "codex-fleet-bus-not-installed"
+
+        artifact, rc = self.doctor(codex_gateway_host=host).artifact()
+
+        self.assertEqual(0, rc)
+        finding = next(
+            row for row in artifact["findings"]
+            if row["code"] == "codex_gateway_vendored_source_missing"
+        )
+        self.assertEqual("ok", finding["severity"])
+        self.assertIsNone(finding["remediation"])
 
     def test_absent_presence_still_degrades_when_the_directory_never_existed(self) -> None:
         """Catches doctor inferring a bus-only fleet from a missing directory."""
@@ -416,6 +689,24 @@ class DoctorContractTests(unittest.TestCase):
         row = next(
             item for item in artifact["findings"]
             if item["code"] == "registry_live_dirs_expected_absent"
+        )
+        self.assertEqual("ok", row["severity"])
+        self.assertIsNone(row["remediation"])
+
+    def test_fresh_solo_root_without_runtime_presence_is_expected_idle(self) -> None:
+        """Registration is durable identity; it does not claim a live waiter."""
+        from floati.solo import initialize_solo
+
+        solo_home = self.base / "fresh-solo"
+        solo_root = FloatiRoot.open_direct_home(solo_home, create=True)
+        initialize_solo(solo_root, "me", "Codex", NOW)
+
+        artifact, rc = self.doctor(root=solo_home, no_sandbox=True).artifact()
+
+        self.assertEqual(0, rc)
+        row = next(
+            item for item in artifact["findings"]
+            if item["code"] == "registry_live_dirs_expected_idle"
         )
         self.assertEqual("ok", row["severity"])
         self.assertIsNone(row["remediation"])
@@ -618,9 +909,9 @@ class DoctorContractTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(rows))
         row = rows[0]
-        self.assertEqual("warning", row["severity"])
-        self.assertIn(str(codex_home / ".codex" / "hooks.json"), row["subject"])
-        self.assertIsNotNone(row["remediation"])
+        self.assertEqual("ok", row["severity"])
+        self.assertEqual("~/.codex/hooks.json", row["subject"])
+        self.assertIsNone(row["remediation"])
 
     def test_cli_requires_the_explicit_profile_flag_and_refuses_an_unruled_value(self) -> None:
         self._remove_presence()

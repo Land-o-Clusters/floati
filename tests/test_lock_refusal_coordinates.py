@@ -182,5 +182,103 @@ class LockRefusalCoordinateTests(unittest.TestCase):
         self.assertGreaterEqual(sites, 30, sites)
 
 
+# LOCK-2. Every function in the shipped tree that takes an advisory lock ITSELF,
+# with the reason it does not route through the shared ledger lock. The ledger
+# lock is `jsonl._locked_path`; every other entry is a DIFFERENT lock class with
+# its own timeout, ordering domain and refusal vocabulary.
+#
+# This is an allowlist and not a prohibition because 12 of these are legitimate:
+# a blanket "only _locked_path may flock" would red on eleven correct call sites
+# and teach the next reader to disable the check. What it buys is that a NEW
+# lock implementation cannot appear in silence — the author must either route it
+# through the shared helper or come here and say why not.
+#
+# `update_consent.py::_locked` is the entry that is NOT here: it used to be, and
+# LOCK-2 routed it through `_locked_path`. Its absence is this row's regression
+# guard.
+_ADVISORY_LOCK_SITES = {
+    ("floati/jsonl.py", "_locked_path"):
+        "THE shared ledger lock; the one LOCK-1's coordinate census fences",
+    ("floati/bus_epoch.py", "_acquire_epoch_descriptor"):
+        "epoch descriptor, held across a roll rather than one transaction",
+    ("floati/bus_epoch.py", "epoch_guard"):
+        "the epoch guard that _locked_path itself defers to for lock ORDER",
+    ("floati/planes.py", "_cas_lock"):
+        "outer CAS lock; its own cas_lock_timeout vocabulary and budget",
+    ("floati/planes.py", "_existing_cas_read_lock"):
+        "non-blocking probe of a CAS lock, never a wait",
+    ("floati/cli.py", "_existing_lock_is_held"):
+        "non-blocking liveness probe of somebody else's lock file",
+    ("floati/fleet_update_receipts.py", "acquire"):
+        "update-receipt lease held ACROSS calls, not scoped to one block",
+    ("floati/fleet_update_receipts.py", "release"):
+        "the release half of that same cross-call lease",
+    ("floati/wake_daemon.py", "acquire"):
+        "daemon pidfile lease held for the process lifetime",
+    ("floati/wake_daemon.py", "release"):
+        "the release half of the daemon pidfile lease",
+    ("floati/wake_control.py", "_lock"):
+        "wake control file, outside every ledger plane",
+    ("floati/seat_declaration.py", "__init__"):
+        "seat declaration lease taken in a constructor, released on close",
+}
+
+
+class AdvisoryLockImplementationCensusTests(unittest.TestCase):
+    """LOCK-2 — a second lock implementation must not appear in silence."""
+
+    maxDiff = None
+
+    @staticmethod
+    def _lock_taking_functions() -> set:
+        found = set()
+        for module in sorted(SHIPPED_PACKAGE.rglob("*.py")):
+            tree = ast.parse(module.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for call in ast.walk(node):
+                    if (
+                        isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Attribute)
+                        and call.func.attr in ("flock", "lockf")
+                    ):
+                        found.add(
+                            (
+                                module.relative_to(SHIPPED_PACKAGE.parent).as_posix(),
+                                node.name,
+                            )
+                        )
+        return found
+
+    def test_every_advisory_lock_implementation_is_declared(self) -> None:
+        """Catches a second lock implementation the coordinate fence cannot see."""
+        observed = self._lock_taking_functions()
+        declared = set(_ADVISORY_LOCK_SITES)
+
+        undeclared = sorted(observed - declared)
+        self.assertEqual(
+            [], undeclared,
+            "a new advisory lock implementation appeared. Route it through "
+            "floati.jsonl._locked_path so its refusal carries a root-relative "
+            "coordinate and LOCK-1's census can see it, or declare it in "
+            "_ADVISORY_LOCK_SITES with the reason it is a different lock class.",
+        )
+        # Both directions: a declaration whose site is gone is a stale reason,
+        # and a stale reason is how an allowlist becomes a place names go to die.
+        self.assertEqual([], sorted(declared - observed))
+
+    def test_the_update_consent_ledger_no_longer_locks_for_itself(self) -> None:
+        """Catches LOCK-2 being reverted: the second implementation returning."""
+        observed = self._lock_taking_functions()
+
+        self.assertNotIn(("floati/update_consent.py", "_locked"), observed)
+        self.assertIn(("floati/jsonl.py", "_locked_path"), observed)
+        # And the module must not even import the lock primitive any more: a
+        # lingering `import fcntl` keeps it READING like a lock implementation.
+        source = (SHIPPED_PACKAGE / "update_consent.py").read_text(encoding="utf-8")
+        self.assertNotIn("import fcntl", source)
+
+
 if __name__ == "__main__":
     unittest.main()

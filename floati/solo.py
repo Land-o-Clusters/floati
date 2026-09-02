@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
+from .copy import TUI_DOOR_COPY
 from .errors import IntegrityFailure, ProtocolRefusal
 from .jsonl import read_records_snapshot
 from .planes import AuthorityGrantStore, MAX_TTL_SECONDS
@@ -36,6 +38,88 @@ def validate_solo_bootstrap_inputs(node_id: str, harness: str) -> tuple[str, str
 
     node = validate_identifier(node_id, "node")
     return node, validate_role(harness)
+
+
+def _canonical_bytes(value: Dict[str, object]) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
+
+
+@dataclass(frozen=True)
+class SoloInitPlan:
+    """Immutable solo values reviewed before any direct-home mutation."""
+
+    node_id: str
+    harness: str
+    configuration_bytes: bytes
+    registry_values: Tuple[Tuple[str, object], ...]
+    authority_values: Tuple[Tuple[str, object], ...]
+
+
+def plan_solo_bootstrap(node_id: str, harness: str) -> SoloInitPlan:
+    """Freeze every solo value that is exact before root creation."""
+
+    node, validated_harness = validate_solo_bootstrap_inputs(node_id, harness)
+    configuration: Dict[str, object] = {
+        "schema_version": 0,
+        "kind": "solo_configuration",
+        "node_id": node,
+        "harness": validated_harness,
+        "authority_subject": SOLO_AUTHORITY_SUBJECT,
+    }
+    registry_values: Dict[str, object] = {
+        "schema_version": 0,
+        "kind": "registry_entry",
+        "node_id": node,
+        "role": validated_harness,
+        "state": "active",
+    }
+    authority_values: Dict[str, object] = {
+        "schema_version": 0,
+        "kind": "authority_grant",
+        "subject_id": SOLO_AUTHORITY_SUBJECT,
+        "holder": node,
+        "ttl_seconds": MAX_TTL_SECONDS,
+        "deadline_seconds": MAX_TTL_SECONDS,
+        "state": "active",
+    }
+    return SoloInitPlan(
+        node,
+        validated_harness,
+        _canonical_bytes(configuration),
+        tuple(sorted(registry_values.items())),
+        tuple(sorted(authority_values.items())),
+    )
+
+
+def render_solo_bootstrap_preview(plan: SoloInitPlan) -> str:
+    """Render only immutable bytes and stable record values, never derived time."""
+
+    return "\n".join(
+        (
+            TUI_DOOR_COPY["tui.door.solo_config_preview"]
+            + " "
+            + plan.configuration_bytes.decode("utf-8").rstrip("\n"),
+            TUI_DOOR_COPY["tui.door.solo_registry_preview"]
+            + " "
+            + json.dumps(
+                dict(plan.registry_values),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            TUI_DOOR_COPY["tui.door.solo_authority_preview"]
+            + " "
+            + json.dumps(
+                dict(plan.authority_values),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+    )
 
 
 def _validate_config(raw: object) -> Dict[str, object]:
@@ -85,12 +169,14 @@ def read_solo(root: FloatiRoot, *, required: bool = True) -> Optional[Dict[str, 
     return _validate_config(raw)
 
 
-def _write_config(root: FloatiRoot, config: Dict[str, object]) -> None:
+def _write_config(
+    root: FloatiRoot,
+    config: Dict[str, object],
+    *,
+    encoded: Optional[bytes] = None,
+) -> None:
     path = root.resolve_relative(SOLO_CONFIG)
-    encoded = (
-        json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        + "\n"
-    ).encode("utf-8")
+    serialized = _canonical_bytes(config) if encoded is None else encoded
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
@@ -101,8 +187,8 @@ def _write_config(root: FloatiRoot, config: Dict[str, object]) -> None:
             )
         return
     try:
-        written = os.write(descriptor, encoded)
-        if written != len(encoded):
+        written = os.write(descriptor, serialized)
+        if written != len(serialized):
             raise OSError("short solo configuration write")
         os.fsync(descriptor)
     finally:
@@ -121,15 +207,34 @@ def initialize_solo(
     harness: str,
     now: Optional[datetime] = None,
 ) -> Dict[str, object]:
-    node, harness = validate_solo_bootstrap_inputs(node_id, harness)
+    return initialize_solo_plan(
+        root,
+        plan_solo_bootstrap(node_id, harness),
+        now=now,
+    )
+
+
+def initialize_solo_plan(
+    root: FloatiRoot,
+    plan: SoloInitPlan,
+    now: Optional[datetime] = None,
+) -> Dict[str, object]:
+    """Commit one immutable reviewed solo plan exactly once."""
+
+    registry_values = dict(plan.registry_values)
+    authority_values = dict(plan.authority_values)
+    node = str(registry_values["node_id"])
+    harness = str(registry_values["role"])
+    authority_subject = str(authority_values["subject_id"])
+    authority_holder = str(authority_values["holder"])
+    ttl_seconds = int(authority_values["ttl_seconds"])
+    deadline_seconds = int(authority_values["deadline_seconds"])
     current = _now(now)
-    config: Dict[str, object] = {
-        "schema_version": 0,
-        "kind": "solo_configuration",
-        "node_id": node,
-        "harness": harness,
-        "authority_subject": SOLO_AUTHORITY_SUBJECT,
-    }
+    config = _validate_config(json.loads(plan.configuration_bytes.decode("utf-8")))
+    assert config["node_id"] == node == plan.node_id
+    assert config["harness"] == harness == plan.harness
+    assert config["authority_subject"] == authority_subject
+    assert authority_holder == node
     existing = read_solo(root, required=False)
     if existing is not None and existing != config:
         raise ProtocolRefusal(
@@ -137,14 +242,16 @@ def initialize_solo(
         )
     rows = _registry_rows(root)
     if not rows:
-        Registry(root).register(node, harness)
+        from .workspace_layout import register_node
+
+        register_node(root, node, harness, create_workspace=True)
     elif len(rows) != 1 or rows[0].get("node_id") != node or rows[0].get("role") != harness:
         raise ProtocolRefusal(
             "solo_identity_mismatch", "solo mode requires exactly the requested registered node"
         )
     grants = read_records_snapshot(
         root,
-        f"authority-grants/{SOLO_AUTHORITY_SUBJECT}.jsonl",
+        f"authority-grants/{authority_subject}.jsonl",
         allowed_kinds={"authority_grant"},
     )
     grant: Dict[str, object]
@@ -158,21 +265,21 @@ def initialize_solo(
             grant = latest
         else:
             grant = AuthorityGrantStore(root).claim(
-                SOLO_AUTHORITY_SUBJECT,
-                node,
-                MAX_TTL_SECONDS,
-                MAX_TTL_SECONDS,
+                authority_subject,
+                authority_holder,
+                ttl_seconds,
+                deadline_seconds,
                 current,
             )
     else:
         grant = AuthorityGrantStore(root).claim(
-            SOLO_AUTHORITY_SUBJECT,
-            node,
-            MAX_TTL_SECONDS,
-            MAX_TTL_SECONDS,
+            authority_subject,
+            authority_holder,
+            ttl_seconds,
+            deadline_seconds,
             current,
         )
-    _write_config(root, config)
+    _write_config(root, config, encoded=plan.configuration_bytes)
     return {**config, "authority_epoch": grant["epoch"], "expires_at": grant["expires_at"]}
 
 

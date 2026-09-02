@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, MutableMapping, Optional, Sequence
 
 from .errors import ProtocolRefusal
+from .tui_choice import ChoiceFocusController
 from .tui_render import APPROVAL_HEADER, APPROVAL_HINTS, APPROVAL_RECORD
 
 
@@ -174,6 +175,7 @@ class ApprovalPanelController:
         self._stashed_composer: Optional[str] = None
         self._queue: list[ApprovalPanelRequest] = []
         self._focused_index = 0
+        self._choice_focus: Optional[ChoiceFocusController] = None
         self._last_click: Optional[tuple[str, int]] = None
         self._rendered_request_id: Optional[str] = None
         self._rendered_record_digest: Optional[str] = None
@@ -190,7 +192,7 @@ class ApprovalPanelController:
     def focused_option_id(self) -> Optional[str]:
         if not self._queue:
             return None
-        return self._queue[0].options[self._focused_index].option_id
+        return self._choice_focus.focused_option_id
 
     @property
     def resolved_receipts(self) -> list[Mapping[str, object]]:
@@ -248,19 +250,17 @@ class ApprovalPanelController:
         if key in {"ENTER", "\r", "\n"}:
             return self._commit(self._focused_index)
         if key in {"KEY_DOWN", "j", "\x1b[B"}:
-            self._focused_index = min(
-                len(request.options) - 1, self._focused_index + 1
-            )
+            self._apply_focus(self._choice_focus.handle_key(key))
             self._last_click = None
             return ApprovalPanelAction("focused", self.focused_option_id)
         if key in {"KEY_UP", "k", "\x1b[A"}:
-            self._focused_index = max(0, self._focused_index - 1)
+            self._apply_focus(self._choice_focus.handle_key(key))
             self._last_click = None
             return ApprovalPanelAction("focused", self.focused_option_id)
         if len(key) == 1 and key in "123456789":
-            index = int(key) - 1
-            if index < len(request.options):
-                self._focused_index = index
+            action = self._choice_focus.handle_key(key)
+            if action.option_id is not None:
+                self._apply_focus(action)
                 self._last_click = None
                 return ApprovalPanelAction("focused", self.focused_option_id)
         return ApprovalPanelAction("none")
@@ -284,7 +284,9 @@ class ApprovalPanelController:
 
         option = request.options[index]
         previous = self._last_click
-        self._focused_index = index
+        self._apply_focus(
+            self._choice_focus.handle_pointer(option_id, activate=False)
+        )
         self._last_click = (option_id, now_ms)
         if (
             previous is None
@@ -318,7 +320,7 @@ class ApprovalPanelController:
 
     def _reset_front(self) -> None:
         request = self._front()
-        self._focused_index = next(
+        initial_index = next(
             (
                 index
                 for index, option in enumerate(request.options)
@@ -332,9 +334,24 @@ class ApprovalPanelController:
                 ),
             ),
         )
+        self._choice_focus = ChoiceFocusController(
+            tuple(option.option_id for option in request.options),
+            initial_option_id=request.options[initial_index].option_id,
+        )
+        self._focused_index = initial_index
         self._last_click = None
         self._rendered_request_id = None
         self._rendered_record_digest = None
+
+    def _apply_focus(self, action: object) -> None:
+        option_id = getattr(action, "option_id", None)
+        if option_id is None:
+            return
+        self._focused_index = next(
+            index
+            for index, option in enumerate(self._front().options)
+            if option.option_id == option_id
+        )
 
     def _commit(self, option_index: int) -> ApprovalPanelAction:
         request = self._front()

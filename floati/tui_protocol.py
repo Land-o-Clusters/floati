@@ -56,6 +56,17 @@ class TerminalInputDecoder:
     def __init__(self) -> None:
         self._buffer = bytearray()
 
+    def has_standalone_escape(self) -> bool:
+        """Report whether the only buffered bytes are one unresolved legacy Escape."""
+        return self._buffer == b"\x1b"
+
+    def resolve_standalone_escape(self) -> Tuple[TerminalInput, ...]:
+        """Resolve one aged legacy Escape without truncating a longer sequence."""
+        if self._buffer != b"\x1b":
+            return ()
+        self._buffer.clear()
+        return ("\x1b",)
+
     def feed(self, data: bytes) -> Tuple[TerminalInput, ...]:
         self._buffer.extend(data)
         events = []
@@ -155,6 +166,8 @@ def decode_terminal_input(data: bytes) -> TerminalInput:
             return "\x1b"
         if codepoint == 13:
             return "ENTER"
+        if codepoint == 127:
+            return "\x7f"
     text = data.decode("utf-8", errors="ignore")
     return {
         "\x1b[A": "KEY_UP",
