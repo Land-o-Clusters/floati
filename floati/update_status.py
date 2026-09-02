@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Dict
 
+from .artifact_subject import artifact_subject
 from .copy import register
 from .errors import IntegrityFailure
 from .update_check import OBSERVATION_LEDGER, validate_observation_ledger_row
@@ -70,7 +71,7 @@ def _finding(code: str, subject: Path, detail: str) -> Dict[str, object]:
     return {
         "code": code,
         "severity": "ok",
-        "subject": str(subject),
+        "subject": artifact_subject(subject),
         "detail": detail,
         "remediation": None,
     }

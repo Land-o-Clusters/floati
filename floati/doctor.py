@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
+from .artifact_subject import artifact_subject
 from .consumption import ConsumptionLedger
 from .copy import (
     DOCTOR_LIVE_DIRS_EXPECTED_ABSENT_DETAIL,
@@ -75,10 +76,24 @@ def _finding(
     return {
         "code": code,
         "severity": severity,
-        "subject": subject,
+        "subject": artifact_subject(subject),
         "detail": detail,
         "remediation": remediation,
     }
+
+
+def _workspace_layout_finding(row: Dict[str, str]) -> Dict[str, object]:
+    """Project one read-only layout defect onto the ordinary doctor shape."""
+
+    code = str(row["code"])
+    node_id = str(row["node_id"])
+    severity = "ok" if row["severity"] == "notice" else str(row["severity"])
+    return _finding(
+        code,
+        severity,
+        str(row["path"]),
+        f"{node_id}: {code.replace('_', ' ')}",
+    )
 
 
 def _role_cadences(
@@ -177,6 +192,12 @@ def _installer_shadow_finding(
 def _fold_shadow_exit(current: int, shadow: int) -> int:
     """Preserve doctor’s existing aggregate diagnostic precedence."""
 
+    # The standalone shadow observer uses exit 20 for affirmative absence.
+    # Inside Doctor that same observation is an ``ok`` finding, not a
+    # ProtocolRefusal.  Preserve Doctor's current result instead of leaking
+    # the observer command's independent exit vocabulary into the aggregate.
+    if shadow == 20:
+        return current
     if current in {20, 33, 35}:
         return current
     return shadow
@@ -312,8 +333,7 @@ def project_installed_bridge_currency(
             str(repository_bridge),
             "repository wake-bridge source cannot be named for comparison",
             (
-                "rerun Doctor with a complete Floati source containing "
-                "hooks/stop-hook-bridge.py before claiming deployed-source currency"
+            "rerun Doctor with a complete Floati source before claiming deployed-source currency"
             ),
         )
     if installed_sha == repository_sha:
@@ -550,7 +570,7 @@ def project_installed_bus_watch_currency(
             str(installed),
             "installed OpenCode bus watcher is present but its install-time source SHA cannot name these bytes",
             (
-                "reinstall with scripts/bus-watch/install-floati-bus-watch.py so the owner can activate current watcher code"
+                "reinstall the OpenCode bus watcher from a complete source tree so the owner can activate current watcher code"
             ),
         )
     repository_watch = Path(source_root) / BUS_WATCH_SOURCE
@@ -569,7 +589,7 @@ def project_installed_bus_watch_currency(
             str(repository_watch),
             "repository OpenCode bus-watch source cannot be named for comparison",
             (
-                "rerun Doctor with a complete Floati source containing scripts/bus-watch/floati-bus-watch.ts before claiming deployed-source currency"
+                "rerun Doctor with a complete Floati source before claiming deployed-source currency"
             ),
         )
     if recorded_sha == repository_sha:
@@ -588,7 +608,7 @@ def project_installed_bus_watch_currency(
             f"repository at {repository_sha[:12]}"
         ),
         (
-            "reinstall with scripts/bus-watch/install-floati-bus-watch.py so the owner can activate current watcher code"
+            "reinstall the OpenCode bus watcher from a complete source tree so the owner can activate current watcher code"
             if currency_current
             else None
         ),
@@ -707,7 +727,7 @@ def _codex_gateway_finding(
     if not vendored.exists() and not digest_path.exists():
         return None
     remediation = (
-        "run scripts/install-codex-gateway.sh explicitly, then rerun doctor"
+        "install the Codex gateway from a complete source tree, then rerun doctor"
     )
     if (
         vendored.is_symlink()
@@ -762,10 +782,9 @@ def _codex_gateway_finding(
     if host_path.is_symlink() or not host_path.is_file():
         return _finding(
             "codex_gateway_vendored_source_missing",
-            "warning",
+            "ok",
             str(host_path),
-            "the fixed host gateway is absent or not a regular non-symlink file",
-            remediation,
+            "the optional fixed host gateway is not installed",
         )
     try:
         host_digest = hashlib.sha256(host_path.read_bytes()).hexdigest()
@@ -944,6 +963,37 @@ class Doctor:
                     finding["epoch_roll"] = epoch_roll
                     findings.append(finding)
 
+        if root is not None:
+            try:
+                from .workspace_layout import inspect_workspace_layout
+
+                workspace_findings = [
+                    _workspace_layout_finding(row)
+                    for row in inspect_workspace_layout(root)
+                ]
+            except IntegrityFailure as exc:
+                findings.append(
+                    _finding(exc.code, "error", str(root.path), exc.detail)
+                )
+                if rc != 20:
+                    rc = 33
+            except ProtocolRefusal as exc:
+                findings.append(
+                    _finding(exc.code, "error", str(root.path), exc.detail)
+                )
+                if rc not in (20, 33):
+                    rc = 35
+            else:
+                findings.extend(workspace_findings)
+                if (
+                    any(
+                        row["severity"] in {"warning", "error"}
+                        for row in workspace_findings
+                    )
+                    and rc == 0
+                ):
+                    rc = 35
+
         currency_finding, currency_current = self._currency()
 
         launcher_interpreter_finding = project_launcher_interpreter()
@@ -1009,6 +1059,36 @@ class Doctor:
                         "registry_live_dirs_expected_absent", "ok", str(root.path),
                         DOCTOR_LIVE_DIRS_EXPECTED_ABSENT_DETAIL,
                     ))
+                elif not live_dirs:
+                    from .solo import read_solo
+
+                    solo = read_solo(root, required=False)
+                    solo_node = None if solo is None else str(solo["node_id"])
+                    solo_row = latest.get(solo_node) if solo_node is not None else None
+                    if (
+                        solo is not None
+                        and registered == {solo_node}
+                        and solo_row is not None
+                        and solo_row.get("role") == solo.get("harness")
+                    ):
+                        findings.append(_finding(
+                            "registry_live_dirs_expected_idle",
+                            "ok",
+                            str(root.path),
+                            "fresh solo identity is registered and no runtime presence has been claimed",
+                        ))
+                    else:
+                        remediation = (
+                            "reconcile registered nodes and liveness-presence files, then rerun doctor"
+                            if currency_current else None
+                        )
+                        findings.append(_finding(
+                            "registry_live_dirs_mismatch", "warning", str(root.path),
+                            f"registered={sorted(registered)} live_dirs={sorted(live_dirs)}",
+                            remediation,
+                        ))
+                        if rc == 0:
+                            rc = 35
                 else:
                     remediation = (
                         "reconcile registered nodes and liveness-presence files, then rerun doctor"
@@ -1332,10 +1412,9 @@ class Doctor:
         if self.codex_hooks_defaulted and not self.codex_hooks_arg.exists():
             findings.append(_finding(
                 "codex_wait_hook_trust",
-                "warning",
+                "ok",
                 str(self.codex_hooks_arg),
-                "Codex hooks are absent; no Floati Stop waiter is configured.",
-                "Install the waiter through the governed path when this host uses Codex.",
+                "Codex hooks are absent; no Stop waiter or trust claim exists yet.",
             ))
         else:
             try:

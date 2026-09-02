@@ -511,6 +511,9 @@ class SoloWorkflowTests(unittest.TestCase):
 
         self.assertEqual(0, initialized.returncode, initialized.stderr)
         self.assertEqual("me", self.artifact(initialized)["evidence"]["solo"]["node_id"])
+        self.assertTrue((self.home / "cursors").is_dir())
+        self.assertTrue((self.home / "receipts" / "deliveries").is_dir())
+        self.assertTrue((self.home / "nodes" / "me").is_dir())
         self.assertEqual(0, added.returncode, added.stderr)
         self.assertEqual("me", self.artifact(added)["evidence"]["owner"])
         self.assertEqual(0, claimed.returncode, claimed.stderr)
@@ -545,6 +548,234 @@ class SoloWorkflowTests(unittest.TestCase):
         self.assertEqual("Codex", self.artifact(second)["evidence"]["solo"]["harness"])
         self.assertEqual(20, mismatch.returncode)
         self.assertEqual("solo_identity_mismatch", self.artifact(mismatch)["evidence"]["code"])
+
+    def test_fully_flagged_solo_init_bypasses_the_door_and_keeps_legacy_artifact(self) -> None:
+        """Catches a complete legacy init being diverted through interactive onboarding."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch(
+                "floati.tui_doors.run_solo_door",
+                side_effect=AssertionError("complete init must bypass the door"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(
+                [
+                    "init",
+                    "--root",
+                    str(self.home),
+                    "--solo",
+                    "me",
+                    "--harness",
+                    "Codex",
+                ]
+            )
+
+        self.assertEqual(0, code, stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
+        self.assertEqual("ok", artifact["status"])
+        self.assertEqual("me", artifact["evidence"]["solo"]["node_id"])
+        self.assertEqual("Codex", artifact["evidence"]["solo"]["harness"])
+
+    def test_no_value_solo_init_routes_door_answers_to_one_stdout_artifact(self) -> None:
+        """Catches the ruled no-value --solo shape remaining unreachable from the CLI."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch(
+                "floati.tui_doors.run_solo_door",
+                return_value=("me", "Codex"),
+            ) as door,
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["init", "--root", str(self.home), "--solo"])
+
+        self.assertEqual(0, code, stderr.getvalue())
+        self.assertEqual(1, len(stdout.getvalue().splitlines()))
+        artifact = json.loads(stdout.getvalue())
+        self.assertEqual("me", artifact["evidence"]["solo"]["node_id"])
+        self.assertEqual("Codex", artifact["evidence"]["solo"]["harness"])
+        door.assert_called_once()
+
+    def test_interactive_solo_commits_the_same_reviewed_plan_bytes_exactly_once(self) -> None:
+        """Catches CLI solo rebuilding reviewed values or initializing before final Commit."""
+        from floati import solo
+        from floati.cli import main
+
+        plan_factory = getattr(solo, "plan_solo_bootstrap", None)
+        self.assertIsNotNone(plan_factory, "interactive solo requires an immutable plan seam")
+        reviewed_plan = plan_factory("me", "Codex")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch(
+                "floati.tui_doors.run_solo_door",
+                return_value=reviewed_plan,
+            ) as door,
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["init", "--root", str(self.home), "--solo"])
+
+        self.assertEqual(0, code, stderr.getvalue())
+        door.assert_called_once()
+        self.assertEqual(
+            reviewed_plan.configuration_bytes,
+            (self.home / "solo.json").read_bytes(),
+        )
+        self.assertEqual(
+            1,
+            len((self.home / "registry" / "entries.jsonl").read_text().splitlines()),
+        )
+        self.assertEqual(
+            1,
+            len(
+                (self.home / "authority-grants" / "solo-work.jsonl")
+                .read_text()
+                .splitlines()
+            ),
+        )
+        artifact = json.loads(stdout.getvalue())
+        self.assertEqual("me", artifact["evidence"]["solo"]["node_id"])
+        self.assertNotIn("plan", artifact["evidence"]["solo"])
+
+    def test_no_value_solo_init_non_tty_refuses_before_creating_the_root(self) -> None:
+        """Catches non-TTY onboarding mutating a root before naming the complete command."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = main(["init", "--root", str(self.home), "--solo"])
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
+        self.assertEqual(
+            "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
+            artifact["evidence"]["remedy"],
+        )
+        self.assertFalse(self.home.exists())
+
+    def test_interactive_solo_validates_door_answers_before_creating_the_root(self) -> None:
+        """Catches raw door answers bypassing solo lexical validation before root creation."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch(
+                "floati.tui_doors.run_solo_door",
+                return_value=("NOT VALID", "Codex"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["init", "--root", str(self.home), "--solo"])
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("node_invalid", artifact["evidence"]["code"])
+        self.assertFalse(self.home.exists())
+
+    def test_solo_terminal_io_failures_become_one_typed_artifact(self) -> None:
+        """Catches setup or cleanup I/O escaping the CLI as an untyped traceback."""
+        from floati.cli import main
+        from floati.tui_doors import DoorTerminalIOError
+
+        for failure in ("setup", "cleanup"):
+            with self.subTest(failure=failure):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    patch(
+                        "floati.tui_doors.run_solo_door",
+                        side_effect=DoorTerminalIOError(failure),
+                    ),
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    code = main(["init", "--root", str(self.home), "--solo"])
+
+                self.assertEqual(20, code)
+                self.assertEqual("", stdout.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+                self.assertEqual(1, len(stderr.getvalue().splitlines()))
+                artifact = json.loads(stderr.getvalue())
+                self.assertEqual("door_terminal_io_failed", artifact["evidence"]["code"])
+                self.assertEqual(
+                    "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
+                    artifact["evidence"]["remedy"],
+                )
+                self.assertFalse(self.home.exists())
+
+    def test_interactive_solo_ctrl_c_is_one_typed_refusal_before_root_creation(self) -> None:
+        """Catches Ctrl-C escaping the init entry point or being emitted on stdout."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        try:
+            with (
+                patch(
+                    "floati.tui_doors.run_door_terminal",
+                    side_effect=KeyboardInterrupt(),
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = main(["init", "--root", str(self.home), "--solo"])
+        except KeyboardInterrupt:
+            self.fail("Ctrl-C escaped the interactive solo entry point")
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertEqual(1, len(stderr.getvalue().splitlines()))
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("door_cancelled", artifact["evidence"]["code"])
+        self.assertEqual(
+            "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
+            artifact["evidence"]["remedy"],
+        )
+        self.assertFalse(self.home.exists())
+
+    def test_term_dumb_solo_refuses_before_terminal_setup_or_root_creation(self) -> None:
+        """Catches TERM=dumb entering alternate-screen setup for no-value solo."""
+        from floati.cli import main
+
+        class TTY(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        stdout = io.StringIO()
+        stderr = TTY()
+        remedy = "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS"
+        with (
+            patch.dict(os.environ, {"TERM": "dumb"}, clear=True),
+            patch.object(sys, "stdin", TTY()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["init", "--root", str(self.home), "--solo"])
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("\x1b[?1049h", stderr.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
+        self.assertEqual(remedy, artifact["evidence"]["remedy"])
+        self.assertFalse(self.home.exists())
 
     def test_solo_resolution_refuses_an_expired_grant(self) -> None:
         from floati.errors import ProtocolRefusal

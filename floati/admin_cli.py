@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Tuple
 
 from .admin_registry import RegistryAdminBackend
+from .copy import TUI_DOOR_COPY
 from .foreign_bus_survey import ForeignBusSurvey
 from .ids import uuid7_hex
 from .multi_bus_chart import MultiBusHarborChart, render_multi_bus_chart
@@ -33,6 +34,9 @@ from .state_receipts import record_state_flush
 
 HandlerResult = Tuple[str, Dict[str, Any], int]
 OK = 0
+_NODE_ADD_FULLY_FLAGGED_REMEDY = TUI_DOOR_COPY[
+    "tui.door.node_add_fully_flagged_remedy"
+]
 
 
 def _root(path: str | None) -> FloatiRoot:
@@ -70,6 +74,40 @@ def _retire_node(args: argparse.Namespace) -> HandlerResult:
 
 
 def _node_add(args: argparse.Namespace) -> HandlerResult:
+    required_values = (args.root, args.node, args.harness, args.lifetime)
+    option_values = (
+        args.lease_minutes,
+        args.tide_metric,
+        args.tide_threshold,
+        args.tide_action,
+        args.tide_idempotency_key,
+    )
+    interactive = not any(value is not None for value in required_values + option_values)
+    if not interactive and not all(value is not None for value in required_values):
+        from .errors import ProtocolRefusal
+
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            TUI_DOOR_COPY["tui.door.node_add_shape_invalid"],
+            _NODE_ADD_FULLY_FLAGGED_REMEDY,
+        )
+    if interactive:
+        from .tui_doors import DoorTerminalIOError, require_door_terminal
+
+        try:
+            require_door_terminal(
+                sys.stdin,
+                sys.stderr,
+                remedy=_NODE_ADD_FULLY_FLAGGED_REMEDY,
+            )
+        except DoorTerminalIOError as exc:
+            from .errors import ProtocolRefusal
+
+            raise ProtocolRefusal(
+                "door_terminal_io_failed",
+                TUI_DOOR_COPY["tui.door.terminal_io_failed"],
+                _NODE_ADD_FULLY_FLAGGED_REMEDY,
+            ) from exc
     root = _root(args.root)
     tide_values = (args.tide_metric, args.tide_threshold, args.tide_action)
     if any(value is not None for value in tide_values) and not all(
@@ -79,7 +117,7 @@ def _node_add(args: argparse.Namespace) -> HandlerResult:
 
         raise ProtocolRefusal(
             "arguments_invalid",
-            "optional tide step requires metric, threshold, and action together",
+            TUI_DOOR_COPY["tui.door.tide_fields_incomplete"],
         )
     if all(value is not None for value in tide_values):
         from .tide_catalog import policy_metric_for
@@ -90,12 +128,30 @@ def _node_add(args: argparse.Namespace) -> HandlerResult:
             policy_metric_for(args.harness, args.tide_metric),
         )
     preview = io.StringIO()
+    wizard = NodeWizard(root, RegistryAdminBackend(root), id_factory=uuid7_hex)
+    if interactive:
+        from .tui_doors import DoorTerminalIOError, run_node_add_door
+
+        try:
+            result = run_node_add_door(
+                wizard,
+                output=preview,
+                input_stream=sys.stdin,
+                terminal_output=sys.stderr,
+            )
+        except DoorTerminalIOError as exc:
+            from .errors import ProtocolRefusal
+
+            raise ProtocolRefusal(
+                "door_terminal_io_failed",
+                TUI_DOOR_COPY["tui.door.terminal_io_failed"],
+                _NODE_ADD_FULLY_FLAGGED_REMEDY,
+            ) from exc
+        return "ok", _previewed(result, preview), OK
     values = [args.node, args.harness, args.lifetime]
     if args.lease_minutes is not None:
         values.append(str(args.lease_minutes))
-    result = NodeWizard(
-        root, RegistryAdminBackend(root), id_factory=uuid7_hex
-    ).add_from_keys(values, preview)
+    result = wizard.add_from_keys(values, preview)
     if all(value is not None for value in tide_values):
         from .tide_policy import TidePolicyLedger
 
@@ -545,7 +601,13 @@ def _bind_resume_probe(
 
     if resume_probe_class(coordinate.harness) != "costs_one_turn":
         return None
-    adapter = wake_adapter_for(coordinate.root, coordinate.node_id, coordinate.harness)
+    adapter = wake_adapter_for(
+        coordinate.root,
+        coordinate.node_id,
+        coordinate.harness,
+        zcode_node_executable=args.zcode_node_executable,
+        zcode_entry_executable=args.zcode_entry_executable,
+    )
     if not getattr(args, "yes", False):
         sys.stderr.write(
             "floati wake daemon bind: this adapter's resume probe costs one turn.\n"
@@ -708,7 +770,13 @@ def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
     try:
         WakeDaemon(
             coordinate,
-            wake_adapter_for(coordinate.root, coordinate.node_id, coordinate.harness),
+            wake_adapter_for(
+                coordinate.root,
+                coordinate.node_id,
+                coordinate.harness,
+                zcode_node_executable=args.zcode_node_executable,
+                zcode_entry_executable=args.zcode_entry_executable,
+            ),
         ).serve(stop.is_set)
     finally:
         signal.signal(signal.SIGTERM, previous)
@@ -729,6 +797,11 @@ def _add_wake_daemon_identity(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_zcode_executable_declarations(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--zcode-node-executable")
+    parser.add_argument("--zcode-entry-executable")
+
+
 def _add_projection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
     parser.add_argument("--node", required=True)
@@ -745,10 +818,10 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     node_commands = node.add_subparsers(dest="node_command", required=True)
 
     add = node_commands.add_parser("add")
-    add.add_argument("--root", required=True)
-    add.add_argument("--node", required=True)
-    add.add_argument("--harness", required=True)
-    add.add_argument("--lifetime", choices=("permanent", "temporary"), required=True)
+    add.add_argument("--root")
+    add.add_argument("--node")
+    add.add_argument("--harness")
+    add.add_argument("--lifetime", choices=("permanent", "temporary"))
     add.add_argument("--lease-minutes", type=int)
     add.add_argument("--tide-metric")
     add.add_argument("--tide-threshold")
@@ -899,6 +972,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         "--yes", action="store_true",
         help="consent to the turn-costing resume probe without the interactive ask",
     )
+    _add_zcode_executable_declarations(daemon_bind)
     daemon_bind.set_defaults(handler=_wake_daemon_bind)
 
     for operation, handler in (
@@ -918,6 +992,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     )
     _add_wake_daemon_identity(daemon_serve)
     daemon_serve.add_argument("--activation-epoch", type=int, required=True)
+    _add_zcode_executable_declarations(daemon_serve)
     daemon_serve.set_defaults(handler=_wake_daemon_serve)
 
     from .uninstall import register_cli as register_uninstall

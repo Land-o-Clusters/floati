@@ -6,8 +6,10 @@ import json
 import io
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,6 +22,11 @@ from floati.codex_wait_contract import (
 
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
+
+
+class TTY(io.StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 class AdminCliTests(unittest.TestCase):
@@ -130,6 +137,293 @@ class AdminCliTests(unittest.TestCase):
         switched_evidence = self.artifact(switched)["evidence"]
         self.assertEqual("provider_switch_receipt", switched_evidence["records"][1]["kind"])
         self.assertEqual(2, len(switched_evidence["preview_rows"]))
+
+    def test_fully_flagged_node_add_bypasses_the_door_and_keeps_legacy_artifact(self) -> None:
+        """Catches complete node-add flags being diverted through interactive onboarding."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch(
+                "floati.tui_doors.run_node_add_door",
+                side_effect=AssertionError("complete node add must bypass the door"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(
+                [
+                    "node",
+                    "add",
+                    "--root",
+                    str(self.root),
+                    "--node",
+                    "builder-door-bypass",
+                    "--harness",
+                    "Codex",
+                    "--lifetime",
+                    "permanent",
+                ]
+            )
+
+        self.assertEqual(0, code, stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        evidence = json.loads(stdout.getvalue())["evidence"]
+        self.assertEqual("builder-door-bypass", evidence["records"][0]["node_id"])
+        self.assertEqual(1, len(evidence["preview_rows"]))
+
+    def test_flagless_node_add_routes_the_door_result_through_preview_evidence(self) -> None:
+        """Catches completely flagless node add remaining unreachable from the CLI."""
+        from floati.cli import main
+
+        preview_row = {
+            "kind": "registry_entry",
+            "node_id": "builder-door",
+            "schema_version": 0,
+        }
+
+        def run_door(wizard, controller=None, output=None, **kwargs):
+            del wizard, controller, kwargs
+            output.write("ledger preview: " + json.dumps(preview_row) + "\n")
+            return {
+                "records": [preview_row],
+                "workspace": str(self.root / "nodes" / "builder-door"),
+            }
+
+        stdout = io.StringIO()
+        stderr = TTY()
+        with (
+            patch.dict(
+                os.environ,
+                {"FLOATI_BUS_ROOT": str(self.root), "TERM": "xterm"},
+            ),
+            patch("floati.tui_doors.run_node_add_door", side_effect=run_door) as door,
+            patch.object(sys, "stdin", TTY()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["node", "add"])
+
+        self.assertEqual(0, code, stderr.getvalue())
+        self.assertEqual(1, len(stdout.getvalue().splitlines()))
+        evidence = json.loads(stdout.getvalue())["evidence"]
+        self.assertEqual([preview_row], evidence["records"])
+        self.assertEqual([preview_row], evidence["preview_rows"])
+        door.assert_called_once()
+
+    def test_partial_and_non_tty_node_add_refuse_before_mutation_with_full_remedy(self) -> None:
+        """Catches ambiguous node-add shapes reaching root mutation or argparse usage output."""
+        from floati.cli import main
+
+        def snapshot() -> dict[str, bytes]:
+            return {
+                path.relative_to(self.root).as_posix(): path.read_bytes()
+                for path in self.root.rglob("*")
+                if path.is_file()
+            }
+
+        before = snapshot()
+        remedy = (
+            "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
+            "--lifetime permanent|temporary [--lease-minutes N]"
+        )
+        for arguments in (
+            ("node", "add", "--root", str(self.root), "--node", "builder-partial"),
+            ("node", "add"),
+        ):
+            with self.subTest(arguments=arguments):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    patch.dict(os.environ, {"FLOATI_BUS_ROOT": str(self.root)}),
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    code = main(list(arguments))
+
+                self.assertEqual(20, code)
+                self.assertEqual("", stdout.getvalue())
+                artifact = json.loads(stderr.getvalue())
+                self.assertIn(
+                    artifact["evidence"]["code"],
+                    {"arguments_invalid", "interactive_terminal_required"},
+                )
+                self.assertEqual(remedy, artifact["evidence"]["remedy"])
+                self.assertEqual(before, snapshot())
+
+    def test_flagless_non_tty_node_add_preflights_before_environment_root(self) -> None:
+        """Catches root resolution outranking the interactive-terminal refusal."""
+        from floati.cli import main
+
+        remedy = (
+            "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
+            "--lifetime permanent|temporary [--lease-minutes N]"
+        )
+        for environment in ({}, {"FLOATI_BUS_ROOT": "relative"}):
+            with self.subTest(environment=environment):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    patch.dict(os.environ, environment, clear=True),
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                ):
+                    code = main(["node", "add"])
+
+                self.assertEqual(20, code)
+                self.assertEqual("", stdout.getvalue())
+                artifact = json.loads(stderr.getvalue())
+                self.assertEqual(
+                    "interactive_terminal_required", artifact["evidence"]["code"]
+                )
+                self.assertEqual(remedy, artifact["evidence"]["remedy"])
+
+    def test_node_add_terminal_io_failure_becomes_one_typed_artifact(self) -> None:
+        """Catches node-door I/O escaping its CLI boundary as a traceback."""
+        from floati.cli import main
+        from floati.tui_doors import DoorTerminalIOError
+
+        stdout = io.StringIO()
+        stderr = TTY()
+        with (
+            patch.dict(
+                os.environ,
+                {"FLOATI_BUS_ROOT": str(self.root), "TERM": "xterm"},
+            ),
+            patch(
+                "floati.tui_doors.run_node_add_door",
+                side_effect=DoorTerminalIOError("cleanup"),
+            ),
+            patch.object(sys, "stdin", TTY()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["node", "add"])
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("door_terminal_io_failed", artifact["evidence"]["code"])
+
+    def test_flagless_node_add_ctrl_c_is_one_typed_refusal_without_mutation(self) -> None:
+        """Catches Ctrl-C escaping the node-add entry point or reaching its backend."""
+        from floati.cli import main
+
+        def snapshot() -> dict[str, bytes]:
+            return {
+                path.relative_to(self.root).as_posix(): path.read_bytes()
+                for path in self.root.rglob("*")
+                if path.is_file()
+            }
+
+        before = snapshot()
+        stdout = io.StringIO()
+        stderr = TTY()
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {"FLOATI_BUS_ROOT": str(self.root), "TERM": "xterm"},
+                ),
+                patch.object(sys, "stdin", TTY()),
+                patch(
+                    "floati.tui_doors.run_door_terminal",
+                    side_effect=KeyboardInterrupt(),
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = main(["node", "add"])
+        except KeyboardInterrupt:
+            self.fail("Ctrl-C escaped the flagless node-add entry point")
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("door_cancelled", artifact["evidence"]["code"])
+        self.assertEqual(
+            "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
+            "--lifetime permanent|temporary [--lease-minutes N]",
+            artifact["evidence"]["remedy"],
+        )
+        self.assertEqual(before, snapshot())
+
+    def test_node_add_backend_oserror_keeps_degraded_durability_artifact(self) -> None:
+        """Catches a backend commit failure being reported as a pre-mutation door refusal."""
+        from floati.cli import main
+        from floati.tui_doors import DoorController, run_node_add_door
+
+        plan = object()
+        test_case = self
+
+        class FailingWizard:
+            def commit_add(self, exact_plan, output):
+                test_case.assertIs(plan, exact_plan)
+                output.write("ledger preview: exact\n")
+                raise OSError("ledger fsync")
+
+        def fail_at_commit(_wizard, output=None, **_kwargs):
+            controller = DoorController.node_add()
+            controller.submit_text("builder-door")
+            controller.submit_text("Codex")
+            controller.handle_key("ENTER")
+            controller.attach_preview(plan, "ledger preview: exact")
+            controller.handle_key("ENTER")
+            return run_node_add_door(FailingWizard(), controller, output)
+
+        stdout = io.StringIO()
+        stderr = TTY()
+        with (
+            patch.dict(
+                os.environ,
+                {"FLOATI_BUS_ROOT": str(self.root), "TERM": "xterm"},
+            ),
+            patch("floati.tui_doors.run_node_add_door", side_effect=fail_at_commit),
+            patch.object(sys, "stdin", TTY()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["node", "add"])
+
+        self.assertEqual(35, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("degraded", artifact["status"])
+        self.assertEqual("node_add_commit_failed", artifact["evidence"]["code"])
+        self.assertNotIn("remedy", artifact["evidence"])
+
+    def test_term_dumb_flagless_node_add_refuses_before_setup_or_root_resolution(self) -> None:
+        """Catches TERM=dumb resolving a malformed root before interactive preflight."""
+        from floati.cli import main
+
+        stdout = io.StringIO()
+        stderr = TTY()
+        remedy = (
+            "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
+            "--lifetime permanent|temporary [--lease-minutes N]"
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"TERM": "dumb", "FLOATI_BUS_ROOT": "relative"},
+                clear=True,
+            ),
+            patch.object(sys, "stdin", TTY()),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = main(["node", "add"])
+
+        self.assertEqual(20, code)
+        self.assertEqual("", stdout.getvalue())
+        self.assertNotIn("\x1b[?1049h", stderr.getvalue())
+        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
+        self.assertEqual(remedy, artifact["evidence"]["remedy"])
 
     def test_role_list_show_and_assignment_use_the_shipped_typed_library(self) -> None:
         """Catches CLI role handling inventing prose or bypassing the typed record."""

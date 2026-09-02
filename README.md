@@ -270,7 +270,7 @@ Afterwards the doctor tells you whether what is on disk still matches
 the manifest, file by file:
 
 ```bash
-floati doctor --root /absolute/fleet --source /absolute/floati
+floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install
 ```
 
 Expect it to be strict on a fresh install: it names every wake bridge
@@ -354,10 +354,12 @@ mutable, uncorrelated, and they can't answer a fleet question.
 Under floati, everything above runs on one append-only, typed ledger.
 The board, the chart, the doctor, the replay are all projections of
 it, and if a projection ever disagrees with the receipts, the
-receipts win. `floati verify` and `journal verify` check the ledger's
-own integrity; `journal checkpoint`, `snapshot` and `epoch roll` are
-the recorded ways to move it; `repair quarantine` and `purge` are the
-recorded ways to remove from it, and nothing is deleted in place.
+receipts win. `journal verify` checks the ledger's own chain;
+`floati verify` reproduces a delivery claim in a fresh worktree at the
+claimed commit; `journal checkpoint`, `snapshot` and `epoch roll` are
+the recorded ways to move the ledger; `repair quarantine` and `purge`
+are the recorded ways to remove from it, and nothing is deleted in
+place.
 
 Kill a worker, kill the sequencer, reboot the machine: nothing is
 lost and nothing lies. The ledger survives every fault, the whole

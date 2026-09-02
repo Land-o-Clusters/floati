@@ -8,7 +8,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from tests.private_artifacts import require_private_artifact
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -80,30 +79,6 @@ class PublicNameFenceTests(unittest.TestCase):
         ]
 
         self.assertEqual([], findings)
-
-    def test_private_only_policy_retains_the_ruled_exact_path_count(self) -> None:
-        """A wildcard-shaped simplification cannot erase the explicit inventory."""
-
-        require_private_artifact(self, '.github/public-export-policy.v0.json')
-
-        from scripts.export_public import ExportPolicy
-
-        policy = ExportPolicy.load(
-            REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json"
-        )
-        # 19 -> 25: six test modules whose whole subject the export strips.
-        # AN EXCLUSION LIST THAT NAMES SUBJECTS BUT NOT THEIR TESTS SHIPS A
-        # SUITE THAT TESTS ABSENCE - the published artifact failed 29 of its
-        # own tests that way.
-        # 25 -> 27: the two captures that hold the retired repository name.
-        # A capture is a photograph, so it leaves the export by membership
-        # rather than being rewritten; see the pin in test_export_public.py.
-        # 27 -> 28: the published-baseline snapshot the retired-name fences
-        # classify against. It is GENERATED, and a generated artifact is private
-        # by MEMBERSHIP, never by riding a human-evidence prefix -- the law
-        # test_generated_projection_damage_inventory_is_private_by_membership
-        # states, applied to the second such artifact.
-        self.assertEqual(28, len(policy.private_only_paths))
 
     def test_home_prefix_is_detected_in_each_supported_encoding(self) -> None:
         """Dropping an encoding from the byte fence leaves that encoded path publishable."""

@@ -15,7 +15,8 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 from .cursor import SparseCursor
 from .copy import (
@@ -24,6 +25,7 @@ from .copy import (
     EFFECT_OPERATION_INVALID_DETAIL,
     EFFECT_PLAN_DIGEST_INVALID_DETAIL,
     EFFECT_RUN_INVALID_DETAIL,
+    TUI_DOOR_COPY,
 )
 from .command_scope import CommandScope, resolve_command_scope
 from .deploy import DeploymentWriter
@@ -67,6 +69,10 @@ HandlerResult = Tuple[str, Dict[str, Any], int]
 
 _UUID7 = r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}"
 _HIDDEN_COMMANDS = frozenset({"wake-evaluate", "wake-record", "wake-callback"})
+_SOLO_DOOR_SENTINEL = object()
+_SOLO_FULLY_FLAGGED_REMEDY = TUI_DOOR_COPY[
+    "tui.door.solo_fully_flagged_remedy"
+]
 
 _EXIT_CODE_CONTRACT = (
     {"code": OK, "status": "ok"},
@@ -230,10 +236,48 @@ def _confluence_bundle(args: argparse.Namespace) -> HandlerResult:
 
 
 def _init(args: argparse.Namespace) -> HandlerResult:
+    interactive_solo = args.solo is _SOLO_DOOR_SENTINEL
+    if interactive_solo and any(
+        value is not None
+        for value in (
+            args.harness,
+            args.topology,
+            args.coordinator,
+            args.coordinator_authority,
+            args.owner_tier,
+        )
+    ):
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            TUI_DOOR_COPY["tui.door.solo_flags_conflict"],
+            _SOLO_FULLY_FLAGGED_REMEDY,
+        )
     if args.solo is None and args.harness is not None:
-        raise ProtocolRefusal("arguments_invalid", "--harness requires --solo")
+        raise ProtocolRefusal(
+            "arguments_invalid", TUI_DOOR_COPY["tui.door.harness_requires_solo"]
+        )
     solo_inputs: Optional[tuple[str, str]] = None
-    if args.solo is not None:
+    solo_plan: Optional[object] = None
+    if interactive_solo:
+        from .tui_doors import DoorTerminalIOError, run_solo_door
+        from .solo import SoloInitPlan, validate_solo_bootstrap_inputs
+
+        try:
+            door_inputs = run_solo_door(
+                input_stream=sys.stdin,
+                output_stream=sys.stderr,
+            )
+        except DoorTerminalIOError as exc:
+            raise ProtocolRefusal(
+                "door_terminal_io_failed",
+                TUI_DOOR_COPY["tui.door.terminal_io_failed"],
+                _SOLO_FULLY_FLAGGED_REMEDY,
+            ) from exc
+        if isinstance(door_inputs, SoloInitPlan):
+            solo_plan = door_inputs
+        else:
+            solo_inputs = validate_solo_bootstrap_inputs(*door_inputs)
+    elif args.solo is not None:
         from .solo import validate_solo_bootstrap_inputs
 
         solo_inputs = validate_solo_bootstrap_inputs(
@@ -246,6 +290,11 @@ def _init(args: argparse.Namespace) -> HandlerResult:
         args.owner_tier,
     )
     root = _root(args.root, create=True)
+    # REL-1: a newly initialized root already owns the two durable bus
+    # coordinates Doctor probes.  Their absence before first use is not a
+    # sandbox fact; it is an incomplete bootstrap shape.
+    for relative in ("cursors", "receipts/deliveries"):
+        root.resolve_relative(relative).mkdir(parents=True, exist_ok=True)
     evidence: Dict[str, Any] = {"root": str(root.path), "tenant_id": root.tenant_id}
     if governance is not None:
         recorded = Registry(root).record_governance(
@@ -255,12 +304,14 @@ def _init(args: argparse.Namespace) -> HandlerResult:
             owner_tier=governance[3],
         )
         evidence["governance"] = recorded.artifact()
-    if solo_inputs is not None:
+    if solo_plan is not None:
+        from .solo import initialize_solo_plan
+
+        evidence["solo"] = initialize_solo_plan(root, solo_plan)
+    elif solo_inputs is not None:
         from .solo import initialize_solo
 
-        evidence["solo"] = initialize_solo(
-            root, *solo_inputs
-        )
+        evidence["solo"] = initialize_solo(root, *solo_inputs)
     return "ok", evidence, OK
 
 
@@ -842,6 +893,19 @@ def _doctor(args: argparse.Namespace) -> HandlerResult:
     return str(artifact["state"]), artifact, return_code
 
 
+def _doctor_command(args: argparse.Namespace) -> int:
+    """Keep machine bytes for pipes/--json; dress only an interactive TTY."""
+
+    status, artifact, return_code = _doctor(args)
+    if args.json or not sys.stdout.isatty():
+        _emit("doctor", status, artifact, return_code)
+        return return_code
+    from .tui_doctor import render_doctor
+
+    print(render_doctor(artifact), end="")
+    return return_code
+
+
 def _supervise(args: argparse.Namespace) -> HandlerResult:
     snapshot = Supervisor(_root(args.root)).snapshot(_current_time())
     return "ok", snapshot, OK
@@ -878,10 +942,83 @@ def _receipts(args: argparse.Namespace) -> HandlerResult:
     return "ok", history, OK
 
 
+WATCH_TRACE_VARIABLE = "FLOATI_WATCH_TRACE"
+
+
+@contextmanager
+def _watch_signal_trace() -> Iterator[None]:
+    """WATCH-1: on request, say WHERE this process was when SIGINT arrived.
+
+    The watch child was observed once, under a loaded host, not honouring
+    SIGINT within a thirty-second bound while its startup was normal - so the
+    question is not "how slow" but "where", and a hang that leaves no trace is
+    a row nobody can finish. Two things are recorded, and the pair is what
+    classifies the hang:
+
+      * a SIGINT handler that writes ITS OWN frame before re-raising. If this
+        line is present, the signal was delivered AND Python ran the handler,
+        so whatever blocked came after - a shutdown path, a flush, a lock.
+      * `faulthandler` on SIGUSR1, dumping EVERY thread. This is the half that
+        survives the case the first half cannot report: a main thread stuck in
+        a call that never returns to the interpreter, or a signal that never
+        arrives at all. faulthandler writes from inside the signal handler, so
+        it works precisely when ordinary Python cannot run.
+
+    Absent the environment variable this is a no-op and the child's signal
+    behaviour is byte-for-byte what it was; the variable is set by the test.
+    """
+
+    target = os.environ.get(WATCH_TRACE_VARIABLE)
+    if not target:
+        yield
+        return
+    import faulthandler
+    import traceback
+
+    handle = open(target, "a", encoding="utf-8", buffering=1)
+    previous = signal.getsignal(signal.SIGINT)
+
+    def record_interrupt(signum: int, frame: object) -> None:
+        handle.write(f"SIGINT_HANDLER_ENTERED pid={os.getpid()} signum={signum}\n")
+        handle.write("".join(traceback.format_stack(frame)))
+        handle.write("SIGINT_HANDLER_RERAISING\n")
+        handle.flush()
+        raise KeyboardInterrupt
+
+    try:
+        faulthandler.enable(file=handle, all_threads=True)
+        if hasattr(signal, "SIGUSR1"):
+            faulthandler.register(
+                signal.SIGUSR1, file=handle, all_threads=True, chain=False
+            )
+        signal.signal(signal.SIGINT, record_interrupt)
+        handle.write(f"WATCH_TRACE_ARMED pid={os.getpid()}\n")
+        handle.flush()
+        yield
+    finally:
+        handle.write("WATCH_TRACE_DISARMED\n")
+        handle.flush()
+        signal.signal(signal.SIGINT, previous)
+        if hasattr(signal, "SIGUSR1"):
+            faulthandler.unregister(signal.SIGUSR1)
+        faulthandler.disable()
+        handle.close()
+
+
 def _watch(args: argparse.Namespace) -> int:
     root = _root(args.root)
     installer_shadow = observe_installer_shadow(getattr(args, "destination", None))
     exit_code = observation_exit_code(installer_shadow)
+    with _watch_signal_trace():
+        return _watch_loop(args, root, installer_shadow, exit_code)
+
+
+def _watch_loop(
+    args: argparse.Namespace,
+    root: object,
+    installer_shadow: object,
+    exit_code: int,
+) -> int:
     try:
         for delta in iter_deltas(
             FleetProjection(root),
@@ -1589,7 +1726,7 @@ def _parser() -> _ArtifactParser:
 
     init = commands.add_parser("init")
     init.add_argument("--root")
-    init.add_argument("--solo")
+    init.add_argument("--solo", nargs="?", const=_SOLO_DOOR_SENTINEL)
     init.add_argument("--harness")
     init.add_argument("--topology", choices=TOPOLOGIES)
     init.add_argument("--coordinator")
@@ -1914,7 +2051,8 @@ def _parser() -> _ArtifactParser:
         "--codex-config",
         help="exact Codex config.toml path containing hook trust state",
     )
-    doctor.set_defaults(handler=_doctor)
+    doctor.add_argument("--json", action="store_true")
+    doctor.set_defaults(direct_handler=_doctor_command)
 
     watch = commands.add_parser("watch")
     watch.add_argument("--root")

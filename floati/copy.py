@@ -134,6 +134,210 @@ WAKE_DAEMON_UNKNOWN_DISPLAY = register(
     "Wake daemon lifecycle",
 )
 
+TUI_DOOR_COPY = {
+    "tui.door.hints": register(
+        "tui.door.hints",
+        "DRAFT - arrows/digits choose · Enter continue · Esc back",
+        "TUI onboarding door",
+    ),
+    "tui.door.node_prompt": register(
+        "tui.door.node_prompt", "DRAFT - Node id", "TUI onboarding door"
+    ),
+    "tui.door.harness_prompt": register(
+        "tui.door.harness_prompt", "DRAFT - Harness", "TUI onboarding door"
+    ),
+    "tui.door.lease_prompt": register(
+        "tui.door.lease_prompt", "DRAFT - Lease minutes", "TUI onboarding door"
+    ),
+    "tui.door.text_input_prefix": register(
+        "tui.door.text_input_prefix", "DRAFT - > ", "TUI onboarding door"
+    ),
+    "tui.door.lifetime_title": register(
+        "tui.door.lifetime_title",
+        "DRAFT - Choose node lifetime",
+        "TUI onboarding door",
+    ),
+    "tui.door.preview_title": register(
+        "tui.door.preview_title",
+        "DRAFT - Review exact ledger records",
+        "TUI onboarding door",
+    ),
+    "tui.door.permanent_label": register(
+        "tui.door.permanent_label", "DRAFT - Permanent", "TUI onboarding door"
+    ),
+    "tui.door.permanent_detail": register(
+        "tui.door.permanent_detail",
+        "DRAFT - No automatic expiry.",
+        "TUI onboarding door",
+    ),
+    "tui.door.temporary_label": register(
+        "tui.door.temporary_label", "DRAFT - Temporary", "TUI onboarding door"
+    ),
+    "tui.door.temporary_detail": register(
+        "tui.door.temporary_detail",
+        "DRAFT - Requires a bounded lease.",
+        "TUI onboarding door",
+    ),
+    "tui.door.commit_label": register(
+        "tui.door.commit_label",
+        "DRAFT - Commit these records",
+        "TUI onboarding door",
+    ),
+    "tui.door.commit_detail": register(
+        "tui.door.commit_detail",
+        "DRAFT - Append the previewed records once.",
+        "TUI onboarding door",
+    ),
+    "tui.door.back_label": register(
+        "tui.door.back_label", "DRAFT - Back", "TUI onboarding door"
+    ),
+    "tui.door.back_detail": register(
+        "tui.door.back_detail",
+        "DRAFT - Revise the preceding answer.",
+        "TUI onboarding door",
+    ),
+    "tui.door.interactive_terminal_required": register(
+        "tui.door.interactive_terminal_required",
+        "DRAFT - onboarding doors require interactive stdin and stderr",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.viewport_too_small": register(
+        "tui.door.viewport_too_small",
+        "DRAFT - the onboarding frame does not fit the measured terminal viewport",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.input_closed": register(
+        "tui.door.input_closed",
+        "DRAFT - onboarding input ended before confirmation",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.controller_invalid": register(
+        "tui.door.controller_invalid",
+        "DRAFT - onboarding requires one door controller",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.solo_fully_flagged_remedy": register(
+        "tui.door.solo_fully_flagged_remedy",
+        "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
+        "TUI onboarding door remedy",
+    ),
+    "tui.door.node_add_fully_flagged_remedy": register(
+        "tui.door.node_add_fully_flagged_remedy",
+        "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS --lifetime permanent|temporary [--lease-minutes N]",
+        "TUI onboarding door remedy",
+    ),
+    "tui.door.option_invalid": register(
+        "tui.door.option_invalid",
+        "DRAFT - door options require ids, labels, and details",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.frame_option_invalid": register(
+        "tui.door.frame_option_invalid",
+        "DRAFT - door frame requires unique options and one focused option",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.width_invalid": register(
+        "tui.door.width_invalid",
+        "DRAFT - onboarding doors require at least 40 terminal columns",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.color_tier_invalid": register(
+        "tui.door.color_tier_invalid",
+        "DRAFT - door color tier must be 256, 16, or mono",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.title_invalid": register(
+        "tui.door.title_invalid",
+        "DRAFT - door title must be non-empty text",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.body_invalid": register(
+        "tui.door.body_invalid",
+        "DRAFT - door body rows must be text",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.text_invalid": register(
+        "tui.door.text_invalid",
+        "DRAFT - this onboarding text step requires non-empty text",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.preview_invalid": register(
+        "tui.door.preview_invalid",
+        "DRAFT - exact preview can be attached once at the preview step",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.key_invalid": register(
+        "tui.door.key_invalid",
+        "DRAFT - door keys must be text",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.solo_text_invalid": register(
+        "tui.door.solo_text_invalid",
+        "DRAFT - solo onboarding requires explicit node and harness text",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.output_invalid": register(
+        "tui.door.output_invalid",
+        "DRAFT - node add onboarding requires a preview output",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.preview_required": register(
+        "tui.door.preview_required",
+        "DRAFT - node add requires the preview decision step",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.terminal_io_failed": register(
+        "tui.door.terminal_io_failed",
+        "DRAFT - the onboarding terminal could not complete its I/O lifecycle",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.cancelled": register(
+        "tui.door.cancelled",
+        "DRAFT - onboarding was cancelled before commit",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.solo_flags_conflict": register(
+        "tui.door.solo_flags_conflict",
+        "DRAFT - no-value --solo does not compose with harness or governance flags",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.harness_requires_solo": register(
+        "tui.door.harness_requires_solo",
+        "DRAFT - --harness requires --solo",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.node_add_shape_invalid": register(
+        "tui.door.node_add_shape_invalid",
+        "DRAFT - node add requires either no flags or the complete flagged shape",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.tide_fields_incomplete": register(
+        "tui.door.tide_fields_incomplete",
+        "DRAFT - optional tide step requires metric, threshold, and action together",
+        "TUI onboarding door refusal",
+    ),
+    "tui.door.node_add_commit_failed_prefix": register(
+        "tui.door.node_add_commit_failed_prefix",
+        "DRAFT - node add commit: ",
+        "TUI onboarding door degraded detail",
+    ),
+    "tui.door.solo_config_preview": register(
+        "tui.door.solo_config_preview",
+        "DRAFT - solo configuration exact bytes:",
+        "TUI onboarding door preview",
+    ),
+    "tui.door.solo_registry_preview": register(
+        "tui.door.solo_registry_preview",
+        "DRAFT - registry entry exact values:",
+        "TUI onboarding door preview",
+    ),
+    "tui.door.solo_authority_preview": register(
+        "tui.door.solo_authority_preview",
+        "DRAFT - authority grant exact values:",
+        "TUI onboarding door preview",
+    ),
+}
+
 
 def copy_ledger_markdown() -> str:
     from . import brand  # noqa: F401 - import registers brand labels
@@ -142,6 +346,8 @@ def copy_ledger_markdown() -> str:
     from . import registry  # noqa: F401 - import registers retirement refusal copy
     from . import doctor  # noqa: F401 - import registers doctor profile copy
     from . import replay_render  # noqa: F401 - import registers replay labels
+    from . import tui_doors  # noqa: F401 - import registers TUI door copy consumers
+    from . import tui_doctor  # noqa: F401 - import registers doctor TTY copy
     from . import tui_render  # noqa: F401 - import registers TUI labels
 
     lines = [

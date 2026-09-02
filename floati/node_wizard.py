@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,47 @@ from .tide_policy import normalize_threshold
 
 _ID_SUFFIX = re.compile(r"^[0-9a-f]{32}$")
 _RETIRE_NOTICE = "Teardown retires the node and retains its workspace."
+
+
+class _ImmutableRecord(Mapping[str, Any]):
+    """Recursively immutable planned record with stable mapping order."""
+
+    __slots__ = ("_items",)
+
+    def __init__(self, values: Mapping[str, Any]) -> None:
+        object.__setattr__(
+            self,
+            "_items",
+            tuple((key, _freeze_record_value(value)) for key, value in values.items()),
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        del name, value
+        raise AttributeError("planned records are immutable")
+
+    def __delattr__(self, name: str) -> None:
+        del name
+        raise AttributeError("planned records are immutable")
+
+    def __getitem__(self, key: str) -> Any:
+        for candidate, value in self._items:
+            if candidate == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self):
+        return (key for key, _ in self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+
+def _freeze_record_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return _ImmutableRecord(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_record_value(item) for item in value)
+    return value
 
 
 def _timestamp(value: datetime) -> str:
@@ -44,10 +86,17 @@ class NodeAddPlan:
     lifetime: str
     lease_minutes: Optional[int]
     workspace: str
-    records: Tuple[Dict[str, Any], ...]
+    records: Tuple[Mapping[str, Any], ...]
     boot_command: Optional[str]
     teardown_command: Optional[str]
     governance: Optional[FleetGovernance] = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "records",
+            tuple(_ImmutableRecord(record) for record in self.records),
+        )
 
 
 @dataclass(frozen=True)
@@ -195,6 +244,10 @@ class NodeWizard:
             governance=Registry(self.root).governance(),
         )
 
+    def plan_add(self, values: Iterable[str]) -> NodeAddPlan:
+        """Build one immutable node-add transaction before it is shown or committed."""
+        return self._add_plan(values)
+
     def _retire_plan(self, values: Iterable[str]) -> NodeRetirePlan:
         answers = self._answers(values)
         if len(answers) != 1:
@@ -251,18 +304,34 @@ class NodeWizard:
         )
 
     @staticmethod
-    def _preview(records: Tuple[Dict[str, Any], ...], output: TextIO) -> None:
+    def _preview(records: Tuple[Mapping[str, Any], ...], output: TextIO) -> None:
         for record in records:
             output.write(
                 "ledger preview: "
-                + json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                + json.dumps(dict(record), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
                 + "\n"
             )
         output.flush()
 
-    def add_from_keys(self, values: Iterable[str], output: TextIO) -> Dict[str, Any]:
-        plan = self._add_plan(values)
-        self._preview(plan.records, output)
+    def render_add_preview(self, plan: NodeAddPlan) -> str:
+        """Return the exact compact ledger rows represented by one add plan."""
+        if not isinstance(plan, NodeAddPlan):
+            raise ProtocolRefusal("wizard_plan_invalid", "node add preview requires one add plan")
+        return "".join(
+            "ledger preview: "
+            + json.dumps(
+                dict(record), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
+            + "\n"
+            for record in plan.records
+        )
+
+    def commit_add(self, plan: NodeAddPlan, output: TextIO) -> Dict[str, Any]:
+        """Flush one rendered plan, then commit that same immutable object once."""
+        if not isinstance(plan, NodeAddPlan):
+            raise ProtocolRefusal("wizard_plan_invalid", "node add commit requires one add plan")
+        output.write(self.render_add_preview(plan))
+        output.flush()
         result = dict(self.backend.commit_add(plan))
         result.update(
             {
@@ -270,12 +339,13 @@ class NodeWizard:
                 "lifetime": plan.lifetime,
                 "boot_command": plan.boot_command,
                 "teardown_command": plan.teardown_command,
-                "tide_metrics": [
-                    metric.name for metric in policy_metrics_for(plan.harness)
-                ],
+                "tide_metrics": [metric.name for metric in policy_metrics_for(plan.harness)],
             }
         )
         return result
+
+    def add_from_keys(self, values: Iterable[str], output: TextIO) -> Dict[str, Any]:
+        return self.commit_add(self.plan_add(values), output)
 
     def add_plain(self, input_stream: TextIO, output: TextIO) -> Dict[str, Any]:
         answers = []

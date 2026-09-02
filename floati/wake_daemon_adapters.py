@@ -103,6 +103,35 @@ def _zcode_node_interpreter(declared: object = None) -> Path:
         ) from exc
 
 
+def _zcode_entry_executable(declared: object = None) -> Path:
+    """Resolve the zcode entry script from one declaration or its fixed default."""
+
+    if declared is not None:
+        try:
+            return Path(
+                _explicit_executable(
+                    declared, "wake_daemon_zcode_entry_invalid"
+                )
+            )
+        except ProtocolRefusal as exc:
+            raise ProtocolRefusal(
+                exc.code,
+                exc.detail,
+                remedy="declare one absolute canonical zcode entry executable path",
+            ) from exc
+    try:
+        return ZCODE_ENTRY_SCRIPT.resolve(strict=True)
+    except OSError as exc:
+        raise ProtocolRefusal(
+            "wake_daemon_zcode_entry_absent",
+            f"the fixed zcode entry script is absent at {ZCODE_ENTRY_SCRIPT}",
+            remedy=(
+                "declare the zcode entry executable, or restore the reviewed "
+                f"zcode entry script at {ZCODE_ENTRY_SCRIPT}"
+            ),
+        ) from exc
+
+
 def resume_probe_class(harness: str) -> str:
     """Return the adapter's declared resume_probe class, refusing if undeclared."""
 
@@ -534,17 +563,23 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
         *,
         runner: Optional[Runner] = None,
         node_executable: object = None,
+        entry_executable: object = None,
     ) -> None:
-        """`node_executable` is the operator's interpreter declaration (HB-1).
+        """The two executable values are the operator's zcode declarations.
 
-        Undeclared, the adapter keeps the fixed default and its typed absence.
-        The declaration is validated here, at construction, so a bad path
-        refuses before any wake is attempted.
+        Undeclared, each keeps its fixed default and typed absence. Declarations
+        are validated here, at construction, so a bad path refuses before any
+        wake is attempted.
         """
 
         super().__init__(coordinate, runner=runner)
         self._node_executable: Optional[Path] = (
             None if node_executable is None else _zcode_node_interpreter(node_executable)
+        )
+        self._entry_executable: Optional[Path] = (
+            None
+            if entry_executable is None
+            else _zcode_entry_executable(entry_executable)
         )
 
     @staticmethod
@@ -570,13 +605,7 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
         self, binding: object, reason: str, deadline_seconds: int
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
-        try:
-            entry = ZCODE_ENTRY_SCRIPT.resolve(strict=True)
-        except OSError as exc:
-            raise ProtocolRefusal(
-                "wake_daemon_zcode_entry_absent",
-                "the fixed zcode entry script is absent",
-            ) from exc
+        entry = _zcode_entry_executable(self._entry_executable)
         if entry != current.executable:
             raise ProtocolRefusal(
                 "wake_daemon_zcode_entry_mismatch",
@@ -642,8 +671,17 @@ def wake_adapter_for(
     harness: str,
     *,
     runner: Optional[Runner] = None,
+    zcode_node_executable: object = None,
+    zcode_entry_executable: object = None,
 ) -> _BoundWakeAdapter:
     coordinate = DaemonCoordinate(root, node_id, harness)
+    if harness != "zcode" and (
+        zcode_node_executable is not None or zcode_entry_executable is not None
+    ):
+        raise ProtocolRefusal(
+            "wake_daemon_zcode_declaration_harness_mismatch",
+            "zcode executable declarations require harness zcode",
+        )
     if harness == "codex":
         return CodexQueueWakeAdapter(coordinate, runner=runner)
     if harness == "cursor":
@@ -651,7 +689,12 @@ def wake_adapter_for(
     if harness == "grok-build":
         return GrokBuildResumeWakeAdapter(coordinate, runner=runner)
     if harness == "zcode":
-        return ZcodeResumeWakeAdapter(coordinate, runner=runner)
+        return ZcodeResumeWakeAdapter(
+            coordinate,
+            runner=runner,
+            node_executable=zcode_node_executable,
+            entry_executable=zcode_entry_executable,
+        )
     raise ProtocolRefusal(
         "wake_daemon_harness_unsupported",
         "wake daemon v1 supports only codex, cursor, grok-build, or zcode",

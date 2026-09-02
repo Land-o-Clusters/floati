@@ -219,6 +219,93 @@ class WakeDaemonCliTests(unittest.TestCase):
         self.assertEqual(20, status)
         self.assertEqual("wake_bind_target_unresumable", artifact["evidence"]["code"])
 
+    def test_zcode_bind_threads_both_operator_declarations_to_the_factory(self) -> None:
+        """HB-1-F2: bind-time probing uses the declared node and entry paths."""
+        from floati.wake_daemon_adapters import WakeAdapterResult
+
+        captured: dict[str, object] = {}
+
+        class ProbeAdapter:
+            def probe_resume(self, *args: object) -> WakeAdapterResult:
+                captured["probe"] = args
+                return WakeAdapterResult("woke", None, 0, None)
+
+        def factory(*args: object, **kwargs: object) -> ProbeAdapter:
+            captured["factory_args"] = args
+            captured["factory_kwargs"] = kwargs
+            return ProbeAdapter()
+
+        with mock.patch(
+            "floati.wake_daemon_adapters.wake_adapter_for",
+            side_effect=factory,
+        ):
+            status, artifact = self.run_cli(
+                *self.identity("bind", "zcode"),
+                "--session", "zcode-session-1",
+                "--workspace", str(self.workspace),
+                "--executable", str(self.proof_executable),
+                "--binding-epoch", "1",
+                "--zcode-node-executable", str(self.executable),
+                "--zcode-entry-executable", str(self.proof_executable),
+                "--yes",
+            )
+
+        self.assertEqual(0, status, artifact)
+        self.assertEqual(
+            {
+                "zcode_node_executable": str(self.executable),
+                "zcode_entry_executable": str(self.proof_executable),
+            },
+            captured["factory_kwargs"],
+        )
+        self.assertIn("probe", captured)
+
+    def test_zcode_serve_threads_both_operator_declarations_to_the_factory(self) -> None:
+        """HB-1-F2: the daemon's live adapter gets the same declarations."""
+        captured: dict[str, object] = {}
+        consent_status, consent_artifact = self.run_cli(
+            *self.identity("consent", "zcode"),
+            "--min-poll-seconds", "1",
+            "--max-poll-seconds", "30",
+            "--max-backoff-seconds", "120",
+            "--activation-epoch", "1",
+        )
+        self.assertEqual(0, consent_status, consent_artifact)
+
+        def factory(*args: object, **kwargs: object) -> object:
+            captured["factory_args"] = args
+            captured["factory_kwargs"] = kwargs
+            return object()
+
+        class FakeDaemon:
+            def __init__(self, coordinate: object, adapter: object) -> None:
+                captured["coordinate"] = coordinate
+                captured["adapter"] = adapter
+
+            def serve(self, stopped: object) -> None:
+                captured["stopped"] = stopped
+
+        with mock.patch(
+            "floati.wake_daemon_adapters.wake_adapter_for",
+            side_effect=factory,
+        ), mock.patch("floati.wake_daemon.WakeDaemon", FakeDaemon):
+            status, artifact = self.run_cli(
+                *self.identity("serve", "zcode"),
+                "--activation-epoch", "1",
+                "--zcode-node-executable", str(self.executable),
+                "--zcode-entry-executable", str(self.proof_executable),
+            )
+
+        self.assertEqual(0, status, artifact)
+        self.assertEqual(
+            {
+                "zcode_node_executable": str(self.executable),
+                "zcode_entry_executable": str(self.proof_executable),
+            },
+            captured["factory_kwargs"],
+        )
+        self.assertIn("stopped", captured)
+
     def test_cursor_bind_is_exact_and_codex_bind_requires_the_waiter(self) -> None:
         status, artifact = self.bind()
         self.assertEqual(0, status)

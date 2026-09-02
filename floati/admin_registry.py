@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Sequence
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
 
 from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
@@ -47,7 +47,7 @@ class RegistryAdminBackend:
     @shared_epoch_operation
     def _commit(
         self,
-        records: Sequence[Dict[str, Any]],
+        records: Sequence[Mapping[str, Any]],
         decide: Any,
     ) -> Dict[str, Any]:
         frozen = tuple(dict(record) for record in records)
@@ -77,7 +77,7 @@ class RegistryAdminBackend:
         return WorkspaceBinding.prepare(self.root, node_id)
 
     def _add_commit_state(
-        self, records: Sequence[Dict[str, Any]]
+        self, records: Sequence[Mapping[str, Any]]
     ) -> Optional[bool]:
         """Return true/false only when exact append presence can be reconciled."""
 

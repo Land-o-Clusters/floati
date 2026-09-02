@@ -117,7 +117,16 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
         self.assertTrue((REPOSITORY_ROOT / "SECURITY.md").is_file())
 
     def test_release_gate_runs_full_selftest_and_public_fences(self) -> None:
-        """Dropping a platform or allowing fence success without selftest is rejected."""
+        """Dropping a platform or allowing fence success without selftest is rejected.
+
+        The selftest matrix is pinned to Linux alone on purpose. On 2026-09-02 the
+        owner ordered hosted macOS removed from every workflow after a billing
+        incident, and this gate was cut to ``ubuntu-latest`` only. The pin is exact
+        in both directions: it refuses a platform being dropped silently, and it
+        equally refuses ``macos-latest`` being restored here. Do not "fix" this
+        test by adding hosted macOS back — that is the retired policy, and the
+        workflow is what the current one says.
+        """
 
         workflow = self.load_json_yaml(".github/workflows/release-gate.yml")
 
@@ -132,7 +141,7 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
             selftest["if"],
         )
         self.assertEqual(
-            {"fail-fast": False, "matrix": {"os": ["ubuntu-latest", "macos-latest"]}},
+            {"fail-fast": False, "matrix": {"os": ["ubuntu-latest"]}},
             selftest["strategy"],
         )
         self.assertEqual("${{ matrix.os }}", selftest["runs-on"])

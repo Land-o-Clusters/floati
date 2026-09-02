@@ -60,6 +60,18 @@ class RecordingBackend:
             raise AssertionError("exact record previews must be flushed before commit")
 
 
+class FlushTrackingOutput(io.StringIO):
+    """Test-only stream proving preview visibility precedes the backend mutation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.flush_count = 0
+
+    def flush(self) -> None:
+        self.flush_count += 1
+        super().flush()
+
+
 class NodeWizardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -104,6 +116,71 @@ class NodeWizardTests(unittest.TestCase):
         self.assertEqual("retire", teardown.node_command)
         self.assertEqual("alpha", boot.node)
         self.assertEqual("alpha", teardown.node)
+
+    def test_public_add_plan_preview_and_commit_preserve_one_exact_plan_object(self) -> None:
+        """Catches preview/commit rebuilding node-add rows after the user reviewed them."""
+        output = FlushTrackingOutput()
+        self.backend.preview_stream = output
+        plan = self.wizard.plan_add(["alpha", "Codex", "temporary", "90"])
+
+        preview = self.wizard.render_add_preview(plan)
+        result = self.wizard.commit_add(plan, output)
+
+        expected = "\n".join(
+            "ledger preview: "
+            + json.dumps(
+                dict(record), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
+            for record in plan.records
+        ) + "\n"
+        self.assertEqual(expected, preview)
+        self.assertEqual(expected, output.getvalue())
+        self.assertGreaterEqual(output.flush_count, 1)
+        self.assertIs(plan, self.backend.added)
+        self.assertEqual(list(plan.records), result["records"])
+
+    def test_previewed_plan_records_cannot_be_mutated_before_that_plan_commits(self) -> None:
+        """Catches a caller changing a reviewed record before the same plan reaches the backend."""
+        output = FlushTrackingOutput()
+        self.backend.preview_stream = output
+        plan = self.wizard.plan_add(["alpha", "Codex", "temporary", "90"])
+        preview = self.wizard.render_add_preview(plan)
+
+        with self.assertRaises(TypeError):
+            plan.records[0]["node_id"] = "changed-after-preview"
+        result = self.wizard.commit_add(plan, output)
+
+        self.assertIn('"node_id":"alpha"', preview)
+        self.assertEqual("alpha", self.backend.added.records[0]["node_id"])
+        self.assertEqual("alpha", result["records"][0]["node_id"])
+
+    def test_previewed_plan_rejects_direct_dict_base_method_mutation_before_commit(self) -> None:
+        """Catches dict.__setitem__ bypassing the reviewed plan's immutability guard."""
+        output = FlushTrackingOutput()
+        self.backend.preview_stream = output
+        plan = self.wizard.plan_add(["alpha", "Codex", "temporary", "90"])
+        preview = self.wizard.render_add_preview(plan)
+
+        with self.assertRaises(TypeError):
+            dict.__setitem__(plan.records[0], "node_id", "changed-after-preview")
+        result = self.wizard.commit_add(plan, output)
+
+        self.assertIn('"node_id":"alpha"', preview)
+        self.assertEqual("alpha", result["records"][0]["node_id"])
+
+    def test_previewed_plan_rejects_backing_attribute_rebinding_before_commit(self) -> None:
+        """Catches direct _items rebinding replacing the reviewed record before commit."""
+        output = FlushTrackingOutput()
+        self.backend.preview_stream = output
+        plan = self.wizard.plan_add(["alpha", "Codex", "temporary", "90"])
+        preview = self.wizard.render_add_preview(plan)
+
+        with self.assertRaises(AttributeError):
+            plan.records[0]._items = (("node_id", "changed-after-preview"),)
+        result = self.wizard.commit_add(plan, output)
+
+        self.assertIn('"node_id":"alpha"', preview)
+        self.assertEqual("alpha", result["records"][0]["node_id"])
 
     def test_permanent_add_has_one_registry_record_and_no_lease_commands(self) -> None:
         """Catches permanent onboarding accidentally creating lease state."""
