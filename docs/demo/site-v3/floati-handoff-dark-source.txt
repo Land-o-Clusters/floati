@@ -1,0 +1,9 @@
+FLOATI // HANDOFF RECEIPTS
+$ floati receipts receiver --root <scratch>
+
+DELIVERED      delivery_receipt  items=1
+ACKNOWLEDGED   ack_receipt  items=1
+DENIED         denial_receipt  code=idempotency_conflict
+
+Append is not delivery. Delivery is not acknowledgment.
+A refusal is recorded separately from both.

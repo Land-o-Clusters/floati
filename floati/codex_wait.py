@@ -17,9 +17,11 @@ from .codex_wait_contract import (
     CodexWaitReopenLedger,
     CodexWaitSessionLedger,
     WatchedLedger,
+    WORKSPACE_MAP_RELATIVE,
     consent_ledger_relative,
     resolve_participant,
 )
+from .errors import ProtocolRefusal
 from .ids import uuid7_hex
 from .wake_control import validate_session_id
 from .wake_exit import WakeExitLedger
@@ -30,6 +32,23 @@ BREAKER_WINDOW_SECONDS = 60.0
 BREAKER_MAX_INVOCATIONS = 20
 
 
+def _report_evidence_failure(
+    stderr: Optional[TextIO], operation: str, failure: Exception
+) -> None:
+    """Name one failed evidence write without disclosing exception content."""
+
+    if stderr is None:
+        return
+    try:
+        stderr.write(
+            "floati waiter evidence unavailable: "
+            f"{operation}: {type(failure).__name__}\n"
+        )
+        stderr.flush()
+    except Exception:
+        return
+
+
 def _record_exit(
     participant: object,
     *,
@@ -37,6 +56,7 @@ def _record_exit(
     reason_code: str,
     waited_seconds: int,
     invocation_id: str,
+    stderr: Optional[TextIO],
 ) -> None:
     """Best-effort exit testimony must never widen the Stop-hook outcome."""
 
@@ -48,8 +68,8 @@ def _record_exit(
             waited_seconds=waited_seconds,
             idempotency_key=f"{invocation_id}-exit-{reason_code}",
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        _report_evidence_failure(stderr, "wake_exit", exc)
 
 
 def _reopen_consent(
@@ -60,6 +80,7 @@ def _reopen_consent(
     session_digest: str,
     invocation_id: str,
     waited_seconds: int,
+    stderr: TextIO,
 ) -> Optional[tuple]:
     """Reopen the consent ledger at the file its PATH names now.
 
@@ -90,19 +111,27 @@ def _reopen_consent(
             outcome="rearmed" if usable else "consent_withdrawn",
             invocation_id=invocation_id,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        _report_evidence_failure(stderr, "consent_reopen", exc)
+        # Reopen testimony is evidence. A failed write does not withdraw consent.
     if not usable:
         _record_exit(
             participant, session_digest=session_digest,
             reason_code="consent_withdrawn", waited_seconds=waited_seconds,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return None
     return reopened, deadline_seconds
 
 
-def _breaker_tripped(root: object, node_id: str, *, now: float) -> bool:
+def _breaker_tripped(
+    root: object,
+    node_id: str,
+    *,
+    now: float,
+    stderr: Optional[TextIO] = None,
+) -> bool:
     """Persist one bounded invocation window after participation is proven."""
 
     path = root.resolve_relative(Path("state/codex-wait") / node_id / "breaker.json")
@@ -124,12 +153,16 @@ def _breaker_tripped(root: object, node_id: str, *, now: float) -> bool:
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             if os.write(descriptor, encoded) != len(encoded):
+                _report_evidence_failure(
+                    stderr, "breaker", OSError("short breaker write")
+                )
                 return True
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
         os.replace(temporary, path)
-    except OSError:
+    except OSError as exc:
+        _report_evidence_failure(stderr, "breaker", exc)
         try:
             temporary.unlink()
         except OSError:
@@ -173,11 +206,13 @@ def run_stop_waiter(
             consent,
             session_id,
         )
-    except Exception:
+    except Exception as exc:
+        _report_evidence_failure(stderr, "session_authority", exc)
         _record_exit(
             participant, session_digest=session_digest,
             reason_code="integrity_failure", waited_seconds=0,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return 0
     if session_authority is None:
@@ -186,8 +221,13 @@ def run_stop_waiter(
         from .wake_daemon_adapters import record_codex_daemon_binding
 
         record_codex_daemon_binding(participant, session_id)
-    except Exception:
-        pass
+    except ProtocolRefusal as exc:
+        if exc.code != "wake_daemon_codex_executable_absent":
+            _report_evidence_failure(stderr, "daemon_binding", exc)
+    except Exception as exc:
+        _report_evidence_failure(stderr, "daemon_binding", exc)
+        # Binding is testimony, not a participation gate. A failed write may
+        # name the op on stderr but must not delete the waiter's later decision.
     try:
         from .wake_control import is_session_paused
 
@@ -196,24 +236,29 @@ def run_stop_waiter(
                 participant, session_digest=session_digest,
                 reason_code="paused", waited_seconds=0,
                 invocation_id=invocation_id,
+                stderr=stderr,
             )
             return 0
-    except Exception:
+    except Exception as exc:
+        _report_evidence_failure(stderr, "pause_state", exc)
         _record_exit(
             participant, session_digest=session_digest,
             reason_code="integrity_failure", waited_seconds=0,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return 0
     if _breaker_tripped(
         participant.root,
         participant.binding.node_id,
         now=wall_time(),
+        stderr=stderr,
     ):
         _record_exit(
             participant, session_digest=session_digest,
             reason_code="breaker", waited_seconds=0,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return 0
     deadline_seconds = consent.get("wait_deadline_seconds")
@@ -222,6 +267,7 @@ def run_stop_waiter(
             participant, session_digest=session_digest,
             reason_code="integrity_failure", waited_seconds=0,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return 0
     if not isinstance(poll_interval_seconds, (int, float)) or poll_interval_seconds <= 0:
@@ -229,6 +275,7 @@ def run_stop_waiter(
             participant, session_digest=session_digest,
             reason_code="integrity_failure", waited_seconds=0,
             invocation_id=invocation_id,
+            stderr=stderr,
         )
         return 0
     started = monotonic()
@@ -236,7 +283,27 @@ def run_stop_waiter(
     controller = WakeHoldController(participant.root)
     consent_relative = consent_ledger_relative(participant.binding.node_id)
     consent_watch = WatchedLedger(participant.root.resolve_relative(consent_relative))
+    workspace_map_watch = WatchedLedger(Path(bus_home) / WORKSPACE_MAP_RELATIVE)
     while True:
+        map_replacement = workspace_map_watch.poll()
+        if map_replacement is not None:
+            refreshed = resolve_participant(Path(bus_home), Path(raw_workspace))
+            if (
+                refreshed is None
+                or refreshed.root.tenant_home != participant.root.tenant_home
+                or refreshed.binding.workspace != participant.binding.workspace
+                or refreshed.binding.node_id != participant.binding.node_id
+            ):
+                _record_exit(
+                    participant,
+                    session_digest=session_digest,
+                    reason_code="not_claimant",
+                    waited_seconds=max(0, int(monotonic() - started)),
+                    invocation_id=invocation_id,
+                    stderr=stderr,
+                )
+                return 0
+            participant = refreshed
         replacement = consent_watch.poll()
         if replacement is not None:
             reopened = _reopen_consent(
@@ -246,6 +313,7 @@ def run_stop_waiter(
                 session_digest=session_digest,
                 invocation_id=invocation_id,
                 waited_seconds=max(0, int(monotonic() - started)),
+                stderr=stderr,
             )
             if reopened is None:
                 return 0
@@ -257,12 +325,14 @@ def run_stop_waiter(
             current_authority = CodexWaitSessionLedger(
                 participant.root
             ).participate(participant.binding, consent, session_id)
-        except Exception:
+        except Exception as exc:
+            _report_evidence_failure(stderr, "session_authority", exc)
             _record_exit(
                 participant, session_digest=session_digest,
                 reason_code="integrity_failure",
                 waited_seconds=max(0, int(monotonic() - started)),
                 invocation_id=invocation_id,
+                stderr=stderr,
             )
             return 0
         if current_authority is None:
@@ -271,6 +341,7 @@ def run_stop_waiter(
                 reason_code="not_claimant",
                 waited_seconds=max(0, int(monotonic() - started)),
                 invocation_id=invocation_id,
+                stderr=stderr,
             )
             return 0
         invocation_key = "codex-stop-" + uuid7_hex()
@@ -279,12 +350,14 @@ def run_stop_waiter(
                 participant.binding.node_id,
                 idempotency_key=invocation_key,
             )
-        except Exception:
+        except Exception as exc:
+            _report_evidence_failure(stderr, "wake_evaluation", exc)
             _record_exit(
                 participant, session_digest=session_digest,
                 reason_code="integrity_failure",
                 waited_seconds=max(0, int(monotonic() - started)),
                 invocation_id=invocation_id,
+                stderr=stderr,
             )
             return 0
         state = artifact.get("state")
@@ -316,11 +389,15 @@ def run_stop_waiter(
                     outcome="woke",
                 )
             except Exception as exc:
-                try:
-                    stderr.write(f"wake evidence unavailable: {type(exc).__name__}\n")
-                    stderr.flush()
-                except Exception:
-                    pass
+                _report_evidence_failure(stderr, "wake_attempt", exc)
+                _record_exit(
+                    participant,
+                    session_digest=session_digest,
+                    reason_code="integrity_failure",
+                    waited_seconds=max(0, int(monotonic() - started)),
+                    invocation_id=invocation_id,
+                    stderr=stderr,
+                )
             return 0
         now = monotonic()
         if now >= deadline:
@@ -329,6 +406,7 @@ def run_stop_waiter(
                 participant, session_digest=session_digest,
                 reason_code="exhausted", waited_seconds=waited,
                 invocation_id=invocation_id,
+                stderr=stderr,
             )
             try:
                 CodexWaitReceiptLedger(participant.root).record_exhaustion(
@@ -337,6 +415,9 @@ def run_stop_waiter(
                     waited_seconds=waited,
                     idempotency_key=invocation_key + "-exhaustion",
                 )
+            except Exception as exc:
+                _report_evidence_failure(stderr, "exhaustion", exc)
+            try:
                 stdout.write(
                     json.dumps(
                         {

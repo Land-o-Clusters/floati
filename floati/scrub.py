@@ -187,7 +187,13 @@ def scan_generated_tree(
 
 
 def scan_git_history_notes(root: Path) -> List[str]:
-    """Return commit-message and Git-note coordinates containing the private name."""
+    """Return history-text coordinates containing the private name.
+
+    Covers commit messages, Git-note bodies, annotated-tag messages, and
+    ref names. Lightweight tags are not read as tag messages: their
+    ``contents`` would reprint the pointed-to commit message already
+    scanned by ``git log``.
+    """
 
     base = Path(root).resolve()
     messages = _git(
@@ -230,6 +236,35 @@ def scan_git_history_notes(root: Path) -> List[str]:
             note = _git(base, "notes", f"--ref={ref}", "show", object_sha).lower()
             if any(token in note for _code, token in vocabulary):
                 hits.append(f"{ref}:{object_sha}:note")
+
+    tag_listing = _git(
+        base,
+        "for-each-ref",
+        "--format=%(objecttype)%00%(objectname)%00%(refname)%00%(contents)%00",
+        "refs/tags",
+    )
+    tag_fields = tag_listing.split(b"\0")
+    for index in range(0, len(tag_fields) - 1, 4):
+        if index + 3 >= len(tag_fields):
+            break
+        objecttype = tag_fields[index].decode("ascii", errors="replace").strip()
+        ref = tag_fields[index + 2].decode("utf-8", errors="replace").strip()
+        body = tag_fields[index + 3].lower()
+        if (
+            objecttype == "tag"
+            and ref
+            and any(token in body for _code, token in vocabulary)
+        ):
+            hits.append(f"{ref}:tag-message")
+
+    all_refs = _git(base, "for-each-ref", "--format=%(refname)")
+    for raw_ref in all_refs.splitlines():
+        ref = raw_ref.decode("utf-8", errors="replace").strip()
+        if not ref:
+            continue
+        lowered = ref.encode("utf-8").lower()
+        if any(token in lowered for _code, token in vocabulary):
+            hits.append(f"{ref}:ref-name")
     return sorted(hits)
 
 

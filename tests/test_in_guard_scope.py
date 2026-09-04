@@ -27,8 +27,7 @@ def invoke(
         text=True,
         env=None if environment is None else {**os.environ, **environment},
     )
-    stream = completed.stdout if completed.returncode == 0 else completed.stderr
-    return completed, json.loads(stream)
+    return completed, json.loads(completed.stdout)
 
 
 class InGuardScopeTests(unittest.TestCase):
@@ -52,8 +51,8 @@ class InGuardScopeTests(unittest.TestCase):
             "inbox", "--root", str(self.root), "--as", "never-registered", "--peek"
         )
         self.assertEqual(20, completed.returncode)
-        self.assertEqual("", completed.stdout)
-        self.assertEqual(1, len(completed.stderr.splitlines()))
+        self.assertEqual("", completed.stderr)
+        self.assertEqual(1, len(completed.stdout.splitlines()))
         self.assertEqual(
             json.dumps(
                 artifact,
@@ -62,7 +61,7 @@ class InGuardScopeTests(unittest.TestCase):
                 separators=(",", ":"),
             )
             + "\n",
-            completed.stderr,
+            completed.stdout,
         )
         self.assertEqual("refused", artifact["status"])
         self.assertEqual(str(self.opened.path), artifact["evidence"]["scope"]["root"])

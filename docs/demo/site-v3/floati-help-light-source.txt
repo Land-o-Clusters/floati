@@ -1,0 +1,28 @@
+$ floati --help
+
+NAME
+    floati - inspect and operate an explicit fleet root
+
+SYNOPSIS
+    floati COMMAND [OPTIONS]
+
+DESCRIPTION
+    Operate the local receipt-ledger bus and orchestration log. Every durable command requires an explicit root.
+
+OPTIONS AND ARGUMENTS
+    Commands: describe, overlap, init, register, retire, node, role, context, chart, survey, wake, send,
+    verify, journal, signature, repair, inbox, ack, sent, log, status, snapshot, effects, effect, threads,
+    thread, graph, plan, doctor, watch, receipts, grant, work, intake, worker, sequencer,
+    supervise, mcp, board, orchestrate, epoch, install, update, uninstall, purge, quota. Use COMMAND --help for its
+    contract.
+
+EXIT STATUS
+    0 success; 20 refusal; 31 intentional silence; 32 no result;
+    33 malformed evidence; 34 orchestration deadline; 35 degraded;
+    36 sandbox write refused.
+    The artifact process status is authoritative.
+
+EXAMPLES
+    floati status --root /absolute/fleet
+    floati effects --root /absolute/fleet
+    floati work --help

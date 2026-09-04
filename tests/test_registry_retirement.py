@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 from floati import fixture_ids as public_ids
 
 import json
@@ -124,7 +126,7 @@ class RegistryRetirementCliTests(unittest.TestCase):
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *args],
+            [str(LAUNCHER), *args],
             cwd=REPOSITORY_ROOT,
             text=True,
             capture_output=True,
@@ -132,9 +134,9 @@ class RegistryRetirementCliTests(unittest.TestCase):
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        self.assertEqual(1, len(stream.splitlines()))
-        return json.loads(stream)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        return json.loads(result.stdout)
 
     def register(self, node: str) -> None:
         result = self.run_cli(

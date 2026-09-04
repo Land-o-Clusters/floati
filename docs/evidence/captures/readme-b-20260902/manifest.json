@@ -1,0 +1,140 @@
+{
+  "captured_at": "2026-09-02T22:00:00.000Z",
+  "captures": [
+    {
+      "files": [
+        {
+          "bytes": 6069,
+          "path": "harbor-board-standard.txt",
+          "sha256": "a04b607f207bef8c5ddb1c4a3c30908fdc6a570f6b1b23eec7192f7f413277e4"
+        },
+        {
+          "bytes": 775,
+          "path": "harbor-board-plain.txt",
+          "sha256": "9eb790b88800c968157f24c24b822a69295209c4f7b377bbc0b0f4cd9c9fb239"
+        },
+        {
+          "bytes": 6960,
+          "path": "harbor-board-dark.svg",
+          "sha256": "3a70450f309b7ed7d2539fdaf6dae647f088094a51bf75c8350d6b4090b8d8d2"
+        },
+        {
+          "bytes": 6961,
+          "path": "harbor-board-light.svg",
+          "sha256": "ba5ebe0fde95b2f97b72700ca220d1a17d3c96185ba0f7d19e420d9806ec491e"
+        }
+      ],
+      "name": "harbor-board",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/harbor-board"
+    },
+    {
+      "animated": true,
+      "event_count": 14,
+      "files": [
+        {
+          "bytes": 1772,
+          "path": "flight-recorder-replay-standard.txt",
+          "sha256": "f8fb7d891b5bdfd309d402451d6f30fe8cde240da84fb4a9e31f81b35b88e6fb"
+        },
+        {
+          "bytes": 1496,
+          "path": "flight-recorder-replay-plain.txt",
+          "sha256": "fed13fd701ade7d67819040b1edb0a883cdb39e2f0091500d763e68f5c24ef68"
+        },
+        {
+          "bytes": 835928,
+          "path": "flight-recorder-replay-dark.gif",
+          "sha256": "63291e5899dad4e4da0600303a9c5e506e260c8ef99e12350b0189ec78ea02a1"
+        },
+        {
+          "bytes": 837124,
+          "path": "flight-recorder-replay-light.gif",
+          "sha256": "5a52fa1443c8acf118c1cde325efa3b5e64f1dcca7219a039c9f44b0690014b4"
+        }
+      ],
+      "frame_count": 14,
+      "name": "flight-recorder-replay",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/flight-recorder"
+    },
+    {
+      "animated": true,
+      "files": [
+        {
+          "bytes": 715,
+          "path": "onboard-wizard-standard.txt",
+          "sha256": "886acfcdff50ad37e08f405b1dd3e1afc6eb9b3a82548f693a9a543768885f1d"
+        },
+        {
+          "bytes": 85234,
+          "path": "onboard-wizard-dark.gif",
+          "sha256": "ef62a23617ccd0b4ef841b577b88f1116c44150693de5480738979d14f8f87f7"
+        },
+        {
+          "bytes": 85312,
+          "path": "onboard-wizard-light.gif",
+          "sha256": "915fc82f6405b5f7350b4a0b31f3baf1fffdde1cc9a78a0a1eb9f4a4f0ad531e"
+        }
+      ],
+      "frame_count": 3,
+      "name": "onboard-wizard",
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/onboard-wizard"
+    },
+    {
+      "declared_roots": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/declared-roots.json",
+      "files": [
+        {
+          "bytes": 481,
+          "path": "harbor-chart-multibus-standard.txt",
+          "sha256": "e2c638d2a22018703163096775a6ed2e79c8cb67ad8a81011deaccff0aa5ef62"
+        },
+        {
+          "bytes": 1468,
+          "path": "harbor-chart-multibus-dark.svg",
+          "sha256": "8f442b0c6efa227fd3d5932acbe79d89f2da53cf999eb1cd3df5cb2c38d88f81"
+        },
+        {
+          "bytes": 1469,
+          "path": "harbor-chart-multibus-light.svg",
+          "sha256": "1d66ae0867a41f8c51d9cb9e8d6b174595d09c8ac3576012cb740b63b55ea932"
+        }
+      ],
+      "name": "harbor-chart-multibus",
+      "real_ledger": true,
+      "roots": [
+        "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/harbor-upstream",
+        "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/harbor-downstream"
+      ]
+    },
+    {
+      "files": [
+        {
+          "bytes": 769,
+          "path": "doctor-delivery-health-standard.txt",
+          "sha256": "85de72f40dc7844dcefd7cb99cbe08cdc39fd08ecc3713aa5a79df4ba0bb6df7"
+        },
+        {
+          "bytes": 2060,
+          "path": "doctor-delivery-health-dark.svg",
+          "sha256": "bc1eb5a286deb3675b36366ebf443e41a9d2e5ea1c949493fbf0e2a68f8dbbe3"
+        },
+        {
+          "bytes": 2061,
+          "path": "doctor-delivery-health-light.svg",
+          "sha256": "314fded5a1af984ed9eacaf06e1d5d407c917c29719e7d3714ce93b5cba42cbd"
+        }
+      ],
+      "name": "doctor-delivery-health",
+      "probe_budget_seconds": 1,
+      "real_ledger": true,
+      "root": "/opt/homebrew/var/floati-rm6-readme-b-20260902/doctor"
+    }
+  ],
+  "generator": "scripts/capture-readme-real-ledgers.py",
+  "schema_version": 0,
+  "scratch": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch",
+  "source_sha": "b911fa29258a17c2c662259faabcff3d5d746801",
+  "synthetic": false
+}

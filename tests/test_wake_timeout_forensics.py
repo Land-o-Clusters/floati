@@ -31,7 +31,10 @@ from pathlib import Path
 go, done = Path(sys.argv[1]), Path(sys.argv[2])
 while not go.is_file():
     time.sleep(0.05)
-done.write_text("done\\n", encoding="utf-8")
+handle = done.open("w", encoding="utf-8")
+time.sleep(0.5)
+handle.write("done\\n")
+handle.close()
 """
 
 _OUTPUT_AFTER_CAP_CHILD = """\
@@ -95,6 +98,19 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
         finally:
             os.close(read_fd)
             os.close(write_fd)
+
+    def _wait_for_marker_content(self, marker: Path, expected: str, timeout: float = 3.0) -> str:
+        deadline = time.monotonic() + timeout
+        content = ""
+        while time.monotonic() < deadline:
+            try:
+                content = marker.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                content = ""
+            if content == expected:
+                break
+            time.sleep(0.02)
+        return content
 
     def _terminate_for_cleanup(self, pid: int) -> None:
         try:
@@ -175,10 +191,7 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
         self.addCleanup(self._terminate_for_cleanup, pid)
         os.kill(pid, 0)
         go.write_text("go\n", encoding="utf-8")
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and not marker.is_file():
-            time.sleep(0.02)
-        self.assertEqual("done\n", marker.read_text(encoding="utf-8"))
+        self.assertEqual("done\n", self._wait_for_marker_content(marker, "done\n"))
 
     def test_child_writes_beyond_measured_pipe_capacity_after_cap(self) -> None:
         capacity = self._measure_pipe_capacity()
@@ -193,10 +206,7 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
             )
         pid = int(pid_path.read_text(encoding="utf-8"))
         self.addCleanup(self._terminate_for_cleanup, pid)
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and not marker.is_file():
-            time.sleep(0.02)
-        self.assertEqual("done\n", marker.read_text(encoding="utf-8"))
+        self.assertEqual("done\n", self._wait_for_marker_content(marker, "done\n"))
         self._assert_reaped(pid)
 
     def test_capped_attempts_do_not_retain_parent_descriptors(self) -> None:

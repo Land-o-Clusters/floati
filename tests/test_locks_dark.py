@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import json
 import re
 import subprocess
@@ -17,7 +19,7 @@ _LOCKS_COMMAND = re.compile(
 class LocksDarkFenceTests(unittest.TestCase):
     def cli_resolves_locks(self) -> bool:
         completed = subprocess.run(
-            ["python3", "-m", "floati", "locks"],
+            [str(LAUNCHER), "locks"],
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
@@ -26,7 +28,7 @@ class LocksDarkFenceTests(unittest.TestCase):
         if completed.returncode == 0:
             return True
         try:
-            artifact = json.loads(completed.stderr)
+            artifact = json.loads(completed.stdout)
         except (json.JSONDecodeError, TypeError):
             return True
         return not (

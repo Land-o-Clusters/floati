@@ -6,8 +6,24 @@ durable action leaves a receipt, and repeated commands are idempotent under an
 explicit key. You never have to guess whether your own action worked — read
 the artifact and the receipt.
 
-Floati itself makes zero model calls and opens no network connection. It is
-operable BY agents; it does not contain one.
+Floati itself makes zero model calls and sends no telemetry. Its four counted
+outbound paths are explicit and fenced below; it is operable BY agents, but it
+does not contain one.
+
+## How to behave (all models: gpt-5.6-sol, gpt-6-astra, Claude)
+
+- Precedence: the owner's live instruction > this file > a seat's `SEAT.md` or role
+  projection > any skill or plugin prompt. If a skill or file makes you stop, ask, or
+  deviate, name the file and quote the line that did it.
+- Ask vs proceed: finish everything the request and the repository already authorise
+  before asking anything. Ask only when a choice would materially change the result and
+  nothing in the repo, a ruling, or the plan settles it. Do not add unsolicited warnings,
+  disclaimers, or approval flows for hypothetical risk. Owner-tier always asks: money,
+  publishing, credentials, key custody, anything irreversible outside the repo.
+- Test scope: a reversible change runs the affected unittest modules, no mirror tests; a change
+  to a refusal, receipt, ledger format, or the install manifest runs `python3 -m unittest discover`.
+- Delegation: parallelise independent work with subagents; write briefs a human can read.
+- Style: concise paragraphs; lists only for parallel items; commands in fenced blocks. Report the exact commit, file, and count.
 
 ## Install
 
@@ -33,59 +49,22 @@ and foreign files. Run the binary as `<destination>/scripts/floati` (or
 check reads the installed destination from the `FLOATI_INSTALL_DESTINATION`
 environment variable when `--destination` is not passed.
 
-**The launcher never resolves its interpreter through `PATH`.**
-`scripts/floati` walks one fixed candidate list - `/usr/bin/python3`, then
-`/bin/python3` - and takes the first that is present and executable. An
-operator overrides that with `FLOATI_PYTHON`, which must name **one absolute
-canonical interpreter path**; a symlink is refused, so name the resolved
-target. With neither a declaration nor a candidate the launcher refuses,
-typed, **exit 20** - it never falls back to `PATH`, because a `PATH` an
-attacker can prepend to would choose the Python that runs the whole product.
-`floati doctor` reports the outcome as the `launcher_interpreter` finding,
-naming the interpreter and whether it was `declared`, a `candidate`, or
-`absent` (the process was not started through the launcher).
+**The launcher never resolves its interpreter through `PATH`:** `scripts/floati` tries
+`/usr/bin/python3` then `/bin/python3`; `FLOATI_PYTHON` overrides with one absolute canonical
+path (symlinks refused); otherwise it refuses, typed, exit 20. Detail: `docs/AGENT-OPERATIONS.md`.
 
-**Relaunch quirk (measured):** a harness session that was already running
-when a wake hook was installed will never run it — harnesses snapshot or
-trust-gate hooks. After installing any wake component: tell the user to
-review/trust/enable the hook in the harness UI, then relaunch the session.
-Never claim a pre-install session is reachable.
-`wake arm` has two installer-created prerequisites - the waiter workspace
-binding and Codex-wait consent - and refuses, fail-closed, without them.
-
-**GUI hook saves shadow working hooks, silently (measured 2026-08-30).** A
-harness settings UI will happily save a hook it cannot run, and that saved hook
-**wins over a registration that was working**. The measured shape: a settings-UI
-save wrote a *Process*-type hook whose command field held the entire argv line -
-so the path contained a space and could never exec - with **no validation and no
-logged error**, silently shadowing the *Shell*-type registration that had
-dispatched six times in the preceding ten minutes. Sixty-three minutes of
-silence followed, and nothing anywhere said why.
-
-So, for any harness with a hook UI:
-
-- **Prefer the registration type the harness actually execs.** Where a UI offers
-  a *Process* form and a *Shell* form, the Process form takes an argv **array**
-  and will not exec a single string holding the whole command line; the Shell
-  form runs the line through a shell and survives a path with a space. Putting
-  a whole argv line into the Process form is the failure above.
-- **Never treat "it appears in the UI" as installed.** The UI shows what was
-  saved, not what can run.
-- **After ANY save through a GUI - including one the user made, not you - prove
-  the hook FIRES.** Not that it is listed, not that its bytes look right: that a
-  real turn-end produced a real dispatch. A hook is bytes on disk; an armed hook
-  is one you have watched fire.
-- **A GUI save is an event you did not observe.** If wake goes quiet, re-verify
-  the registration before diagnosing anything downstream - the harness will not
-  tell you it was replaced.
-
-**★ A CONFIGURATION SURFACE THAT ACCEPTS WITHOUT VALIDATING MANUFACTURES A
-REGISTRATION THAT LOOKS CONFIGURED AND CANNOT RUN** - and because it looks
-configured, every downstream diagnosis starts in the wrong place.
+**Harness wake hooks (measured incidents in `docs/AGENT-OPERATIONS.md`):** a session
+already running when a wake hook is installed never runs it, so have the user trust or
+enable the hook in the harness UI and relaunch; `wake arm` refuses, fail-closed, without
+the waiter workspace binding and Codex-wait consent. A GUI hook save can silently shadow
+a working registration with one that cannot exec ("it appears in the UI" is not
+installed), so after ANY GUI save prove the hook FIRES with a real turn-end dispatch.
+Prefer the registration type the harness actually execs (Shell form for a command line;
+the Process form takes an argv array).
 
 ## The output contract
 
-Every command prints exactly one JSON artifact:
+Every command prints exactly one JSON artifact on stdout:
 
 ```
 {"artifact_version": 0, "command": "<verb>", "status": "<status>", "evidence": {...}}
@@ -110,87 +89,40 @@ contract (`docs/CONFLUENCE-v0.md`).
 | 34 | `orchestration_deadline`: the orchestrated run exceeded its deadline | re-run with a larger `--deadline` |
 | 35 | `degraded`: the run completed but at least one check could not speak | read the artifact's findings; each names the check that degraded |
 
-## Verbs
+## Verbs (contracts: `COMMAND --help`; the full reference is in `docs/AGENT-OPERATIONS.md`)
 
-Every durable verb requires an explicit absolute `--root`; there is no default
-root, no home scan, and no discovery. `COMMAND --help` prints the full
-contract for each.
+Every durable verb requires an explicit absolute `--root`; there is no default root, no
+home scan, and no discovery.
 
-- **Bootstrap:** `init` (create/validate one direct-home fleet root;
-  `--solo NODE --harness H` for one-seat setup) · `register` · `retire`
-  (self-retirement only).
-- **Nodes and roles:** `node {add|retire|switch|role|boot|teardown|explain|state-flush}`
+- Bootstrap: `init` (`--solo NODE --harness H` for one seat) · `register` · `retire` (self only).
+- Nodes and roles: `node {add|retire|switch|role|boot|teardown|explain|state-flush}`
   (preview-first; temporary nodes take `--lease-minutes`) · `role {list|show}`.
-- **Mail:** `send --root --from --to --repo --sha SHA --doc PATH --note TEXT
-  [--reply-to ID] [--idempotency-key KEY]` · `inbox --session SESSION`
-  (ack-on-drain by default; `--peek` is explicit) · `ack` (repeat `--id` for one
-  exact batch) · `sent` (read-only sender receipt projection). Delivery and
-  acknowledgment are separate receipts; `status: ok` from `send` proves the
-  append, never the delivery.
-- **Truth surfaces:** `describe --json` · `verify` · `journal {checkpoint|verify}` ·
-  `signature {sign|verify}` · `status` · `snapshot` (consented maintainer bundle) ·
-  `log` (`--replay` reconstructs from the
-  ledger) · `effects` / `effect` · `threads` / `thread` · `graph` · `plan` ·
-  `receipts` · `board` (TUI).
-- **Overlap evidence:** `overlap report --repository REPOSITORY --base-ref REF
-  --left-ref REF --right-ref REF` emits one read-only, local schema-v1 overlap fact.
-- **Repair:** `repair quarantine` preserves one exact selected event frame beneath
-  the tenant, atomically replaces the ledger, and receipts follower invalidation.
-- **Health:** `doctor` (per-node delivery scoreboard; `--probe` loopback
-  deafness probe) · `watch`.
-- **Presence:** `presence report --root ROOT --as NODE --ttl-seconds N`
-  records only the acting node's own bounded report · `presence show --root
-  ROOT` lists what each active node last reported and when; expiry is never
-  translated into "down".
-- **Epoch lifecycle:** `epoch roll --root ROOT --as NODE --idempotency-key KEY`
-  performs one authority-gated coherent roll of the selected event, delivery,
-  and acknowledgment planes.
-- **Confluence:** `confluence {grant|revoke|status|bundle}` — the read
-  seam for a consuming observer app: one explicit per-root, per-consumer
-  read grant; the bundle materializes the receipts-read surface under the
-  grant it was produced under. No discovery, no watcher, no network, no
-  mutation API.
-- **Work:** `grant` / `grant revoke` · `work` · `worker` · `sequencer`
-  · `supervise` · `orchestrate`.
-- **Intake:** `intake {scan|adopt|show}` reads or adopts explicitly supplied
-  local Markdown; adoption and outbound issue operations remain unavailable to
-  agent sessions.
-- **Agent transport:** `mcp serve --root ROOT --as NODE --session SESSION`
-  binds one local stdio server to one exact active node and session.
-- **Context:** `context` projects or records bounded Tide context evidence.
-- **Quota:** `quota {collect|show}` records or inspects citation-bound local
-  quota testimony without discovering provider surfaces.
-- **Wake control:** `wake {pause|resume|status} --root ROOT --as NODE
-  --session SESSION` — exactly one session per invocation; global and
-  wildcard selectors do not exist. Marker-only and receipted; hook
-  registration is never edited. A paused session is recorded state, not
-  absence or deafness; `wake status` names what it cannot see (the running
-  session's cache, the harness trust gate).
-- **Codex Stop waiter:** `scripts/floati-codex-wait --root ROOT` is the
-  documented installed entrypoint. It derives node, workspace, and acting
-  session only from the validated hook payload; those identities are not
-  caller-selectable flags.
-- **Cartography:** `chart --declared-roots FILE` (only explicitly declared
-  roots) · `survey` (user-invoked, read-only report of buses floati did not
-  install — it never writes, drains, acks, registers, or locks a foreign
-  bus).
-- **Lifecycle:** `install` · `update` · `uninstall` (see Install above) · `purge`
-  (moves only explicitly named roots to Trash; never deletes).
-
-**Managed wrappers:** a harness seat provisioned with a managed bus profile
-sends through its wrapper binary, which pins root/from/repo and takes exactly
-`<wrapper> <profile> send --to NODE --sha SHA --doc PATH --idempotency-key KEY
---note TEXT [--reply-to ID]`. Its acknowledgment shape is `<wrapper> <profile>
-ack --id MSG_ID [--id MSG_ID ...] --session SESSION_ID`; every id is explicit
-and the acting session is required. A seat's own boot projection (`node boot`)
-prints its exact wrapper shapes — use those verbatim, never a remembered
-shape.
+- Mail: `send --root --from --to --repo --sha SHA --doc PATH --note TEXT [--reply-to ID]
+  [--idempotency-key KEY]` · `inbox --session SESSION` (acks on drain; `--peek` is explicit)
+  · `ack` (repeat `--id` for one exact batch) · `sent`. Delivery and acknowledgment are
+  separate receipts; `status: ok` from `send` proves the append, never the delivery.
+- Truth surfaces: `describe --json` · `verify` · `journal {checkpoint|verify}` ·
+  `signature {sign|verify}` · `status` · `snapshot` · `log` (`--replay`) · `effects`/`effect`
+  · `threads`/`thread` · `graph` · `plan` · `receipts` · `board`.
+- Evidence, repair, health: `overlap report` · `repair quarantine` · `doctor` (`--probe`) ·
+  `watch` · `presence {report|show}` · `epoch roll`.
+- Confluence: `confluence {grant|revoke|status|bundle}` (read seam only: no discovery,
+  no watcher, no network, no mutation API).
+- Work: `grant` / `grant revoke` · `work` · `worker` · `sequencer` · `supervise` · `orchestrate`.
+- Intake, transport, context, quota: `intake {scan|adopt|show}` · `mcp serve --root ROOT
+  --as NODE --session SESSION` · `context` · `quota {collect|show}`.
+- Wake: `wake {pause|resume|status|arm} --root ROOT --as NODE --session SESSION` (one
+  session per call; marker-only and receipted; hook registration is never edited) · the
+  Codex Stop waiter is `scripts/floati-codex-wait --root ROOT`.
+- Cartography and lifecycle: `chart --declared-roots FILE` · `survey` (read-only view of
+  foreign buses) · `install` · `update` · `uninstall` · `purge` (Trash only, never deletes).
+- Managed wrappers: a seat's `node boot` prints its exact wrapper shapes for `send` and
+  `ack`; use those verbatim, never a remembered shape.
 
 ## Standard workflows
 
 - **Solo:** `init --root R --solo me --harness Codex` → `work`/`log`/`board`.
-- **Fleet:** `init` → `node add` per seat → `send`/`inbox`/`ack` between
-  seats → `board`.
+- **Fleet:** `init` → `node add` per seat → `send`/`inbox`/`ack` between seats → `board`.
 - **Manual non-solo work authority:** add the architect first,
   assign its shipped role, add the holder, grant one exact coordinate, then
   add and claim work. The reverse uses the same coordinate and architect gate.
@@ -228,117 +160,41 @@ floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --
 - Never invent a number floati did not measure. Absences are typed and
   cited, not filled in.
 
-## Fleet governance — message and ack hygiene
+## Fleet governance — binding rules (detail and incidents: `docs/AGENT-OPERATIONS.md`)
 
-Every rule here was paid for by a real multi-agent incident. They are how a fleet stays
-coherent when nobody is watching every window.
+- An ack means SEEN, nothing more. Disagreement is a reply; work is a work receipt. Never
+  withhold an ack to signal anything; use `--peek` only for an explicit process-before-ack flow.
+- A question typed into your own session is invisible to every other node. Put the wait on
+  the bus as an envelope, then keep working on what does not depend on the answer.
+- Answer with coordinates (exact commit, file, count), never summaries; copy SHAs by command
+  substitution; say what you did NOT touch. Silence is evidence only when you name the root
+  and node you drained.
+- Your identity comes from your workspace seat declaration, never from memory. A remembered
+  command that names no root belongs to another fleet: stop and ask.
+- A reassignment is a dispatch: old and new owner both get an envelope. Do not take a claimed
+  task; do not assume an unclaimed one is blocked; check the mail and the log.
+- A refusal that names its contract is an instruction (apply the printed shape once); a
+  refusal that names a policy is a stop. Never retry a refusal unchanged, never retry a
+  policy refusal at all. A wrapper's contract can be stricter than the bare CLI; the wrapper
+  is the contract for that seat.
+- Boarding order is fixed: attach, take over the wake claim, then drain. Re-run
+  `floati wake arm --root ROOT --as NODE --session SESSION --workspace PATH` at every
+  session turnover; takeover is predecessor-bound and built for this.
+- Most seats run with no human watching. Never wait for operator approval that will never
+  come: route decisions to the fleet's DECLARED coordinator as an envelope and keep working;
+  owner-tier questions park with the coordinator. Topology and coordinator authority are
+  declared at fleet setup, in writing; authority is per-fleet, never inherited.
+- On Codex, HEALTHY idle is a turn that does not visibly end (the Stop waiter holds it). A
+  turn that ends promptly is a diagnostic flag (stale wake claim, tripped breaker, pause
+  marker, exhaustion): check `doctor` before assuming quiet.
+- Safe fixes are reads and governed verbs; breaking fixes are raw file edits, wrapper
+  bypasses, and identity guesses. When a refusal names no remedy, envelope your coordinator.
+  `malformed_evidence` on an unknown record kind is usually version skew: update the reader,
+  never edit a ledger.
 
-- **An ack means SEEN. Nothing more.** Not agreement, not action, not promise.
-  Disagreement is a reply; work is a work receipt. Withholding an ack to signal
-  displeasure is a defect because it manufactures ghost attention and poisons
-  the doctor's numbers. The default inbox drain acknowledges exactly what it
-  returns; use `--peek` only for an explicit process-before-ack workflow.
+## Where the rest lives
 
-- **An ask that needs a reply is an envelope, not a chat line.** A question typed into
-  your own session — "approve this design?", "should I proceed?" — is invisible to every
-  other node. If you are waiting on someone, they must be able to see the wait: send it on
-  the bus, then keep working on what does not depend on the answer.
-- **`status: ok` from `send` proves the append, never the delivery.** Delivery is the
-  recipient's receipt; acknowledgment is a third thing. Never report "I told X" on the
-  strength of your own send result.
-- **Ack on seeing; record action separately.** The default drain records SEEN in
-  the same guarded operation. If a workflow explicitly peeks first, acknowledge
-  the exact reviewed batch before continuing; replies and work receipts carry
-  disagreement, action, and completion.
-- **Answer with coordinates, not summaries.** A report that names an exact commit, file,
-  and count can be independently verified; "done" cannot. Copy SHAs by command
-  substitution — never retype one by hand.
-- **Say what you did NOT touch.** A receipt that names its non-touches ("manifest, schemas,
-  public remote untouched") is worth more than one that only names its work, because the
-  reader's next question is always "what else moved?"
-- **Silence is not evidence.** An empty inbox answer is only meaningful if it names the
-  root and node it drained. If a tool's answer does not say where it looked, you do not
-  know what its silence means — say which root you drained when you report it.
-- **Your identity comes from your workspace, never from memory.** If your working
-  directory declares a seat (a `SEAT.md` or marker), it outranks anything you remember
-  from other sessions — including procedures. A remembered command that does not name a
-  root belongs to another fleet: stop and ask.
-- **A reassignment is a dispatch.** If ownership of a task changes, the new owner and the
-  old one both get an envelope. Work reassigned in silence gets done twice or not at all.
-- **Do not take a claimed task; do not assume an unclaimed one is blocked.** Ask both
-  "is someone on it?" and "is it already done?" — of the mail as well as the log.
-- **A refusal that names its contract is an instruction; a refusal that names a policy is
-  a stop.** When the body says the invocation is malformed and prints the required shape,
-  apply that exact shape once — that is following the refusal, not guessing. When it names
-  a missing approval, consent, or identity, stop and surface it verbatim. Never retry a
-  refusal unchanged, and never retry a policy refusal at all.
-- **A wrapper's contract can be stricter than the tool it wraps.** Where a governed
-  gateway requires an argument the bare CLI calls optional, the gateway is the contract
-  for that seat. Read the shape where you were told to invoke it; the wrapper's doc names
-  every difference on purpose.
-- **Boarding order is fixed: attach, take over the wake claim, then drain.** A session
-  that drains before it arms answers its mail once and goes deaf to everything after.
-  Turnover is the designed case — takeover replaces exactly one predecessor's authority
-  and never multiplies waiters. If attach reports hook trust pending, the one-time
-  operator trust act comes before anything else relies on the wake path.
-
-## Topology and authority — decided at fleet setup, never assumed
-
-Most fleet seats run with NO human watching. Design every behavior for that fact:
-
-- **Do not wait for operator approval that will never come.** A question typed to "the
-  user" from an unmonitored seat is an infinite wait. Route decisions to the fleet's
-  DECLARED authority (below) as an envelope, and keep working on what does not depend on
-  the answer. If nothing depends on it, proceed within your granted authority and record
-  what you decided.
-- **Declare the topology at setup.** A fleet picks its shape deliberately — commonly a
-  STAR: one coordinator/architect node that dispatches work, gates results, and owns
-  cross-seat decisions, with worker seats that never re-task each other directly. Meshes
-  are possible; unowned decisions are not. Record the choice where every seat reads it
-  (the workspace seat declaration and this file's local equivalent).
-- **Decide how much authority the coordinator gets, in writing:** what it may dispatch,
-  what it gates before merge, what it may decide alone, and what stays OWNER-TIER — the
-  human's list (money, publishing, credentials, key custody, anything irreversible).
-  A seat that hits an owner-tier question parks it as an envelope to the coordinator and
-  moves on; the coordinator holds it for the human.
-- **Authority is per-fleet, never inherited.** Being coordinator on one bus grants nothing
-  on another. Cross-fleet actions from a seat are refused by default (see the identity
-  rules above).
-
-## Troubleshooting — safe fixes and breaking fixes
-
-Every entry below comes from a real fleet incident. The pattern to internalize: **safe
-fixes are reads and governed verbs; breaking fixes are raw file edits, wrapper bypasses,
-and identity guesses.** When a refusal names no remedy, stop and envelope your fleet's
-coordinator — do not improvise on shared state.
-
-- **`malformed_evidence` on a record kind you don't recognize** — usually VERSION SKEW,
-  not corruption: your installed floati is older than the ledger's vocabulary.
-  Safe: update the reading installation via the governed `update` verb.
-  Breaking: editing the ledger, deleting records, retry loops.
-- **`APPROVAL_REQUIRED: manifest differs from the pinned digest`** — your transport's
-  bytes changed. That may be a legitimate update or tampering; the fence cannot know.
-  Safe: check the install's wiring journal for a governed update receipt, then perform
-  the approval act your fleet documents. Breaking: bypassing the wrapper or pointing at
-  a different floati binary.
-- **Empty inbox when you expected mail** — read which ROOT the answer names before
-  concluding anything; a true "empty" about the wrong root is the classic cross-fleet
-  trap. Safe: check your workspace seat declaration. Breaking: draining a root you
-  merely remember.
-- **`send` returned ok but nothing happened** — ok proves the append, never the
-  delivery. Safe: `doctor` for the recipient's lease/registration and unread-mail age.
-  Breaking: resend loops.
-- **Waiters/wakes went quiet after a repair, restore, or rotation** — a replaced ledger
-  file has a new identity; watchers must re-arm. Safe: restart your watcher; check for
-  a repair notice. Breaking: assuming the fleet went idle.
-
-**Know your harness's healthy idle shape.** On Codex, HEALTHY is that your turn does
-NOT visibly end — the Stop waiter holds it open, watching the bus (the status line says
-so). **A turn that ends promptly is itself a diagnostic flag**: stale wake claim, tripped
-breaker, pause marker, or a real exhaustion — check `doctor` before assuming quiet.
-
-- **Your turn ends instantly instead of waiting for mail** — your seat's wake claim is
-  probably still armed to a PREVIOUS session (turnover without re-arm). Safe: run
-  `floati wake arm --root ROOT --as NODE --session YOUR_SESSION --workspace PATH` —
-  takeover is predecessor-bound and built for this. Do it at every session turnover.
-  Breaking: assuming the hook is broken and disabling it.
+- `docs/AGENT-OPERATIONS.md`: the full verb reference and the incident-backed long form of
+  every rule above (hook shadowing, message/ack hygiene, topology, troubleshooting), verbatim.
+- `docs/CONFLUENCE-v0.md` (the `status --json` / `graph --json` machine contract),
+  `docs/FLEET.md`, `docs/FLEET-AUTONOMY.md`, `docs/TRUTH-GUARANTEES.md`.

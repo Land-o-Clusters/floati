@@ -13,6 +13,7 @@ import subprocess
 import unittest
 
 from tests import harness_declaration
+from tests import managed_test_tools
 from tests.test_roster_adapters import ROSTER
 
 
@@ -54,8 +55,12 @@ class LiveExecutableTests(unittest.TestCase):
         )
         if executable is None:
             return
+        node = managed_test_tools.executable(
+            "FLOATI_TEST_NODE_EXECUTABLE", "node"
+        )
+        self.assertIsNotNone(node, "AD-1 t3 requires a real Node executable")
         completed = subprocess.run(
-            [str(executable), "--version"],
+            [str(node), str(executable), "--version"],
             check=False,
             capture_output=True,
             text=True,

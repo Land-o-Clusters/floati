@@ -100,7 +100,7 @@ _LOADER = (
     "  offset+=written\n"
     "except BaseException: raise SystemExit(126)\n"
     "sys.argv=['effect_reconciliation_observer.py']\n"
-    "spec=importlib.machinery.ModuleSpec('__main__',loader=None,origin='effect_reconciliation_observer.py')\n"
+    "spec=importlib.machinery.ModuleSpec('floati.__main__',loader=None,origin='effect_reconciliation_observer.py')\n"
     "namespace={'__name__':'__main__','__file__':'effect_reconciliation_observer.py','__package__':'floati','__spec__':spec}\n"
     "exec(observer_code,namespace,namespace)\n"
 )

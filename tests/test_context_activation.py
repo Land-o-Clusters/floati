@@ -246,7 +246,7 @@ class ContextActivationTests(unittest.TestCase):
         self.assertEqual(20, missing.returncode, missing.stderr)
         self.assertEqual(
             "role_template_path_invalid",
-            json.loads(missing.stderr)["evidence"]["code"],
+            json.loads(missing.stdout)["evidence"]["code"],
         )
 
 

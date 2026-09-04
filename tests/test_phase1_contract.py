@@ -100,8 +100,8 @@ class Phase1ContractTests(unittest.TestCase):
                     text=True,
                     env=environment,
                 )
-                self.assertEqual("", completed.stdout)
-                artifact = json.loads(completed.stderr)
+                self.assertEqual("", completed.stderr)
+                artifact = json.loads(completed.stdout)
                 if arguments[0] in {"init", "inbox"}:
                     self.assertEqual(22, completed.returncode)
                     self.assertEqual("cannot_speak", artifact["status"])

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import base64
 import json
 import os
@@ -11,6 +13,7 @@ from pathlib import Path
 
 from floati.errors import ProtocolRefusal
 from floati.root import FloatiRoot
+from tests import managed_test_tools
 
 try:
     from floati.signing import sign_minisign, verify_minisign
@@ -34,11 +37,13 @@ class MinisignSigningTests(unittest.TestCase):
         self._copy_fixture("checkpoint.json", self.artifact)
         self._copy_fixture("checkpoint.json.minisig", self.signature)
         self._copy_fixture("fixture.pub", self.public_key)
-        selected = shutil.which("minisign")
+        selected = managed_test_tools.executable(
+            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
+        )
         self.assertIsNotNone(
             selected, "the S2 constants must execute against a real minisign binary"
         )
-        self.minisign = Path(selected).resolve(strict=True)
+        self.minisign = Path(selected)
 
     def _copy_fixture(self, name: str, relative: Path) -> Path:
         target = self.root.resolve_relative(relative)
@@ -150,7 +155,7 @@ class MinisignSigningTests(unittest.TestCase):
     def test_s2_cli_verify_emits_one_machine_artifact(self) -> None:
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "signature", "verify",
+                str(LAUNCHER), "signature", "verify",
                 "--root", str(self.root.tenant_home),
                 "--artifact", str(self.artifact),
                 "--signature", str(self.signature),
@@ -178,7 +183,7 @@ class MinisignSigningTests(unittest.TestCase):
         output = Path("signed/checkpoint.json.minisig")
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "signature", "sign",
+                str(LAUNCHER), "signature", "sign",
                 "--root", str(self.root.tenant_home),
                 "--artifact", str(self.artifact),
                 "--signature", str(output),
@@ -209,7 +214,7 @@ class MinisignSigningTests(unittest.TestCase):
         )
         completed = subprocess.run(
             [
-                "/usr/bin/python3", "-m", "floati", "signature", "verify",
+                str(LAUNCHER), "signature", "verify",
                 "--root", str(self.root.tenant_home),
                 "--artifact", str(self.artifact),
                 "--signature", str(self.signature),
@@ -227,8 +232,8 @@ class MinisignSigningTests(unittest.TestCase):
         )
 
         self.assertEqual(20, completed.returncode, completed.stdout)
-        self.assertEqual("", completed.stdout)
-        artifact = json.loads(completed.stderr)
+        self.assertEqual("", completed.stderr)
+        artifact = json.loads(completed.stdout)
         self.assertEqual("refused", artifact["status"])
         self.assertEqual("signature_tool_absent", artifact["evidence"]["code"])
         self.assertIn("--minisign-executable", artifact["evidence"]["remedy"])
@@ -239,7 +244,7 @@ class MinisignSigningTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 completed = subprocess.run(
-                    ["python3", "-m", "floati", *command, "--help"],
+                    [str(LAUNCHER), *command, "--help"],
                     cwd=REPOSITORY_ROOT,
                     env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
                     text=True,

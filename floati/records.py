@@ -520,8 +520,10 @@ def validate_role(value: object, *, integrity: bool = False) -> str:
 
     error = IntegrityFailure if integrity else ProtocolRefusal
 
-    def refuse(code: str, detail: str) -> None:
-        raise error(code, detail)
+    def refuse(code: str, detail: str, remedy: Any = None) -> None:
+        raise error(code, detail) if error is IntegrityFailure else ProtocolRefusal(
+            code, detail, remedy=remedy
+        )
 
     _bounded_string(value, 1, 64, "role", refuse)
     return value
@@ -548,8 +550,10 @@ def wake_hold_decision_digest(record: Mapping[str, object]) -> str:
 def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[str], *, integrity: bool) -> Dict[str, Any]:
     error = IntegrityFailure if integrity else ProtocolRefusal
 
-    def refuse(code: str, detail: str) -> None:
-        raise error(code, detail)
+    def refuse(code: str, detail: str, remedy: Any = None) -> None:
+        raise error(code, detail) if error is IntegrityFailure else ProtocolRefusal(
+            code, detail, remedy=remedy
+        )
 
     if not isinstance(record, dict):
         refuse("record_not_object", "each durable record must be an object")
@@ -4250,37 +4254,106 @@ def _dependency_edges(value: object, item_ids: object, refuse: Any) -> None:
 
 
 def _repository_document(value: object, refuse: Any) -> None:
-    if (
-        not isinstance(value, str)
-        or not 1 <= len(value) <= 1024
-        or _terminal_unsafe(value)
-        or value.startswith("/")
-        or any(component in ("", ".", "..") for component in value.split("/"))
+    if not isinstance(value, str):
+        refuse(
+            "doc_invalid",
+            "doc must be a string",
+            "pass --doc as a repository-relative path",
+        )
+    hit = _terminal_unsafe_hit(value)
+    if hit is not None:
+        kind, offset = hit
+        refuse(
+            "doc_invalid",
+            "doc contains a terminal-unsafe {0} character at offset {1}".format(
+                kind, offset
+            ),
+            "remove control, surrogate, and bidi characters from --doc",
+        )
+    if not 1 <= len(value) <= 1024:
+        refuse(
+            "doc_invalid",
+            "doc is {0} characters; cap is 1024".format(len(value)),
+            "pass --doc as a repository-relative path of at most 1024 characters",
+        )
+    if value.startswith("/") or any(
+        component in ("", ".", "..") for component in value.split("/")
     ):
-        refuse("doc_invalid", "doc must be a contained repository-relative path")
+        refuse(
+            "doc_invalid",
+            "doc must be a contained repository-relative path",
+            "pass --doc as a repository-relative path with no leading slash or ..",
+        )
 
 
 def _bounded_note(value: object, refuse: Any) -> None:
-    if not isinstance(value, str) or len(value) > 1024 or _terminal_unsafe(value):
-        refuse("note_invalid", "note must be a string of at most 1024 characters")
+    if not isinstance(value, str):
+        refuse(
+            "note_invalid",
+            "note must be a string",
+            "pass --note as one UTF-8 string of at most 1024 characters",
+        )
+    hit = _terminal_unsafe_hit(value)
+    if hit is not None:
+        kind, offset = hit
+        refuse(
+            "note_invalid",
+            "note contains a terminal-unsafe {0} character at offset {1}".format(
+                kind, offset
+            ),
+            "remove control, surrogate, and bidi characters from --note; keep it on one line",
+        )
+    if len(value) > 1024:
+        refuse(
+            "note_invalid",
+            "note is {0} characters; cap is 1024".format(len(value)),
+            "shorten --note to at most 1024 characters",
+        )
 
 
 def _bounded_string(value: object, minimum: int, maximum: int, field: str, refuse: Any) -> None:
-    if (
-        not isinstance(value, str)
-        or not minimum <= len(value) <= maximum
-        or _terminal_unsafe(value)
-    ):
-        refuse(f"{field}_invalid", f"{field} violates its v0 string bounds")
+    if not isinstance(value, str):
+        refuse(
+            f"{field}_invalid",
+            "{0} must be a string".format(field),
+            "pass {0} as a UTF-8 string within its v0 bounds".format(field),
+        )
+    hit = _terminal_unsafe_hit(value)
+    if hit is not None:
+        kind, offset = hit
+        refuse(
+            f"{field}_invalid",
+            "{0} contains a terminal-unsafe {1} character at offset {2}".format(
+                field, kind, offset
+            ),
+            "remove control, surrogate, and bidi characters from {0}".format(field),
+        )
+    if not minimum <= len(value) <= maximum:
+        refuse(
+            f"{field}_invalid",
+            "{0} is {1} characters; bounds are {2} to {3}".format(
+                field, len(value), minimum, maximum
+            ),
+            "pass {0} with length between {1} and {2}".format(
+                field, minimum, maximum
+            ),
+        )
+
+
+def _terminal_unsafe_hit(value: str) -> Optional[tuple[str, int]]:
+    for index, character in enumerate(value):
+        category = unicodedata.category(character)
+        if category == "Cc":
+            return ("control", index)
+        if category == "Cs":
+            return ("surrogate", index)
+        if unicodedata.bidirectional(character) in _BIDI_CONTROLS:
+            return ("bidi", index)
+    return None
 
 
 def _terminal_unsafe(value: str) -> bool:
-    return any(
-        unicodedata.category(character) == "Cc"
-        or unicodedata.category(character) == "Cs"
-        or unicodedata.bidirectional(character) in _BIDI_CONTROLS
-        for character in value
-    )
+    return _terminal_unsafe_hit(value) is not None
 
 
 def _worker_workspace_shape(value: object) -> bool:

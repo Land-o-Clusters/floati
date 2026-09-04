@@ -8,9 +8,9 @@ worth reporting.
 ## Nothing leaves this machine
 
 Floati sends no telemetry and phones no home. Measured (re-measured
-2026-09-01, source audit of `floati/`): every socket in the product is a
-local AF_UNIX pipe between floati's own processes, with three counted
-exceptions, each consent-gated and each client-only:
+2026-09-02, source audit of `floati/`): every socket in the product is a
+local AF_UNIX pipe between floati's own processes. There are exactly four
+counted outbound paths:
 
 - the herdr adapter's loopback connection and the t3 adapter's loopback
   connection, which dial literal `127.0.0.1`/`::1` on your machine, perform
@@ -20,14 +20,21 @@ exceptions, each consent-gated and each client-only:
   `docs/design/loopback-client-ruling-2026-08-28.md`);
 - the update fetch, one HTTPS connection to the exact channel you consented
   to (`floati/update_transport.py`), refused without an active consent
-  receipt for that channel (`floati/update_apply.py`, `UpdateConsentLedger`).
+  receipt for that channel (`floati/update_apply.py`, `UpdateConsentLedger`);
+- GitHub issue intake, one `gh issue view` subprocess started only by the
+  explicit `intake adopt --source github` command. Its closed environment may
+  receive non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; stored `gh` login
+  configuration is hidden. This path does not yet have its own consent receipt
+  ([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
 
 Nothing in the product can listen: `tests/test_no_listener_fence.py` pins
-every `bind`/`listen` to the AF_UNIX sequencer and confines network imports
-to the one update module. *(Am.1, 2026-09-01: this page previously said "one
-exception"; the t3 adapter and the update fetch were live and unlisted.)*
-The installed child harnesses own their normal provider traffic; floati reads
-no credential and adds no traffic of its own.
+every `bind`/`listen` to the AF_UNIX sequencer, confines network imports to the
+one update module, and derives a census of network-tool subprocess argv. The
+herdr and t3 paths require explicit target-bound arm receipts; the update path
+requires channel-bound consent. *(Am.1, 2026-09-01: this page previously said
+"one exception"; the t3 adapter and update fetch were live and unlisted. Am.2,
+2026-09-02: the GitHub subprocess was live but invisible to the import-only
+fence.)* The installed child harnesses own their normal provider traffic.
 
 ## The ledger is append-only and survives faults
 

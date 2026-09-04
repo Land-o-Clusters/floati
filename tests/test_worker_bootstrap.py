@@ -686,6 +686,7 @@ class WorkerBootstrapTests(unittest.TestCase):
                 root,
                 inherited=(),
                 probe_descriptor=2,
+                # CI-GREEN-23-chosen: product-kept stderr, inherited unchanged
                 probe_identity=self._descriptor_identity(2),
             )
             report = self._probe_report(observation)

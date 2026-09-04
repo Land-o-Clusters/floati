@@ -470,7 +470,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 output = completed.stdout + completed.stderr
 
                 self.assertEqual(20, completed.returncode, output.decode("utf-8", "replace"))
-                artifact = json.loads(completed.stderr)
+                artifact = json.loads(completed.stdout)
                 self.assertEqual("init", artifact["command"])
                 self.assertEqual(code, artifact["evidence"]["code"])
                 self.assertFalse(home.exists())
@@ -496,7 +496,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 output = completed.stdout + completed.stderr
 
                 self.assertEqual(20, completed.returncode, output.decode("utf-8", "replace"))
-                artifact = json.loads(completed.stderr)
+                artifact = json.loads(completed.stdout)
                 self.assertEqual("init", artifact["command"])
                 self.assertEqual("role_invalid", artifact["evidence"]["code"])
                 self.assertFalse(home.exists())
@@ -568,7 +568,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 capture_output=True, check=False, timeout=5,
             )
             self.assertEqual(20, explicit_result.returncode, explicit_result.stderr)
-            explicit_artifact = json.loads(explicit_result.stderr)
+            explicit_artifact = json.loads(explicit_result.stdout)
             self.assertEqual("ok", explicit_artifact["status"])
             self.assertEqual(1, explicit_artifact["evidence"]["status_schema_version"])
             self.assertEqual(
@@ -594,7 +594,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 capture_output=True, check=False, timeout=5,
             )
             self.assertEqual(20, environment_result.returncode, environment_result.stderr)
-            environment_artifact = json.loads(environment_result.stderr)
+            environment_artifact = json.loads(environment_result.stdout)
             self.assertEqual("ok", environment_artifact["status"])
             self.assertEqual(1, environment_artifact["evidence"]["status_schema_version"])
             self.assertEqual(
@@ -611,7 +611,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 capture_output=True, check=False, timeout=5,
             )
             self.assertEqual(22, absent_result.returncode)
-            absent_artifact = json.loads(absent_result.stderr)
+            absent_artifact = json.loads(absent_result.stdout)
             self.assertEqual("cannot_speak", absent_artifact["status"])
             self.assertEqual("cannot_speak", absent_artifact["evidence"]["code"])
 

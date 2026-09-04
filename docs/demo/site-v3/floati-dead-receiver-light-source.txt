@@ -1,0 +1,15 @@
+ROOT=<temp>/capture/doctor
+SOURCE=<temp>/capture/source
+$ floati doctor --root $ROOT --source $SOURCE --probe --probe-budget 1
+
+DELIVERY HEALTH
++ OK   architect-codex: 0 undelivered, no drain on record, RED threshold 15m RULED
++ OK   builder-floati: 0 undelivered, no drain on record, RED threshold 15m RULED
+! RED  reviewer: 1 undelivered, oldest 16m, no drain on record, RED threshold 15m RULED
+
+LOOPBACK PROBE
++ PASS  architect-codex: PASS: loopback probe drained in 1 tick(s)
+! DEAF  builder-floati: DEAF: loopback probe not drained within 1s budget
+! DEAF  reviewer: DEAF: loopback probe not drained within 1s budget
+
+STATE DEGRADED — one or more delivery paths require attention

@@ -1,0 +1,24 @@
+FLOATI // FAILURE INJECTION
+$ python3 -m unittest -v tests.test_gauntlet_crash
+
+INJECTED: worker process failure and authority change
+CAUGHT: typed replay evidence preserved below
+
+PLAIN REPLAY // v0
++0000.000s  CLAIM    WORK    floati-b <receipt-id> claim
++0000.000s  CLAIM    WORK    floati-c <receipt-id> claim
++0000.000s  CLAIM    WORK    floati-a <receipt-id> claim
++0000.001s  CLAIM    WORKER  floati-b <receipt-id> claim
++0000.002s  CLAIM    WORKER  floati-a <receipt-id> claim
++0000.002s  CLAIM    WORKER  floati-c <receipt-id> claim
++0000.004s  TURN     WORKER  floati-c <receipt-id> spawn
++0000.004s  TURN     WORKER  floati-b <receipt-id> spawn
++0000.005s  TURN     WORKER  floati-a <receipt-id> spawn
++0000.006s  TURN     WORKER  floati-b <receipt-id> drive
++0000.006s  TURN     WORKER  floati-c <receipt-id> drive
++0000.007s  TURN     WORKER  floati-a <receipt-id> drive
++0000.015s  DEGRADED WORKER  floati-a <receipt-id> process_cancelled
++0000.156s  DENIED   REFUSAL floati-b <receipt-id> worker_authority_changed
++0000.157s  DEGRADED WORKER  floati-b <receipt-id> authority_expired_mid_claim
++0000.304s  DEGRADED WORKER  floati-c <receipt-id> process_timeout
+REPLAY COMPLETE // 16 EVENTS // 304 MS

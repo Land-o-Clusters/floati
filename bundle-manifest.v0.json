@@ -87,7 +87,7 @@
     },
     {
       "path": "floati/adapters/codex_live.py",
-      "sha256": "0c0f86688bdb51bf8f8d3839e8d3a2856125ac8ace975b743f7b254304559f44"
+      "sha256": "d064758d005fcdcb92923993873a326aafe59b09931d4a344f20c0f1a3fbc180"
     },
     {
       "path": "floati/adapters/cursor.py",
@@ -203,7 +203,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "346398b3badc8f0dc73f7b4a2f78d8167e6504b45439d71fb65e604038ef42f4"
+      "sha256": "eaad69b66250e68a4f1d8548598ba64fe0a91920b3752b66ae6ae03257ed7915"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -215,7 +215,7 @@
     },
     {
       "path": "floati/codex_wait.py",
-      "sha256": "db675adfd5cf78c0a1931f255bdb3fa692c1e4e0f11d2b662da6d8a56dd0394d"
+      "sha256": "8c32687434c7be4e51e4c5b86e33351c54fd1776a44aa8411b9e2ffc4ae28ee2"
     },
     {
       "path": "floati/codex_wait_contract.py",
@@ -295,7 +295,7 @@
     },
     {
       "path": "floati/effect_reconciliation_exec.py",
-      "sha256": "b18ef8ad755c9dc271ec8d1e7a73f454e370129f9f0782cb59769dfc58fc3c02"
+      "sha256": "c15a0b8aea8a7b5800c8a65e79060ad553b4b8cb12b783189e6a4c2ff37fdb1d"
     },
     {
       "path": "floati/effect_reconciliation_observer.py",
@@ -323,7 +323,7 @@
     },
     {
       "path": "floati/fcd20_conformance.py",
-      "sha256": "be47a06770256b211ff112e14e2e13f5e7cc65217babccb483c81686681d4265"
+      "sha256": "e73f2f594a3a8f55f16dc7894373b16e05e93743787113667f76b85e3768bc53"
     },
     {
       "path": "floati/fixture_ids.py",
@@ -495,7 +495,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "1fd6bf7eacc940b6f02024dbfa462f095f611e1affbf8614dcacd04ec295792f"
+      "sha256": "c5ec3b3ce8dbc46221c1db2cb0f670d9232a4ac69b85ffc38e739e404f4dec88"
     },
     {
       "path": "floati/registry.py",
@@ -555,7 +555,7 @@
     },
     {
       "path": "floati/scrub.py",
-      "sha256": "60b55389b6efb7c144af677a098fc621183c3c5d2c7e6db3470b43524a598e46"
+      "sha256": "fa673d4e9636bd19752f5215f4c8347ea1d4b9750849cdaa0bf7fb6477f0f411"
     },
     {
       "path": "floati/seat_declaration.py",
@@ -803,7 +803,7 @@
     },
     {
       "path": "floati/worker_errors.py",
-      "sha256": "eb646ab783f9eec2f358a7d090e0dfda182387b66d1a7900da80bddd4598ff41"
+      "sha256": "83b8526139e55c3c56e3a8c55e587ffd323d0f4cedbffeb03f39351feec53fff"
     },
     {
       "path": "floati/worker_exec.py",
@@ -1487,7 +1487,7 @@
     },
     {
       "path": "scripts/floati",
-      "sha256": "40e7b28d065a651a6037e18e60b8442fc58862f65112806b3bfe9f021d55d3f4"
+      "sha256": "13da57c446d9c7151e2779e3e94e7ef79fa8c3ec18c95e377e34788a2bf64ab2"
     },
     {
       "path": "scripts/floati-codex-wait",

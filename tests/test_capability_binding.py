@@ -237,6 +237,15 @@ class CapabilityBindingTests(unittest.TestCase):
         self.assertEqual("capability_set_bound", snapshot["kind"])
         self.assertEqual(self.opened["fence_token"], snapshot["fence_token"])
         self.assertEqual(2, len(snapshot["effective_grants"]))
+        self.assertEqual(2, snapshot["grant_ledger_high_watermark"])
+        workspace_grant = next(
+            row for row in self.grants.records()
+            if row["kind"] == "capability_grant" and row["capability_name"] == "workspace_write"
+        )
+        self.assertIn(
+            workspace_grant["id"],
+            {row["grant_id"] for row in snapshot["effective_grants"]},
+        )
         self.assertEqual(capability_set_digest(snapshot["effective_grants"]), snapshot["capability_digest"])
         dispatch = self.binder.dispatch(
             snapshot["id"], [public_ids.worker('alpha')], "policy.route", self.policy,
@@ -1117,14 +1126,6 @@ class CapabilityBindingTests(unittest.TestCase):
         self.assertNotIn("error", {status for status, _ in results})
         self.assertEqual(1, sum(value == "capability_revoked" for _, value in results))
         self.assertLessEqual(sum(value == "capability_set_bound" for _, value in results), 1)
-        run = self.ledger.project().run(self.run_id)
-        snapshots = list(run["capability_sets"].values())
-        if snapshots:
-            self.assertEqual(2, snapshots[0]["grant_ledger_high_watermark"])
-            self.assertIn(
-                workspace_grant["id"],
-                {row["grant_id"] for row in snapshots[0]["effective_grants"]},
-            )
         revocations = [row for row in self.grants.records() if row["kind"] == "capability_revoked"]
         self.assertEqual(3, self.grants.records().index(revocations[0]) + 1)
 

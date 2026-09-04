@@ -65,8 +65,8 @@ class AuthorityGrantCliTests(unittest.TestCase):
         stderr = io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
             status = main(list(arguments))
-        rendered = stdout.getvalue() if status == 0 else stderr.getvalue()
-        return status, json.loads(rendered)
+        self.assertEqual("", stderr.getvalue())
+        return status, json.loads(stdout.getvalue())
 
     def grant(self, *, actor: str = "architect-a", epoch: int = 1) -> tuple[int, dict]:
         return self.run_cli(

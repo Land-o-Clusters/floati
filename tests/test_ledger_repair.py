@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import fcntl
 import hashlib
 import json
@@ -425,7 +427,7 @@ class GovernedLedgerRepairTests(unittest.TestCase):
         """Catches the missing G4 public repair quarantine grammar or an unbound artifact."""
         result = subprocess.run(
             [
-                "python3", "-m", "floati", "repair", "quarantine",
+                str(LAUNCHER), "repair", "quarantine",
                 "--root", str(self.home),
                 "--ledger", "events.jsonl",
                 "--record-id", self.bad_id,

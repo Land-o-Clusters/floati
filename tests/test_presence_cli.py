@@ -48,8 +48,7 @@ class PresenceCliTests(unittest.TestCase):
 
     @staticmethod
     def artifact(result: subprocess.CompletedProcess[str]) -> dict:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        return json.loads(stream)
+        return json.loads(result.stdout)
 
     def test_report_has_only_the_acting_node_and_records_its_explicit_ttl(self) -> None:
         before_report = datetime.now(timezone.utc)

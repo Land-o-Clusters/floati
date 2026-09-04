@@ -1,0 +1,336 @@
+{
+  "artifacts": [
+    {
+      "bytes": 110869,
+      "kind": "png",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-dark-source.png",
+      "sha256": "dad86d109b5023ab098ad80b38f4acc21325190c169e8145a0aedda604acc6e4",
+      "theme": "dark"
+    },
+    {
+      "bytes": 524,
+      "kind": "transcript",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-dark-source.txt",
+      "sha256": "20ef95a0c3504f2c0cfab0ebb287a009a8dbc4956f00c22fce79342bcf2db928",
+      "theme": "dark"
+    },
+    {
+      "bytes": 111014,
+      "kind": "png",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-light-source.png",
+      "sha256": "95018aaaea2559ec73d9fb8b87c89c7367aac4533a440006849bf856bf7f6dfc",
+      "theme": "light"
+    },
+    {
+      "bytes": 524,
+      "kind": "transcript",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-light-source.txt",
+      "sha256": "20ef95a0c3504f2c0cfab0ebb287a009a8dbc4956f00c22fce79342bcf2db928",
+      "theme": "light"
+    },
+    {
+      "bytes": 197509,
+      "kind": "png",
+      "moment": "board",
+      "path": "floati-board-dark-source.png",
+      "sha256": "acf04626cd4a9ebc61fae5177c3b7a624e5476c75966004afb65380a5c0c1f91",
+      "theme": "dark"
+    },
+    {
+      "bytes": 3577,
+      "kind": "transcript",
+      "moment": "board",
+      "path": "floati-board-dark-source.txt",
+      "sha256": "fae73cfa057f755ed755e95f690d992f08c10831ea6fee4e916f916899b41ff5",
+      "theme": "dark"
+    },
+    {
+      "bytes": 197870,
+      "kind": "png",
+      "moment": "board",
+      "path": "floati-board-light-source.png",
+      "sha256": "57627c4b59e8c456872e1509b287bf53dd9e5275dc73fccc85203b4fb44cbc0f",
+      "theme": "light"
+    },
+    {
+      "bytes": 3577,
+      "kind": "transcript",
+      "moment": "board",
+      "path": "floati-board-light-source.txt",
+      "sha256": "fae73cfa057f755ed755e95f690d992f08c10831ea6fee4e916f916899b41ff5",
+      "theme": "light"
+    },
+    {
+      "bytes": 128011,
+      "kind": "png",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-dark-source.png",
+      "sha256": "f7165869c6e4f38f39fda539d0e77a60345ffb36212b0b93a9a13d32d67ae8ad",
+      "theme": "dark"
+    },
+    {
+      "bytes": 687,
+      "kind": "transcript",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-dark-source.txt",
+      "sha256": "06d9366b049a3d157f3400b49d331f490c98aff532109ec1bcc9348f86b610eb",
+      "theme": "dark"
+    },
+    {
+      "bytes": 128097,
+      "kind": "png",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-light-source.png",
+      "sha256": "3f8ce43dc148df49ad4526e7f1884e41a07d7eb0c9428e347ff607be11501f5f",
+      "theme": "light"
+    },
+    {
+      "bytes": 687,
+      "kind": "transcript",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-light-source.txt",
+      "sha256": "06d9366b049a3d157f3400b49d331f490c98aff532109ec1bcc9348f86b610eb",
+      "theme": "light"
+    },
+    {
+      "bytes": 262264,
+      "kind": "png",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-dark-source.png",
+      "sha256": "b9b6ac40ce770854a0a43759f4c5ed0ccf7fb32281f89a7009c737bd79ff6802",
+      "theme": "dark"
+    },
+    {
+      "bytes": 1214,
+      "kind": "transcript",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-dark-source.txt",
+      "sha256": "a9b312be89a2405b02788599282c32c1389e9a4950be53c58db476a8690f682f",
+      "theme": "dark"
+    },
+    {
+      "bytes": 263235,
+      "kind": "png",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-light-source.png",
+      "sha256": "31b7cf83b52f932e9a21c8e5710e8bfb16a2c971b72bdd634fd721706eea7cf6",
+      "theme": "light"
+    },
+    {
+      "bytes": 1214,
+      "kind": "transcript",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-light-source.txt",
+      "sha256": "a9b312be89a2405b02788599282c32c1389e9a4950be53c58db476a8690f682f",
+      "theme": "light"
+    },
+    {
+      "bytes": 73117,
+      "kind": "png",
+      "moment": "handoff",
+      "path": "floati-handoff-dark-source.png",
+      "sha256": "1dbeb81f222c7fec6025cd133bb81f15be475d5a1bf4c5608b13e57b081b39e6",
+      "theme": "dark"
+    },
+    {
+      "bytes": 307,
+      "kind": "transcript",
+      "moment": "handoff",
+      "path": "floati-handoff-dark-source.txt",
+      "sha256": "4b42778d91a9644f03e1a6aa00957809ca6efab8b2f36e9bc63bbc30d1a02743",
+      "theme": "dark"
+    },
+    {
+      "bytes": 73264,
+      "kind": "png",
+      "moment": "handoff",
+      "path": "floati-handoff-light-source.png",
+      "sha256": "4f751b0b5026b103fc8707c97e3040008184d907ef6368c1a4e22634fc4b8c75",
+      "theme": "light"
+    },
+    {
+      "bytes": 307,
+      "kind": "transcript",
+      "moment": "handoff",
+      "path": "floati-handoff-light-source.txt",
+      "sha256": "4b42778d91a9644f03e1a6aa00957809ca6efab8b2f36e9bc63bbc30d1a02743",
+      "theme": "light"
+    },
+    {
+      "bytes": 161571,
+      "kind": "png",
+      "moment": "help",
+      "path": "floati-help-dark-source.png",
+      "sha256": "47a9c1e8d2def1b6043ca25c4800917e7ded795fa94ca22619813b433a8692dd",
+      "theme": "dark"
+    },
+    {
+      "bytes": 1039,
+      "kind": "transcript",
+      "moment": "help",
+      "path": "floati-help-dark-source.txt",
+      "sha256": "4eb72333227ef1328bdb0eef7048eacc794dfb6ade8c531da06f9376c50fcfb4",
+      "theme": "dark"
+    },
+    {
+      "bytes": 161950,
+      "kind": "png",
+      "moment": "help",
+      "path": "floati-help-light-source.png",
+      "sha256": "18af8fcfba24b32ddd1ce092754842fb312d63d36b8aaf5bc98cd8bb797db704",
+      "theme": "light"
+    },
+    {
+      "bytes": 1039,
+      "kind": "transcript",
+      "moment": "help",
+      "path": "floati-help-light-source.txt",
+      "sha256": "4eb72333227ef1328bdb0eef7048eacc794dfb6ade8c531da06f9376c50fcfb4",
+      "theme": "light"
+    },
+    {
+      "bytes": 69908,
+      "kind": "png",
+      "moment": "identity",
+      "path": "floati-identity-dark-source.png",
+      "sha256": "788aab4c91945819499ad4a865f4e2d419fd4baf543b25432aca82af1a35c9f1",
+      "theme": "dark"
+    },
+    {
+      "bytes": 338,
+      "kind": "transcript",
+      "moment": "identity",
+      "path": "floati-identity-dark-source.txt",
+      "sha256": "dd5637ebfecf1dc8820790cfcc68f3bdbf95f4c0273836694ac681318fe84c4e",
+      "theme": "dark"
+    },
+    {
+      "bytes": 70045,
+      "kind": "png",
+      "moment": "identity",
+      "path": "floati-identity-light-source.png",
+      "sha256": "62cece89347215fd353e048a57590a9bc0d3bf91eb0d43e20f0e05ccde3086ad",
+      "theme": "light"
+    },
+    {
+      "bytes": 338,
+      "kind": "transcript",
+      "moment": "identity",
+      "path": "floati-identity-light-source.txt",
+      "sha256": "dd5637ebfecf1dc8820790cfcc68f3bdbf95f4c0273836694ac681318fe84c4e",
+      "theme": "light"
+    },
+    {
+      "bytes": 73223,
+      "kind": "png",
+      "moment": "lease",
+      "path": "floati-lease-dark-source.png",
+      "sha256": "d9bf309b7251d4fa2cc619b5988eb0cd4c2f8bd1988a3e946eb7af10f83ba800",
+      "theme": "dark"
+    },
+    {
+      "bytes": 302,
+      "kind": "transcript",
+      "moment": "lease",
+      "path": "floati-lease-dark-source.txt",
+      "sha256": "3548da71600a3074867deed77106774e847ecb45f6502e818fd3a93687184473",
+      "theme": "dark"
+    },
+    {
+      "bytes": 73376,
+      "kind": "png",
+      "moment": "lease",
+      "path": "floati-lease-light-source.png",
+      "sha256": "d0a2413aaf4730673f769c52c3d11284d4f60cd9aa81a35f36b26485ad05f73d",
+      "theme": "light"
+    },
+    {
+      "bytes": 302,
+      "kind": "transcript",
+      "moment": "lease",
+      "path": "floati-lease-light-source.txt",
+      "sha256": "3548da71600a3074867deed77106774e847ecb45f6502e818fd3a93687184473",
+      "theme": "light"
+    }
+  ],
+  "captured_at": "2026-09-02T17:00:00.000Z",
+  "font": {
+    "cell_height": 25,
+    "cell_width": 11,
+    "face": ".SF NS Mono Light",
+    "path": "/System/Library/Fonts/SFNSMono.ttf",
+    "sha256": "55caaed55254a28ac793847e8976be16c5ba7cbad1ec2ee2d5d86d4e6b3fa0c1"
+  },
+  "generator": "scripts/capture-shot1-locf1.py",
+  "moments": [
+    {
+      "data_class": "fixture",
+      "name": "board",
+      "source": "docs/evidence/captures/hm1-tui-monochrome.txt",
+      "surface": "floati board --demo --no-animation"
+    },
+    {
+      "data_class": "real",
+      "name": "handoff",
+      "source": "fresh scratch ledger: send -> inbox -> ack -> refused send",
+      "surface": "floati receipts NODE --root ROOT"
+    },
+    {
+      "data_class": "real",
+      "name": "lease",
+      "source": "fresh scratch liveness ledger",
+      "surface": "floati presence show plus expired-authority board testimony"
+    },
+    {
+      "data_class": "real",
+      "name": "dead-receiver",
+      "source": "docs/evidence/captures/rp1-public-safe-svg-20260831/doctor-delivery-health-standard.txt",
+      "surface": "floati doctor --probe --probe-budget 1"
+    },
+    {
+      "data_class": "real",
+      "name": "identity",
+      "source": "fresh scratch authority ledger",
+      "surface": "floati grant plus signature verify"
+    },
+    {
+      "data_class": "real",
+      "name": "adapter-boundary",
+      "source": "docs/evidence/captures/rp1-public-safe-svg-20260831/harbor-chart-multibus-standard.txt",
+      "surface": "floati chart --declared-roots FILE"
+    },
+    {
+      "data_class": "real",
+      "name": "failure-injection",
+      "source": "docs/evidence/captures/floati-replay-drill.txt",
+      "surface": "gauntlet crash injection replay"
+    },
+    {
+      "data_class": "real",
+      "name": "help",
+      "source": "live argparse command surface",
+      "surface": "floati --help"
+    }
+  ],
+  "schema_version": 0,
+  "source_sha": "df54875ec35985f0d26f9275926d605611b33bac",
+  "terminal": {
+    "columns": 120,
+    "rows": 40,
+    "source_scale": 2
+  },
+  "themes": {
+    "dark": {
+      "background": "#12161c",
+      "foreground": "#d8dee9"
+    },
+    "light": {
+      "background": "#f7f3eb",
+      "foreground": "#20252c"
+    }
+  }
+}

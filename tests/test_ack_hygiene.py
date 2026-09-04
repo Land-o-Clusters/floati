@@ -122,13 +122,15 @@ class AckHygieneTests(unittest.TestCase):
         self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids("recipient"))
 
     def test_inbox_without_session_or_peek_refuses_instead_of_accidental_peek(self) -> None:
+        stdout = io.StringIO()
         stderr = io.StringIO()
 
-        with redirect_stderr(stderr):
+        with redirect_stdout(stdout), redirect_stderr(stderr):
             status = main(["inbox", "--root", str(self.home), "--as", "recipient"])
 
         self.assertEqual(20, status)
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("refused", artifact["status"])
         self.assertEqual("inbox_session_required", artifact["evidence"]["code"])
 

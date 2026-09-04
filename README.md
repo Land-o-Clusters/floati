@@ -91,7 +91,7 @@ ledger sees what the harness saw.
 ### See the whole harbor
 
 <p align="center">
-  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
+  <img src="docs/evidence/captures/readme-b-20260904/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
 </p>
 
 The Harbor Board: liveness, authority, and lock state as three
@@ -101,7 +101,7 @@ watch` streams the same deltas as text, and `floati supervise` holds
 a run open and reports as it goes.
 
 <p align="center">
-  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
+  <img src="docs/evidence/captures/readme-b-20260904/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
 </p>
 
 Running more than one fleet on this machine? Declare your roots
@@ -115,7 +115,7 @@ your request.
 ### Know which node went deaf — and which step died
 
 <p align="center">
-  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 16-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
+  <img src="docs/evidence/captures/readme-b-20260904/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 17-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
 </p>
 
 "The node went quiet" is not a diagnosis. The doctor states per-node
@@ -136,7 +136,7 @@ means *no report since*, never *down*.
 ### Onboard and tear down nodes like it's nothing
 
 <p align="center">
-  <img src="docs/evidence/captures/rp1-r4-onboard-20260831/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
+  <img src="docs/evidence/captures/readme-b-20260904/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
 </p>
 
 `floati node add` walks you through a new node: identity, harness,
@@ -173,13 +173,14 @@ logs, on request: `floati quota collect`, then `quota show`.
 `floati intake scan` reads a repository's issues into candidate work,
 `intake show` and `intake adopt` turn one into a work item with the
 issue as its provenance, and `intake dispatch` hands it to a node.
-`intake preview` renders an issue through your own `gh`, which is a
-network call under your credentials — see the network section below.
+`intake adopt --source github` reads one issue through the explicit `gh`
+executable you name. That is a network call which may receive only ambient
+`GH_TOKEN` or `GITHUB_TOKEN` — see the network section below.
 
 ### Replay any run
 
 <p align="center">
-  <img src="docs/evidence/captures/rp1-r2-public-safe-20260831/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
+  <img src="docs/evidence/captures/readme-b-20260904/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
 </p>
 
 The flight recorder replays a finished run as an ordered timeline:
@@ -293,12 +294,14 @@ Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads th
 
 Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.
 
+Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-03](docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md); cells marked `version_stale: true` were measured at 2.1.231 (Claude Code) at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps.
+
 **CLI surfaces**
 
 | harness | bus | work | wake | notes |
 |---|---|---|---|---|
 | codex | [live](docs/evidence/conformance/C1-codex-conformance-live.md) | [adapter](docs/evidence/conformance/C1-codex-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-codex-cli-wake.md) ● | deep integrations below |
-| claude | [live](docs/evidence/conformance/C2-claude-conformance-live.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live.md) | [daemon](docs/evidence/gauntlet/H-claude-wake-remeasure-2-2026-08-29.md) ● | confirmed at 2.1.238 (re-measured 08-29) |
+| claude | [live](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [daemon](docs/evidence/conformance/H-claude-wake-remeasure-2026-09-04.md) ● | confirmed at 2.1.251 (re-measured 09-04) |
 | opencode | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) | [adapter](docs/evidence/conformance/C3-opencode-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) ● | 3-cycle live hold |
 | cursor | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) | [adapter](docs/evidence/conformance/C4-cursor-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-cursor-cli-wake.md) ● |  |
 | cline | [live](docs/evidence/conformance/C5-cline-conformance-live.md) | [adapter](docs/evidence/conformance/C5-cline-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-cline-cli-wake.md) ● |  |
@@ -372,16 +375,17 @@ empty, and filling it is open work ([#8](https://github.com/Land-o-Clusters/floa
 One convention to know: a refused or degraded run prints its artifact
 on stderr, not stdout ([#22](https://github.com/Land-o-Clusters/floati/issues/22)).
 
-No telemetry, ever. Nothing leaves this machine without a consent
-receipt. Floati's own sockets are local pipes between its own
-processes, and nothing in the product can listen — a test refuses
-any `bind` or `listen` outside a local pipe. The outbound exceptions
-are counted, and there are four: two client-only loopback dials, for
-the herdr and t3 adapters; one HTTPS fetch for updates; and `intake
-preview`, which runs your own `gh` to read an issue and therefore
-uses whatever credential `gh` holds. The first three run only behind
-your explicit consent; the fourth is not yet consent-gated, and that
-is open ([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
+No telemetry, ever. Floati's own sockets are local pipes between its own
+processes, and nothing in the product can listen — a test refuses any `bind`
+or `listen` outside a local pipe. The outbound paths are counted, and there
+are exactly four: two client-only loopback dials, for the herdr and t3
+adapters; one HTTPS fetch for updates; and `intake adopt --source github`,
+which runs the explicit `gh` executable to read one issue. That subprocess
+may receive only a non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; Floati
+hides `gh`'s stored login configuration. The first three run only behind an
+explicit consent receipt. The fourth requires the explicit command but does
+not yet have a consent receipt of its own, and that is open
+([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
 
 The full promise — and precisely what floati refuses to guess — is
 written down: **[Truth Guarantees](docs/TRUTH-GUARANTEES.md)**. If a

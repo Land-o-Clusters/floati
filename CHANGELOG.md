@@ -25,6 +25,7 @@ that fleet's own records.
   when your harness un-trusts a modified hook — as it should — the installer
   says `untrusted_pending_user` and tells you the one step to fix it. It
   never trusts itself.
+- **Wake daemon.** `wake daemon` supplies consent, binding, installation, start, status, stop, removal, and revocation for one harness coordinate.
 - **Context and Tide.** Read-only context status and turnover receipts, and
   tide tables: thresholds over measurable facts only. A policy that names a
   metric without a shipped evaluator is refused with the citation in the

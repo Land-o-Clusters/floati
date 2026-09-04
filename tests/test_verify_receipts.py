@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import hashlib
 import inspect
 import json
@@ -353,7 +355,7 @@ class VerifyReceiptTests(unittest.TestCase):
         claim_path.write_text(json.dumps(self._claim_payload()), encoding="utf-8")
         send = subprocess.run(
             [
-                "python3", "-m", "floati", "send",
+                str(LAUNCHER), "send",
                 "--root", str(self.root.tenant_home),
                 "--from", "sender", "--to", "recipient",
                 "--repo", "floati", "--sha", self.sha,
@@ -371,7 +373,7 @@ class VerifyReceiptTests(unittest.TestCase):
 
         verified = subprocess.run(
             [
-                "python3", "-m", "floati", "verify",
+                str(LAUNCHER), "verify",
                 "--root", str(self.root.tenant_home),
                 "--as", "verifier", "--claim", claim_id, "--json",
             ],
@@ -401,7 +403,7 @@ class VerifyReceiptTests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "send",
+                str(LAUNCHER), "send",
                 "--root", str(self.root.tenant_home),
                 "--from", "sender", "--to", "recipient",
                 "--repo", "floati", "--sha", self.sha,
@@ -415,7 +417,8 @@ class VerifyReceiptTests(unittest.TestCase):
         )
 
         self.assertEqual(20, completed.returncode)
-        artifact = json.loads(completed.stderr)
+        artifact = json.loads(completed.stdout)
+        self.assertEqual("", completed.stderr)
         self.assertEqual("claim_malformed", artifact["evidence"]["code"])
         self.assertFalse(self.events.path.exists())
 
@@ -427,7 +430,7 @@ class VerifyReceiptTests(unittest.TestCase):
         ):
             with self.subTest(arguments=arguments):
                 completed = subprocess.run(
-                    ["python3", "-m", "floati", *arguments],
+                    [str(LAUNCHER), *arguments],
                     cwd=REPOSITORY_ROOT,
                     text=True,
                     capture_output=True,

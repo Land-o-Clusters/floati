@@ -6,15 +6,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import importlib
 import io
 import json
+import os
 import re
 import sys
 import textwrap
 import threading
 import time
+from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable, Iterator
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -24,6 +29,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from floati.admin_registry import RegistryAdminBackend  # noqa: E402
 from floati.doctor import Doctor  # noqa: E402
+from floati.errors import ProtocolRefusal  # noqa: E402
 from floati.events import EventLog  # noqa: E402
 from floati import fixture_ids  # noqa: E402
 from floati.ids import uuid7_hex  # noqa: E402
@@ -53,7 +59,28 @@ _FLOATI_BUILDER = fixture_ids.builder("floati")
 _REVIEWER = fixture_ids.reviewer()
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 ANSI_COLOR = re.compile(r"\x1b\[([0-9;]*)m")
-FONT = Path("/System/Library/Fonts/SFNSMono.ttf")
+CAPTURE_FONT_FLAG = "--font"
+CAPTURE_FONT_VARIABLE = "FLOATI_CAPTURE_FONT"
+FONT_CANDIDATES = (
+    Path("/System/Library/Fonts/Menlo.ttc"),
+    Path("/System/Library/Fonts/SFNSMono.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+)
+FONT_COMPONENT = "README real-ledger capture monospace font"
+FONT_ABSENT_CODE = "readme_capture_font_absent"
+FONT_DECLARATION_INVALID_CODE = "readme_capture_font_declaration_invalid"
+FONT_ABSENT_EXIT_CODE = 3
+FONT_DECLARATION_REMEDY = (
+    f"declare one absolute, readable font file with {CAPTURE_FONT_FLAG} <path> "
+    f"or {CAPTURE_FONT_VARIABLE}=<path>"
+)
+CAPTURE_ID_MODULES = (
+    "floati.events",
+    "floati.planes",
+    "floati.registry",
+    "floati.work",
+    "floati.workers",
+)
 PALETTES = {
     "dark": {
         "background": "#12161c",
@@ -76,6 +103,145 @@ class RenderedIdentityRefusal(RuntimeError):
         self.code = code
         self.detail = detail
         self.evidence = evidence
+
+
+def _validate_declared_font(path: Path, *, source: str) -> Path:
+    if not path.is_absolute():
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name an absolute path, not {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    if not path.is_file():
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name a regular file that exists: {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    if not os.access(path, os.R_OK):
+        raise ProtocolRefusal(
+            FONT_DECLARATION_INVALID_CODE,
+            f"{source} must name a readable file: {path}",
+            FONT_DECLARATION_REMEDY,
+        )
+    return path
+
+
+def resolve_capture_font(
+    declared: Path | str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    candidates: Sequence[Path] | None = None,
+) -> Path:
+    """Resolve one declared or fixed face without searching the host."""
+
+    environ = os.environ if environ is None else environ
+    candidates = FONT_CANDIDATES if candidates is None else tuple(candidates)
+    source = CAPTURE_FONT_FLAG
+    if declared is None:
+        value = environ.get(CAPTURE_FONT_VARIABLE)
+        if value is not None and value.strip():
+            declared = Path(value.strip())
+            source = CAPTURE_FONT_VARIABLE
+    if declared is not None:
+        return _validate_declared_font(Path(declared), source=source)
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.R_OK):
+            return candidate
+    raise ProtocolRefusal(
+        FONT_ABSENT_CODE,
+        (
+            f"no {FONT_COMPONENT} is declared and none of the fixed candidates "
+            f"is readable on this host: {', '.join(str(path) for path in candidates)}"
+        ),
+        FONT_DECLARATION_REMEDY,
+    )
+
+
+def font_absence_report(refusal: ProtocolRefusal) -> dict[str, object]:
+    return {
+        "condition": refusal.code,
+        "component": FONT_COMPONENT,
+        "detail": refusal.detail,
+        "declaration": {
+            "flag": CAPTURE_FONT_FLAG,
+            "variable": CAPTURE_FONT_VARIABLE,
+        },
+        "candidates": [str(candidate) for candidate in FONT_CANDIDATES],
+        "remedy": refusal.remedy,
+        "exit_code": FONT_ABSENT_EXIT_CODE,
+    }
+
+
+def _capture_moment(value: str) -> datetime:
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "captured-at must be an ISO-8601 timestamp with an explicit offset"
+        ) from exc
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise argparse.ArgumentTypeError(
+            "captured-at must be an ISO-8601 timestamp with an explicit offset"
+        )
+    return moment.astimezone(timezone.utc)
+
+
+def _capture_id_factory(label: str, moment: datetime) -> Callable[[], str]:
+    timestamp_ms = int(moment.timestamp() * 1000)
+    ordinal = 0
+
+    def next_id() -> str:
+        nonlocal ordinal
+        seed = hashlib.sha256(f"{label}:{ordinal}".encode("utf-8")).digest()
+        ordinal += 1
+        random_bits = int.from_bytes(seed[:10], "big") & ((1 << 74) - 1)
+        return uuid7_hex(timestamp_ms=timestamp_ms, random_bits=random_bits)
+
+    return next_id
+
+
+@contextmanager
+def _capture_id_scope(
+    label: str,
+    moment: datetime,
+) -> Iterator[Callable[[], str]]:
+    factory = _capture_id_factory(label, moment)
+    originals = []
+    for module_name in CAPTURE_ID_MODULES:
+        module = importlib.import_module(module_name)
+        originals.append((module, module.uuid7_hex))
+        module.uuid7_hex = factory
+    try:
+        yield factory
+    finally:
+        for module, original in reversed(originals):
+            module.uuid7_hex = original
+
+
+def _instrument_spellings(path: Path) -> tuple[str, ...]:
+    expanded = path.expanduser()
+    spellings = {str(path), str(expanded), str(expanded.resolve())}
+    resolved = str(expanded.resolve())
+    if resolved.startswith("\x2fprivate/tmp/"):
+        spellings.add("\x2ftmp/" + resolved[len("\x2fprivate/tmp/") :])
+    if resolved.startswith("/private/var/"):
+        spellings.add("/var/" + resolved[len("/private/var/") :])
+    return tuple(spelling for spelling in spellings if spelling and spelling != ".")
+
+
+def expose_readme_text(text: str, *, instrument_roots: Sequence[Path]) -> str:
+    """Replace generator scratch roots with <scratch> before any write."""
+
+    spellings = {
+        spelling
+        for path in instrument_roots
+        for spelling in _instrument_spellings(path)
+    }
+    exposed = text
+    for root in sorted(spellings, key=len, reverse=True):
+        exposed = exposed.replace(root, "<scratch>")
+    return exposed
 
 
 def _assert_rendered_identity_safe(name: str, frames: list[str]) -> None:
@@ -150,8 +316,12 @@ def _write_capture(
     standard: str,
     *,
     plain: str | None = None,
+    instrument_roots: Sequence[Path] = (),
 ) -> dict[str, object]:
-    _assert_rendered_identity_safe(name, [standard])
+    standard = expose_readme_text(standard, instrument_roots=instrument_roots)
+    if plain is not None:
+        plain = expose_readme_text(plain, instrument_roots=instrument_roots)
+    _assert_rendered_identity_safe(name, [standard] if plain is None else [standard, plain])
     standard_path = output / f"{name}-standard.txt"
     standard_path.write_text(standard.rstrip() + "\n", encoding="utf-8")
     files = [standard_path]
@@ -194,11 +364,16 @@ def _line_runs(line: str, theme: str) -> list[tuple[str, str]]:
     return runs or [("", color)]
 
 
-def _terminal_frame(testimony: str, theme: str) -> Image.Image:
+def _terminal_frame(
+    testimony: str,
+    theme: str,
+    *,
+    font_path: Path,
+) -> Image.Image:
     palette = PALETTES[theme]
     image = Image.new("RGB", (1600, 900), palette["background"])
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(str(FONT), 20)
+    font = ImageFont.truetype(io.BytesIO(font_path.read_bytes()), 20)
     x_margin = 30
     y = 26
     line_height = 25
@@ -237,7 +412,16 @@ def _write_animated_capture(
     *,
     plain: str | None = None,
     duration_ms: int,
+    font_path: Path,
+    instrument_roots: Sequence[Path] = (),
 ) -> dict[str, object]:
+    standard = expose_readme_text(standard, instrument_roots=instrument_roots)
+    animation_frames = [
+        expose_readme_text(frame, instrument_roots=instrument_roots)
+        for frame in animation_frames
+    ]
+    if plain is not None:
+        plain = expose_readme_text(plain, instrument_roots=instrument_roots)
     _assert_rendered_identity_safe(name, animation_frames)
     standard_path = output / f"{name}-standard.txt"
     standard_path.write_text(standard.rstrip() + "\n", encoding="utf-8")
@@ -248,7 +432,10 @@ def _write_animated_capture(
         files.append(plain_path)
     for theme in ("dark", "light"):
         gif_path = output / f"{name}-{theme}.gif"
-        rendered = [_terminal_frame(frame, theme) for frame in animation_frames]
+        rendered = [
+            _terminal_frame(frame, theme, font_path=font_path)
+            for frame in animation_frames
+        ]
         durations = [duration_ms] * len(rendered)
         durations[-1] = max(1200, duration_ms)
         _write_gif(gif_path, rendered, durations)
@@ -271,7 +458,11 @@ def _new_root(path: Path) -> FloatiRoot:
     return FloatiRoot.open_direct_home(path, create=True)
 
 
-def _board_capture(scratch: Path, output: Path) -> dict[str, object]:
+def _board_capture(
+    scratch: Path,
+    output: Path,
+    moment: datetime,
+) -> dict[str, object]:
     root = _new_root(scratch / "harbor-board")
     registry = Registry(root)
     for node, harness in (
@@ -281,7 +472,7 @@ def _board_capture(scratch: Path, output: Path) -> dict[str, object]:
     ):
         registry.register(node, harness)
 
-    now = datetime.now(timezone.utc)
+    now = moment
     liveness = LivenessPresenceStore(root)
     liveness.observe("architect-codex", 3600, now - timedelta(seconds=2))
     liveness.observe("builder-claude", 3600, now - timedelta(seconds=5))
@@ -310,6 +501,7 @@ def _board_capture(scratch: Path, output: Path) -> dict[str, object]:
         "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md",
         "DRAFT frame review requested",
         idempotency_key="capture-board-mail",
+        now=now,
     )
     model = model_from_root(root, now)
     standard = (
@@ -320,24 +512,32 @@ def _board_capture(scratch: Path, output: Path) -> dict[str, object]:
         f"ROOT={root.path}\n$ floati board --root $ROOT --session capture-session --no-animation\n\n"
         + render_plain_dump(model, width=108)
     )
-    result = _write_capture(output, "harbor-board", standard, plain=plain)
+    result = _write_capture(
+        output, "harbor-board", standard, plain=plain, instrument_roots=(scratch,)
+    )
     result["root"] = str(root.path)
     return result
 
 
-def _replay_capture(scratch: Path, output: Path) -> dict[str, object]:
+def _replay_capture(
+    scratch: Path,
+    output: Path,
+    font_path: Path,
+    moment: datetime,
+    id_factory: Callable[[], str],
+) -> dict[str, object]:
     root = _new_root(scratch / "flight-recorder")
     registry = Registry(root)
     registry.register("architect-codex", "Architect")
     registry.register("builder-claude", "Claude")
-    now = datetime.now(timezone.utc)
+    now = moment
     grant = AuthorityGrantStore(root).claim(
         "orchestration", "builder-claude", 3600, 3600, now - timedelta(seconds=12)
     )
     work = WorkLog(root)
     receipts = WorkerReceipts(root)
-    first_session = "worker-" + uuid7_hex()
-    second_session = "worker-" + uuid7_hex()
+    first_session = "worker-" + id_factory()
+    second_session = "worker-" + id_factory()
     first = work.add("assemble capture ledger", "builder-claude", [], now=now - timedelta(seconds=11))
     work.claim(first["id"], "builder-claude", "orchestration", grant["epoch"], now=now - timedelta(seconds=10))
     for transition, offset in (("claim", 9), ("spawn", 8), ("drive", 7), ("bind_artifact", 5)):
@@ -386,17 +586,28 @@ def _replay_capture(scratch: Path, output: Path) -> dict[str, object]:
         animation_frames,
         plain=plain,
         duration_ms=250,
+        font_path=font_path,
+        instrument_roots=(scratch,),
     )
     result["root"] = str(root.path)
     result["event_count"] = len(artifact["events"])
     return result
 
 
-def _onboard_capture(scratch: Path, output: Path) -> dict[str, object]:
+def _onboard_capture(
+    scratch: Path,
+    output: Path,
+    font_path: Path,
+    moment: datetime,
+    id_factory: Callable[[], str],
+) -> dict[str, object]:
     root = _new_root(scratch / "onboard-wizard")
     preview = io.StringIO()
     result = NodeWizard(
-        root, RegistryAdminBackend(root), id_factory=uuid7_hex
+        root,
+        RegistryAdminBackend(root),
+        id_factory=id_factory,
+        now=lambda: moment,
     ).add_from_keys(["architect-codex", "Codex", "permanent"], preview)
     record = result["records"][0]
     preview_payload = json.loads(preview.getvalue().split("ledger preview: ", 1)[1])
@@ -437,19 +648,49 @@ def _onboard_capture(scratch: Path, output: Path) -> dict[str, object]:
         testimony,
         [command, preview_frame, testimony],
         duration_ms=1100,
+        font_path=font_path,
+        instrument_roots=(scratch,),
     )
     captured["root"] = str(root.path)
     return captured
+
+
+def _prepare_doctor_fixture(path: Path, moment: datetime) -> None:
+    root = _new_root(path)
+    registry = Registry(root)
+    for node, harness in (
+        ("architect-codex", "Architect"),
+        ("builder-floati", "Codex"),
+        ("reviewer-opencode", "OpenCode"),
+    ):
+        registry.register(node, harness)
+    EventLog(root).send(
+        "architect-codex",
+        "builder-floati",
+        "floati",
+        "d" * 40,
+        "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md",
+        "DRAFT delivery-health recapture",
+        idempotency_key="capture-doctor-aged-mail",
+        now=moment - timedelta(minutes=17),
+    )
 
 
 def _doctor_capture(
     doctor_root: Path,
     doctor_source: Path,
     output: Path,
+    moment: datetime,
 ) -> dict[str, object]:
     root = FloatiRoot.open_direct_home(doctor_root, create=False)
     doctor = Doctor(doctor_source, root.path, ref="origin/main")
-    artifact, _ = doctor.artifact()
+    doctor_module = importlib.import_module("floati.doctor")
+    original_utc_now = doctor_module._utc_now
+    doctor_module._utc_now = lambda: moment
+    try:
+        artifact, _ = doctor.artifact()
+    finally:
+        doctor_module._utc_now = original_utc_now
     delivery_findings = [
         finding
         for finding in artifact["findings"]
@@ -486,13 +727,22 @@ def _doctor_capture(
         prefix = "+ PASS" if finding["severity"] == "ok" else "! DEAF"
         lines.append(f"{prefix}  {finding['subject']}: {finding['detail']}")
     lines.extend(("", "STATE DEGRADED — one or more delivery paths require attention"))
-    captured = _write_capture(output, "doctor-delivery-health", "\n".join(lines))
+    captured = _write_capture(
+        output,
+        "doctor-delivery-health",
+        "\n".join(lines),
+        instrument_roots=(doctor_root, doctor_source),
+    )
     captured["root"] = str(root.path)
     captured["probe_budget_seconds"] = 1
     return captured
 
 
-def _chart_capture(scratch: Path, output: Path) -> dict[str, object]:
+def _chart_capture(
+    scratch: Path,
+    output: Path,
+    moment: datetime,
+) -> dict[str, object]:
     upstream = _new_root(scratch / "harbor-upstream")
     downstream = _new_root(scratch / "harbor-downstream")
     for root, rows in (
@@ -506,11 +756,13 @@ def _chart_capture(scratch: Path, output: Path) -> dict[str, object]:
         "architect-codex", _FLOATI_BUILDER, "floati", "b" * 40,
         "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md", "DRAFT downstream handoff",
         idempotency_key="capture-chart-upstream",
+        now=moment,
     )
     EventLog(downstream).send(
         "architect-puddle", _REVIEWER, "puddle", "c" * 40,
         "docs/evidence/POST-CAMPAIGN-CAPTURE-SET.md", "DRAFT frame review",
         idempotency_key="capture-chart-downstream",
+        now=moment,
     )
     declarations = scratch / "declared-roots.json"
     declarations.write_text(
@@ -543,7 +795,9 @@ def _chart_capture(scratch: Path, output: Path) -> dict[str, object]:
         f"DECLARED_ROOTS={declarations}\n$ floati chart --declared-roots $DECLARED_ROOTS\n\n"
         + render_multi_bus_chart(artifact)
     )
-    captured = _write_capture(output, "harbor-chart-multibus", testimony)
+    captured = _write_capture(
+        output, "harbor-chart-multibus", testimony, instrument_roots=(scratch,)
+    )
     captured["roots"] = [str(upstream.path), str(downstream.path)]
     captured["declared_roots"] = str(declarations)
     return captured
@@ -551,6 +805,9 @@ def _chart_capture(scratch: Path, output: Path) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--font", type=Path)
+    parser.add_argument("--captured-at", type=_capture_moment)
+    parser.add_argument("--seed-doctor-fixture", action="store_true")
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
@@ -569,6 +826,14 @@ def main() -> int:
         help="capture only this named frame; repeat to select multiple frames",
     )
     args = parser.parse_args()
+    try:
+        font_path = resolve_capture_font(args.font)
+    except ProtocolRefusal as refusal:
+        if refusal.code not in (FONT_ABSENT_CODE, FONT_DECLARATION_INVALID_CODE):
+            raise
+        print(json.dumps(font_absence_report(refusal), sort_keys=True), file=sys.stderr)
+        return FONT_ABSENT_EXIT_CODE
+    captured_at = args.captured_at or datetime.now(timezone.utc)
     scratch = args.scratch.expanduser().resolve()
     output = args.output.expanduser().resolve()
     scratch.mkdir(parents=True, exist_ok=True)
@@ -584,34 +849,55 @@ def main() -> int:
     ]
     captures = []
     for name in requested:
-        if name == "harbor-board":
-            captures.append(_board_capture(scratch, output))
-        elif name == "flight-recorder-replay":
-            captures.append(_replay_capture(scratch, output))
-        elif name == "onboard-wizard":
-            captures.append(_onboard_capture(scratch, output))
-        elif name == "harbor-chart-multibus":
-            captures.append(_chart_capture(scratch, output))
-        else:
-            captures.append(
-                _doctor_capture(
-                    args.doctor_root.expanduser().resolve(),
-                    args.doctor_source.expanduser().resolve(),
-                    output,
+        with _capture_id_scope(name, captured_at) as id_factory:
+            if name == "harbor-board":
+                captures.append(_board_capture(scratch, output, captured_at))
+            elif name == "flight-recorder-replay":
+                captures.append(
+                    _replay_capture(
+                        scratch, output, font_path, captured_at, id_factory
+                    )
                 )
-            )
+            elif name == "onboard-wizard":
+                captures.append(
+                    _onboard_capture(
+                        scratch, output, font_path, captured_at, id_factory
+                    )
+                )
+            elif name == "harbor-chart-multibus":
+                captures.append(_chart_capture(scratch, output, captured_at))
+            else:
+                doctor_root = args.doctor_root.expanduser().resolve()
+                if args.seed_doctor_fixture:
+                    _prepare_doctor_fixture(doctor_root, captured_at)
+                captures.append(
+                    _doctor_capture(
+                        doctor_root,
+                        args.doctor_source.expanduser().resolve(),
+                        output,
+                        captured_at,
+                    )
+                )
+    instrument_roots = (
+        scratch,
+        args.doctor_root.expanduser().resolve(),
+        args.doctor_source.expanduser().resolve(),
+    )
     manifest = {
         "schema_version": 0,
         "generator": "scripts/capture-readme-real-ledgers.py",
         "source_sha": args.source_sha,
-        "captured_at": _stamp(datetime.now(timezone.utc)),
+        "captured_at": _stamp(captured_at),
         "synthetic": False,
         "scratch": str(scratch),
         "captures": captures,
     }
     manifest_path = output / "manifest.json"
     manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        expose_readme_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            instrument_roots=instrument_roots,
+        ),
         encoding="utf-8",
     )
     print(json.dumps({"status": "ok", "manifest": str(manifest_path), "captures": len(captures)}))

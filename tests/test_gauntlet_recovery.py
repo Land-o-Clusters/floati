@@ -184,10 +184,10 @@ class RecoveryGauntletTests(unittest.TestCase):
                 },
             )
             try:
-                self.assertIsNotNone(process.stderr)
-                ready, _, _ = select.select([process.stderr], [], [], 2)
+                self.assertIsNotNone(process.stdout)
+                ready, _, _ = select.select([process.stdout], [], [], 2)
                 self.assertTrue(ready, "watch did not emit its initial frame")
-                first = process.stderr.readline()
+                first = process.stdout.readline()
                 initial = json.loads(first)
                 self.assertEqual(1, initial["schema_version"])
                 self.assertEqual("watch", initial["command"])
@@ -206,7 +206,8 @@ class RecoveryGauntletTests(unittest.TestCase):
 
             output = first + stdout + stderr
             self.assertEqual(35, process.returncode, output.decode("utf-8", "replace"))
-            self.assertIn(b'"code":"root_deleted"', stderr)
+            self.assertIn(b'"code":"root_deleted"', stdout)
+            self.assertEqual(b"", stderr)
             self.assertNotIn(b"Traceback", output)
 
     def test_decision_disk_full_and_root_disappearance_are_typed_without_partial_projection(self) -> None:

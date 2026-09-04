@@ -234,6 +234,137 @@ class SourceScrubTests(unittest.TestCase):
                 [f"refs/notes/publication:{sha}:note"], scan_git_history_notes(root)
             )
 
+    def test_history_note_scanner_detects_annotated_tag_message(self) -> None:
+        """Catches a forbidden name living only in an annotated tag object."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Scrub Fixture",
+                "GIT_AUTHOR_EMAIL": "scrub@example.invalid",
+                "GIT_COMMITTER_NAME": "Scrub Fixture",
+                "GIT_COMMITTER_EMAIL": "scrub@example.invalid",
+            }
+            subprocess.run(
+                ["git", "init", "--quiet", "--initial-branch=main"],
+                cwd=root,
+                check=True,
+            )
+            (root / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "clean subject"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+            forbidden = bytes.fromhex("5369676e616c4372616674").decode("ascii")
+            subprocess.run(
+                [
+                    "git", "tag", "-a", "hist-1-fixture",
+                    "-m", f"archive {forbidden}",
+                ],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+
+            self.assertEqual(
+                ["refs/tags/hist-1-fixture:tag-message"],
+                scan_git_history_notes(root),
+            )
+
+    def test_history_note_scanner_detects_forbidden_ref_name(self) -> None:
+        """Catches a forbidden name living only in the ref path, not the object."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Scrub Fixture",
+                "GIT_AUTHOR_EMAIL": "scrub@example.invalid",
+                "GIT_COMMITTER_NAME": "Scrub Fixture",
+                "GIT_COMMITTER_EMAIL": "scrub@example.invalid",
+            }
+            subprocess.run(
+                ["git", "init", "--quiet", "--initial-branch=main"],
+                cwd=root,
+                check=True,
+            )
+            (root / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", "clean subject"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+            forbidden = bytes.fromhex("5369676e616c4372616674").decode("ascii")
+            subprocess.run(
+                ["git", "tag", f"hist-1-{forbidden}"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+
+            self.assertEqual(
+                [f"refs/tags/hist-1-{forbidden}:ref-name"],
+                scan_git_history_notes(root),
+            )
+
+    def test_history_note_scanner_ignores_clean_annotated_tag_and_lightweight_tag(self) -> None:
+        """A clean annotated-tag message and a clean lightweight tag are not hits.
+
+        A lightweight tag whose name is clean must not reprint the pointed-to
+        commit message as a tag-message coordinate.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Scrub Fixture",
+                "GIT_AUTHOR_EMAIL": "scrub@example.invalid",
+                "GIT_COMMITTER_NAME": "Scrub Fixture",
+                "GIT_COMMITTER_EMAIL": "scrub@example.invalid",
+            }
+            subprocess.run(
+                ["git", "init", "--quiet", "--initial-branch=main"],
+                cwd=root,
+                check=True,
+            )
+            (root / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+            forbidden = bytes.fromhex("5369676e616c4372616674").decode("ascii")
+            subprocess.run(
+                ["git", "commit", "--quiet", "-m", f"remove {forbidden} source"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+            sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "tag", "-a", "hist-1-clean", "-m", "release notes"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "tag", "hist-1-light"],
+                cwd=root,
+                env=environment,
+                check=True,
+            )
+
+            self.assertEqual(
+                [f"{sha}:commit-message"],
+                scan_git_history_notes(root),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="280" viewBox="0 0 1920 280" role="img">
+  <title>harbor-chart-multibus — light</title>
+  <desc>Real Floati scratch-ledger terminal capture.</desc>
+  <rect width="1920" height="280" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">DECLARED_ROOTS=/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/declared-roots.json</tspan>
+    <tspan x="28" dy="19" fill="#20252c">$ floati chart --declared-roots $DECLARED_ROOTS</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">FLOATI // MULTI-BUS HARBOR CHART</tspan>
+    <tspan x="28" dy="19" fill="#20252c">floati-upstream [architect: architect-codex] [last activity: 0s]</tspan>
+    <tspan x="28" dy="19" fill="#20252c">  |-- architect-codex (Architect)</tspan>
+    <tspan x="28" dy="19" fill="#20252c">  |-- builder-floati (Codex)</tspan>
+    <tspan x="28" dy="19" fill="#20252c">puddle-downstream [architect: architect-puddle] [last activity: 0s]</tspan>
+    <tspan x="28" dy="19" fill="#20252c">  |-- architect-puddle (Architect)</tspan>
+    <tspan x="28" dy="19" fill="#20252c">  |-- reviewer (Claude)</tspan>
+    <tspan x="28" dy="19" fill="#20252c">relationships:</tspan>
+    <tspan x="28" dy="19" fill="#20252c">  floati-upstream -&gt; puddle-downstream</tspan>
+  </text>
+</svg>

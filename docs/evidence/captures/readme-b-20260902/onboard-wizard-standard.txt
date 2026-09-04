@@ -1,0 +1,23 @@
+ROOT=/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/onboard-wizard
+$ floati node add --root $ROOT --node architect-codex --harness Codex --lifetime permanent
+
+RECORDS PREVIEW — BEFORE WRITE
+{
+  "id": "registry-01a06422d70079c990aadeca27eae24c",
+  "kind": "registry_entry",
+  "node_id": "architect-codex",
+  "role": "Codex",
+  "schema_version": 0,
+  "state": "active",
+  "tenant_id": "onboard-wizard",
+  "timestamp": "2026-09-02T22:00:00.000Z"
+}
+
+COMMIT RECEIPT
+{
+  "node_id": "architect-codex",
+  "record_id": "registry-01a06422d70079c990aadeca27eae24c",
+  "state": "active",
+  "status": "ok",
+  "workspace": "/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/onboard-wizard/nodes/architect-codex"
+}

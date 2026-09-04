@@ -177,6 +177,50 @@ class CodexAppServerAdapterTests(unittest.TestCase):
     def command(self, mode: str) -> tuple[str, ...]:
         return (str(Path(sys.executable).resolve()), str(HARNESS), "--mode", mode)
 
+    def test_git_nonzero_exit_carries_stderr_in_typed_failure_detail(self) -> None:
+        diagnostic = "fatal: unable to access /dev/null: Permission denied\n"
+        completed = subprocess.CompletedProcess(
+            args=["git", "init"], returncode=128, stdout="", stderr=diagnostic
+        )
+
+        with (
+            mock.patch.object(codex_live.subprocess, "run", return_value=completed),
+            self.assertRaises(WorkerAdapterFailure) as caught,
+        ):
+            CodexAppServerAdapter._git(self.workspace, time.monotonic() + 5, "init")
+
+        self.assertEqual("git_finalize_failed", caught.exception.code)
+        self.assertEqual(diagnostic.rstrip("\n"), caught.exception.detail)
+
+    def test_git_timeout_carries_captured_stderr_in_typed_failure_detail(self) -> None:
+        diagnostic = "fatal: could not read git identity\n"
+        timeout = subprocess.TimeoutExpired(
+            cmd=["git", "commit"], timeout=5, stderr=diagnostic
+        )
+
+        with (
+            mock.patch.object(codex_live.subprocess, "run", side_effect=timeout),
+            self.assertRaises(WorkerAdapterFailure) as caught,
+        ):
+            CodexAppServerAdapter._git(
+                self.workspace, time.monotonic() + 5, "commit"
+            )
+
+        self.assertEqual("git_finalize_failed", caught.exception.code)
+        self.assertEqual(diagnostic.rstrip("\n"), caught.exception.detail)
+
+    def test_git_start_failure_carries_os_error_in_typed_failure_detail(self) -> None:
+        failure = FileNotFoundError(2, "No such file or directory", "git")
+
+        with (
+            mock.patch.object(codex_live.subprocess, "run", side_effect=failure),
+            self.assertRaises(WorkerAdapterFailure) as caught,
+        ):
+            CodexAppServerAdapter._git(self.workspace, time.monotonic() + 5, "init")
+
+        self.assertEqual("git_finalize_failed", caught.exception.code)
+        self.assertEqual(str(failure), caught.exception.detail)
+
     def item(self, workspace: Path | None = None) -> dict:
         return {
             "id": self.work_id,

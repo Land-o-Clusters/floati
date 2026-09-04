@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 from floati import fixture_ids as public_ids
 
 import json
@@ -40,7 +42,7 @@ class AdminCliTests(unittest.TestCase):
 
     def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *arguments],
+            [str(LAUNCHER), *arguments],
             cwd=REPOSITORY_ROOT,
             env=dict(os.environ),
             text=True,
@@ -243,8 +245,8 @@ class AdminCliTests(unittest.TestCase):
                     code = main(list(arguments))
 
                 self.assertEqual(20, code)
-                self.assertEqual("", stdout.getvalue())
-                artifact = json.loads(stderr.getvalue())
+                self.assertEqual("", stderr.getvalue())
+                artifact = json.loads(stdout.getvalue())
                 self.assertIn(
                     artifact["evidence"]["code"],
                     {"arguments_invalid", "interactive_terminal_required"},
@@ -272,8 +274,8 @@ class AdminCliTests(unittest.TestCase):
                     code = main(["node", "add"])
 
                 self.assertEqual(20, code)
-                self.assertEqual("", stdout.getvalue())
-                artifact = json.loads(stderr.getvalue())
+                self.assertEqual("", stderr.getvalue())
+                artifact = json.loads(stdout.getvalue())
                 self.assertEqual(
                     "interactive_terminal_required", artifact["evidence"]["code"]
                 )
@@ -302,9 +304,8 @@ class AdminCliTests(unittest.TestCase):
             code = main(["node", "add"])
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("Traceback", stderr.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("door_terminal_io_failed", artifact["evidence"]["code"])
 
     def test_flagless_node_add_ctrl_c_is_one_typed_refusal_without_mutation(self) -> None:
@@ -340,9 +341,8 @@ class AdminCliTests(unittest.TestCase):
             self.fail("Ctrl-C escaped the flagless node-add entry point")
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("Traceback", stderr.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("door_cancelled", artifact["evidence"]["code"])
         self.assertEqual(
             "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
@@ -389,9 +389,8 @@ class AdminCliTests(unittest.TestCase):
             code = main(["node", "add"])
 
         self.assertEqual(35, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("Traceback", stderr.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("degraded", artifact["status"])
         self.assertEqual("node_add_commit_failed", artifact["evidence"]["code"])
         self.assertNotIn("remedy", artifact["evidence"])
@@ -419,9 +418,9 @@ class AdminCliTests(unittest.TestCase):
             code = main(["node", "add"])
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("\x1b[?1049h", stderr.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        self.assertNotIn("\x1b[?1049h", stdout.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
         self.assertEqual(remedy, artifact["evidence"]["remedy"])
 

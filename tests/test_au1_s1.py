@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import base64
 import builtins
 import hashlib
@@ -20,6 +22,7 @@ from unittest import mock
 from floati.errors import ProtocolRefusal
 from floati.root import FloatiRoot
 from floati.signing import sign_minisign
+from tests import managed_test_tools
 
 try:
     from floati.update_consent import UpdateConsentLedger
@@ -90,9 +93,11 @@ class AU1S1Tests(unittest.TestCase):
         self.destination.mkdir()
         self.entrypoint = self._write_standalone_install(self.destination)
         self.channel = "https://updates.example.invalid/release-index.v0"
-        selected = shutil.which("minisign")
+        selected = managed_test_tools.executable(
+            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
+        )
         self.assertIsNotNone(selected, "AU1-S1 requires a real minisign binary")
-        self.minisign = Path(selected).resolve(strict=True)
+        self.minisign = Path(selected)
         self.index = {
             "schema_version": 0,
             "channel_id": "stable-fixture",
@@ -300,9 +305,7 @@ class AU1S1Tests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3",
-                "-m",
-                "floati",
+                str(LAUNCHER),
                 "update",
                 "check",
                 "--destination",
@@ -323,7 +326,8 @@ class AU1S1Tests(unittest.TestCase):
         )
 
         self.assertEqual(20, completed.returncode, completed.stdout)
-        artifact = json.loads(completed.stderr)
+        artifact = json.loads(completed.stdout)
+        self.assertEqual("", completed.stderr)
         self.assertEqual("update_consent_missing", artifact["evidence"]["code"])
 
     def test_s1_00_update_check_type_hints_resolve_the_executable_seam(self) -> None:
@@ -599,7 +603,7 @@ class AU1S1Tests(unittest.TestCase):
         for *arguments, expected_state in commands:
             with self.subTest(operation=arguments[0]):
                 completed = subprocess.run(
-                    ["python3", "-m", "floati", "update", *arguments],
+                    [str(LAUNCHER), "update", *arguments],
                     cwd=REPOSITORY_ROOT,
                     env=environment,
                     check=False,
@@ -615,7 +619,7 @@ class AU1S1Tests(unittest.TestCase):
         """Catches the optional S1 action removing the existing local update form."""
 
         completed = subprocess.run(
-            ["python3", "-m", "floati", "update", "--help"],
+            [str(LAUNCHER), "update", "--help"],
             cwd=REPOSITORY_ROOT,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
             check=False,

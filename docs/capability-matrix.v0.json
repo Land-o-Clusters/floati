@@ -6,6 +6,13 @@
   "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals \u2014 those do not vary by surface.",
   "orchestrator_note": "Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.",
   "surface_scope_note": "Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.",
+  "declared_current_versions": {
+    "claude/cli": {
+      "version": "2.1.251 (Claude Code)",
+      "measured_at": "2026-09-03",
+      "receipt_path": "docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md"
+    }
+  },
   "columns": [
     {
       "id": "bus",
@@ -288,10 +295,10 @@
       "surface": "cli",
       "capability": "bus",
       "value": "live",
-      "receipt_path": "docs/evidence/conformance/C2-claude-conformance-live.md",
-      "measured_at": "2026-08-27",
+      "receipt_path": "docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md",
+      "measured_at": "2026-09-04",
       "versions": {
-        "cli": "2.1.231 (Claude Code)"
+        "cli": "2.1.251 (Claude Code)"
       }
     },
     {
@@ -299,10 +306,10 @@
       "surface": "cli",
       "capability": "work",
       "value": "adapter",
-      "receipt_path": "docs/evidence/conformance/C2-claude-conformance-live.md",
-      "measured_at": "2026-08-27",
+      "receipt_path": "docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md",
+      "measured_at": "2026-09-04",
       "versions": {
-        "cli": "2.1.231 (Claude Code)"
+        "cli": "2.1.251 (Claude Code)"
       }
     },
     {
@@ -310,10 +317,10 @@
       "surface": "cli",
       "capability": "wake",
       "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-claude-wake-remeasure-2-2026-08-29.md",
-      "measured_at": "2026-08-29",
+      "receipt_path": "docs/evidence/conformance/H-claude-wake-remeasure-2026-09-04.md",
+      "measured_at": "2026-09-04",
       "versions": {
-        "cli": "2.1.238 (Claude Code)"
+        "cli": "2.1.251 (Claude Code)"
       },
       "grade": "measured"
     },
@@ -1822,7 +1829,7 @@
   "honesty": [
     "No cell spans CLI and desktop (dual-surface law).",
     "wake says HOW a seat is woken, not how well. zcode/cli is the one surface measured observed-on-arrival (WD-R2): a waiting message made a stopped seat run. The codex cells are observed-on-stop and read identically here, because the graded vocabulary is not in this column yet.",
-    "claude/cli wake stays daemon: H-claude-wake-remeasure refused the flip.",
+    "claude/cli wake stays daemon: H-claude-wake-remeasure refused the flip; re-confirmed at 2.1.251 on 2026-09-04.",
     "compaction is \u2014 everywhere: T1 found no non-interactive compact argv.",
     "auto_turnover stays \u2014 until T2-T4; five CLI surfaces keep derivable=A.",
     "work adapter cells cite C-rows that launched floati/adapters/ modules on main (Car 4 roster: cline, cursor, grok-build, opencode, plus claude reference and C1/C7). COPY-LEDGER is not the proof.",
@@ -1837,7 +1844,7 @@
   "spec_sha": "b9e5d2ec857e77498d9d047b672a8373b137cf1e",
   "row_notes": {
     "codex/cli": "deep integrations below",
-    "claude/cli": "confirmed at 2.1.238 (re-measured 08-29)",
+    "claude/cli": "confirmed at 2.1.251 (re-measured 09-04)",
     "opencode/cli": "3-cycle live hold",
     "grok/cli": "via installed grok binary",
     "herdr/cli": "orchestrator; observation adapter live",

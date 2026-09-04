@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 from floati import fixture_ids as public_ids
 
 import hashlib
@@ -122,8 +124,7 @@ class CliWorkflowTests(unittest.TestCase):
 
     @staticmethod
     def artifact(result: subprocess.CompletedProcess[str]) -> dict:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        return json.loads(stream)
+        return json.loads(result.stdout)
 
     def test_status_and_supervise_share_three_plane_snapshot(self) -> None:
         status = self.run_cli(
@@ -289,12 +290,12 @@ class CliWorkflowTests(unittest.TestCase):
         ):
             with self.subTest(missing=label):
                 self.assertEqual(20, result.returncode)
-                self.assertEqual("", result.stdout)
+                self.assertEqual("", result.stderr)
                 self.assertEqual("arguments_invalid", self.artifact(result)["evidence"]["code"])
         for label, result in (("plan", relative_plan), ("policy", relative_policy)):
             with self.subTest(relative=label):
                 self.assertEqual(20, result.returncode)
-                self.assertEqual("", result.stdout)
+                self.assertEqual("", result.stderr)
                 self.assertEqual("refused", self.artifact(result)["status"])
         self.assertEqual(before, after)
 
@@ -482,7 +483,7 @@ class SoloWorkflowTests(unittest.TestCase):
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *args],
+            [str(LAUNCHER), *args],
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
@@ -491,7 +492,7 @@ class SoloWorkflowTests(unittest.TestCase):
 
     @staticmethod
     def artifact(result: subprocess.CompletedProcess[str]) -> dict:
-        return json.loads(result.stdout if result.returncode == 0 else result.stderr)
+        return json.loads(result.stdout)
 
     def test_solo_init_work_and_board_round_trip(self) -> None:
         initialized = self.run_cli("init", "--root", str(self.home), "--solo", "me")
@@ -657,8 +658,8 @@ class SoloWorkflowTests(unittest.TestCase):
             code = main(["init", "--root", str(self.home), "--solo"])
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
         self.assertEqual(
             "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
@@ -683,8 +684,8 @@ class SoloWorkflowTests(unittest.TestCase):
             code = main(["init", "--root", str(self.home), "--solo"])
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("node_invalid", artifact["evidence"]["code"])
         self.assertFalse(self.home.exists())
 
@@ -708,10 +709,9 @@ class SoloWorkflowTests(unittest.TestCase):
                     code = main(["init", "--root", str(self.home), "--solo"])
 
                 self.assertEqual(20, code)
-                self.assertEqual("", stdout.getvalue())
-                self.assertNotIn("Traceback", stderr.getvalue())
-                self.assertEqual(1, len(stderr.getvalue().splitlines()))
-                artifact = json.loads(stderr.getvalue())
+                self.assertEqual("", stderr.getvalue())
+                self.assertEqual(1, len(stdout.getvalue().splitlines()))
+                artifact = json.loads(stdout.getvalue())
                 self.assertEqual("door_terminal_io_failed", artifact["evidence"]["code"])
                 self.assertEqual(
                     "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
@@ -739,10 +739,9 @@ class SoloWorkflowTests(unittest.TestCase):
             self.fail("Ctrl-C escaped the interactive solo entry point")
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("Traceback", stderr.getvalue())
-        self.assertEqual(1, len(stderr.getvalue().splitlines()))
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        self.assertEqual(1, len(stdout.getvalue().splitlines()))
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("door_cancelled", artifact["evidence"]["code"])
         self.assertEqual(
             "DRAFT - floati init --root ROOT --solo NODE --harness HARNESS",
@@ -770,9 +769,9 @@ class SoloWorkflowTests(unittest.TestCase):
             code = main(["init", "--root", str(self.home), "--solo"])
 
         self.assertEqual(20, code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertNotIn("\x1b[?1049h", stderr.getvalue())
-        artifact = json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        self.assertNotIn("\x1b[?1049h", stdout.getvalue())
+        artifact = json.loads(stdout.getvalue())
         self.assertEqual("interactive_terminal_required", artifact["evidence"]["code"])
         self.assertEqual(remedy, artifact["evidence"]["remedy"])
         self.assertFalse(self.home.exists())
@@ -934,7 +933,7 @@ class SendUnbankedShaFenceTests(unittest.TestCase):
     def test_send_refuses_a_sha_reachable_from_no_remote_ref(self) -> None:
         result = self.run_send(self.local_sha)
         self.assertEqual(20, result.returncode, result.stdout)
-        evidence = json.loads(result.stderr)["evidence"]
+        evidence = json.loads(result.stdout)["evidence"]
         self.assertEqual("sha_unbanked", evidence["code"])
         self.assertIn(str(self.checkout), evidence["detail"])
         self.assertIn("refs/remotes", evidence["detail"])
@@ -943,7 +942,7 @@ class SendUnbankedShaFenceTests(unittest.TestCase):
         self._git("update-ref", "refs/remotes/origin/other", self.parent_sha)
         result = self.run_send(self.local_sha)
         self.assertEqual(20, result.returncode, result.stdout)
-        evidence = json.loads(result.stderr)["evidence"]
+        evidence = json.loads(result.stdout)["evidence"]
         self.assertEqual("sha_unbanked", evidence["code"])
         self.assertIn("refs/remotes/origin/other", evidence["detail"])
 

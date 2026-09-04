@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import base64
 import builtins
 import hashlib
@@ -22,6 +24,7 @@ from floati.root import FloatiRoot
 from floati.signing import sign_minisign
 from floati.update_check import check_for_updates
 from floati.update_consent import UpdateConsentLedger
+from tests import managed_test_tools
 
 try:
     from floati.update_apply import apply_update
@@ -44,9 +47,11 @@ class AU1S2Tests(unittest.TestCase):
         self.git = shutil.which("git")
         self.assertIsNotNone(self.git)
         self.git_directory = Path(str(self.git)).resolve().parent
-        selected = shutil.which("minisign")
+        selected = managed_test_tools.executable(
+            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
+        )
         self.assertIsNotNone(selected, "AU1-S2 requires a real minisign binary")
-        self.minisign = Path(selected).resolve(strict=True)
+        self.minisign = Path(selected)
         self._git("init", "--quiet", "--initial-branch=lane/hm0")
         self._git("config", "user.name", "Floati AU-1 Fixture")
         self._git("config", "user.email", "floati-au1@example.invalid")
@@ -696,9 +701,7 @@ class AU1S2Tests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3",
-                "-m",
-                "floati",
+                str(LAUNCHER),
                 "update",
                 "apply",
                 "--destination",
@@ -718,7 +721,8 @@ class AU1S2Tests(unittest.TestCase):
         )
 
         self.assertEqual(20, completed.returncode, completed.stderr)
-        artifact = json.loads(completed.stderr)
+        artifact = json.loads(completed.stdout)
+        self.assertEqual("", completed.stderr)
         self.assertEqual("update_consent_missing", artifact["evidence"]["code"])
 
 

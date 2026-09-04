@@ -2307,16 +2307,9 @@ def _emit(
     }
     if schema_version is not None:
         artifact["schema_version"] = schema_version
-    # PROBE-1: doctor's completed measurement prints its artifact on stdout
-    # whatever it measured (34 deadline, 35 degraded) — a script redirecting
-    # stdout captures the probe verdict. Every other verb keeps the stock
-    # channel: ok on stdout, silence/no-result/refusal-class on stderr.
-    if exit_code == OK:
-        stream = sys.stdout
-    elif command == "doctor" and exit_code in (34, DEGRADED):
-        stream = sys.stdout
-    else:
-        stream = sys.stderr
+    # STREAM-1: status and exit code carry the outcome; the artifact's stream
+    # is stable so every machine consumer can read exactly one stdout record.
+    stream = sys.stdout
     if command == "install" and exit_code == OK and stream.isatty():
         from .brand import render_buoy_mark
 
