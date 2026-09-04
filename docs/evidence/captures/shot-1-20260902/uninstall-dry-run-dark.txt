@@ -1,0 +1,11 @@
+FLOATI // UNINSTALL DRY RUN
+$ floati uninstall --destination <scratch>/installed --dry-run
+
+STATUS: ok
+DRY RUN: true
+OWNED TOOL FILES PLANNED: 375
+FILES REMOVED: 0
+FOREIGN FILES RETAINED: foreign.keep
+
+Bus roots and ledgers are retained; uninstall removes tool files only.
+NO FILE REMOVED — dry run is a plan, not a mutation.

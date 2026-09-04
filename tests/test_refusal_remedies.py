@@ -45,8 +45,8 @@ class RefusalRemedyTests(unittest.TestCase):
         with mock.patch("floati.cli._parser", return_value=parser):
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 exit_code = main(["remedy-probe"])
-        self.assertEqual("", stdout.getvalue())
-        return exit_code, json.loads(stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        return exit_code, json.loads(stdout.getvalue())
 
     def test_supplied_remedy_survives_both_protocol_refusal_artifacts(self) -> None:
         """Catches refusal serialization dropping the caller's bounded remedy."""
@@ -102,9 +102,10 @@ class RefusalRemedyTests(unittest.TestCase):
         ):
             with self.subTest(arguments=arguments):
                 completed = self.run_cli(*arguments)
-                artifact = json.loads(completed.stderr)
+                artifact = json.loads(completed.stdout)
 
                 self.assertEqual(expected_exit, completed.returncode)
+                self.assertEqual("", completed.stderr)
                 self.assertEqual(expected_status, artifact["status"])
                 self.assertEqual(expected_evidence, artifact["evidence"])
 

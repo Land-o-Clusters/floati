@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1002" viewBox="0 0 1920 1002" role="img">
+  <title>harbor-board — light</title>
+  <desc>Real Floati scratch-ledger terminal capture.</desc>
+  <rect width="1920" height="1002" fill="#f7f3eb"/>
+  <text x="28" y="32" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" xml:space="preserve">
+    <tspan x="28" dy="0" fill="#20252c">ROOT=/opt/homebrew/var/floati-rm6-readme-b-20260902/scratch/harbor-board</tspan>
+    <tspan x="28" dy="19" fill="#20252c">$ floati board --root $ROOT --session capture-session --no-animation</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">⊙ FLOATI // HARBOR BOARD</tspan>
+    <tspan x="28" dy="19" fill="#20252c">~ ≈ ~</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">╭ NODE</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    ────────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│OBSERVED 2026-09-02T22:00:00.000Z</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│NODE               LIVE       AUTH       MUTEX      INBOX  LAST</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│&gt; architect-codex        ●          ●          ●          0  21:59:58.000</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  builder-claude         ●          ○          ○          1  21:59:55.000</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  reviewer-opencode      ○          ●          ○          0  21:58:00.000</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">╭ WORKERS</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    ─────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  NONE</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">╭ WORK DAG</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    ────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│[▱▱▱▱▱▱▱▱▱▱]   0%</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  CLAIMED   capture the three-plane harbor  holder:architect-codex</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  BLOCKED   review the frozen frame  holder:-  needs:work-01a06422d7007b30a169a4786d9bce9c</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">╭ CONSUMPTION</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    ─────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  coordinate: work/items.jsonl</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯</tspan>
+    <tspan x="28" dy="19" fill="#20252c"></tspan>
+    <tspan x="28" dy="19" fill="#20252c">╭ RECEIPTS</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    ────────────────────────────────────────────────────────────────────────────────────────────────╮</tspan>
+    <tspan x="28" dy="19" fill="#20252c">│  NONE</tspan>
+    <tspan x="28" dy="19" fill="#20252c">    │</tspan>
+    <tspan x="28" dy="19" fill="#20252c">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯</tspan>
+    <tspan x="28" dy="19" fill="#20252c">↑/k ↓/j select  enter detail  a ack  q quit</tspan>
+  </text>
+</svg>

@@ -1,93 +1,23 @@
-# Demo/UAT capture inventory
+# Demo capture inventory
 
-Status: Slice 1 listing only. Inclusion beyond the ruled dogfood bus evidence
-requires the next architect task pack.
+Status: generated from the committed `docs/demo` directory truth.
+The two generated truth documents are excluded from their own receipt set.
 
-## Included now — dogfood bus evidence
+## Direct capture files — 5 direct capture files
 
-- `docs/demo/corpus.v0.jsonl`: six referential rows covering the frozen
-  old-root PASS/tombstone/settlement chain and the live successor-root
-  opener/delivery/ack round trip.
-- Disposition: included by Demo/UAT Task Pack 1.
-- Ledger content is not copied into this repository.
+- `docs/demo/board-glow.gif` — 445838 bytes — SHA-256 `3e562a48987930d09c597e6a9624791a485eb46157eb625ccb16779e877d846c`
+- `docs/demo/corpus.v0.jsonl` — 3614 bytes — SHA-256 `86f9d8a289c1e3a21b46af1c0f645819d61f2127a338a4ad35a33409b88c3ee1`
+- `docs/demo/harbor-chart-map.gif` — 80686 bytes — SHA-256 `e155311b2ef1a5221e7d88e1587479d82a3844863b0ed3a8beb2fd07a22c7b46`
+- `docs/demo/hero-three-fault-replay.gif` — 1533205 bytes — SHA-256 `94af4a20c8f95e2b8250eaba9f92185e4bcd3cfc5acfa492e29916dc5ddc9e89`
+- `docs/demo/install-moment.gif` — 625093 bytes — SHA-256 `9d822a5d1b6765521e742804fe32b72e027e1aebfcd25df59dedf0e04711579a`
 
-## Candidate — TUI excellence wall
+## Nested capture families — 1 nested capture manifest
 
-- `docs/evidence/wall/manifest.json`
-- `docs/evidence/wall/README.md`
-- `docs/evidence/wall/PUNCH-LIST.md`
-- Sixteen SVG renders: idle/live/degraded/replay × standard/plain ×
-  dark/light.
-- Sixteen paired text testimonies with theme-independent content.
-- Disposition: inventory only; awaiting architect eye review and a later
-  ruled corpus class. No ingestion in Slice 1.
+- `docs/demo/site-v3/manifest.json` — 10127 bytes — SHA-256 `14c3d973ef3e7c13e50adebce3b3a4d739d9a1471eb4aba1cfe45a9f4b4060c6`
 
-## Candidate — previously banked text captures
+## Generated truth documents
 
-- `docs/evidence/captures/floati-orchestrate-drill.txt`
-- `docs/evidence/captures/floati-orchestrate-live.txt`
-- `docs/evidence/captures/floati-replay-drill.txt`
-- `docs/evidence/captures/floati-replay-live.txt`
-- `docs/evidence/captures/hm1-tui-color.txt`
-- `docs/evidence/captures/hm1-tui-monochrome.txt`
-- Disposition: inventory only; not selected by Task Pack 1 and not ingested.
+- `docs/demo/manifest.json`
+- `docs/demo/CAPTURE-INVENTORY.md`
 
-## The capture font is operator-declared or absent, never probed
-
-`scripts/capture-demo-assets.py` rasterises every frame with one monospace
-face, chosen by exactly one of two mechanisms and no others:
-
-1. **The operator's declaration.** `--font <absolute path>` on the script, or
-   the `FLOATI_CAPTURE_FONT` environment variable; the flag outranks the
-   variable. A declared path is validated the way the house validates a
-   declared path — **absolute · a regular file · readable**. A declaration that
-   fails validation is the refusal `demo_capture_font_declaration_invalid`; it
-   **never** falls back to the defaults, because rendering with a face the
-   operator did not name and not saying so is the defect this row removes.
-2. **A fixed ordered candidate list**, the SYSTEM-binary shape — absolute
-   paths only, first readable hit wins, nothing searched:
-
-   | order | path |
-   |---|---|
-   | 1 | `/System/Library/Fonts/Menlo.ttc` |
-   | 2 | `/System/Library/Fonts/SFNSMono.ttf` |
-
-   Both are macOS locations. That is deliberate: the candidate list is where
-   the committed captures were photographed, and adding a Linux face here
-   would silently re-render the demo assets in a different typeface rather
-   than say the ruled one is unavailable.
-
-**With no declaration and no candidate present**, the script writes the typed
-absence to stderr and exits **3**:
-
-```json
-{"candidates":["…"],"component":"demo capture monospace font",
- "condition":"demo_capture_font_absent","declaration":{"flag":"--font",
- "variable":"FLOATI_CAPTURE_FONT"},"exit_code":3,"detail":"…","remedy":"…"}
-```
-
-It does not raise, it does not skip, and it resolves the face **before any
-destination write**, so an absent font cannot leave a half-written candidate
-directory behind.
-
-> ⛔ **`ImageFont.truetype(<str path>, …)` is itself a probe.** On `OSError`
-> Pillow takes the **basename** of the path and walks the host's font
-> directories — `XDG_DATA_HOME`/`XDG_DATA_DIRS`-derived on Linux,
-> `/Library/Fonts`, `/System/Library/Fonts` and the calling account's own
-> `Library/Fonts` on macOS —
-> so before this row a wrong or absent path was answered with whatever
-> same-named face the host happened to carry, silently. Every face is now
-> built from **bytes the script reads itself**, which is the Pillow branch
-> that performs no search at all. This is why validating the declared path was
-> not on its own sufficient: *validation after discovery cannot undo a
-> compromised search.*
-
-**Committed captures under `docs/demo/` are photographs and are not
-regenerated by this row.** No committed GIF or PNG changed.
-
-## Explicitly absent from Slice 1
-
-- No screenshots, casts, hero loops, README media, captions, or LoC page
-  assets are added.
-- No copied or redacted bus JSONL is added.
-- No public copy is authored.
+Nested PNGs and transcripts are receipted by each nested manifest and are not duplicated here.

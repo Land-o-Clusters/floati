@@ -224,18 +224,46 @@ class TuiControlTests(unittest.TestCase):
         self.assertEqual(2, loads)
         self.assertIn("7  12:00:09.000", strip_ansi(output.getvalue()))
 
-    @unittest.skipUnless(hasattr(__import__("select"), "kqueue"), "Darwin kqueue gate")
     def test_filesystem_wakeup_refuses_incomplete_watch_coverage(self) -> None:
         """Catches an unreadable ledger path silently leaving the Board stale."""
         from floati.errors import ProtocolRefusal
-        from floati.tui import BoardFilesystemWakeup
+        from floati import tui
+
+        class Call:
+            def __init__(self, result: int) -> None:
+                self.result = result
+                self.argtypes = None
+                self.restype = None
+
+            def __call__(self, *_args):
+                return self.result
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "events.jsonl").write_text("", encoding="utf-8")
-            with patch("floati.tui.os.open", side_effect=PermissionError("denied")):
-                with self.assertRaises(ProtocolRefusal) as refusal:
-                    BoardFilesystemWakeup(root)
+            if hasattr(tui.select, "kqueue"):
+                with patch("floati.tui.os.open", side_effect=PermissionError("denied")):
+                    with self.assertRaises(ProtocolRefusal) as refusal:
+                        tui.BoardFilesystemWakeup(root)
+            else:
+                read_descriptor, write_descriptor = os.pipe()
+                libc = type(
+                    "FakeLibc",
+                    (),
+                    {
+                        "inotify_init1": Call(read_descriptor),
+                        "inotify_add_watch": Call(-1),
+                    },
+                )()
+                try:
+                    with (
+                        patch("floati.tui.ctypes.CDLL", return_value=libc),
+                        patch("floati.tui.ctypes.get_errno", return_value=13),
+                    ):
+                        with self.assertRaises(ProtocolRefusal) as refusal:
+                            tui.BoardFilesystemWakeup(root)
+                finally:
+                    os.close(write_descriptor)
 
         self.assertEqual("board_event_watch_unavailable", refusal.exception.code)
 

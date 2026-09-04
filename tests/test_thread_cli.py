@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import json
 import os
 import subprocess
@@ -50,7 +52,7 @@ class ThreadCliTests(unittest.TestCase):
 
     def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *arguments],
+            [str(LAUNCHER), *arguments],
             cwd=REPOSITORY_ROOT,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
             text=True,
@@ -60,12 +62,8 @@ class ThreadCliTests(unittest.TestCase):
 
     @staticmethod
     def artifact(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        if result.returncode == 0:
-            assert result.stderr == ""
-        else:
-            assert result.stdout == ""
-        return json.loads(stream)
+        assert result.stderr == ""
+        return json.loads(result.stdout)
 
     def observer(self, mode: str = "idle"):
         from floati.thread_observations import ThreadObserver

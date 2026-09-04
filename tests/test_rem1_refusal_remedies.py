@@ -77,9 +77,9 @@ class Rem1RefusalRemedyTests(unittest.TestCase):
         )
 
     def artifact(self, completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = completed.stdout if completed.returncode == 0 else completed.stderr
-        self.assertEqual(1, len(stream.splitlines()), stream)
-        return json.loads(stream)
+        self.assertEqual("", completed.stderr)
+        self.assertEqual(1, len(completed.stdout.splitlines()), completed.stdout)
+        return json.loads(completed.stdout)
 
     def assert_populated_remedy(self, remedy: object, *, detail: str | None = None) -> None:
         self.assertIsNotNone(remedy, "refusal serialized remedy:null")

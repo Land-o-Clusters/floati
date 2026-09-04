@@ -232,13 +232,8 @@ class ConfluenceCliRoundTrip(unittest.TestCase):
             self.assertEqual(
                 expect, completed.returncode,
                 f"rc={completed.returncode} stderr={completed.stderr[-300:]}")
-            # a nonzero observation exit prints the artifact on stderr
-            for stream in (completed.stdout, completed.stderr):
-                try:
-                    return json.loads(stream)
-                except json.JSONDecodeError:
-                    continue
-            raise AssertionError(f"no artifact: {completed.stderr[-300:]}")
+            self.assertEqual("", completed.stderr)
+            return json.loads(completed.stdout)
 
         cli("init", "--root", str(root))
         cli("register", "--root", str(root), public_ids.builder("a"),

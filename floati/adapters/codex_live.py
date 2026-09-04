@@ -871,7 +871,16 @@ class CodexAppServerAdapter:
                 timeout=cls._remaining(deadline),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            raise WorkerAdapterFailure("git_finalize_failed") from exc
+            stderr = getattr(exc, "stderr", None)
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            detail = stderr.rstrip("\n") if isinstance(stderr, str) else ""
+            raise WorkerAdapterFailure(
+                "git_finalize_failed", detail=detail or str(exc)
+            ) from exc
         if result.returncode != 0:
-            raise WorkerAdapterFailure("git_finalize_failed")
+            raise WorkerAdapterFailure(
+                "git_finalize_failed",
+                detail=result.stderr.rstrip("\n") or f"git exited {result.returncode}",
+            )
         return result.stdout.rstrip("\n")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import json
 import shutil
 import subprocess
@@ -122,7 +124,7 @@ class EffectCliTests(unittest.TestCase):
 
     def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *arguments],
+            [str(LAUNCHER), *arguments],
             cwd=REPOSITORY_ROOT,
             text=True,
             capture_output=True,
@@ -130,10 +132,9 @@ class EffectCliTests(unittest.TestCase):
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        self.assertEqual("", result.stderr if result.returncode == 0 else result.stdout)
-        self.assertEqual(1, len(stream.splitlines()))
-        return json.loads(stream)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        return json.loads(result.stdout)
 
     def test_effects_lists_deterministic_projection_with_filters(self) -> None:
         first, first_rows = lifecycle_rows("intent")

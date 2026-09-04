@@ -1,0 +1,8 @@
+FLOATI // LEASE EXPIRY
+$ floati presence show --root <scratch>
+
+BEFORE  receiver  recent_report  ttl=30s
+AFTER   receiver  no_report_since  expires_at=2026-09-02T17:00:30.000Z
+
+AUTHORITY EXPIRED — work remains recorded and available.
+Expiry means no report since the named time; it never means down.

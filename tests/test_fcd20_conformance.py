@@ -152,6 +152,7 @@ class FCD20ArtifactTests(unittest.TestCase):
         with self.assertRaises(ProtocolRefusal) as raised:
             fcd20.validate_artifact(reordered)
         self.assertEqual("fcd20_artifact_invalid", raised.exception.code)
+        self.assertIn("out of order", raised.exception.detail)
 
         skipped = copy.deepcopy(artifact)
         skipped["evidence"]["rows"][0]["skip"] = True

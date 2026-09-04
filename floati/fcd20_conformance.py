@@ -585,16 +585,27 @@ def validate_artifact(artifact: object) -> None:
         actual.append((row.get("row"), row.get("harness")))
         statuses.append(status)
         row_evidence = row["evidence"]
+        spec = next(
+            (
+                candidate
+                for candidate in ROWS
+                if candidate.row == row.get("row")
+                and candidate.harness == row.get("harness")
+            ),
+            None,
+        )
+        if spec is None:
+            _refuse("artifact row identity is not a C1-C9 coordinate")
         if status == "host_condition":
             if set(row_evidence) != {"code", "detail", "paths", "remedy"}:
                 _refuse("host-condition evidence fields are invalid")
             paths = row_evidence.get("paths")
             if (
                 row_evidence.get("code")
-                != _declaration_code(ROWS[len(actual) - 1], "undeclared")
+                != _declaration_code(spec, "undeclared")
                 or not _nonempty_text(row_evidence.get("detail"))
                 or row_evidence.get("remedy")
-                != _declaration_remedy(ROWS[len(actual) - 1])
+                != _declaration_remedy(spec)
                 or paths != []
             ):
                 _refuse("host-condition evidence values are invalid")

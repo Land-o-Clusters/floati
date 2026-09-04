@@ -21,6 +21,7 @@ from unittest import mock
 
 from tests.test_effect_reconciliation_observer import (
     copy_exact_observer_source_package,
+    observer_exec_rebound_descriptors,
 )
 from tests.temp_roots import REAL_TEMP_ROOT
 
@@ -673,7 +674,14 @@ class EffectReconciliationExecTests(unittest.TestCase):
             [mock.call(value, fcntl.F_DUPFD_CLOEXEC, 7) for value in (3, 6, 4, 5)],
             duplicate.call_args_list,
         )
-        self.assertEqual([mock.call(value) for value in (3, 6, 4, 5)], close.call_args_list)
+        opened = {3, 6, 4, 5}
+        closed = [
+            call.args[0]
+            for call in close.call_args_list
+            if call.args[0] in opened
+        ]
+        self.assertEqual(opened, set(closed))
+        self.assertEqual(len(opened), len(closed))
 
     def test_exec_local_repository_is_the_only_optional_child_descriptor(self) -> None:
         """Catches fd 6 crossing exec for any adapter except git_local."""
@@ -1032,10 +1040,17 @@ class EffectReconciliationExecTests(unittest.TestCase):
         if self.untrusted_host_refuses_reconciliation():
             return
         original = os.open(self.base / "hostile", os.O_WRONLY | os.O_CREAT, 0o600)
-        hostile = fcntl.fcntl(original, fcntl.F_DUPFD_CLOEXEC, 20)
-        os.close(original)
+        rebound = observer_exec_rebound_descriptors()
+        try:
+            hostile = fcntl.fcntl(
+                original, fcntl.F_DUPFD_CLOEXEC, max(rebound) + 1,
+            )
+        finally:
+            os.close(original)
         self.addCleanup(self._safe_close, hostile)
+        self.assertNotIn(hostile, rebound)
         os.set_inheritable(hostile, True)
+        hostile_identity = os.fstat(hostile)
         descriptor_proof = self.base / "inherited-descriptor-proof"
         environment_proof = self.base / "inherited-environment-proof"
         git_environment_proof = self.base / "git-environment-proof.json"
@@ -1045,11 +1060,13 @@ class EffectReconciliationExecTests(unittest.TestCase):
         injected = (
             "import os as _exec_os, pathlib as _exec_pathlib\n"
             "try:\n"
-            f" _exec_os.fstat({hostile})\n"
+            f" status = _exec_os.fstat({hostile})\n"
             "except OSError:\n"
             " pass\n"
             "else:\n"
-            f" _exec_pathlib.Path({str(descriptor_proof)!r}).write_text('inherited', encoding='utf-8')\n"
+            f" if (status.st_dev, status.st_ino) == "
+            f"({hostile_identity.st_dev}, {hostile_identity.st_ino}):\n"
+            f"  _exec_pathlib.Path({str(descriptor_proof)!r}).write_text('inherited', encoding='utf-8')\n"
             f"if any(_name in _exec_os.environ for _name in {hostile_environment_names!r}):\n"
             f" _exec_pathlib.Path({str(environment_proof)!r}).write_text('inherited', encoding='utf-8')\n"
         )

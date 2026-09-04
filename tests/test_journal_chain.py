@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import hashlib
 import json
 import subprocess
@@ -238,7 +240,7 @@ class JournalChainTests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "journal", "verify",
+                str(LAUNCHER), "journal", "verify",
                 "--root", str(self.root.tenant_home),
                 "--journal", str(self.relative),
                 "--journal-id", self.journal_id,
@@ -263,7 +265,7 @@ class JournalChainTests(unittest.TestCase):
         for command in (("journal",), ("journal", "checkpoint"), ("journal", "verify")):
             with self.subTest(command=command):
                 completed = subprocess.run(
-                    ["python3", "-m", "floati", *command, "--help"],
+                    [str(LAUNCHER), *command, "--help"],
                     cwd=REPOSITORY_ROOT,
                     text=True,
                     capture_output=True,

@@ -59,12 +59,10 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        stream = completed.stdout if completed.returncode == 0 else completed.stderr
-        other_stream = completed.stderr if completed.returncode == 0 else completed.stdout
-        self.assertEqual("", other_stream)
-        self.assertTrue(stream.endswith("\n"))
-        self.assertEqual(1, len(stream.splitlines()))
-        artifact = json.loads(stream)
+        self.assertEqual("", completed.stderr)
+        self.assertTrue(completed.stdout.endswith("\n"))
+        self.assertEqual(1, len(completed.stdout.splitlines()))
+        artifact = json.loads(completed.stdout)
         self.assertEqual(
             json.dumps(
                 artifact,
@@ -73,7 +71,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
                 separators=(",", ":"),
             )
             + "\n",
-            stream,
+            completed.stdout,
         )
         return completed, artifact
 

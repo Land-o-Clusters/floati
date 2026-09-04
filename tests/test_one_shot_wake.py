@@ -1018,8 +1018,8 @@ class OneShotWakeTests(unittest.TestCase):
 
         self.assertNotEqual(self.attempt["attempt_id"], successor["attempt_id"])
         self.assertEqual(20, result.returncode, result.stderr)
-        self.assertEqual("", result.stdout)
-        artifact = json.loads(result.stderr)
+        self.assertEqual("", result.stderr)
+        artifact = json.loads(result.stdout)
         self.assertEqual("refused", artifact["status"])
         self.assertEqual("wake_stale_fence", artifact["evidence"]["code"])
         self.assertFalse(plist_path.exists())

@@ -39,12 +39,10 @@ class SlipCliTests(unittest.TestCase):
     def run_cli(
         self,
         *args: str,
-        launcher: bool = False,
         cwd: Path = REPOSITORY_ROOT,
     ) -> subprocess.CompletedProcess[str]:
-        command = [str(LAUNCHER)] if launcher else ["python3", "-m", "floati"]
         return subprocess.run(
-            [*command, *args],
+            [str(LAUNCHER), *args],
             cwd=cwd,
             text=True,
             capture_output=True,
@@ -52,14 +50,13 @@ class SlipCliTests(unittest.TestCase):
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        self.assertEqual("", result.stderr if stream is result.stdout else result.stdout)
-        self.assertEqual(1, len(stream.splitlines()))
-        self.assertTrue(stream.endswith("\n"))
-        artifact = json.loads(stream)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        self.assertTrue(result.stdout.endswith("\n"))
+        artifact = json.loads(result.stdout)
         self.assertEqual(
             json.dumps(artifact, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-            stream,
+            result.stdout,
         )
         return artifact
 
@@ -107,7 +104,7 @@ class SlipCliTests(unittest.TestCase):
         environment = Path(self.temp.name) / "environment"
         legacy = Path(self.temp.name) / "legacy"
         result = subprocess.run(
-            ["python3", "-m", "floati", "init", str(legacy)],
+            [str(LAUNCHER), "init", str(legacy)],
             cwd=REPOSITORY_ROOT,
             env={**os.environ, "FLOATI_BUS_ROOT": str(environment)},
             text=True,
@@ -387,7 +384,7 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("", stderr.getvalue())
         self.assertEqual("ok", json.loads(stdout.getvalue())["status"])
 
-    def test_protocol_refusal_is_one_stderr_artifact_with_exit_20(self) -> None:
+    def test_protocol_refusal_is_one_stdout_artifact_with_exit_20(self) -> None:
         self.initialize()
         self.register("sender")
         registry_lock = self.home / "registry" / "entries.jsonl.lock"
@@ -452,8 +449,8 @@ class SlipCliTests(unittest.TestCase):
         with redirect_stdout(stdout), redirect_stderr(stderr):
             exit_code = main(["register", "sender", "--harness", "Codex"])
         self.assertEqual(22, exit_code)
-        self.assertEqual("", stdout.getvalue())
-        self.assertEqual("cannot_speak", json.loads(stderr.getvalue())["evidence"]["code"])
+        self.assertEqual("cannot_speak", json.loads(stdout.getvalue())["evidence"]["code"])
+        self.assertEqual("", stderr.getvalue())
 
     def test_every_command_has_static_man_page_quality_help(self) -> None:
         commands = (
@@ -523,6 +520,43 @@ class SlipCliTests(unittest.TestCase):
         self.assertIn("board", stdout.getvalue())
         self.assertEqual("", stderr.getvalue())
 
+    def test_machine_artifacts_always_use_stdout_and_success_bytes_stay_fixed(self) -> None:
+        """STREAM-1: status is artifact data, never a stream selector."""
+
+        from floati.cli import _emit
+
+        cases = (
+            (
+                "status",
+                "ok",
+                {"root": "/fleet"},
+                0,
+                0,
+                '{"artifact_version":0,"command":"status","evidence":{"root":"/fleet"},"schema_version":0,"status":"ok"}\n',
+            ),
+            ("register", "refused", {"code": "example_refusal"}, 20, None, None),
+            ("doctor", "degraded", {"code": "example_degraded"}, 35, None, None),
+        )
+        for command, status, evidence, exit_code, schema_version, exact_bytes in cases:
+            with self.subTest(status=status):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    _emit(
+                        command,
+                        status,
+                        evidence,
+                        exit_code,
+                        schema_version=schema_version,
+                    )
+
+                self.assertEqual("", stderr.getvalue())
+                artifact = json.loads(stdout.getvalue())
+                self.assertEqual(command, artifact["command"])
+                self.assertEqual(status, artifact["status"])
+                if exact_bytes is not None:
+                    self.assertEqual(exact_bytes, stdout.getvalue())
+
     def test_abbreviated_long_options_are_refused(self) -> None:
         self.initialize()
         cases = (
@@ -547,14 +581,14 @@ class SlipCliTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        result = self.run_cli("init", "--root", str(self.home), launcher=True, cwd=outside)
+        result = self.run_cli("init", "--root", str(self.home), cwd=outside)
 
         self.assertEqual(0, result.returncode, result.stderr)
         artifact = self.artifact(result)
         self.assertEqual("init", artifact["command"])
         self.assertEqual(str(self.home.resolve()), artifact["evidence"]["root"])
 
-        refusal = self.run_cli("register", launcher=True, cwd=outside)
+        refusal = self.run_cli("register", cwd=outside)
         self.assertEqual(20, refusal.returncode)
         refusal_artifact = self.artifact(refusal)
         self.assertEqual("register", refusal_artifact["command"])
@@ -569,14 +603,14 @@ class SequencerCliTests(unittest.TestCase):
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *args], cwd=REPOSITORY_ROOT,
+            [str(LAUNCHER), *args], cwd=REPOSITORY_ROOT,
             text=True, capture_output=True, check=False,
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        self.assertEqual(1, len(stream.splitlines()))
-        return json.loads(stream)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        return json.loads(result.stdout)
 
     def initialize(self) -> None:
         result = self.run_cli("init", "--root", str(self.home))
@@ -612,7 +646,7 @@ class SequencerCliTests(unittest.TestCase):
         self.initialize()
         process = subprocess.Popen(
             [
-                "python3", "-m", "floati", "sequencer", "serve",
+                str(LAUNCHER), "sequencer", "serve",
                 "--root", str(self.home), "--as", "sequencer-a",
             ],
             cwd=REPOSITORY_ROOT,
@@ -651,19 +685,18 @@ class WakeEvaluateCliTests(unittest.TestCase):
 
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "floati", *args], cwd=REPOSITORY_ROOT,
+            [str(LAUNCHER), *args], cwd=REPOSITORY_ROOT,
             text=True, capture_output=True, check=False,
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        stream = result.stdout if result.returncode == 0 else result.stderr
-        self.assertEqual("", result.stderr if stream is result.stdout else result.stdout)
-        self.assertEqual(1, len(stream.splitlines()))
-        self.assertTrue(stream.endswith("\n"))
-        artifact = json.loads(stream)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        self.assertTrue(result.stdout.endswith("\n"))
+        artifact = json.loads(result.stdout)
         self.assertEqual(
             json.dumps(artifact, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-            stream,
+            result.stdout,
         )
         return artifact
 
@@ -794,7 +827,7 @@ class WakeEvaluateCliTests(unittest.TestCase):
         """Catches aliases, an implicit root, or an out-of-range selection limit."""
         environment_root = Path(self.temp.name) / "environment-root"
         omitted_root = subprocess.run(
-            ["python3", "-m", "floati", "wake-evaluate", "--as", "bob", "--idempotency-key", "key"],
+            [str(LAUNCHER), "wake-evaluate", "--as", "bob", "--idempotency-key", "key"],
             cwd=REPOSITORY_ROOT,
             env={**os.environ, "FLOATI_BUS_ROOT": str(environment_root)},
             text=True,

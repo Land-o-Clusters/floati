@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import io
 import json
 import os
@@ -462,7 +464,7 @@ class ReplayProjectionTests(unittest.TestCase):
 
         result = subprocess.run(
             [
-                "python3", "-m", "floati", "log", "--root", str(self.root.path),
+                str(LAUNCHER), "log", "--root", str(self.root.path),
                 "--replay", "--speed", "100", "--plain",
             ],
             cwd=REPOSITORY_ROOT,
@@ -480,14 +482,14 @@ class ReplayProjectionTests(unittest.TestCase):
 
     def test_cli_replay_empty_and_nonreplay_options_refuse_honestly(self) -> None:
         empty = subprocess.run(
-            ["python3", "-m", "floati", "log", "--root", str(self.root.path), "--replay"],
+            [str(LAUNCHER), "log", "--root", str(self.root.path), "--replay"],
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
             text=True,
         )
         invalid = subprocess.run(
-            ["python3", "-m", "floati", "log", "--root", str(self.root.path), "--speed", "2"],
+            [str(LAUNCHER), "log", "--root", str(self.root.path), "--speed", "2"],
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
@@ -495,10 +497,10 @@ class ReplayProjectionTests(unittest.TestCase):
         )
 
         self.assertEqual(32, empty.returncode)
-        self.assertEqual("no_result", json.loads(empty.stderr)["status"])
-        self.assertEqual("", empty.stdout)
+        self.assertEqual("no_result", json.loads(empty.stdout)["status"])
+        self.assertEqual("", empty.stderr)
         self.assertEqual(20, invalid.returncode)
-        self.assertEqual("arguments_invalid", json.loads(invalid.stderr)["evidence"]["code"])
+        self.assertEqual("arguments_invalid", json.loads(invalid.stdout)["evidence"]["code"])
 
 
 if __name__ == "__main__":

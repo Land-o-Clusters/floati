@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 from floati import fixture_ids as public_ids
 
 import ast
@@ -411,26 +413,27 @@ class DoctorContractTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
             and node.name == "_workspace_layout_finding"
         ]
-        self.assertIn(len(workspace_projections), (0, 1))
-        if workspace_projections:
-            projection_calls = [
-                node
-                for node in ast.walk(workspace_projections[0])
-                if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "_finding"
-            ]
-            self.assertEqual(1, len(projection_calls))
-            subject = projection_calls[0].args[2]
-            # Compare unparse to unparse: ast.unparse renders string constants
-            # with single quotes, so a hand-typed double-quoted literal never
-            # matches and this branch reds on every composition that reaches it
-            # (it did, in train 0902x). The expected form is derived from the
-            # same renderer, so the pin is about the CALL and not about quoting.
-            expected_subject = ast.unparse(
-                ast.parse('str(row["path"])', mode="eval").body
-            )
-            self.assertEqual(expected_subject, ast.unparse(subject))
+        # PIN-DRAFT-1: allowing (0, 1) meant the inner pin never ran on a tree
+        # that lacked the function. This tree has the function; require it.
+        self.assertEqual(1, len(workspace_projections))
+        projection_calls = [
+            node
+            for node in ast.walk(workspace_projections[0])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_finding"
+        ]
+        self.assertEqual(1, len(projection_calls))
+        subject = projection_calls[0].args[2]
+        # Compare unparse to unparse: ast.unparse renders string constants
+        # with single quotes, so a hand-typed double-quoted literal never
+        # matches and this branch reds on every composition that reaches it
+        # (it did, in train 0902x). The expected form is derived from the
+        # same renderer, so the pin is about the CALL and not about quoting.
+        expected_subject = ast.unparse(
+            ast.parse('str(row["path"])', mode="eval").body
+        )
+        self.assertEqual(expected_subject, ast.unparse(subject))
 
     def _assert_typed_launcher_doctor_outcome(self, result) -> dict:
         """LAUNCH-1: a doctor started through scripts/floati is asserted by TYPE.
@@ -945,7 +948,7 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(20, refused.returncode)
         self.assertEqual(
             "doctor_profile_invalid",
-            json.loads(refused.stderr)["evidence"]["code"],
+            json.loads(refused.stdout)["evidence"]["code"],
         )
 
     def test_registered_set_folds_latest_row_wins_and_excludes_retired_nodes(self) -> None:
@@ -1729,7 +1732,7 @@ class DoctorContractTests(unittest.TestCase):
             command.append(word)
             index += 1
         completed = subprocess.run(
-            ["python3", "-m", "floati", *command],
+            [str(LAUNCHER), *command],
             cwd=str(agents_md.parent),
             capture_output=True,
             text=True,
@@ -1786,7 +1789,7 @@ class DoctorContractTests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "doctor",
+                str(LAUNCHER), "doctor",
                 "--root", str(self.home),
                 "--source", str(self.source),
                 "--probe", "--probe-budget", "2",
@@ -1824,7 +1827,7 @@ class DoctorContractTests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3", "-m", "floati", "doctor",
+                str(LAUNCHER), "doctor",
                 "--root", str(self.home),
                 "--source", str(self.source),
                 "--probe", "--probe-budget", "2",

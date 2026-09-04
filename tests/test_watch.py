@@ -134,7 +134,8 @@ class WatchTests(unittest.TestCase):
         )
 
         self.assertEqual(20, result.returncode)
-        artifact = json.loads(result.stderr)
+        artifact = json.loads(result.stdout)
+        self.assertEqual("", result.stderr)
         self.assertEqual("refused", artifact["status"])
         self.assertEqual("watch_interval_invalid", artifact["evidence"]["code"])
 

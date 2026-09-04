@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import importlib
 import importlib.util
 import json
@@ -269,9 +271,7 @@ class OverlapRadarDerivationTests(unittest.TestCase):
 
         completed = subprocess.run(
             [
-                "python3",
-                "-m",
-                "floati",
+                str(LAUNCHER),
                 "overlap",
                 "report",
                 "--repository",

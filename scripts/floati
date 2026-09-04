@@ -41,4 +41,8 @@ if [ -z "$FLOATI_LAUNCHER_INTERPRETER" ]; then
   exit 20
 fi
 export FLOATI_LAUNCHER_INTERPRETER
+# The installed tree is the package the launcher execs. A PATH-only child
+# (SHOT-1 capture, Linux runners) would otherwise write __pycache__ into
+# that tree; uninstall then reports those files as foreign.
+export PYTHONDONTWRITEBYTECODE=1
 exec "$FLOATI_LAUNCHER_INTERPRETER" -m floati "$@"

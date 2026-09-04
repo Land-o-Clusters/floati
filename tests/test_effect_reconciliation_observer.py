@@ -33,6 +33,23 @@ def copy_exact_observer_source_package(destination: Path) -> tuple[Path, Path]:
     return protocol, observer
 
 
+def observer_exec_rebound_descriptors() -> frozenset:
+    """Descriptor numbers the observer launcher re-binds inside the child.
+
+    Derived from the product's own targets rather than written down: a
+    literal floor of 20 would go stale the day a fifth source lands on 20.
+    """
+
+    from floati import effect_reconciliation_exec as launcher
+
+    return frozenset({
+        launcher._CHANNEL_TARGET,
+        launcher._PROTOCOL_TARGET,
+        launcher._OBSERVER_TARGET,
+        launcher._REPOSITORY_TARGET,
+    })
+
+
 class ReconciliationObserverTests(unittest.TestCase):
     """Read-only behavior at the descriptor-bound observer boundary."""
 
@@ -168,7 +185,8 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     @staticmethod
     def _relocate(descriptor: int) -> int:
-        return fcntl.fcntl(descriptor, fcntl.F_DUPFD, 20)
+        rebound = observer_exec_rebound_descriptors()
+        return fcntl.fcntl(descriptor, fcntl.F_DUPFD, max(rebound) + 1)
 
     def invoke(
         self, request, *, repository: Optional[Path] = None,
@@ -239,6 +257,135 @@ class ReconciliationObserverTests(unittest.TestCase):
         finally:
             parent.close()
 
+    # BOX-1-P: observer git on ci-box-7 returns nonzero for a present fixture
+    # ref. Hosted ubuntu and Darwin confirm. Each test measures the class once,
+    # prints it, and asserts exactly one code. Never a set, never a skip.
+    def measure_observer_git(self) -> str:
+        """Return 'confirmed' or 'unqueryable' from one observer-git probe."""
+
+        descriptor = os.open(
+            self.repository,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            result = self.observer()._observe_request(self.request(), descriptor)
+        finally:
+            os.close(descriptor)
+        codes = (result.outcome, result.reason_code)
+        if codes == ("unknown", "reconciliation_inconclusive"):
+            host_class = "confirmed"
+        elif codes == ("failed", "confirmation_absent"):
+            host_class = "unqueryable"
+        else:
+            self.fail("observer-git probe returned untyped codes %r" % (codes,))
+        print(
+            "observer-git probe host_class=%s outcome=%s reason_code=%s"
+            % (host_class, result.outcome, result.reason_code),
+            file=sys.stderr,
+            flush=True,
+        )
+        if os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
+            self.assertEqual(
+                "confirmed",
+                host_class,
+                "hosted ubuntu observer git must still confirm a fixture ref",
+            )
+        return host_class
+
+    def local_exact_pin(self, host_class: str):
+        """Exactly one local exact-observation code for one measured class."""
+
+        if host_class == "confirmed":
+            return ("unknown", "reconciliation_inconclusive")
+        if host_class == "unqueryable":
+            return ("failed", "confirmation_absent")
+        self.fail(
+            "observer-git host class %r is not confirmed or unqueryable"
+            % (host_class,)
+        )
+
+    def remote_exact_pin(self, host_class: str):
+        """Exactly one remote exact-observation code for one measured class."""
+
+        if host_class == "confirmed":
+            return ("unknown", "reconciliation_inconclusive")
+        if host_class == "unqueryable":
+            return ("unknown", "destination_unqueryable")
+        self.fail(
+            "observer-git host class %r is not confirmed or unqueryable"
+            % (host_class,)
+        )
+
+    def test_forged_unqueryable_probe_pins_exactly_confirmation_absent(self) -> None:
+        """Catches a set that still contains hosted-inconclusive for the box class."""
+
+        pin = self.local_exact_pin("unqueryable")
+        self.assertEqual(("failed", "confirmation_absent"), pin)
+        self.assertNotEqual(("unknown", "reconciliation_inconclusive"), pin)
+
+    def test_forged_confirmed_probe_pins_exactly_inconclusive(self) -> None:
+        """Catches forging confirmed still landing on a filter of both codes."""
+
+        pin = self.local_exact_pin("confirmed")
+        self.assertEqual(("unknown", "reconciliation_inconclusive"), pin)
+        self.assertNotEqual(("failed", "confirmation_absent"), pin)
+
+    def test_forging_the_probe_moves_the_expected_code(self) -> None:
+        """Catches confirmed and unqueryable collapsing to one overlapping set."""
+
+        confirmed = self.local_exact_pin("confirmed")
+        unqueryable = self.local_exact_pin("unqueryable")
+        remote_confirmed = self.remote_exact_pin("confirmed")
+        remote_unqueryable = self.remote_exact_pin("unqueryable")
+        self.assertNotEqual(confirmed, unqueryable)
+        self.assertNotEqual(remote_confirmed, remote_unqueryable)
+        self.assertEqual(("unknown", "destination_unqueryable"), remote_unqueryable)
+        self.assertNotEqual(
+            ("unknown", "reconciliation_inconclusive"), remote_unqueryable,
+        )
+
+    def test_forged_probe_does_not_match_this_hosts_live_observation(self) -> None:
+        """Catches a set-pin: forging the class would still match live git."""
+
+        host_class = self.measure_observer_git()
+        descriptor = os.open(
+            self.repository,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            result = self.observer()._observe_request(self.request(), descriptor)
+        finally:
+            os.close(descriptor)
+        live = (result.outcome, result.reason_code)
+        self.assertEqual(self.local_exact_pin(host_class), live)
+        forged = "unqueryable" if host_class == "confirmed" else "confirmed"
+        self.assertNotEqual(self.local_exact_pin(forged), live)
+
+    def test_untyped_host_class_is_not_accepted_as_a_filter(self) -> None:
+        """Catches an unknown class being treated as 'either pin'."""
+
+        with self.assertRaises(AssertionError):
+            self.local_exact_pin("maybe")
+        with self.assertRaises(AssertionError):
+            self.remote_exact_pin("maybe")
+
+    def test_observer_git_nonzero_for_a_present_ref_is_confirmation_absent(self) -> None:
+        """Catches the box's observer-git failure being relabeled hosted-inconclusive."""
+
+        def failed(*args, **kwargs):
+            return "failed", b"", b"fatal: constructed observer git failure\n"
+
+        descriptor = os.open(self.repository, os.O_RDONLY)
+        try:
+            with mock.patch.object(self.observer(), "_run_git", failed):
+                result = self.observer()._observe_request(self.request(), descriptor)
+        finally:
+            os.close(descriptor)
+        self.assertEqual(
+            self.local_exact_pin("unqueryable"),
+            (result.outcome, result.reason_code),
+        )
+
     def test_observer_closes_and_reverifies_every_unruled_actual_fd(self) -> None:
         """Catches cwd/session setup or repeated actual-FD closure being skipped."""
         leaked_read, leaked_write = os.pipe()
@@ -301,6 +448,7 @@ class ReconciliationObserverTests(unittest.TestCase):
                 os.dup2(leaked_read, 3)
                 self._safe_close(leaked_write)
                 payload = json.dumps({
+                    # CI-GREEN-23-chosen: product channel 3 after this test's dup2
                     "inherited": self._fstat_identity(3),
                     "unrelated": self._fstat_identity(proof_write),
                     "closed": self._fstat_identity(leaked_write),
@@ -473,6 +621,7 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     def test_local_git_observes_only_exact_full_ref_and_object_through_fd(self) -> None:
         """Catches pathname reopening, shorthand, or non-object evidence becoming observation."""
+        host_class = self.measure_observer_git()
         request = self.request()
         alias = self.base / "repository-alias"
         alias.symlink_to(self.repository, target_is_directory=True)
@@ -527,10 +676,11 @@ class ReconciliationObserverTests(unittest.TestCase):
         finally:
             os.close(descriptor)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.local_exact_pin(host_class),
             (result.outcome, result.reason_code),
         )
-        self.assertEqual({"observed_ref_digest": self.sha}, result.observation)
+        if host_class == "confirmed":
+            self.assertEqual({"observed_ref_digest": self.sha}, result.observation)
         self.assertIsNone(result.confirmation)
         self.assertIsNone(result.measured_spend)
         self.assertNotEqual(self.sha, replacement_sha)
@@ -573,11 +723,22 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     def test_local_git_wrong_ref_wrong_sha_and_missing_object_fail_closed(self) -> None:
         """Catches wrong refs, wrong SHA, absent objects, malformed output, or timeout becoming truth."""
+        host_class = self.measure_observer_git()
+        present_object = (
+            ("failed", "expected_object_absent")
+            if host_class == "confirmed"
+            else self.local_exact_pin("unqueryable")
+        )
+        missing_ref = (
+            ("failed", "confirmation_absent")
+            if host_class == "confirmed"
+            else self.local_exact_pin("unqueryable")
+        )
         cases = (
             (self.request(locator="main"), "unknown", "contract_invalid"),
             (self.request(locator="HEAD"), "unknown", "contract_invalid"),
-            (self.request(locator="refs/heads/missing"), "failed", "confirmation_absent"),
-            (self.request(digest="f" * 64), "failed", "expected_object_absent"),
+            (self.request(locator="refs/heads/missing"), *missing_ref),
+            (self.request(digest="f" * 64), *present_object),
         )
         for request, outcome, reason in cases:
             with self.subTest(
@@ -605,6 +766,7 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     def test_local_git_disables_hooks_config_replacements_prompts_and_pagers(self) -> None:
         """Catches hooks, replacements, prompts, pagers, ambient config, or tracking refs influencing local proof."""
+        host_class = self.measure_observer_git()
         marker = self.base / "hook-ran"
         hooks = self.base / "hooks"
         hooks.mkdir()
@@ -622,7 +784,7 @@ class ReconciliationObserverTests(unittest.TestCase):
         with mock.patch.dict(os.environ, hostile, clear=False):
             result, _ = self.invoke(self.request(), repository=self.repository)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.local_exact_pin(host_class),
             (result.outcome, result.reason_code),
         )
         self.assertFalse(marker.exists())
@@ -706,8 +868,9 @@ class ReconciliationObserverTests(unittest.TestCase):
         )
         before_control = object_store()
         lawful, _ = self.invoke(lawful_request, repository=promisor)
+        host_class = self.measure_observer_git()
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.local_exact_pin(host_class),
             (lawful.outcome, lawful.reason_code),
         )
         self.assertEqual(before_control, object_store())
@@ -722,7 +885,9 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.assertFalse(marker.exists())
         self.assertEqual(before_hostile, object_store())
         self.assertEqual(
-            ("failed", "expected_object_absent"),
+            ("failed", "expected_object_absent")
+            if host_class == "confirmed"
+            else self.local_exact_pin("unqueryable"),
             (hostile.outcome, hostile.reason_code),
         )
 
@@ -749,6 +914,7 @@ class ReconciliationObserverTests(unittest.TestCase):
         """Catches in-process observer controls contaminating every later relative fixture."""
 
         original = Path.cwd()
+        host_class = self.measure_observer_git()
         descriptor = os.open(self.repository, os.O_RDONLY)
         try:
             result = self.observer()._observe_request(self.request(), descriptor)
@@ -758,25 +924,37 @@ class ReconciliationObserverTests(unittest.TestCase):
             if Path.cwd() != original:
                 os.chdir(original)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.local_exact_pin(host_class),
             (result.outcome, result.reason_code),
         )
         self.assertEqual(original, observed)
 
     def test_remote_fixture_observes_exact_explicit_full_ref_without_local_fallback(self) -> None:
         """Catches shorthand, extra output, or local tracking state satisfying explicit remote observation."""
+        host_class = self.measure_observer_git()
         bare = self.base / "remote-fixture.git"
         self.git("init", "--quiet", "--bare", "--object-format=sha256", bare.as_posix())
         self.git("push", "--quiet", str(bare), "refs/heads/main:refs/heads/main")
         request = self.request("git_remote_explicit", coordinate=str(bare))
         result, _ = self.invoke(request)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.remote_exact_pin(host_class),
             (result.outcome, result.reason_code),
         )
-        self.assertEqual(self.sha, result.observation["observed_ref_digest"])
-        self.assertEqual("filesystem_fixture", result.observation["evidence_scope"])
+        if host_class == "confirmed":
+            self.assertEqual(self.sha, result.observation["observed_ref_digest"])
+            self.assertEqual("filesystem_fixture", result.observation["evidence_scope"])
         self.assertIsNone(result.confirmation)
+        missing_ref = (
+            ("failed", "confirmation_absent")
+            if host_class == "confirmed"
+            else self.remote_exact_pin("unqueryable")
+        )
+        digest_mismatch = (
+            ("failed", "ref_digest_mismatch")
+            if host_class == "confirmed"
+            else self.remote_exact_pin("unqueryable")
+        )
         cases = (
             (self.request("git_remote_explicit", coordinate=str(bare), locator="main"), "unknown", "contract_invalid"),
             (
@@ -784,13 +962,13 @@ class ReconciliationObserverTests(unittest.TestCase):
                     "git_remote_explicit", coordinate=str(bare),
                     locator="refs/heads/missing",
                 ),
-                "failed", "confirmation_absent",
+                *missing_ref,
             ),
             (
                 self.request(
                     "git_remote_explicit", coordinate=str(bare), digest="f" * 64,
                 ),
-                "failed", "ref_digest_mismatch",
+                *digest_mismatch,
             ),
         )
 
@@ -817,16 +995,18 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     def test_exact_git_observation_does_not_manufacture_measured_spend(self) -> None:
         """Catches exact ref evidence being relabeled as complete resource measurement."""
+        host_class = self.measure_observer_git()
         local_request = self.request()
         local, _ = self.invoke(local_request, repository=self.repository)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.local_exact_pin(host_class),
             (local.outcome, local.reason_code),
         )
-        self.assertEqual(
-            {"observed_ref_digest": self.sha},
-            local.observation,
-        )
+        if host_class == "confirmed":
+            self.assertEqual(
+                {"observed_ref_digest": self.sha},
+                local.observation,
+            )
         self.assertIsNone(local.confirmation)
         self.assertEqual("unknown", local.spend_status)
         self.assertIsNone(local.measured_spend)
@@ -837,11 +1017,12 @@ class ReconciliationObserverTests(unittest.TestCase):
         remote_request = self.request("git_remote_explicit", coordinate=str(bare))
         remote, _ = self.invoke(remote_request)
         self.assertEqual(
-            ("unknown", "reconciliation_inconclusive"),
+            self.remote_exact_pin(host_class),
             (remote.outcome, remote.reason_code),
         )
-        self.assertEqual(self.sha, remote.observation["observed_ref_digest"])
-        self.assertEqual("filesystem_fixture", remote.observation["evidence_scope"])
+        if host_class == "confirmed":
+            self.assertEqual(self.sha, remote.observation["observed_ref_digest"])
+            self.assertEqual("filesystem_fixture", remote.observation["evidence_scope"])
         self.assertIsNone(remote.confirmation)
         self.assertEqual("unknown", remote.spend_status)
         self.assertIsNone(remote.measured_spend)

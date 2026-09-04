@@ -521,7 +521,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
 
     @staticmethod
     def _artifact(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        return json.loads(result.stdout if result.returncode == 0 else result.stderr)
+        return json.loads(result.stdout)
 
     def _roll_success(
         self, *, root: FloatiRoot | None = None, actor: str = "actor-a",
@@ -586,12 +586,12 @@ class GovernedBusEpochRollTests(unittest.TestCase):
     ) -> dict[str, object]:
         selected = self.root if root is None else root
         self.assertEqual(20, result.returncode, result.stdout or result.stderr)
-        self.assertEqual("", result.stdout, contract)
-        self.assertEqual(1, len(result.stderr.splitlines()), contract)
-        artifact = json.loads(result.stderr)
+        self.assertEqual("", result.stderr, contract)
+        self.assertEqual(1, len(result.stdout.splitlines()), contract)
+        artifact = json.loads(result.stdout)
         self.assertEqual(
             json.dumps(artifact, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
-            result.stderr, contract,
+            result.stdout, contract,
         )
         self.assertEqual({"artifact_version", "command", "status", "evidence"}, set(artifact), contract)
         self.assertEqual((0, "epoch", "refused"),
@@ -3675,6 +3675,13 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             stdout=output, stderr=waiter_errors, monotonic=lambda: next(clock_values),
             sleep=waiter_sleep, wall_time=lambda: 1000.0, poll_interval_seconds=1)
         self.assertEqual(0, waiter_rc)
+        self.assertIn(
+            '"decision": "block"',
+            output.getvalue(),
+            "stderr={0!r} stdout={1!r}".format(
+                waiter_errors.getvalue(), output.getvalue()
+            ),
+        )
         waiter_artifact = json.loads(output.getvalue())
         expected_waiter = {
             "decision": "block",

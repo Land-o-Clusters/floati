@@ -1,0 +1,43 @@
+{
+  "direct_files": [
+    {
+      "bytes": 445838,
+      "path": "board-glow.gif",
+      "sha256": "3e562a48987930d09c597e6a9624791a485eb46157eb625ccb16779e877d846c"
+    },
+    {
+      "bytes": 3614,
+      "path": "corpus.v0.jsonl",
+      "sha256": "86f9d8a289c1e3a21b46af1c0f645819d61f2127a338a4ad35a33409b88c3ee1"
+    },
+    {
+      "bytes": 80686,
+      "path": "harbor-chart-map.gif",
+      "sha256": "e155311b2ef1a5221e7d88e1587479d82a3844863b0ed3a8beb2fd07a22c7b46"
+    },
+    {
+      "bytes": 1533205,
+      "path": "hero-three-fault-replay.gif",
+      "sha256": "94af4a20c8f95e2b8250eaba9f92185e4bcd3cfc5acfa492e29916dc5ddc9e89"
+    },
+    {
+      "bytes": 625093,
+      "path": "install-moment.gif",
+      "sha256": "9d822a5d1b6765521e742804fe32b72e027e1aebfcd25df59dedf0e04711579a"
+    }
+  ],
+  "excluded_generated_files": [
+    "CAPTURE-INVENTORY.md",
+    "manifest.json"
+  ],
+  "generator": "scripts/capture-shot1-locf1.py",
+  "nested_manifests": [
+    {
+      "bytes": 10127,
+      "path": "site-v3/manifest.json",
+      "sha256": "14c3d973ef3e7c13e50adebce3b3a4d739d9a1471eb4aba1cfe45a9f4b4060c6"
+    }
+  ],
+  "root": "docs/demo",
+  "schema_version": 0
+}

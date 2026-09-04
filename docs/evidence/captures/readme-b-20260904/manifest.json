@@ -1,0 +1,140 @@
+{
+  "captured_at": "2026-09-04T16:00:00.000Z",
+  "captures": [
+    {
+      "files": [
+        {
+          "bytes": 6024,
+          "path": "harbor-board-standard.txt",
+          "sha256": "495115799250b3e3e1591093f917786b0902df650d83a635aa3527ab18667d0e"
+        },
+        {
+          "bytes": 730,
+          "path": "harbor-board-plain.txt",
+          "sha256": "82f5d653efa7d138550b37e25fff8ed00a817f16e6a016685be6d0b4d7925293"
+        },
+        {
+          "bytes": 6921,
+          "path": "harbor-board-dark.svg",
+          "sha256": "7156fc253470a5eceb24f1ed3e0c24816ae2a4baadbb8179f02d74998ee6554b"
+        },
+        {
+          "bytes": 6922,
+          "path": "harbor-board-light.svg",
+          "sha256": "9a0f8970e05c7796ec0e31da670fef333cd5503e3520c3187097aaa0abbdd17c"
+        }
+      ],
+      "name": "harbor-board",
+      "real_ledger": true,
+      "root": "<scratch>/harbor-board"
+    },
+    {
+      "animated": true,
+      "event_count": 14,
+      "files": [
+        {
+          "bytes": 1727,
+          "path": "flight-recorder-replay-standard.txt",
+          "sha256": "6b46f004e3029af780b624e78b3c0ecec481a05cf8a7c78359d75a90ab464779"
+        },
+        {
+          "bytes": 1451,
+          "path": "flight-recorder-replay-plain.txt",
+          "sha256": "80e370eea903825d1eab0be6532d21ae17272fef1f451df7abda48ebf45a7e1d"
+        },
+        {
+          "bytes": 799371,
+          "path": "flight-recorder-replay-dark.gif",
+          "sha256": "62139a2f1bcfa2b090542c74f2e53a264e21c25548c0be6141aeebb997e8915a"
+        },
+        {
+          "bytes": 800743,
+          "path": "flight-recorder-replay-light.gif",
+          "sha256": "73be975407b2110ad63803328dd534134cb6a65a069536a2153c5e16469c12d7"
+        }
+      ],
+      "frame_count": 14,
+      "name": "flight-recorder-replay",
+      "real_ledger": true,
+      "root": "<scratch>/flight-recorder"
+    },
+    {
+      "animated": true,
+      "files": [
+        {
+          "bytes": 625,
+          "path": "onboard-wizard-standard.txt",
+          "sha256": "16d6705c5fc73aa11b8fa2628d7023615feaf4ce7344f5df24aa31d145cf491b"
+        },
+        {
+          "bytes": 72236,
+          "path": "onboard-wizard-dark.gif",
+          "sha256": "362d04955a278ccdf1a3ef54e52fcdb82ee1fafdaa87db7f06eb548fb5a2a3a2"
+        },
+        {
+          "bytes": 72608,
+          "path": "onboard-wizard-light.gif",
+          "sha256": "2b1ed67ad4ccf6f709f58d7a22e8bf0b8b51817fdeae8da51fa9e9c160691263"
+        }
+      ],
+      "frame_count": 3,
+      "name": "onboard-wizard",
+      "real_ledger": true,
+      "root": "<scratch>/onboard-wizard"
+    },
+    {
+      "declared_roots": "<scratch>/declared-roots.json",
+      "files": [
+        {
+          "bytes": 436,
+          "path": "harbor-chart-multibus-standard.txt",
+          "sha256": "86e2afd47f8fe9944f986331255486a7935ada4caa0e54c78923e37506e00ed2"
+        },
+        {
+          "bytes": 1429,
+          "path": "harbor-chart-multibus-dark.svg",
+          "sha256": "38a6ced8923931c4a13472493a6d2985c84e43075cce4593015822060f0b6de0"
+        },
+        {
+          "bytes": 1430,
+          "path": "harbor-chart-multibus-light.svg",
+          "sha256": "74a2b01591edb241c5be5befe27ad90a4f2d7e24f6cbcda9870ebaf3060d5e7b"
+        }
+      ],
+      "name": "harbor-chart-multibus",
+      "real_ledger": true,
+      "roots": [
+        "<scratch>/harbor-upstream",
+        "<scratch>/harbor-downstream"
+      ]
+    },
+    {
+      "files": [
+        {
+          "bytes": 681,
+          "path": "doctor-delivery-health-standard.txt",
+          "sha256": "22895a6f6e9806a0675dcfe5cde19f4d4aacc3b7b5d4a97975a559980d4c94d2"
+        },
+        {
+          "bytes": 1984,
+          "path": "doctor-delivery-health-dark.svg",
+          "sha256": "a1dccf437a4f9a2d6e2acc6cee400aa922b784880c7fd49606af474b7bcda7ec"
+        },
+        {
+          "bytes": 1985,
+          "path": "doctor-delivery-health-light.svg",
+          "sha256": "e7af36279f7d29964252df586a61c0225d464b8dbfad29ef5b8275639b1df07c"
+        }
+      ],
+      "name": "doctor-delivery-health",
+      "probe_budget_seconds": 1,
+      "real_ledger": true,
+      "root": "<scratch>"
+    }
+  ],
+  "generator": "scripts/capture-readme-real-ledgers.py",
+  "schema_version": 0,
+  "scratch": "<scratch>",
+  "source_sha": "4167d27c2ebb379d58b04a5b5a3efb0cf44314bd",
+  "synthetic": false
+}

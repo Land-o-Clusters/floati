@@ -27,14 +27,88 @@ def _load(path: Path) -> dict:
     return payload
 
 
-def _cell(record: dict) -> str:
+def _coordinate(record: dict) -> str:
+    return "{0}/{1}".format(record["harness"], record["surface"])
+
+
+def _declared_current_versions(dataset: dict) -> dict:
+    declared = dataset.get("declared_current_versions") or {}
+    if not isinstance(declared, dict):
+        raise SystemExit("declared_current_versions must be an object")
+    for coordinate, current in declared.items():
+        if not isinstance(coordinate, str) or not isinstance(current, dict):
+            raise SystemExit("each declared current version needs a coordinate and object")
+        for field in ("version", "measured_at", "receipt_path"):
+            if not isinstance(current.get(field), str) or not current[field]:
+                raise SystemExit(
+                    "declared current version {0!r} needs string {1}".format(
+                        coordinate, field
+                    )
+                )
+    return declared
+
+
+def _version_is_stale(dataset: dict, record: dict) -> bool:
+    current = _declared_current_versions(dataset).get(_coordinate(record))
+    if current is None:
+        return False
+    versions = record.get("versions")
+    if not isinstance(versions, dict):
+        raise SystemExit("each record needs a versions object")
+    measured = versions.get(record["surface"])
+    if not isinstance(measured, str) or not measured:
+        raise SystemExit(
+            "record {0}/{1} needs a measured version for its surface".format(
+                _coordinate(record), record["capability"]
+            )
+        )
+    return measured != current["version"]
+
+
+def _version_honesty(dataset: dict) -> str:
+    parts = []
+    declared = _declared_current_versions(dataset)
+    records = dataset["records"]
+    for coordinate, current in sorted(declared.items()):
+        measured = {}
+        for record in records:
+            if _coordinate(record) != coordinate or not _version_is_stale(dataset, record):
+                continue
+            version = record["versions"][record["surface"]]
+            measured.setdefault(version, set()).add(record["measured_at"])
+        if not measured:
+            continue
+        measured_text = "; ".join(
+            "{0} at {1}".format(version, " and ".join(sorted(measured_at)))
+            for version, measured_at in sorted(measured.items())
+        )
+        parts.append(
+            "{0} declared current [{1} at {2}]({3}); cells marked "
+            "`version_stale: true` were measured at {4} and keep those receipt-bound "
+            "stamps.".format(
+                coordinate,
+                current["version"],
+                current["measured_at"],
+                current["receipt_path"],
+                measured_text,
+            )
+        )
+    if not parts:
+        return ""
+    return "Version honesty: " + " ".join(parts)
+
+
+def _cell(dataset: dict, record: dict) -> str:
     value = record["value"]
     receipt = record["receipt_path"]
     if not isinstance(value, str) or not isinstance(receipt, str):
         raise SystemExit("each record needs string value and receipt_path")
     if not value or not receipt:
         raise SystemExit("uncitable empty cell: value and receipt_path are required")
-    return "[{0}]({1})".format(value, receipt)
+    cell = "[{0}]({1})".format(value, receipt)
+    if _version_is_stale(dataset, record):
+        cell += " · `version_stale: true`"
+    return cell
 
 
 def render(dataset: dict) -> str:
@@ -67,6 +141,10 @@ def render(dataset: dict) -> str:
     if surface_scope:
         lines.append(surface_scope)
         lines.append("")
+    version_honesty = _version_honesty(dataset)
+    if version_honesty:
+        lines.append(version_honesty)
+        lines.append("")
 
     titles = []
     for column in columns:
@@ -90,7 +168,7 @@ def render(dataset: dict) -> str:
             record = index.get((harness, surface, cap))
             if record is None:
                 raise SystemExit("missing record: {0}/{1}/{2}".format(harness, surface, cap))
-            cells.append(_cell(record))
+            cells.append(_cell(dataset, record))
         lines.append("| " + " | ".join(cells) + " |")
 
     notes = dataset.get("provider_notes") or []
@@ -118,8 +196,8 @@ def render(dataset: dict) -> str:
 _GRADE_MARKS = {"measured": "●", "classified": "○"}
 
 
-def _compact_cell(record: dict) -> str:
-    cell = _cell(record)
+def _compact_cell(dataset: dict, record: dict) -> str:
+    cell = _cell(dataset, record)
     grade = record.get("grade")
     if grade:
         mark = _GRADE_MARKS.get(grade)
@@ -162,6 +240,10 @@ def render_compact(dataset: dict) -> str:
     if surface_scope:
         lines.append(surface_scope)
         lines.append("")
+    version_honesty = _version_honesty(dataset)
+    if version_honesty:
+        lines.append(version_honesty)
+        lines.append("")
 
     lines.append("**CLI surfaces**")
     lines.append("")
@@ -175,7 +257,7 @@ def render_compact(dataset: dict) -> str:
             record = index.get((harness, surface, cap))
             if record is None:
                 raise SystemExit("missing record: {0}/{1}/{2}".format(harness, surface, cap))
-            cells.append(_compact_cell(record))
+            cells.append(_compact_cell(dataset, record))
         cells.append(row_notes.get("{0}/{1}".format(harness, surface), ""))
         lines.append("| " + " | ".join(cells) + " |")
 
@@ -192,7 +274,7 @@ def render_compact(dataset: dict) -> str:
             continue
         cells = [
             "{0} / {1}".format(harness, surface),
-            _compact_cell(record),
+            _compact_cell(dataset, record),
             row_notes.get("{0}/{1}".format(harness, surface), ""),
         ]
         lines.append("| " + " | ".join(cells) + " |")

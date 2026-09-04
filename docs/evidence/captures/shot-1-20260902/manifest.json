@@ -1,0 +1,146 @@
+{
+  "artifacts": [
+    {
+      "bytes": 137555,
+      "kind": "png",
+      "moment": "survey",
+      "path": "survey-dark.png",
+      "sha256": "9b35f40f97ab3b787524e0f69a680da591281d8c96530b62dd85a72246bafc85",
+      "theme": "dark"
+    },
+    {
+      "bytes": 753,
+      "kind": "transcript",
+      "moment": "survey",
+      "path": "survey-dark.txt",
+      "sha256": "9ef41467210777d5aed8f274ea733e22d245966c55e0e59263c61748e1235b34",
+      "theme": "dark"
+    },
+    {
+      "bytes": 137950,
+      "kind": "png",
+      "moment": "survey",
+      "path": "survey-light.png",
+      "sha256": "34f11f2328839e830b2f3865c560a5dc17c1922df2107d77e8bc92e988556717",
+      "theme": "light"
+    },
+    {
+      "bytes": 753,
+      "kind": "transcript",
+      "moment": "survey",
+      "path": "survey-light.txt",
+      "sha256": "9ef41467210777d5aed8f274ea733e22d245966c55e0e59263c61748e1235b34",
+      "theme": "light"
+    },
+    {
+      "bytes": 77996,
+      "kind": "png",
+      "moment": "uninstall-dry-run",
+      "path": "uninstall-dry-run-dark.png",
+      "sha256": "b1cbcc733564542e3df1d61c61ce01941da7b08ef79bce34d377a606be0e7fe5",
+      "theme": "dark"
+    },
+    {
+      "bytes": 328,
+      "kind": "transcript",
+      "moment": "uninstall-dry-run",
+      "path": "uninstall-dry-run-dark.txt",
+      "sha256": "b00fa922b4942c98e7afa3f2b720ce9cd36343451b064a564840eea445bcfeef",
+      "theme": "dark"
+    },
+    {
+      "bytes": 78094,
+      "kind": "png",
+      "moment": "uninstall-dry-run",
+      "path": "uninstall-dry-run-light.png",
+      "sha256": "f4b2a012730fb93489dcb5d3dffbd55b07c39a1b6442f018997389630d22ad04",
+      "theme": "light"
+    },
+    {
+      "bytes": 328,
+      "kind": "transcript",
+      "moment": "uninstall-dry-run",
+      "path": "uninstall-dry-run-light.txt",
+      "sha256": "b00fa922b4942c98e7afa3f2b720ce9cd36343451b064a564840eea445bcfeef",
+      "theme": "light"
+    },
+    {
+      "bytes": 92905,
+      "kind": "png",
+      "moment": "wake-ping",
+      "path": "wake-ping-dark.png",
+      "sha256": "49cb4feafc78526ceacb89b12030890750a8d4907960f8b415ff4d6c3e0ed3d4",
+      "theme": "dark"
+    },
+    {
+      "bytes": 367,
+      "kind": "transcript",
+      "moment": "wake-ping",
+      "path": "wake-ping-dark.txt",
+      "sha256": "d7834eb54aa6d4fb1c83ce5fb31093d2be44110a677c4bc871fa5a70ac67ea5f",
+      "theme": "dark"
+    },
+    {
+      "bytes": 93277,
+      "kind": "png",
+      "moment": "wake-ping",
+      "path": "wake-ping-light.png",
+      "sha256": "23ac642d82ff5fdaa1db3b9c6bdce315b3e15c68473baf42fe6be1cbcdb14295",
+      "theme": "light"
+    },
+    {
+      "bytes": 367,
+      "kind": "transcript",
+      "moment": "wake-ping",
+      "path": "wake-ping-light.txt",
+      "sha256": "d7834eb54aa6d4fb1c83ce5fb31093d2be44110a677c4bc871fa5a70ac67ea5f",
+      "theme": "light"
+    }
+  ],
+  "captured_at": "2026-09-02T17:00:00.000Z",
+  "font": {
+    "cell_height": 25,
+    "cell_width": 11,
+    "face": ".SF NS Mono Light",
+    "path": "/System/Library/Fonts/SFNSMono.ttf",
+    "sha256": "55caaed55254a28ac793847e8976be16c5ba7cbad1ec2ee2d5d86d4e6b3fa0c1"
+  },
+  "generator": "scripts/capture-shot1-locf1.py",
+  "moments": [
+    {
+      "data_class": "fixture",
+      "name": "survey",
+      "source": "fresh explicit bounded survey fixture",
+      "surface": "floati survey --declared-roots FILE --json"
+    },
+    {
+      "data_class": "real",
+      "name": "wake-ping",
+      "source": "docs/evidence/gate-p0-organic-wake-complete-2026-08-28.md",
+      "surface": "organic Codex Stop wake receipt"
+    },
+    {
+      "data_class": "real",
+      "name": "uninstall-dry-run",
+      "source": "fresh committed-tree scratch installation",
+      "surface": "floati uninstall --dry-run"
+    }
+  ],
+  "schema_version": 0,
+  "source_sha": "df54875ec35985f0d26f9275926d605611b33bac",
+  "terminal": {
+    "columns": 120,
+    "rows": 40,
+    "source_scale": 2
+  },
+  "themes": {
+    "dark": {
+      "background": "#12161c",
+      "foreground": "#d8dee9"
+    },
+    "light": {
+      "background": "#f7f3eb",
+      "foreground": "#20252c"
+    }
+  }
+}

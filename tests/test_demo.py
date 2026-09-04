@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import hashlib
 import os
 import subprocess
@@ -103,7 +105,7 @@ class DemoTests(unittest.TestCase):
             check=False, capture_output=True, text=True,
         )
         cli = subprocess.run(
-            ["python3", "-m", "floati", "board", "--demo", "--no-animation"],
+            [str(LAUNCHER), "board", "--demo", "--no-animation"],
             cwd=REPOSITORY_ROOT, check=False, capture_output=True, text=True,
         )
 

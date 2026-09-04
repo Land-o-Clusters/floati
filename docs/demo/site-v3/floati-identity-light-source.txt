@@ -1,0 +1,10 @@
+FLOATI // IDENTITY AND AUTHORITY
+$ floati grant --as architect --holder builder --subject site-capture --epoch 1
+
+holder: builder
+subject: site-capture
+epoch: 1
+expires_at: 2026-09-02T17:05:00.000Z
+
+Detached signatures verify exact artifact bytes and their binding.
+No certificate view exists: do not claim this is a session certificate.

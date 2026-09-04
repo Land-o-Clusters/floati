@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 import base64
 import hashlib
 import json
@@ -14,6 +16,7 @@ from unittest import mock
 from floati.deploy import DeploymentWriter
 from floati.errors import ProtocolRefusal
 from floati.root import FloatiRoot
+from tests import managed_test_tools
 
 try:
     from floati.signing import verify_minisign_paths
@@ -40,9 +43,11 @@ class AU1S0Tests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
-        selected = shutil.which("minisign")
+        selected = managed_test_tools.executable(
+            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
+        )
         self.assertIsNotNone(selected, "AU1-S0 requires a real minisign binary")
-        self.minisign = Path(selected).resolve(strict=True)
+        self.minisign = Path(selected)
         self.staging = self.base / "staging"
         self.staging.mkdir()
         self._copy_minisign_fixture(
@@ -197,9 +202,7 @@ class AU1S0Tests(unittest.TestCase):
         """Catches the internal bridge changing the shipped signature artifact."""
 
         arguments = [
-            "python3",
-            "-m",
-            "floati",
+            str(LAUNCHER),
             "signature",
             "verify",
             "--root",

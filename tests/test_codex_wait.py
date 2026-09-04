@@ -21,6 +21,12 @@ from tests.schema_validation import validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
+def waiter_captured_io(stdout: io.StringIO, stderr: io.StringIO) -> str:
+    """Name captured stderr when a waiter decision is missing from stdout."""
+
+    return "stderr={0!r} stdout={1!r}".format(stderr.getvalue(), stdout.getvalue())
+
+
 class CodexWaitParticipationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
@@ -410,20 +416,32 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             idempotency_key=key,
         )
 
+    def assert_waiter_stdout_contains(
+        self, stdout: io.StringIO, stderr: io.StringIO, needle: str
+    ) -> None:
+        self.assertIn(needle, stdout.getvalue(), waiter_captured_io(stdout, stderr))
+
+    def load_block_decision(
+        self, stdout: io.StringIO, stderr: io.StringIO
+    ) -> dict:
+        self.assert_waiter_stdout_contains(stdout, stderr, '"decision": "block"')
+        return json.loads(stdout.getvalue())
+
     def test_fresh_envelope_emits_one_block_and_records_wake_after_flush(self) -> None:
         from floati.codex_wait import run_stop_waiter
 
         message = self.send("runtime-ping")
         stdout = io.StringIO()
+        stderr = io.StringIO()
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={"cwd": str(self.workspace), "session_id": "thread-live"},
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
         )
 
         self.assertEqual(0, status)
-        decision = json.loads(stdout.getvalue())
+        decision = self.load_block_decision(stdout, stderr)
         self.assertEqual("block", decision["decision"])
         self.assertIn(message["id"], decision["reason"])
         attempts = read_records_snapshot(
@@ -508,26 +526,28 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
 
         self.send("runtime-held")
         first = io.StringIO()
+        first_err = io.StringIO()
         second = io.StringIO()
+        second_err = io.StringIO()
         clock = [0.0]
         payload = {"cwd": str(self.workspace), "session_id": "thread-held"}
         run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload=payload,
             stdout=first,
-            stderr=io.StringIO(),
+            stderr=first_err,
         )
         run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload=payload,
             stdout=second,
-            stderr=io.StringIO(),
+            stderr=second_err,
             monotonic=lambda: clock[0],
             sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
-        self.assertIn('"decision": "block"', first.getvalue())
-        self.assertIn("deadline exhausted", second.getvalue())
+        self.assert_waiter_stdout_contains(first, first_err, '"decision": "block"')
+        self.assert_waiter_stdout_contains(second, second_err, "deadline exhausted")
         attempts = read_records_snapshot(
             self.root,
             public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
@@ -555,17 +575,18 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
                 later.append(self.send("runtime-held-later"))
 
         stdout = io.StringIO()
+        stderr = io.StringIO()
         run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload=payload,
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
             monotonic=lambda: clock[0],
             sleep=sleep,
         )
 
         self.assertEqual(1.0, clock[0])
-        self.assertIn(later[0]["id"], stdout.getvalue())
+        self.assert_waiter_stdout_contains(stdout, stderr, later[0]["id"])
         attempts = read_records_snapshot(
             self.root,
             public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
@@ -585,18 +606,19 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             clock[0] += seconds
 
         stdout = io.StringIO()
+        stderr = io.StringIO()
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={"cwd": str(self.workspace), "session_id": "thread-idle"},
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
             monotonic=monotonic,
             sleep=sleep,
             poll_interval_seconds=1.0,
         )
 
         self.assertEqual(0, status)
-        decision = json.loads(stdout.getvalue())
+        decision = self.load_block_decision(stdout, stderr)
         self.assertEqual("block", decision["decision"])
         self.assertIn("deadline exhausted", decision["reason"])
         rows = read_records_snapshot(
@@ -669,15 +691,16 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         marker.parent.mkdir(parents=True)
         marker.write_text("disabled\n", encoding="utf-8")
         stdout = io.StringIO()
+        stderr = io.StringIO()
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={"cwd": str(self.workspace), "session_id": "thread-detached"},
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
         )
 
         self.assertEqual(0, status)
-        self.assertIn('"decision": "block"', stdout.getvalue())
+        self.assert_waiter_stdout_contains(stdout, stderr, '"decision": "block"')
         attempts = read_records_snapshot(
             self.root,
             public_ids.compose('receipts/wakes/', public_ids.ledger(public_ids.builder('floati'))),
@@ -845,7 +868,9 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
             self.root, relative, allowed_kinds={"wake_waiter_exit_receipt"}
         )
 
-    def run_with_replacement(self, payload: bytes) -> tuple[io.StringIO, tuple[dict, dict]]:
+    def run_with_replacement(
+        self, payload: bytes
+    ) -> tuple[io.StringIO, io.StringIO, tuple[dict, dict]]:
         from floati.codex_wait import run_stop_waiter
 
         consent_path = self.consent_ledger_path()
@@ -858,6 +883,7 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
                 swapped.append(self.replace_ledger(consent_path, payload))
 
         stdout = io.StringIO()
+        stderr = io.StringIO()
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={
@@ -865,14 +891,14 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
                 "session_id": "thread-reopen",
             },
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
             monotonic=lambda: clock[0],
             sleep=sleep,
             poll_interval_seconds=1.0,
         )
         self.assertEqual(0, status)
         self.assertEqual(1, len(swapped), "the consent ledger was never replaced")
-        return stdout, swapped[0]
+        return stdout, stderr, swapped[0]
 
     def test_repaired_consent_ledger_is_reopened_and_the_wait_continues_in_place(
         self,
@@ -893,9 +919,9 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
         self.assertNotEqual(original, repaired)
         self.replace_ledger(consent_path, original)
 
-        stdout, (before, after) = self.run_with_replacement(repaired)
+        stdout, stderr, (before, after) = self.run_with_replacement(repaired)
 
-        decision = json.loads(stdout.getvalue())
+        decision = self.load_block_decision(stdout, stderr)
         self.assertEqual("block", decision["decision"])
         self.assertIn("deadline exhausted", decision["reason"])
         rows = self.exhaustion_rows()
@@ -930,12 +956,13 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
     ) -> None:
         """A restore that removes consent must stop the hold, not run to exhaustion."""
 
-        stdout, (before, after) = self.run_with_replacement(b"")
+        stdout, stderr, (before, after) = self.run_with_replacement(b"")
 
         self.assertEqual(
             "",
             stdout.getvalue(),
-            "the waiter kept blocking the turn against a consent receipt that is gone",
+            "the waiter kept blocking the turn against a consent receipt that is gone; "
+            + waiter_captured_io(stdout, stderr),
         )
         self.assertEqual([], self.exhaustion_rows())
         exits = self.exit_rows()
@@ -972,6 +999,340 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
         rows = self.exhaustion_rows()
         self.assertEqual(1, len(rows))
         self.assertEqual(2, rows[0]["waited_seconds"])
+
+
+class CodexWaitWorkspaceMapReopenTests(CodexWaitRuntimeTests):
+    """IN-6e — map growth and map restore are different live-wait events."""
+
+    def map_path(self) -> Path:
+        return self.bus_home / "codex-wait" / "workspaces.v0.json"
+
+    def exit_rows(self) -> list[dict]:
+        relative = public_ids.compose(
+            "receipts/wake-waiter-exit/",
+            public_ids.ledger(public_ids.builder("floati")),
+        )
+        if not self.root.resolve_relative(relative).exists():
+            return []
+        return read_records_snapshot(
+            self.root, relative, allowed_kinds={"wake_waiter_exit_receipt"}
+        )
+
+    def test_in_place_workspace_map_growth_does_not_reresolve_live_claim(self) -> None:
+        from floati import codex_wait
+
+        second_workspace = self.base / "second-workspace"
+        second_workspace.mkdir()
+        clock = [0.0]
+        grew: list[bool] = []
+
+        def sleep(seconds: float) -> None:
+            clock[0] += seconds
+            if not grew:
+                self.write_map(
+                    sorted(
+                        [
+                            {
+                                "workspace": str(self.workspace),
+                                "node_id": public_ids.builder("floati"),
+                            },
+                            {
+                                "workspace": str(second_workspace),
+                                "node_id": public_ids.builder("floati"),
+                            },
+                        ],
+                        key=lambda row: (row["workspace"], row["node_id"]),
+                    )
+                )
+                grew.append(True)
+
+        real_resolve = codex_wait.resolve_participant
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(
+            codex_wait, "resolve_participant", wraps=real_resolve
+        ) as resolve:
+            status = codex_wait.run_stop_waiter(
+                bus_home=self.bus_home,
+                hook_payload={
+                    "cwd": str(self.workspace),
+                    "session_id": "thread-map-growth",
+                },
+                stdout=stdout,
+                stderr=stderr,
+                monotonic=lambda: clock[0],
+                sleep=sleep,
+                poll_interval_seconds=1.0,
+            )
+
+        self.assertEqual(0, status)
+        self.assertEqual(1, resolve.call_count)
+        self.assertEqual(2.0, clock[0])
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+
+    def test_restored_map_without_workspace_releases_live_claim(self) -> None:
+        from floati.codex_wait import run_stop_waiter
+
+        replacement = (
+            json.dumps(
+                {
+                    "schema_version": 0,
+                    "tenant_id": "demo-fleet",
+                    "mappings": [],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+        map_path = self.map_path()
+        before = map_path.stat()
+        clock = [0.0]
+        restored: list[bool] = []
+
+        def sleep(seconds: float) -> None:
+            clock[0] += seconds
+            if not restored:
+                temporary = map_path.with_name(map_path.name + ".restored")
+                temporary.write_bytes(replacement)
+                os.replace(temporary, map_path)
+                restored.append(True)
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        status = run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload={
+                "cwd": str(self.workspace),
+                "session_id": "thread-map-restore",
+            },
+            stdout=stdout,
+            stderr=stderr,
+            monotonic=lambda: clock[0],
+            sleep=sleep,
+            poll_interval_seconds=1.0,
+        )
+
+        after = map_path.stat()
+        self.assertEqual(0, status)
+        self.assertNotEqual(
+            (before.st_dev, before.st_ino),
+            (after.st_dev, after.st_ino),
+            "the fixture did not replace the workspace map",
+        )
+        self.assertEqual(1.0, clock[0])
+        self.assertEqual(
+            "",
+            stdout.getvalue(),
+            "the waiter kept holding a seat its restored map no longer declares; "
+            + waiter_captured_io(stdout, stderr),
+        )
+        exits = self.exit_rows()
+        self.assertEqual(1, len(exits))
+        self.assertEqual("not_claimant", exits[0]["reason_code"])
+        self.assertEqual(1, exits[0]["waited_seconds"])
+
+
+class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
+    """IN-6f — waiter evidence-write failures are never silent."""
+
+    def exit_rows(self) -> list[dict]:
+        relative = public_ids.compose(
+            "receipts/wake-waiter-exit/",
+            public_ids.ledger(public_ids.builder("floati")),
+        )
+        if not self.root.resolve_relative(relative).exists():
+            return []
+        return read_records_snapshot(
+            self.root, relative, allowed_kinds={"wake_waiter_exit_receipt"}
+        )
+
+    def run_idle(self, session_id: str, stderr: io.StringIO) -> io.StringIO:
+        from floati.codex_wait import run_stop_waiter
+
+        clock = [0.0]
+        stdout = io.StringIO()
+        run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload={"cwd": str(self.workspace), "session_id": session_id},
+            stdout=stdout,
+            stderr=stderr,
+            monotonic=lambda: clock[0],
+            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            poll_interval_seconds=1.0,
+        )
+        return stdout
+
+    def assert_redacted_diagnostic(
+        self, stderr: io.StringIO, operation: str
+    ) -> None:
+        self.assertEqual(
+            f"floati waiter evidence unavailable: {operation}: OSError\n",
+            stderr.getvalue(),
+        )
+        self.assertNotIn("secret-write-detail", stderr.getvalue())
+
+    def test_exit_receipt_write_failure_surfaces_on_stderr(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.codex_wait.WakeExitLedger.record",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            stdout = self.run_idle("thread-exit-write", stderr)
+
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+        self.assert_redacted_diagnostic(stderr, "wake_exit")
+
+    def test_session_authority_write_failure_surfaces_and_records_exit(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.codex_wait.CodexWaitSessionLedger.participate",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            stdout = self.run_idle("thread-session-write", stderr)
+
+        self.assertEqual(
+            "",
+            stdout.getvalue(),
+            waiter_captured_io(stdout, stderr),
+        )
+        self.assert_redacted_diagnostic(stderr, "session_authority")
+        self.assertEqual(
+            ["integrity_failure"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
+
+    def test_daemon_binding_write_failure_surfaces_and_keeps_the_decision(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.wake_daemon_adapters.record_codex_daemon_binding",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            stdout = self.run_idle("thread-daemon-write", stderr)
+
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+        self.assert_redacted_diagnostic(stderr, "daemon_binding")
+        self.assertEqual(
+            ["exhausted"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
+
+    def test_absent_codex_executable_does_not_swallow_the_exhaustion_decision(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        prior = adapters.CODEX_EXECUTABLE
+        adapters.CODEX_EXECUTABLE = self.base / "missing-codex"
+        self.addCleanup(setattr, adapters, "CODEX_EXECUTABLE", prior)
+        stderr = io.StringIO()
+        stdout = self.run_idle("thread-absent-codex", stderr)
+
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+        self.assertEqual("", stderr.getvalue())
+        self.assertEqual(
+            ["exhausted"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
+
+    def test_reopen_receipt_write_failure_surfaces_and_keeps_the_wait(self) -> None:
+        from floati.codex_wait import run_stop_waiter
+        from floati.codex_wait_contract import CodexWaitConsentLedger
+
+        consent_path = self.root.resolve_relative(
+            public_ids.compose(
+                "receipts/codex-wait-consent/",
+                public_ids.ledger(public_ids.builder("floati")),
+            )
+        )
+        original = consent_path.read_bytes()
+        CodexWaitConsentLedger(self.root).arm(
+            self.participant.binding,
+            hook_timeout_seconds=10,
+            wait_deadline_seconds=5,
+            idempotency_key="write-failure-consent",
+        )
+        repaired = consent_path.read_bytes()
+        temporary = consent_path.with_name(consent_path.name + ".original")
+        temporary.write_bytes(original)
+        os.replace(temporary, consent_path)
+        clock = [0.0]
+        replaced: list[bool] = []
+
+        def sleep(seconds: float) -> None:
+            clock[0] += seconds
+            if not replaced:
+                replacement = consent_path.with_name(consent_path.name + ".repaired")
+                replacement.write_bytes(repaired)
+                os.replace(replacement, consent_path)
+                replaced.append(True)
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.codex_wait.CodexWaitReopenLedger.record",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            run_stop_waiter(
+                bus_home=self.bus_home,
+                hook_payload={
+                    "cwd": str(self.workspace),
+                    "session_id": "thread-reopen-write",
+                },
+                stdout=stdout,
+                stderr=stderr,
+                monotonic=lambda: clock[0],
+                sleep=sleep,
+                poll_interval_seconds=1.0,
+            )
+
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+        self.assertEqual(5.0, clock[0])
+        self.assert_redacted_diagnostic(stderr, "consent_reopen")
+        self.assertEqual(
+            ["exhausted"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
+
+    def test_wake_attempt_write_failure_surfaces_and_records_exit(self) -> None:
+        self.send("write-failure-wake")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.codex_wait.WakeAttemptLedger.record",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            from floati.codex_wait import run_stop_waiter
+
+            run_stop_waiter(
+                bus_home=self.bus_home,
+                hook_payload={
+                    "cwd": str(self.workspace),
+                    "session_id": "thread-wake-write",
+                },
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+        self.assert_waiter_stdout_contains(stdout, stderr, '"decision": "block"')
+        self.assert_redacted_diagnostic(stderr, "wake_attempt")
+        self.assertEqual(
+            ["integrity_failure"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
+
+    def test_exhaustion_receipt_write_failure_surfaces_with_prior_exit(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch(
+            "floati.codex_wait.CodexWaitReceiptLedger.record_exhaustion",
+            side_effect=OSError("secret-write-detail"),
+        ):
+            stdout = self.run_idle("thread-exhaustion-write", stderr)
+
+        self.assert_waiter_stdout_contains(stdout, stderr, "deadline exhausted")
+        self.assert_redacted_diagnostic(stderr, "exhaustion")
+        self.assertEqual(
+            ["exhausted"],
+            [row["reason_code"] for row in self.exit_rows()],
+        )
 
 
 if __name__ == "__main__":

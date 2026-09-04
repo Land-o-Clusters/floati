@@ -115,15 +115,20 @@ class WakeWaiterContinuityTests(unittest.TestCase):
         # exhausted
         root, workspace, _participant = self.fixture("exhausted")
         clock = [0.0]
+        exhausted_err = io.StringIO()
         run_stop_waiter(
             bus_home=root.path,
             hook_payload={"cwd": str(workspace), "session_id": "seat-exhausted"},
             stdout=io.StringIO(),
-            stderr=io.StringIO(),
+            stderr=exhausted_err,
             monotonic=lambda: clock[0],
             sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
-        self.assertEqual(["exhausted"], [row["reason_code"] for row in self.rows(root)])
+        self.assertEqual(
+            ["exhausted"],
+            [row["reason_code"] for row in self.rows(root)],
+            "stderr={0!r}".format(exhausted_err.getvalue()),
+        )
 
         # paused
         root, workspace, _participant = self.fixture("paused")
@@ -205,12 +210,19 @@ class WakeWaiterContinuityTests(unittest.TestCase):
             "docs/evidence/first.md", "first", idempotency_key="first",
         )
         first_stdout = io.StringIO()
+        first_stderr = io.StringIO()
         run_stop_waiter(
             bus_home=root.path,
             hook_payload={"cwd": str(workspace), "session_id": "seat-reopen"},
-            stdout=first_stdout, stderr=io.StringIO(),
+            stdout=first_stdout, stderr=first_stderr,
         )
-        self.assertIn(str(first["id"]), first_stdout.getvalue())
+        self.assertIn(
+            str(first["id"]),
+            first_stdout.getvalue(),
+            "stderr={0!r} stdout={1!r}".format(
+                first_stderr.getvalue(), first_stdout.getvalue()
+            ),
+        )
 
         now = datetime.now(timezone.utc)
         AuthorityGrantStore(root).grant_exact(
@@ -232,17 +244,22 @@ class WakeWaiterContinuityTests(unittest.TestCase):
             )["message"])
 
         stdout = io.StringIO()
+        stderr = io.StringIO()
         run_stop_waiter(
             bus_home=root.path,
             hook_payload={"cwd": str(workspace), "session_id": "seat-reopen"},
             stdout=stdout,
-            stderr=io.StringIO(),
+            stderr=stderr,
             monotonic=lambda: clock[0],
             sleep=sleep,
         )
 
         self.assertEqual(1.0, clock[0])
-        self.assertIn(str(later[0]["id"]), stdout.getvalue())
+        self.assertIn(
+            str(later[0]["id"]),
+            stdout.getvalue(),
+            "stderr={0!r} stdout={1!r}".format(stderr.getvalue(), stdout.getvalue()),
+        )
         self.assertNotIn(str(first["id"]), stdout.getvalue())
 
 

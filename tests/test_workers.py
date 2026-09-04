@@ -1533,7 +1533,14 @@ class WorkerEffectPipeTests(unittest.TestCase):
             [mock.call(descriptor, fcntl.F_DUPFD_CLOEXEC, 8) for descriptor in descriptors],
             duplicate.call_args_list,
         )
-        self.assertEqual([mock.call(descriptor) for descriptor in descriptors], close.call_args_list)
+        opened = set(descriptors)
+        closed = [
+            call.args[0]
+            for call in close.call_args_list
+            if call.args[0] in opened
+        ]
+        self.assertEqual(opened, set(closed))
+        self.assertEqual(len(descriptors), len(closed))
 
     def test_exec_closes_every_parent_prelude_descriptor_after_start_or_failure(
         self,

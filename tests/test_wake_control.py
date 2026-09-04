@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.test_cli import LAUNCHER
+
 from floati import fixture_ids as public_ids
 
 import hashlib
@@ -143,7 +145,7 @@ class WakeControlTests(unittest.TestCase):
         """Catches parser aliases or omitted identity reaching the controller."""
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
-                ["python3", "-m", "floati", *arguments],
+                [str(LAUNCHER), *arguments],
                 cwd=REPOSITORY_ROOT,
                 env=dict(os.environ),
                 text=True,

@@ -1,0 +1,27 @@
+FLOATI // FOREIGN-BUS SURVEY
+$ floati survey --declared-roots <scratch>/declared-roots.json --json
+
+{
+  "declared_roots": [
+    "<scratch>/survey/declared"
+  ],
+  "foreign_buses": [
+    {
+      "apparent_schema": "floati-direct-v0-shaped",
+      "foreign_waiter_bindings": [
+        {
+          "hooks_file": "<scratch>/survey/hooks.json",
+          "targets_file": "<scratch>/survey/targets.json",
+          "workspace": "<scratch>/survey/declared"
+        }
+      ],
+      "root": "<scratch>/survey/foreign-bus"
+    }
+  ],
+  "invocation": "explicit_user_request",
+  "notice": "Survey is read-only; foreign buses are never written, drained, acknowledged, registered, or locked.",
+  "schema_version": 0,
+  "search_paths": [
+    "<scratch>/survey"
+  ]
+}

@@ -555,25 +555,28 @@ class DemoCaptureAssetTests(unittest.TestCase):
         """A typo must not silently render with a face the operator did not name."""
 
         capture = load_capture_module()
-        present = [
-            candidate
-            for candidate in capture.FONT_CANDIDATES
-            if candidate.is_file() and os.access(candidate, os.R_OK)
-        ]
         with tempfile.TemporaryDirectory() as temporary:
-            for declared, why in (
-                (Path(temporary) / "missing.ttc", "absent"),
-                (Path("relative/font.ttc"), "not absolute"),
-                (Path(temporary), "a directory, not a regular file"),
-            ):
-                with self.subTest(why=why):
-                    with self.assertRaises(capture.ProtocolRefusal) as caught:
-                        capture.resolve_capture_font(declared)
-                    self.assertEqual(
-                        capture.FONT_DECLARATION_INVALID_CODE,
-                        caught.exception.code,
-                    )
-                    if present:
+            planted = Path(temporary) / "planted-candidate.ttf"
+            planted.write_bytes(b"not a font")
+            with mock.patch.object(capture, "FONT_CANDIDATES", (planted,)):
+                present = [
+                    candidate
+                    for candidate in capture.FONT_CANDIDATES
+                    if candidate.is_file() and os.access(candidate, os.R_OK)
+                ]
+                self.assertEqual((planted,), tuple(present))
+                for declared, why in (
+                    (Path(temporary) / "missing.ttc", "absent"),
+                    (Path("relative/font.ttc"), "not absolute"),
+                    (Path(temporary), "a directory, not a regular file"),
+                ):
+                    with self.subTest(why=why):
+                        with self.assertRaises(capture.ProtocolRefusal) as caught:
+                            capture.resolve_capture_font(declared)
+                        self.assertEqual(
+                            capture.FONT_DECLARATION_INVALID_CODE,
+                            caught.exception.code,
+                        )
                         self.assertNotIn(
                             str(present[0]), str(caught.exception.detail)
                         )

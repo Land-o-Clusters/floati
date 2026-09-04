@@ -7,6 +7,7 @@ failed with ModuleNotFoundError before floati/workflow_runner_fence.py existed.
 
 from __future__ import annotations
 
+import difflib
 import json
 import tempfile
 import unittest
@@ -151,35 +152,39 @@ jobs:
         run: python3 -m floati.selftest
 """
 
-# The live harbor CI is the 481afae4 bytes above under EXACTLY THREE named
-# substitutions, and the pin below names all three rather than tolerating a
-# diff. Two are the rename out of the projection. The third is a fix: ci-box-8
-# (run 33653526683) died in this step at `sudo apt-get` with "sudo: a terminal
-# is required to read the password", because passwordless sudo is refused on
-# that box on the record. A PIN THAT IGNORES A CHANGED STEP IS A LOOSENING, so
-# the new step text is pinned as an exact literal and the old one is asserted
-# ABSENT — a substitution that stops matching must red, not quietly no-op.
+# The live harbor CI is the 481afae4 bytes above under EXACTLY FOUR named
+# substitutions, and the pin below names all four rather than tolerating a
+# diff. Two are the rename out of the projection. The other two are the
+# ci-box-8 (run 33653526683) remedy: `pip install … --user`, and the Linux
+# step that stopped running `sudo apt-get` as the first act. A default-context
+# unified diff collapses those last two into one hunk, which is how this pin
+# once named three. SequenceMatcher (and unified diff at context 0) sees four.
+# A PIN THAT IGNORES A CHANGED STEP IS A LOOSENING, so each new text is pinned
+# as an exact literal and the old one is asserted ABSENT — a substitution that
+# stops matching must red, not quietly no-op.
 HARBOR_NAME_481AFAE4 = "name: selftest\n"
 HARBOR_NAME_LIVE = "name: harbor-selftest\n"
 
 HARBOR_CONCURRENCY_481AFAE4 = "group: selftest-${{ github.ref }}"
 HARBOR_CONCURRENCY_LIVE = "group: harbor-selftest-${{ github.ref }}"
 
-HARBOR_INSTALL_STEP_481AFAE4 = r"""          python3 -m pip install --disable-pip-version-check --quiet pillow jsonschema
-          if [ "${RUNNER_OS}" = "Linux" ]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq minisign
-"""
-
-HARBOR_INSTALL_STEP_LIVE = r"""          # ci-box-8, run 33653526683: this step assumed hosted ubuntu and ran
+HARBOR_PIP_481AFAE4 = (
+    "          python3 -m pip install --disable-pip-version-check --quiet pillow jsonschema\n"
+)
+HARBOR_PIP_LIVE = r"""          # ci-box-8, run 33653526683: this step assumed hosted ubuntu and ran
           # `sudo apt-get`, which on the self-hosted box died with "sudo: a
           # terminal is required to read the password". The install was never
           # the point - the ASSERTION was - so assert first and install only
           # where installing is possible, and when it is not, say which runner
           # is missing what rather than failing as a password prompt.
           python3 -m pip install --disable-pip-version-check --quiet --user pillow jsonschema
-          if [ "${RUNNER_OS}" = "Linux" ]; then
-            if command -v minisign >/dev/null 2>&1; then
+"""
+
+HARBOR_LINUX_STEP_481AFAE4 = (
+    "            sudo apt-get update -qq\n"
+    "            sudo apt-get install -y -qq minisign\n"
+)
+HARBOR_LINUX_STEP_LIVE = r"""            if command -v minisign >/dev/null 2>&1; then
               echo "minisign present on ${RUNNER_NAME:-unknown}: nothing to install"
             elif sudo -n true 2>/dev/null; then
               sudo apt-get update -qq
@@ -191,7 +196,8 @@ HARBOR_INSTALL_STEP_LIVE = r"""          # ci-box-8, run 33653526683: this step 
 """
 
 # (from-481afae4, to-live, what it is) — the whole substitution set, in one
-# place, so the pin cannot name two of three.
+# place, so the pin cannot name three of four.
+HARBOR_SUBSTITUTION_COUNT = 4
 HARBOR_SUBSTITUTIONS = (
     (HARBOR_NAME_481AFAE4, HARBOR_NAME_LIVE, "the workflow name"),
     (
@@ -200,11 +206,29 @@ HARBOR_SUBSTITUTIONS = (
         "the concurrency group prefix",
     ),
     (
-        HARBOR_INSTALL_STEP_481AFAE4,
-        HARBOR_INSTALL_STEP_LIVE,
+        HARBOR_PIP_481AFAE4,
+        HARBOR_PIP_LIVE,
+        "pip install --user (linux job; the Mac job already had --user at 481afae4)",
+    ),
+    (
+        HARBOR_LINUX_STEP_481AFAE4,
+        HARBOR_LINUX_STEP_LIVE,
         "the Linux install step (ci-box-8 assert-first remedy, run 33653526683)",
     ),
 )
+
+
+def harbor_differing_hunks(before: str, after: str) -> list[tuple[str, int, int, int, int]]:
+    """Return SequenceMatcher opcodes that are not equal — the cold-diff hunks.
+
+    Unified diff with default context collapses adjacent edits into one hunk;
+    that is how this pin named three substitutions where the delta had four.
+    """
+
+    left = before.splitlines(True)
+    right = after.splitlines(True)
+    matcher = difflib.SequenceMatcher(a=left, b=right)
+    return [opcode for opcode in matcher.get_opcodes() if opcode[0] != "equal"]
 
 
 def one_job(runs_on: str, *, extra: str = "") -> str:
@@ -565,7 +589,7 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
         )
 
     def test_the_renamed_harbor_workflow_is_the_481afae4_bytes(self) -> None:
-        """The harbor's live CI is the 481afae4 bytes under three NAMED substitutions."""
+        """The harbor's live CI is the 481afae4 bytes under four NAMED substitutions."""
 
         relative = ".github/workflows/harbor-selftest.yml"
         require_private_artifact(self, relative)
@@ -579,6 +603,17 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
         # self.fail() rather than assertIn/assertNotIn on purpose: those print
         # the whole 6 KB haystack and bury the sentence that says WHICH
         # substitution moved. The first line of the literal is locator enough.
+        hunks = harbor_differing_hunks(HARBOR_SELFTEST_481AFAE4, live)
+        self.assertEqual(
+            HARBOR_SUBSTITUTION_COUNT,
+            len(HARBOR_SUBSTITUTIONS),
+            "the named substitution LIST must have one entry per differing hunk",
+        )
+        self.assertEqual(
+            HARBOR_SUBSTITUTION_COUNT,
+            len(hunks),
+            "differing-hunk count must equal the named LIST length",
+        )
         for old, new, what in HARBOR_SUBSTITUTIONS:
             if old not in HARBOR_SELFTEST_481AFAE4:
                 self.fail(

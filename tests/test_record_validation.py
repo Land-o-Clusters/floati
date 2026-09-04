@@ -590,6 +590,82 @@ class RecordValidationTests(unittest.TestCase):
                     )
                 self.assertEqual(code, caught.exception.code)
 
+    def test_note_refusal_names_a_newline_not_length(self) -> None:
+        """RED-first: a short note with \\n used to claim the 1024 cap."""
+        message = self.valid_message()
+        message["note"] = "short\nline"
+        with self.assertRaises(ProtocolRefusal) as caught:
+            append_record(
+                self.root, "events.jsonl", message,
+                allowed_kinds={"message_envelope"},
+            )
+        self.assertEqual("note_invalid", caught.exception.code)
+        self.assertIn("control", caught.exception.detail)
+        self.assertIn("offset 5", caught.exception.detail)
+        self.assertNotIn("1024", caught.exception.detail)
+        self.assertIsInstance(caught.exception.remedy, str)
+        self.assertTrue(caught.exception.remedy.strip())
+
+    def test_note_length_refusal_names_the_measured_length(self) -> None:
+        message = self.valid_message()
+        message["note"] = "x" * 1025
+        with self.assertRaises(ProtocolRefusal) as caught:
+            append_record(
+                self.root, "events.jsonl", message,
+                allowed_kinds={"message_envelope"},
+            )
+        self.assertEqual("note_invalid", caught.exception.code)
+        self.assertIn("1025", caught.exception.detail)
+        self.assertIn("1024", caught.exception.detail)
+        self.assertNotIn("control", caught.exception.detail)
+
+    def test_title_refusal_names_a_newline_not_bounds_prose(self) -> None:
+        work = {
+            "schema_version": 0,
+            "id": "work-" + uuid7_hex(),
+            "tenant_id": "alpha",
+            "timestamp": "2026-07-31T12:00:00.000Z",
+            "kind": "work_item",
+            "title": "line\nbreak",
+            "owner": "worker-1",
+            "artifact_bindings": [],
+        }
+        with self.assertRaises(ProtocolRefusal) as caught:
+            append_record(
+                self.root, "work/items.jsonl", work,
+                allowed_kinds={"work_item"},
+            )
+        self.assertEqual("title_invalid", caught.exception.code)
+        self.assertIn("control", caught.exception.detail)
+        self.assertNotIn("v0 string bounds", caught.exception.detail)
+
+    def test_doc_refusal_names_a_newline_not_containment(self) -> None:
+        message = self.valid_message()
+        message["doc"] = "docs/a\nb.md"
+        with self.assertRaises(ProtocolRefusal) as caught:
+            append_record(
+                self.root, "events.jsonl", message,
+                allowed_kinds={"message_envelope"},
+            )
+        self.assertEqual("doc_invalid", caught.exception.code)
+        self.assertIn("control", caught.exception.detail)
+        self.assertNotIn("contained", caught.exception.detail)
+
+    def test_protocol_refusal_evidence_surfaces_note_remedy(self) -> None:
+        from floati.cli import _protocol_refusal_evidence
+
+        message = self.valid_message()
+        message["note"] = "short\nline"
+        with self.assertRaises(ProtocolRefusal) as caught:
+            append_record(
+                self.root, "events.jsonl", message,
+                allowed_kinds={"message_envelope"},
+            )
+        evidence = _protocol_refusal_evidence(caught.exception)
+        self.assertEqual("note_invalid", evidence["code"])
+        self.assertEqual(caught.exception.remedy, evidence["remedy"])
+        self.assertNotEqual({"kind": "none", "why": "no action was named for this refusal"}, evidence["remedy"])
+
     def test_work_item_refuses_an_arbitrary_workspace_mapping(self) -> None:
         work = {
             "schema_version": 0,

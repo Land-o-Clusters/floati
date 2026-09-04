@@ -1,0 +1,5 @@
+FLOATI // CHART
+$ floati chart --declared-roots FILE
+
+declared: 1
+foreign: 0

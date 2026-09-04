@@ -1,0 +1,14 @@
+DECLARED_ROOTS=<temp>/capture/scratch/declared-roots.json
+$ floati chart --declared-roots $DECLARED_ROOTS
+
+FLOATI // MULTI-BUS HARBOR CHART
+floati-upstream [architect: architect-codex] [last activity: 0s]
+  |-- architect-codex (Architect)
+  |-- builder-floati (Codex)
+puddle-downstream [architect: architect-puddle] [last activity: 0s]
+  |-- architect-puddle (Architect)
+  |-- reviewer (Claude)
+relationships:
+  floati-upstream -> puddle-downstream
+
+ONE BUS, MANY HARNESSES — adapters keep their dialects at the boundary.
