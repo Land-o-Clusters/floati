@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from floati.adapters.cline import ClineAdapter
 from floati.adapters.cursor import CursorAgentAdapter
@@ -47,11 +48,10 @@ class DocumentedHeadlessInvocationTests(unittest.TestCase):
                 self.assertEqual((), profile.headless_arguments)
                 self.assertIsNone(profile.cited_source)
 
-    def test_grok_build_default_binary_is_not_renamed_to_vendor_grok(self) -> None:
-        self.assertEqual(
-            ("/opt/homebrew/bin/grok-build",),
-            GrokBuildAdapter._default_profile().command,
-        )
+    def test_grok_build_default_binary_is_the_vendor_grok(self) -> None:
+        command = GrokBuildAdapter._default_profile().command
+        self.assertEqual("grok", Path(command[0]).name)
+        self.assertNotEqual("/opt/homebrew/bin/grok-build", command[0])
 
 
 if __name__ == "__main__":

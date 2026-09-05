@@ -1,5 +1,4 @@
 {
-  "canonical_ref": "refs/heads/lane/hm0",
   "files": [
     {
       "path": "LICENSE",
@@ -103,7 +102,7 @@
     },
     {
       "path": "floati/adapters/grok_build.py",
-      "sha256": "f5651118d66434cf103688a3437559d00a8cc36e2cf922181d314a1374e0c2cb"
+      "sha256": "63912028817d2850cc5ea95f2e49afab4d6b715268b535f1552b3ebfd2f76e6b"
     },
     {
       "path": "floati/adapters/headless_template.py",
@@ -187,7 +186,7 @@
     },
     {
       "path": "floati/c7_bundle.py",
-      "sha256": "2260086937b51b6ea2faacfc92ac3a78173559633d0828348bea0460a07af1cc"
+      "sha256": "a0011d0d47c73f5ab44bbde0c39e3dbd15140a752c8d65620a1e03d6460456cf"
     },
     {
       "path": "floati/cancellation.py",
@@ -231,7 +230,7 @@
     },
     {
       "path": "floati/confluence.py",
-      "sha256": "5e907df9dbba417916327345df494d7943a326999e713915048c115925d6f32c"
+      "sha256": "738dd13cf6fd6bf764332ab926242c8c69a2125c19d355a39a4e204db1085500"
     },
     {
       "path": "floati/conformance.py",
@@ -383,7 +382,7 @@
     },
     {
       "path": "floati/host_paths.py",
-      "sha256": "854f98e67f02e232a6bcd7aeed18007b59802d872abaed3b1fc1336d5b72f311"
+      "sha256": "9129a230c4a34a95562d4ec5bdf5fadb3113d33c0a203798a625d390d21ae67e"
     },
     {
       "path": "floati/identity_fence.py",
@@ -575,7 +574,7 @@
     },
     {
       "path": "floati/sequencer.py",
-      "sha256": "a782ad3d2db79457b5d6551c87e15ba1ceb325454502b850d3b9298f3930cc45"
+      "sha256": "5634e0f7956c8995aa7ab31769e466fea2016e85c6b4922228387802cb41a88c"
     },
     {
       "path": "floati/sequencer_epoch.py",
@@ -811,7 +810,7 @@
     },
     {
       "path": "floati/worker_isolation.py",
-      "sha256": "389590c00c689e1329c0617aa6ee3a8ca1241f52547c67954aa1c001094b1959"
+      "sha256": "a83134236e8812d22ac92bd8b5cd47481dd26cd50e51c07319d14770ae84e720"
     },
     {
       "path": "floati/workers.py",
@@ -1498,6 +1497,15 @@
       "sha256": "c5b347c5446f9aa4dd8a01592228d367d022335cb85f252a5d25a1e97e29cc07"
     }
   ],
-  "protocol_version": "0",
-  "schema_version": 0
+  "ownership": {
+    "destination": "\u002fprivate/tmp/floati-m4-codex-20260905/installed",
+    "entrypoint": "scripts/floati",
+    "entrypoint_sha256": "13da57c446d9c7151e2779e3e94e7ef79fa8c3ec18c95e377e34788a2bf64ab2",
+    "kind": "floati_standalone",
+    "manager": null,
+    "remedy": null
+  },
+  "schema_version": 1,
+  "source_ref": "origin/main",
+  "source_sha": "1a17f706f5ece1cc3a3d0e5efa4a05b85bb5aade"
 }

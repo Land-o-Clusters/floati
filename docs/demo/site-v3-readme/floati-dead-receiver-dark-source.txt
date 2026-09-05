@@ -1,0 +1,5 @@
+FLOATI // DOCTOR PROBE
+$ floati doctor --probe --probe-budget 1
+
+PASS  architect  delivery healthy
+DEAF  receiver   no unread mail observed in budget

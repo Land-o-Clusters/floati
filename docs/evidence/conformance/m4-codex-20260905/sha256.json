@@ -1,0 +1,102 @@
+[
+  {
+    "path": "setup.jsonl",
+    "bytes": 2198,
+    "sha256": "7835be2b37bfccbe35082e0f6e89987566d260200e0f5546b460af2c4afbd9c0"
+  },
+  {
+    "path": "authority-setup.jsonl",
+    "bytes": 2289,
+    "sha256": "15272b878914afce8eebfe890a017b6791f708503ad990bdfbbc5eff4bfe3164"
+  },
+  {
+    "path": "drive.py",
+    "bytes": 2116,
+    "sha256": "051fe2cb17a151e20b8a5bab3acabb6d5d9e47d8a0e46fd6153a2b7e13be873b"
+  },
+  {
+    "path": "prepare.py",
+    "bytes": 1458,
+    "sha256": "cb1df633746ae6a48a8fedced84014f3cf42124751f7aa419c7044e1c5581afa"
+  },
+  {
+    "path": "prepare-peer.py",
+    "bytes": 1114,
+    "sha256": "a474b8c7340e3fcd77695438481f708212f452d7cdfb67c7a58506b09984c51f"
+  },
+  {
+    "path": "verify-evidence.py",
+    "bytes": 4067,
+    "sha256": "2af4f15d1452ba12497d372b57b4c5929b27027412a6a849426876e98ffbeed8"
+  },
+  {
+    "path": "verification.json",
+    "bytes": 726,
+    "sha256": "195525a6f2e830d71bcb38c14a6f8e366fa098985e40fc154bc1e77207965942"
+  },
+  {
+    "path": "surface.requests.json",
+    "bytes": 432,
+    "sha256": "b8a6206dc476c00f4bb2aadc5e363d2c7f64b3a0cc7f12cf02d9316dd329aca2"
+  },
+  {
+    "path": "surface.wire.jsonl",
+    "bytes": 25495,
+    "sha256": "360cb9c04c11b879f7239ec042f4313230de8d812223e68a8aa3dc41bc5df2d3"
+  },
+  {
+    "path": "surface.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "operator.requests.json",
+    "bytes": 5507,
+    "sha256": "f7c48e03f8a00572112718a99677f64aaeb5ec9f05afa58835fdf276a766e148"
+  },
+  {
+    "path": "operator.wire.jsonl",
+    "bytes": 421064,
+    "sha256": "c23da3f19ac22997bdc26ebf0530d45f6a563e797188710be31cbb847cd6c9b4"
+  },
+  {
+    "path": "operator.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "peer.requests.json",
+    "bytes": 1474,
+    "sha256": "2498712facdf11be371a6b2cbf6dd8f4eea7b913e4dc52022c4f0d8bd5a1b65d"
+  },
+  {
+    "path": "peer.wire.jsonl",
+    "bytes": 20686,
+    "sha256": "49379e5992e4914549802be88315b5c11c6cccbd237144f16099957a8c88bc22"
+  },
+  {
+    "path": "peer.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "work.requests.json",
+    "bytes": 868,
+    "sha256": "127d19b78a4ac01018eaab991f4a9e60eb5a5e0cfaa7f9126958235c3be88f75"
+  },
+  {
+    "path": "work.wire.jsonl",
+    "bytes": 18870,
+    "sha256": "da39ffaee65086bbe924bcd97dfdff5663b80fc00db876f0b6111df39594f91b"
+  },
+  {
+    "path": "work.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "install-manifest.json",
+    "bytes": 55395,
+    "sha256": "f2bc7c7d315e145a1728a0cc4007b162d24fd652fd3df65f3dc7d9dfcdf300ba"
+  }
+]

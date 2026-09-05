@@ -35,6 +35,10 @@ CAPTURE_REFUSAL_EXIT = 20
 FONT_SIZE = 18
 TERMINAL_COLUMNS = 120
 TERMINAL_ROWS = 40
+CONTENT_ROW_MARGIN = 2
+CONTENT_COLUMN_MARGIN = 4
+FIT_FIXED = "fixed"
+FIT_CONTENT = "content"
 FONT_CANDIDATES = (
     Path("/System/Library/Fonts/Menlo.ttc"),
     Path("/System/Library/Fonts/SFNSMono.ttf"),
@@ -99,10 +103,43 @@ def terminal_grid(
     return "\n".join(padded) + "\n"
 
 
-def terminal_transcript(text: str) -> str:
+def moment_terminal_rows(text: str) -> int:
+    """Return content height plus margin, never taller than the terminal."""
+
+    lines = text.expandtabs(4).splitlines()
+    while lines and lines[-1] == "":
+        lines.pop()
+    content = len(lines)
+    if content <= 0:
+        raise ValueError("capture testimony has no content rows")
+    return min(TERMINAL_ROWS, content + CONTENT_ROW_MARGIN)
+
+
+def moment_terminal_columns(text: str) -> int:
+    """Return longest line plus margin, never wider than the terminal."""
+
+    lines = text.expandtabs(4).splitlines()
+    while lines and lines[-1] == "":
+        lines.pop()
+    longest = max((len(line) for line in lines), default=0)
+    if longest <= 0:
+        raise ValueError("capture testimony has no content columns")
+    return min(TERMINAL_COLUMNS, longest + CONTENT_COLUMN_MARGIN)
+
+
+def terminal_transcript(
+    text: str,
+    *,
+    rows: int | None = None,
+    columns: int | None = None,
+) -> str:
     """Serialize visible testimony without terminal-cell padding."""
 
-    terminal_grid(text)
+    terminal_grid(
+        text,
+        columns=TERMINAL_COLUMNS if columns is None else columns,
+        rows=TERMINAL_ROWS if rows is None else rows,
+    )
     lines = [line.rstrip() for line in text.expandtabs(4).splitlines()]
     return "\n".join(lines).rstrip() + "\n"
 
@@ -185,8 +222,19 @@ def render_terminal_png(
     if scale <= 0:
         raise ValueError("source scale must be positive")
     lines = text.splitlines()
-    if len(lines) != TERMINAL_ROWS or any(len(line) != TERMINAL_COLUMNS for line in lines):
-        raise ValueError("terminal raster input must already be an exact 120x40 grid")
+    rows = len(lines)
+    columns = len(lines[0]) if lines else 0
+    if (
+        rows < 1
+        or rows > TERMINAL_ROWS
+        or columns < 1
+        or columns > TERMINAL_COLUMNS
+        or any(len(line) != columns for line in lines)
+    ):
+        raise ValueError(
+            "terminal raster input must already be a rectangular grid of at most "
+            f"{TERMINAL_COLUMNS}x{TERMINAL_ROWS} cells"
+        )
 
     from PIL import Image, ImageDraw, ImageFont
 
@@ -194,8 +242,8 @@ def render_terminal_png(
     image = Image.new(
         "RGB",
         (
-            TERMINAL_COLUMNS * font.cell_width * scale,
-            TERMINAL_ROWS * font.cell_height * scale,
+            columns * font.cell_width * scale,
+            rows * font.cell_height * scale,
         ),
         palette["background"],
     )
@@ -906,6 +954,7 @@ def write_capture_directory(
     captured_at: str,
     *,
     site_names: bool,
+    fit: str = FIT_FIXED,
 ) -> dict[str, object]:
     if output.exists() and any(output.iterdir()):
         raise CaptureRefusal(
@@ -913,11 +962,25 @@ def write_capture_directory(
             f"capture output is not empty: {output}",
             "declare a new empty output directory",
         )
+    if fit not in {FIT_FIXED, FIT_CONTENT}:
+        raise ValueError("capture fit must be fixed or content")
     output.mkdir(parents=True, exist_ok=True)
     artifacts: list[dict[str, object]] = []
+    moment_rows: dict[str, int] = {}
+    moment_columns: dict[str, int] = {}
     for moment in moments:
-        grid = terminal_grid(moment.text)
-        transcript = terminal_transcript(moment.text)
+        rows = (
+            moment_terminal_rows(moment.text) if fit == FIT_CONTENT else TERMINAL_ROWS
+        )
+        columns = (
+            moment_terminal_columns(moment.text)
+            if fit == FIT_CONTENT
+            else TERMINAL_COLUMNS
+        )
+        moment_rows[moment.name] = rows
+        moment_columns[moment.name] = columns
+        grid = terminal_grid(moment.text, columns=columns, rows=rows)
+        transcript = terminal_transcript(moment.text, columns=columns, rows=rows)
         for theme in ("dark", "light"):
             stem = (
                 f"floati-{moment.name}-{theme}-source"
@@ -934,22 +997,47 @@ def write_capture_directory(
                 compress_level=9,
             )
             for kind, path in (("transcript", text_path), ("png", image_path)):
-                artifacts.append(
-                    {
-                        "path": path.name,
-                        "kind": kind,
-                        "moment": moment.name,
-                        "theme": theme,
-                        "sha256": _digest(path),
-                        "bytes": path.stat().st_size,
-                    }
-                )
+                artifact: dict[str, object] = {
+                    "path": path.name,
+                    "kind": kind,
+                    "moment": moment.name,
+                    "theme": theme,
+                    "sha256": _digest(path),
+                    "bytes": path.stat().st_size,
+                }
+                if fit == FIT_CONTENT:
+                    artifact["rows"] = rows
+                    artifact["columns"] = columns
+                artifacts.append(artifact)
+    terminal: dict[str, object] = {
+        "source_scale": 2,
+    }
+    if fit == FIT_CONTENT:
+        terminal["column_margin"] = CONTENT_COLUMN_MARGIN
+        terminal["columns"] = "content+margin"
+        terminal["row_margin"] = CONTENT_ROW_MARGIN
+        terminal["rows"] = "content+margin"
+    else:
+        terminal["columns"] = 120
+        terminal["rows"] = 40
+    moment_records = []
+    for moment in moments:
+        record: dict[str, object] = {
+            "name": moment.name,
+            "surface": moment.surface,
+            "data_class": moment.data_class,
+            "source": moment.source,
+        }
+        if fit == FIT_CONTENT:
+            record["columns"] = moment_columns[moment.name]
+            record["rows"] = moment_rows[moment.name]
+        moment_records.append(record)
     manifest: dict[str, object] = {
         "schema_version": 0,
         "generator": "scripts/capture-shot1-locf1.py",
         "source_sha": source_sha,
         "captured_at": captured_at,
-        "terminal": {"columns": 120, "rows": 40, "source_scale": 2},
+        "terminal": terminal,
         "font": {
             "path": str(font.path),
             "sha256": font.sha256,
@@ -958,15 +1046,7 @@ def write_capture_directory(
             "cell_height": font.cell_height,
         },
         "themes": THEMES,
-        "moments": [
-            {
-                "name": moment.name,
-                "surface": moment.surface,
-                "data_class": moment.data_class,
-                "source": moment.source,
-            }
-            for moment in moments
-        ],
+        "moments": moment_records,
         "artifacts": sorted(artifacts, key=lambda row: str(row["path"])),
     }
     (output / "manifest.json").write_text(
@@ -1018,6 +1098,12 @@ def _validate_inputs(args: argparse.Namespace) -> DeclaredFont:
                 f"--{name.replace('_', '-')} must be absolute: {value}",
                 "declare absolute empty output and scratch paths",
             )
+    if args.readme_output is not None and not args.readme_output.is_absolute():
+        raise CaptureRefusal(
+            "capture_path_invalid",
+            f"--readme-output must be absolute: {args.readme_output}",
+            "declare an absolute empty README capture directory",
+        )
     if args.demo_root is not None and not args.demo_root.is_absolute():
         raise CaptureRefusal(
             "capture_path_invalid",
@@ -1038,6 +1124,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--site-output", type=Path, required=True)
     parser.add_argument("--shot-output", type=Path, required=True)
+    parser.add_argument("--readme-output", type=Path)
     parser.add_argument("--dead-receiver-transcript", type=Path, required=True)
     parser.add_argument("--adapter-transcript", type=Path, required=True)
     parser.add_argument("--wake-evidence", type=Path, required=True)
@@ -1045,7 +1132,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         font = _validate_inputs(args)
-        for path in (args.scratch, args.site_output, args.shot_output):
+        checked_paths = [args.scratch, args.site_output, args.shot_output]
+        if args.readme_output is not None:
+            checked_paths.append(args.readme_output)
+        for path in checked_paths:
             if path.exists() and any(path.iterdir()):
                 raise CaptureRefusal(
                     "capture_output_not_empty",
@@ -1081,6 +1171,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.captured_at,
             site_names=False,
         )
+        readme_manifest = (
+            write_capture_directory(
+                args.readme_output,
+                loc_moments,
+                font,
+                args.source_sha,
+                args.captured_at,
+                site_names=True,
+                fit=FIT_CONTENT,
+            )
+            if args.readme_output is not None
+            else None
+        )
         demo_inventory = (
             write_demo_inventory(args.demo_root) if args.demo_root is not None else None
         )
@@ -1095,6 +1198,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "site_artifacts": len(site_manifest["artifacts"]),
                         "shot_output": str(args.shot_output),
                         "shot_artifacts": len(shot_manifest["artifacts"]),
+                        "readme_output": (
+                            str(args.readme_output)
+                            if args.readme_output is not None
+                            else None
+                        ),
+                        "readme_artifacts": (
+                            len(readme_manifest["artifacts"])
+                            if readme_manifest is not None
+                            else None
+                        ),
                         "source_sha": args.source_sha,
                         "captured_at": args.captured_at,
                         "demo_direct_files": (

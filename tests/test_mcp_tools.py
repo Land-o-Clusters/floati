@@ -222,6 +222,37 @@ class McpToolSurfaceTests(unittest.TestCase):
                     "arguments_invalid",
                 )
 
+    def test_mcp_refusals_name_mcp_inputs_never_cli_flags(self) -> None:
+        """MCP-2 (public #24): catches CLI vocabulary leaking into tool refusals."""
+
+        server = self.server()
+        schema = self.tool("send", server=server)["inputSchema"]
+
+        artifact = self.assert_tool_error(
+            server.call_tool("send", {}), "arguments_invalid"
+        )
+        detail = artifact["evidence"]["detail"]
+        self.assertNotIn("--", detail)
+        self.assertNotIn("choose from", detail)
+        for name in sorted(schema["required"]):
+            self.assertIn(name, detail)
+
+        provided = self.send_arguments(note="x", key="k")
+        provided["bogus_input"] = 1
+        artifact = self.assert_tool_error(
+            server.call_tool("send", provided), "arguments_invalid"
+        )
+        detail = artifact["evidence"]["detail"]
+        self.assertNotIn("--", detail)
+        self.assertIn("bogus_input", detail)
+
+        artifact = self.assert_tool_error(
+            server.call_tool("not_a_tool", {}), "arguments_invalid"
+        )
+        detail = artifact["evidence"]["detail"]
+        self.assertNotIn("choose from", detail)
+        self.assertIn("not_a_tool", detail)
+
     def test_mcp_keyed_governed_tools_refuse_without_a_caller_key(self) -> None:
         """Catches MCP inheriting the CLI's human-only idempotency-key mint."""
 

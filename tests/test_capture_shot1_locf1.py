@@ -166,6 +166,54 @@ class CaptureBoundaryTests(unittest.TestCase):
             image.size,
         )
 
+    def test_moment_terminal_rows_is_content_height_plus_margin(self) -> None:
+        capture = load_capture_module()
+
+        eight = "\n".join(f"line-{index}" for index in range(8))
+        self.assertEqual(10, capture.moment_terminal_rows(eight))
+        self.assertEqual(10, capture.moment_terminal_rows(eight + "\n"))
+        self.assertEqual(
+            40,
+            capture.moment_terminal_rows(
+                "\n".join(f"line-{index}" for index in range(39))
+            ),
+        )
+        self.assertEqual(
+            40,
+            capture.moment_terminal_rows(
+                "\n".join(f"line-{index}" for index in range(40))
+            ),
+        )
+
+    def test_moment_terminal_columns_is_longest_line_plus_margin(self) -> None:
+        capture = load_capture_module()
+
+        self.assertEqual(60, capture.moment_terminal_columns("x" * 56))
+        self.assertEqual(60, capture.moment_terminal_columns("x" * 56 + "\nshort\n"))
+        self.assertEqual(120, capture.moment_terminal_columns("x" * 116))
+        self.assertEqual(120, capture.moment_terminal_columns("x" * 120))
+
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
+    def test_content_fit_raster_is_two_times_the_content_plus_margin_grid(self) -> None:
+        capture = load_capture_module()
+        font = resolve_test_capture_font(self, capture)
+        if font is None:
+            return
+        text = "\n".join(f"line-{index}" for index in range(8))
+        rows = capture.moment_terminal_rows(text)
+        columns = capture.moment_terminal_columns(text)
+        grid = capture.terminal_grid(text, columns=columns, rows=rows)
+        image = capture.render_terminal_png(grid, "dark", font, scale=2)
+
+        self.assertEqual(10, rows)
+        self.assertEqual(10, columns)
+        self.assertEqual(10, len(grid.splitlines()))
+        self.assertTrue(all(len(line) == 10 for line in grid.splitlines()))
+        self.assertEqual(
+            (10 * font.cell_width * 2, 10 * font.cell_height * 2),
+            image.size,
+        )
+
 
 class CaptureMomentTests(unittest.TestCase):
     def test_fixed_capture_faces_include_the_debian_system_candidate(self) -> None:
@@ -407,6 +455,110 @@ class CaptureMomentTests(unittest.TestCase):
             )
             self.assertEqual(manifest, persisted)
 
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
+    def test_readme_directory_rasterizes_each_moment_at_content_height_plus_margin(
+        self,
+    ) -> None:
+        capture = load_capture_module()
+        font = resolve_test_capture_font(self, capture)
+        if font is None:
+            return
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            base = Path(temporary)
+            moments = capture.build_loc_moments(
+                base / "scratch", SOURCE_SHA, CAPTURED_AT, **declared_loc_inputs()
+            )
+            manifest = capture.write_capture_directory(
+                base / "site-v3-readme",
+                moments,
+                font,
+                SOURCE_SHA,
+                CAPTURED_AT,
+                site_names=True,
+                fit=capture.FIT_CONTENT,
+            )
+
+            self.assertEqual("content+margin", manifest["terminal"]["rows"])
+            self.assertEqual("content+margin", manifest["terminal"]["columns"])
+            self.assertEqual(2, manifest["terminal"]["row_margin"])
+            self.assertEqual(4, manifest["terminal"]["column_margin"])
+            for moment in moments:
+                with self.subTest(moment=moment.name):
+                    expected_rows = capture.moment_terminal_rows(moment.text)
+                    expected_columns = capture.moment_terminal_columns(moment.text)
+                    named = next(
+                        row
+                        for row in manifest["moments"]
+                        if row["name"] == moment.name
+                    )
+                    self.assertEqual(expected_rows, named["rows"])
+                    self.assertEqual(expected_columns, named["columns"])
+                    self.assertLessEqual(expected_rows, capture.TERMINAL_ROWS)
+                    self.assertLessEqual(expected_columns, capture.TERMINAL_COLUMNS)
+                    image = Image.open(
+                        base
+                        / "site-v3-readme"
+                        / f"floati-{moment.name}-dark-source.png"
+                    )
+                    self.assertEqual(
+                        (
+                            expected_columns * font.cell_width * 2,
+                            expected_rows * font.cell_height * 2,
+                        ),
+                        image.size,
+                    )
+                    image.close()
+
+            by_name = {row["name"]: row for row in manifest["moments"]}
+            for name in ("board", "help"):
+                text = next(moment.text for moment in moments if moment.name == name)
+                self.assertEqual(
+                    capture.moment_terminal_rows(text), by_name[name]["rows"]
+                )
+                self.assertEqual(
+                    capture.moment_terminal_columns(text), by_name[name]["columns"]
+                )
+
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is not installed")
+    def test_two_content_fit_loc_runs_are_byte_identical(self) -> None:
+        capture = load_capture_module()
+        font = resolve_test_capture_font(self, capture)
+        if font is None:
+            return
+
+        def digest_tree(root: Path) -> dict[str, str]:
+            return {
+                path.relative_to(root).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in sorted(root.rglob("*"))
+                if path.is_file()
+            }
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            base = Path(temporary)
+            maps = []
+            for label in ("run-a", "run-b"):
+                run = base / label
+                moments = capture.build_loc_moments(
+                    run / "scratch", SOURCE_SHA, CAPTURED_AT, **declared_loc_inputs()
+                )
+                capture.write_capture_directory(
+                    run / "readme",
+                    moments,
+                    font,
+                    SOURCE_SHA,
+                    CAPTURED_AT,
+                    site_names=True,
+                    fit=capture.FIT_CONTENT,
+                )
+                maps.append(digest_tree(run / "readme"))
+
+        self.assertEqual(maps[0], maps[1])
+        self.assertEqual(33, len(maps[0]))
+
 
 class CaptureInventoryAndReproducibilityTests(unittest.TestCase):
     def test_demo_inventory_derives_direct_bytes_and_nested_manifests_once(self) -> None:
@@ -479,6 +631,8 @@ class CaptureInventoryAndReproducibilityTests(unittest.TestCase):
                             str(run / "site"),
                             "--shot-output",
                             str(run / "shot"),
+                            "--readme-output",
+                            str(run / "readme"),
                             *fixture_capture_args(),
                         ]
                     )
@@ -493,11 +647,15 @@ class CaptureInventoryAndReproducibilityTests(unittest.TestCase):
                             f"shot/{name}": digest
                             for name, digest in digest_tree(run / "shot").items()
                         },
+                        **{
+                            f"readme/{name}": digest
+                            for name, digest in digest_tree(run / "readme").items()
+                        },
                     }
                 )
 
         self.assertEqual(maps[0], maps[1])
-        self.assertEqual(46, len(maps[0]))
+        self.assertEqual(79, len(maps[0]))
 
 
 if __name__ == "__main__":

@@ -14,238 +14,58 @@
   </picture>
 </h1>
 <p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
-<p align="center">Any harness, any mix — one bus, one board, one set of receipts.</p>
+<p align="center">Any harness, any mix. One bus, one board, one set of receipts.</p>
 
 <p align="center">
   <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
   <img alt="platform macOS today" src="https://img.shields.io/badge/platform-macOS%20today-3E4A56">
-  <img alt="telemetry zero" src="https://img.shields.io/badge/telemetry-zero-3E4A56">
+  <a href="#what-it-runs-with"><img alt="harnesses 12 measured" src="https://img.shields.io/badge/harnesses-12%20measured-3E4A56"></a>
 </p>
-
-You're already running a fleet. An agent in Codex, two in Claude,
-one in OpenCode, something experimental in Cursor — each in its own
-terminal, each with its own dialect, none of them aware the others
-exist. You are the bus, the scheduler, and the one who checks
-whether anything died.
-
-Floati takes those jobs. Register your agents as nodes — whatever
-harness they run in — and they share one bus: dispatch work, message
-each other with full provenance, wake when mail lands, and show up
-on one board. Cross-harness fleets are the whole point; a Codex
-worker, a Claude reviewer, and an OpenCode scout in one orchestrated
-plan is a Tuesday.
 
 <p align="center">
-  <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay" width="1400">
+  <a href="#get-it">Get it</a> ·
+  <a href="#what-you-can-do-with-it">What you can do</a> ·
+  <a href="#start-alone">Start alone</a> ·
+  <a href="#grow-the-fleet">Grow the fleet</a> ·
+  <a href="#what-it-runs-with">What it runs with</a> ·
+  <a href="#why-it-doesnt-fall-over">Why it doesn't fall over</a> ·
+  <a href="#what-it-costs-to-run">What it costs</a> ·
+  <a href="#leave-cleanly">Leave cleanly</a> ·
+  <a href="#compose-with-it">Compose</a> ·
+  <a href="#verify">Verify</a> ·
+  <a href="#what-we-know-is-wrong">What we know is wrong</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 
-A worker killed, a sequencer killed, a reboot — and every event
-reconstructed from receipts, in order, on demand. Nothing here is
-animated by the demo; it is played back from the fleet's own
-records.
+You are already running a fleet. An agent in Codex, two in Claude,
+one in OpenCode, something experimental in Cursor. Each sits in its
+own terminal with its own dialect, and none of them knows the others
+exist. You are the bus, the scheduler, and the one who checks whether
+anything died.
 
-<sub>Every moving image in this README was recorded from a real ledger. The capture directories under <code>docs/evidence/captures/</code> carry a per-file SHA-256 manifest; <code>docs/demo/</code> gets its manifest with the next recapture, and until then that directory's images are the one place this README asks you to take its word.</sub>
-
-## What you can do with it
-
-### Talk to your fleet
-
-```bash
-floati send --root /absolute/fleet --from architect --to builder-a \
-  --repo myapp --sha <40-hex> --doc docs/briefs/row-1.md --note "Row 1 is yours."
-```
-
-Every message is a typed envelope with provenance — sender,
-recipient, tenant, repo, SHA — validated on the way in, refused when
-malformed. Delivery, acknowledgment, and consumption are separate
-records, so "did they get it?" has an actual answer. `floati receipts
-NODE` shows the three histories as distinct evidence, and a refusal
-is a fourth record with its own typed code.
-
-### Wake the node you just dispatched
-
-Stop-hook waiters for your harnesses and an optional per-fleet
-daemon mean a dispatched node wakes in seconds — not whenever
-someone remembers to check a terminal. Wake is opt-in per fleet,
-armed by a consent receipt (`floati wake arm`), off by default:
-nothing wakes without your recorded say-so, and `floati wake status`
-shows exactly what is armed. A floati waiter is a polite neighbor —
-instant silent exit for any workspace that isn't its own, other
-buses' hooks and mail never touched.
-
-### Orchestrate across harnesses
-
-```bash
-floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
-```
-
-Plans fan work across registered workers with dependency edges —
-work stays `BLOCKED` until prerequisites complete. Workers can live
-in different harnesses; the adapter layer speaks each one's dialect
-so the plan doesn't have to. Degradation is typed, and drain refuses
-to declare victory until work state, terminal receipts, controller
-exits, and descendant cleanup audits all agree. Today the
-`orchestrate` verb takes one adapter choice, `codex`; the fleet
-underneath it is any mix.
-
-Every side effect a worker takes is its own record: `floati effects`
-lists them, `effect reconcile` checks them against what the harness
-reports, and `effect compensate` records the undo. `floati threads`
-and `thread attach` put an observer on a harness's own thread, so the
-ledger sees what the harness saw.
-
-### See the whole harbor
+Floati takes those jobs. Register your agents as nodes, whatever
+harness they run in, and they share one bus: they dispatch work,
+message each other with full provenance, wake when mail lands, and
+show up on one board. A Codex worker, a Claude reviewer and an
+OpenCode scout in one plan is the normal case, not the demo.
 
 <p align="center">
-  <img src="docs/evidence/captures/readme-b-20260904/harbor-board-dark.svg" alt="The Harbor Board: three nodes with separate liveness, authority, and lock lamps" width="1400">
+  <img src="docs/demo/board-glow.gif" alt="The Harbor Board, live: three nodes, each with separate liveness, authority and lock lamps, redrawn as their ledgers change" width="1400">
 </p>
 
-The Harbor Board: liveness, authority, and lock state as three
-separate lamps — three different questions, never blended into one
-green dot. Keyboard-first, redraws only on state change. `floati
-watch` streams the same deltas as text, and `floati supervise` holds
-a run open and reports as it goes.
+The Harbor Board. Liveness, authority and lock state are three
+separate lamps, because they are three different questions, and the
+board redraws only when the ledger changes. The fleet in this
+recording is the repository's demo fixture; every lamp on it is read
+from that fixture's ledger, not drawn by the demo.
 
-<p align="center">
-  <img src="docs/evidence/captures/readme-b-20260904/harbor-chart-multibus-dark.svg" alt="Multi-bus harbor chart: two declared roots, their architects, and the downstream edge" width="1400">
-</p>
-
-Running more than one fleet on this machine? Declare your roots
-(floati never scans your disk) and `floati chart` draws the harbor:
-buses, nodes, architect seats, what's downstream, last activity.
-`floati survey` goes further — it reports agent buses on this
-filesystem that floati did *not* install, including whether a
-foreign waiter is bound to one of your workspaces. Read-only, on
-your request.
-
-### Know which node went deaf — and which step died
-
-<p align="center">
-  <img src="docs/evidence/captures/readme-b-20260904/doctor-delivery-health-dark.svg" alt="Doctor report: one node RED with a 17-minute-old undelivered envelope; loopback probe PASS and DEAF; state DEGRADED" width="1400">
-</p>
-
-"The node went quiet" is not a diagnosis. The doctor states per-node
-undelivered counts, oldest-message age, and last drain even when
-everything is green. `doctor --probe` sends a self-addressed
-envelope through each node's own delivery path and reports PASS or
-DEAF per node, without touching anyone else's mail. Two things to
-know before you read a DEAF: the probe's budget is per node, sixty
-seconds by default, so set `--probe-budget` low on a big fleet; and
-a node with no waiter armed is DEAF by definition — the probe reports
-the fact, it does not know whether you meant it.
-
-Liveness is a separate question from mail. A node reports about
-itself, and only itself, with `floati presence report`; `presence
-show` prints the last report, its TTL and its expiry — and expiry
-means *no report since*, never *down*.
-
-### Onboard and tear down nodes like it's nothing
-
-<p align="center">
-  <img src="docs/evidence/captures/readme-b-20260904/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
-</p>
-
-`floati node add` walks you through a new node: identity, harness,
-permanent or temporary. Temporary nodes boot with one command and
-tear down with one. Switching a node between providers or models is
-a recorded reassignment, not a re-onboarding. Every wizard step
-prints the exact records it will write before writing them — the
-wizard fronts the same verbs you could type, never a second path.
-Nodes keep their working folders nested under the fleet root, so ten
-agents don't mean ten directories strewn across your home.
-
-### Give every node a role
-
-A fleet isn't just processes — it's an architect, reviewers,
-builders, scouts, each needing the right boot instructions and a
-clean hand-off ritual when a session ends. Floati generates and
-explains boot and wind-down commands per node from its role
-(`floati node explain`), runs them where the harness allows, and
-keeps them current as the fleet changes — so standing up your whole
-fleet stops being an act of memory.
-
-### Treat context like the resource it is
-
-Agent sessions degrade as their context fills, and every harness
-handles it differently. Floati tracks what each harness actually
-exposes (`floati context policy`, `context reading record`), hands a
-node a turnover ritual before it drowns — wind down, port the
-working state, boot the successor — and never invents a pressure
-number it can't measure. Provider usage comes from the harness's own
-logs, on request: `floati quota collect`, then `quota show`.
-
-### Take work in from GitHub
-
-`floati intake scan` reads a repository's issues into candidate work,
-`intake show` and `intake adopt` turn one into a work item with the
-issue as its provenance, and `intake dispatch` hands it to a node.
-`intake adopt --source github` reads one issue through the explicit `gh`
-executable you name. That is a network call which may receive only ambient
-`GH_TOKEN` or `GITHUB_TOKEN` — see the network section below.
-
-### Replay any run
-
-<p align="center">
-  <img src="docs/evidence/captures/readme-b-20260904/flight-recorder-replay-dark.gif" alt="Flight recorder replaying a completed two-work orchestration in order" width="1400">
-</p>
-
-The flight recorder replays a finished run as an ordered timeline:
-claims, worker turns, degradations, denials, completions. Playback
-speed changes the waiting, never the order.
-
-### Bring your agent — or be the human
-
-Humans and agents are both first-class operators here. Point your
-agent at this repo: `AGENTS.md` is its manual, every verb
-self-describes in JSON (`floati describe --json`), every refusal
-carries a typed code and a detail, and every action leaves a receipt
-your agent can verify — it never has to guess whether its own message
-arrived. `floati mcp serve` exposes the same verbs to an MCP client
-as tools, with the node identity pinned at launch so the client
-cannot speak as anyone else. The keyboard-first flows and the
-declarative `--json` flows are the same engine wearing two idioms, so
-your fleet reads identically whether you run it or your agent does.
-
-## Start alone
-
-Every durable command names an explicit absolute root. There is no
-default root, no home scan, and nothing that wakes without you.
-Point it somewhere; that directory is the entire blast radius.
-
-```bash
-floati init --root /absolute/my-sessions --solo me --harness Codex
-floati work add --root /absolute/my-sessions --title "Record this session"
-floati board --root /absolute/my-sessions
-```
-
-## Grow the fleet
-
-```bash
-floati node add --root /absolute/fleet --node builder-a --harness Codex --lifetime permanent
-floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
-floati log --root /absolute/fleet --replay --speed 4
-```
-
-The installed child harness owns its own provider traffic and
-credentials. A fleet is not the ceiling: one machine can run
-several — different harness mixes, an architect seat in each, peer
-architects exchanging artifacts but never authority, and no path
-between fleets unless you build one:
-
-<picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-multifleet-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-multifleet-light.svg">
-    <img src="docs/assets/floati-multifleet-light.svg" alt="Two floati fleets and a solo seat on one machine: each fleet is a star of harnesses around its own append-only root with an architect seat; the architects exchange artifacts as peers; the fleets share nothing by default" width="1440">
-</picture>
-
-Every element in that picture is a shipping mechanism — roots,
-ledgers, leases, star governance.
+<sub>Every image in this README was produced by the repository's own capture scripts from a real ledger or a declared fixture. Each capture directory (<code>docs/demo/</code>, <code>docs/demo/site-v3-readme/</code>, <code>docs/evidence/captures/</code>) carries a per-file SHA-256 manifest that says which.</sub>
 
 ## Get it
 
 Floati is one Python package with no dependencies. Clone it and let
 it install itself: the installer deploys exactly the files the
-manifest names and nothing else, into a directory you choose.
+manifest names, into a directory you choose, and nothing else.
 
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
@@ -259,6 +79,10 @@ release, check the tag out first and name it:
 git -C /absolute/floati checkout v0.1.0
 python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.1.0
 ```
+
+<p align="center">
+  <img src="docs/demo/install-moment.gif" alt="The install moment: the manifest-exact deploy and its receipt" width="1400">
+</p>
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
 directory to your `PATH` or call it by path.
@@ -285,10 +109,236 @@ you have not armed yet and every path it could not read, and reports
 the whole as degraded until you have. Some of those findings do not
 yet carry a remedy ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
 
+## What you can do with it
+
+### Talk to your fleet
+
+```bash
+floati send --root /absolute/fleet --from architect --to builder-a \
+  --repo myapp --sha <40-hex> --doc docs/briefs/row-1.md --note "Row 1 is yours."
+```
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-handoff-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-handoff-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-handoff-light-source.png" alt="A handoff, three receipts: delivered, acknowledged, and a denial recorded separately with its typed code" width="1320">
+  </picture>
+</p>
+
+Every message is a typed envelope with provenance: sender, recipient,
+tenant, repo, SHA. It is validated on the way in and refused when
+malformed. Delivery, acknowledgment and consumption are separate
+records, so "did they get it?" has an actual answer. `floati receipts
+NODE` shows the three histories as distinct evidence, and a refusal
+is a fourth record with its own typed code.
+
+### Wake the node you just dispatched
+
+Stop-hook waiters for your harnesses and an optional per-fleet daemon
+mean a dispatched node wakes in seconds, not whenever someone
+remembers to check a terminal. Wake is opt-in per fleet, armed by a
+consent receipt (`floati wake arm`) and off by default: nothing wakes
+without your recorded say-so, and `floati wake status` shows exactly
+what is armed. A floati waiter exits silently and at once for any
+workspace that is not its own; other buses' hooks and mail are never
+touched.
+
+### Orchestrate across harnesses
+
+```bash
+floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
+```
+
+Plans fan work across registered workers with dependency edges, and
+work stays `BLOCKED` until its prerequisites complete. Workers can
+live in different harnesses; the adapter layer speaks each one's
+dialect so the plan does not have to. Degradation is typed, and drain
+refuses to declare victory until work state, terminal receipts,
+controller exits and descendant cleanup audits all agree. Today the
+`orchestrate` verb takes one adapter choice, `codex`; the fleet
+underneath it is any mix.
+
+Every side effect a worker takes is its own record: `floati effects`
+lists them, `effect reconcile` checks them against what the harness
+reports, and `effect compensate` records the undo. `floati threads`
+and `thread attach` put an observer on a harness's own thread, so the
+ledger sees what the harness saw.
+
+### See the whole harbor
+
+<p align="center">
+  <img src="docs/demo/harbor-chart-map.gif" alt="Multi-bus harbor chart, live: two declared roots, their architect seats, the nodes under each, and the downstream edge between them" width="1400">
+</p>
+
+Running more than one fleet on this machine? Declare your roots
+(floati never scans your disk) and `floati chart` draws the harbor:
+buses, nodes, architect seats, what is downstream, last activity.
+`floati survey` goes further. It reports agent buses on this
+filesystem that floati did *not* install, including whether a foreign
+waiter is bound to one of your workspaces. Read-only, on your
+request. `floati watch` streams the board's deltas as text, and
+`floati supervise` holds a run open and reports as it goes.
+
+### Know which node went deaf, and which step died
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-dead-receiver-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-dead-receiver-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-dead-receiver-light-source.png" alt="Doctor report with the loopback probe: two nodes OK, one RED with a 16-minute-old undelivered envelope and a DEAF probe result; state DEGRADED" width="1320">
+  </picture>
+</p>
+
+"The node went quiet" is not a diagnosis. The doctor states per-node
+undelivered counts, oldest-message age and last drain even when
+everything is green. `doctor --probe` sends a self-addressed envelope
+through each node's own delivery path and reports PASS or DEAF per
+node, without touching anyone else's mail. Two things to know before
+you read a DEAF: the probe's budget is per node, sixty seconds by
+default, so set `--probe-budget` low on a big fleet; and a node with
+no waiter armed is DEAF by definition. The probe reports the fact; it
+does not know whether you meant it.
+
+Each role template declares the acknowledgment SLA the doctor reads
+it against. The shipped templates say 45 minutes, and that number is
+the measured p90 of 601 acknowledgments on a live fleet ledger,
+rounded up to the quarter hour, not a guess.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-lease-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-lease-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-lease-light-source.png" alt="Presence before and after a lease expires: a recent report with its TTL, then no report since the named time; authority expired, work still recorded" width="1320">
+  </picture>
+</p>
+
+Liveness is a separate question from mail. A node reports about
+itself, and only itself, with `floati presence report`; `presence
+show` prints the last report, its TTL and its expiry. Expiry means
+*no report since*, never *down*.
+
+### Onboard and tear down nodes
+
+<p align="center">
+  <img src="docs/evidence/captures/readme-b-20260904/onboard-wizard-dark.gif" alt="Node onboarding: the records preview shown before write, then the commit receipt" width="1400">
+</p>
+
+`floati node add` walks you through a new node: identity, harness,
+permanent or temporary. Temporary nodes boot with one command and
+tear down with one. Switching a node between providers or models is
+a recorded reassignment, not a re-onboarding. Every wizard step
+prints the exact records it will write before writing them; the
+wizard fronts the same verbs you could type, never a second path.
+Before a governed seat is declared, floati checks that the seat can
+actually be reached (its bus cursors, receipts and git paths are
+writable) and refuses, typed, if it would be deaf on arrival. Nodes
+keep their working folders nested under the fleet root, so ten agents
+do not mean ten directories across your home.
+
+### Give every node a role
+
+A fleet is not just processes. It is an architect, reviewers,
+builders, scouts, each needing the right boot instructions and a
+clean hand-off when a session ends. Floati generates and explains
+boot and wind-down commands per node from its role (`floati node
+explain`), runs them where the harness allows, and keeps them current
+as the fleet changes, so standing up your whole fleet stops being an
+act of memory.
+
+### Treat context like the resource it is
+
+Agent sessions degrade as their context fills, and every harness
+handles it differently. Floati tracks what each harness actually
+exposes (`floati context policy`, `context reading record`), hands a
+node a turnover ritual before it drowns (wind down, port the working
+state, boot the successor), and never invents a pressure number it
+cannot measure. Provider usage comes from the harness's own logs, on
+request: `floati quota collect`, then `quota show`.
+
+### Take work in from GitHub
+
+`floati intake scan` reads a repository's issues into candidate work,
+`intake show` and `intake adopt` turn one into a work item with the
+issue as its provenance, and `intake dispatch` hands it to a node.
+`intake adopt --source github` reads one issue through the explicit
+`gh` executable you name. That is a network call which may receive
+only ambient `GH_TOKEN` or `GITHUB_TOKEN`; see the network section
+below.
+
+### Replay any run
+
+<p align="center">
+  <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay: a worker killed, the sequencer killed, a reboot, every event reconstructed from receipts in order" width="1400">
+</p>
+
+A worker killed, a sequencer killed, a reboot, and every event
+reconstructed from receipts, in order, on demand. Nothing in that
+recording is animated by the demo; it is played back from the fleet's
+own records. The flight recorder replays any finished run the same
+way: claims, worker turns, degradations, denials, completions.
+Playback speed changes the waiting, never the order.
+
+### Bring your agent, or be the human
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-help-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-help-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-help-light-source.png" alt="floati --help: every verb of the CLI, each self-describing, each with typed refusals" width="1320">
+  </picture>
+</p>
+
+Humans and agents are both first-class operators here. Point your
+agent at this repo: `AGENTS.md` is its manual, every verb
+self-describes in JSON (`floati describe --json`), every refusal
+carries a typed code and a detail, and every action leaves a receipt
+your agent can verify. It never has to guess whether its own message
+arrived. `floati mcp serve` exposes the same verbs to an MCP client
+as tools, with the node identity pinned at launch so the client
+cannot speak as anyone else. The keyboard-first flows and the
+declarative `--json` flows are the same engine, so your fleet reads
+identically whether you run it or your agent does.
+
+## Start alone
+
+Every durable command names an explicit absolute root. There is no
+default root, no home scan, and nothing that wakes without you.
+Point it somewhere; that directory is the entire blast radius.
+
+```bash
+floati init --root /absolute/my-sessions --solo me --harness Codex
+floati work add --root /absolute/my-sessions --title "Record this session"
+floati board --root /absolute/my-sessions
+```
+
+## Grow the fleet
+
+```bash
+floati node add --root /absolute/fleet --node builder-a --harness Codex --lifetime permanent
+floati orchestrate --root /absolute/fleet --plan /absolute/plan.json --adapter codex --deadline 120
+floati log --root /absolute/fleet --replay --speed 4
+```
+
+The installed child harness owns its own provider traffic and
+credentials. A fleet is not the ceiling: one machine can run several,
+with different harness mixes, an architect seat in each, peer
+architects exchanging artifacts but never authority, and no path
+between fleets unless you build one:
+
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-multifleet-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-multifleet-light.svg">
+    <img src="docs/assets/floati-multifleet-light.svg" alt="Two floati fleets and a solo seat on one machine: each fleet is a star of harnesses around its own append-only root with an architect seat; the architects exchange artifacts as peers; the fleets share nothing by default" width="1440">
+</picture>
+
+Every element in that picture is a shipping mechanism: roots,
+ledgers, leases, star governance.
+
 ## What it runs with
 
 Floati is worth installing for a single harness: a durable work log,
-receipts, and a board for your own sessions. Cross-harness fleets are
+receipts and a board for your own sessions. Cross-harness fleets are
 the point, not the entry fee.
 
 <!-- capability-matrix:begin — GENERATED from docs/capability-matrix.v0.json by
@@ -338,10 +388,7 @@ Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-0
 <!-- capability-matrix:end -->
 
 Platforms: macOS today. Anything POSIX is intended; a platform joins
-this list the same way a harness does — with receipts. The public
-test suite does not yet pass on GitHub's own Linux and macOS runners
-at this tip; every failure is classified and the fixes are open
-issues, and this sentence leaves when the run is green.
+this list the same way a harness does, with receipts.
 
 <p align="center">
   <picture>
@@ -352,17 +399,16 @@ issues, and this sentence leaves when the run is green.
 </p>
 
 One picture: harnesses at the edge, one append-only ledger in the
-middle, projections derived from it — never a second source of
-truth.
+middle, projections derived from it, never a second source of truth.
 
 ## Why it doesn't fall over
 
 Every harness already writes a session log. Those are per-harness,
-mutable, uncorrelated, and they can't answer a fleet question.
+mutable, uncorrelated, and they cannot answer a fleet question.
 
 Under floati, everything above runs on one append-only, typed ledger.
-The board, the chart, the doctor, the replay are all projections of
-it, and if a projection ever disagrees with the receipts, the
+The board, the chart, the doctor and the replay are all projections
+of it, and if a projection ever disagrees with the receipts, the
 receipts win. `journal verify` checks the ledger's own chain;
 `floati verify` reproduces a delivery claim in a fresh worktree at the
 claimed commit; `journal checkpoint`, `snapshot` and `epoch roll` are
@@ -370,47 +416,67 @@ the recorded ways to move the ledger; `repair quarantine` and `purge`
 are the recorded ways to remove from it, and nothing is deleted in
 place.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-failure-injection-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-failure-injection-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-failure-injection-light-source.png" alt="Failure injection: a worker process killed and an authority change injected mid-run; the typed replay evidence preserved, in order" width="1320">
+  </picture>
+</p>
+
 Kill a worker, kill the sequencer, reboot the machine: nothing is
-lost and nothing lies. The ledger survives every fault, the whole
-run replays on demand, and floati refuses to continue past what it
-cannot prove, telling you exactly why in a typed exit code.
-Ambiguous identity, expired authority, malformed envelopes — same
-answer: refusal with a reason, never a guess. Today a refusal names
-its code and its detail; the `remedy` field exists and is mostly
-empty, and filling it is open work ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
+lost and nothing lies. The ledger survives every fault, the whole run
+replays on demand, and floati refuses to continue past what it cannot
+prove, telling you why in a typed exit code.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-identity-dark-source.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-identity-light-source.png">
+    <img src="docs/demo/site-v3-readme/floati-identity-light-source.png" alt="Identity and authority: a grant from the architect to a builder for one subject and one epoch, with its expiry; detached signatures verify exact artifact bytes" width="1320">
+  </picture>
+</p>
+
+Ambiguous identity, expired authority, malformed envelopes: same
+answer, refusal with a reason, never a guess. Authority is a grant
+with a holder, a subject, an epoch and an expiry, and a detached
+signature verifies exact artifact bytes. Today a refusal names its
+code and its detail; the `remedy` field exists and is mostly empty,
+and filling it is open work ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
 One convention to know: a refused or degraded run prints its artifact
 on stderr, not stdout ([#22](https://github.com/Land-o-Clusters/floati/issues/22)).
 
-No telemetry, ever. Floati's own sockets are local pipes between its own
-processes, and nothing in the product can listen — a test refuses any `bind`
-or `listen` outside a local pipe. The outbound paths are counted, and there
-are exactly four: two client-only loopback dials, for the herdr and t3
-adapters; one HTTPS fetch for updates; and `intake adopt --source github`,
-which runs the explicit `gh` executable to read one issue. That subprocess
-may receive only a non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; Floati
-hides `gh`'s stored login configuration. The first three run only behind an
-explicit consent receipt. The fourth requires the explicit command but does
-not yet have a consent receipt of its own, and that is open
+No telemetry, ever. Floati's own sockets are local pipes between its
+own processes, and nothing in the product can listen; a test refuses
+any `bind` or `listen` outside a local pipe. The outbound paths are
+counted, and there are exactly four: two client-only loopback dials,
+for the herdr and t3 adapters; one HTTPS fetch for updates; and
+`intake adopt --source github`, which runs the explicit `gh`
+executable to read one issue. That subprocess may receive only a
+non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; floati hides `gh`'s
+stored login configuration. The first three run only behind an
+explicit consent receipt. The fourth requires the explicit command but
+does not yet have a consent receipt of its own, and that is open
 ([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
 
-The full promise — and precisely what floati refuses to guess — is
+The full promise, and precisely what floati refuses to guess, is
 written down: **[Truth Guarantees](docs/TRUTH-GUARANTEES.md)**. If a
-promise on that page can't be demonstrated by a test or a receipt,
-it doesn't belong on it.
+promise on that page cannot be demonstrated by a test or a receipt,
+it does not belong on it.
 
 ## What it costs to run
 
 Almost nothing is resident. A send, a drain, a doctor run, a status
 read are processes that live for one command. Three things stay up
 while you use them, each on your say-so: the wake daemon you consent
-to per seat, with poll bounds you set at consent time — revoking it
-removes the process, provably; `sequencer serve`, which holds a run's
-local pipe open while a run is in flight; and `mcp serve`, which
-lives exactly as long as the agent client attached to it. The board
-and `watch` are interactive and exit when you do.
+to per seat, with poll bounds you set at consent time (revoking it
+removes the process, provably); `sequencer serve`, which holds a run's
+local pipe open while a run is in flight; and `mcp serve`, which lives
+exactly as long as the agent client attached to it. The board and
+`watch` are interactive and exit when you do.
 
-The readers stay fast at hostile scale — measured, not promised.
-At 10,000 work items and 100,000 ledger events:
+The readers stay fast at scale, measured rather than promised. At
+10,000 work items and 100,000 ledger events:
 
 | Reader | Median | Budget |
 | --- | ---: | ---: |
@@ -429,35 +495,34 @@ plain report; `doctor --probe` waits its per-node budget on top.
 
 One number we have not measured yet, so we will not print one: the
 wake daemon's resident footprint over a long window. It is a small
-polling process with ruled bounds, but "small" is not a
-measurement — that receipt is queued, and this section gets the
-number when the number exists.
+polling process with ruled bounds, but "small" is not a measurement.
+That receipt is queued, and this section gets the number when the
+number exists.
 
 ## Leave cleanly
 
 Every door in floati has an exit beside it, at equal polish: pause
-the wake, retire the node, drain the run, uninstall the tool —
-each one obvious, each one receipted, none of them touching your
-records. A product that's sure of its worth doesn't make leaving
-hard.
+the wake, retire the node, drain the run, uninstall the tool. Each
+one is obvious, each one is receipted, and none of them touches your
+records.
 
 ```bash
 floati uninstall --destination /absolute/install --dry-run
 ```
 
 Manifest-exact removal with receipts. Files floati did not install
-are never touched, and your ledgers are never part of an uninstall —
-the record outlives the tool, which is rather the point of a record.
+are never touched, and your ledgers are never part of an uninstall.
+The record outlives the tool.
 
 ## Compose with it
 
 `floati status --root /absolute/fleet --json` is the stable
 version-zero machine contract; `floati graph --json` is its topology
 twin. `docs/CONFLUENCE-v0.md` and its JSON Schemas define the
-read-only seam for downstream consumers — a GUI, a dashboard, or
-anything that wants to draw your harbor in glass instead of ASCII.
-`floati confluence adopt` and `confluence release` are the recorded
-way a consumer takes and gives back that seam.
+read-only seam for downstream consumers: a GUI, a dashboard, anything
+that wants to draw your harbor. `floati confluence adopt` and
+`confluence release` are the recorded way a consumer takes and gives
+back that seam.
 
 ## Verify
 
@@ -467,17 +532,22 @@ python3 -m floati.selftest
 python3 -m floati.conformance --live-root-smoke
 ```
 
-Visible CLI language is generated into `docs/COPY-LEDGER.md`. Hosted
-CI, deployment, and release are separate gates; a local green suite
-doesn't manufacture them.
+Visible CLI language is generated into `docs/COPY-LEDGER.md`. The
+capture scripts that made the images above refuse to run on a dirty
+tree, refuse a silent font substitution, and redact every host path
+at exposure; a capture that cannot be reproduced byte for byte is not
+banked. Hosted CI, deployment and release are separate gates; a local
+green suite does not manufacture them.
 
 ## What we know is wrong
 
 Every open defect we know about is an issue on this repository, filed
 by us, with the measurement that found it. The ones a new user meets
-first are linked above. A README that says a product is finished is
-lying about a product this young; this one says what it does, what
-it costs, and what is still open.
+first are linked above. What the product does not do yet, in the order
+we intend to build it, is the [roadmap](docs/ROADMAP.md); it is a
+sequence, not a promise, and an item leaves it only with a receipt. A README that says a product is finished is
+lying about a product this young; this one says what it does, what it
+costs, and what is still open.
 
 Product code is AGPL-3.0; the interchange schemas and bundle
 specifications are Apache-2.0.
