@@ -20,6 +20,7 @@ from floati.seat_declaration import FleetGovernance, WorkspaceBinding
 
 
 NOW = "2026-08-29T14:00:00.000Z"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 AUTHORITIES = (
     "dispatch_bounded_work",
     "gate_results_before_merge",
@@ -34,6 +35,8 @@ class WorkspaceSeatFaultTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = FloatiRoot.open_direct_home(self.base / "governed", create=True)
+        for relative in ("cursors", "receipts/deliveries"):
+            self.root.resolve_relative(relative).mkdir(parents=True, exist_ok=True)
         self.governance = FleetGovernance.create(
             self.root,
             topology="star",
@@ -41,7 +44,9 @@ class WorkspaceSeatFaultTests(unittest.TestCase):
             coordinator_authority=AUTHORITIES,
             owner_tier=OWNER_TIERS,
         )
-        self.backend = RegistryAdminBackend(self.root)
+        self.backend = RegistryAdminBackend(
+            self.root, repository=REPOSITORY_ROOT
+        )
 
     def plan(self, node: str = public_ids.builder("a")) -> NodeAddPlan:
         workspace = self.root.path / "nodes" / node
@@ -66,6 +71,122 @@ class WorkspaceSeatFaultTests(unittest.TestCase):
             None,
             self.governance,
         )
+
+    @staticmethod
+    def probe_fact(
+        coordinate: str,
+        path: Path | None,
+        verdict: str,
+        reason_code: str,
+    ) -> dict:
+        return {
+            "schema_version": 0,
+            "coordinate": coordinate,
+            "path": None if path is None else str(path),
+            "verdict": verdict,
+            "reason_code": reason_code,
+            "errno_name": None,
+            "observed_at": NOW,
+            "residue_path": None,
+        }
+
+    def test_deaf_declaration_aggregates_every_problem_before_marker_or_lease(self) -> None:
+        """C-2: one refusal names the full write set before the seat becomes live."""
+        plan = replace(self.plan(), lifetime="temporary", lease_minutes=60)
+        cursor_path = self.root.path / "cursors"
+        git_path = REPOSITORY_ROOT / ".git"
+        facts = (
+            self.probe_fact(
+                "bus_cursors", cursor_path, "refused", "permission_denied"
+            ),
+            self.probe_fact(
+                "bus_receipts",
+                self.root.path / "receipts" / "deliveries",
+                "writable",
+                "probe_succeeded",
+            ),
+            self.probe_fact(
+                "bus_ledger", self.root.path, "writable", "probe_succeeded"
+            ),
+            self.probe_fact(
+                "git_common_dir", git_path, "unknown", "probe_errno_unmapped"
+            ),
+            self.probe_fact(
+                "git_worktree_admin_dir",
+                git_path,
+                "writable",
+                "probe_succeeded",
+            ),
+        )
+
+        with mock.patch(
+            "floati.admin_registry.probe_write_set", return_value=facts
+        ) as probe, mock.patch.object(
+            self.backend, "_commit"
+        ) as commit:
+            with self.assertRaises(ProtocolRefusal) as raised:
+                self.backend.commit_add(plan)
+
+        self.assertEqual("seat_declaration_deaf", raised.exception.code)
+        self.assertIn(
+            f"bus_cursors path={cursor_path} reason=permission_denied",
+            raised.exception.detail,
+        )
+        self.assertIn(
+            f"git_common_dir path={git_path} reason=probe_errno_unmapped",
+            raised.exception.detail,
+        )
+        self.assertNotIn("bus_receipts", raised.exception.detail)
+        self.assertIn(str(cursor_path), raised.exception.remedy)
+        self.assertIn(str(git_path), raised.exception.remedy)
+        self.assertIn(".codex/config.toml", raised.exception.remedy)
+        probe.assert_called_once_with(
+            self.root,
+            plan.node_id,
+            repository=REPOSITORY_ROOT,
+        )
+        commit.assert_not_called()
+        self.assertFalse((Path(plan.workspace) / "SEAT.json").exists())
+        self.assertEqual((), Registry(self.root).active_node_ids())
+
+    def test_deaf_declaration_unknown_path_is_typed_and_uses_harness_remedy(self) -> None:
+        """C-2: an underivable coordinate is not silently treated as writable."""
+        plan = replace(self.plan(), harness="Cursor")
+        facts = tuple(
+            self.probe_fact(
+                coordinate,
+                None if coordinate == "git_common_dir" else self.root.path,
+                "unknown" if coordinate == "git_common_dir" else "writable",
+                "coordinate_underivable"
+                if coordinate == "git_common_dir"
+                else "probe_succeeded",
+            )
+            for coordinate in (
+                "bus_cursors",
+                "bus_receipts",
+                "bus_ledger",
+                "git_common_dir",
+                "git_worktree_admin_dir",
+            )
+        )
+
+        with mock.patch(
+            "floati.admin_registry.probe_write_set", return_value=facts
+        ):
+            with self.assertRaises(ProtocolRefusal) as raised:
+                self.backend.commit_add(plan)
+
+        self.assertEqual("seat_declaration_deaf", raised.exception.code)
+        self.assertIn(
+            "git_common_dir path=null reason=coordinate_underivable",
+            raised.exception.detail,
+        )
+        self.assertEqual(
+            "no verified remedy is recorded for this harness",
+            raised.exception.remedy,
+        )
+        self.assertFalse((Path(plan.workspace) / "SEAT.json").exists())
+        self.assertEqual((), Registry(self.root).active_node_ids())
 
     def test_parent_fsync_failure_after_visible_registry_frame_retains_seat(self) -> None:
         """Catches rollback deleting a seat whose registry append is already visible."""

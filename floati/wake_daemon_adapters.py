@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -38,7 +39,7 @@ _ADAPTER_CONTRACTS = {
     "codex": "floati:wake-daemon:codex:v1:queue --thread SESSION --message REASON",
     "cursor": "floati:wake-daemon:cursor:v1:--print --output-format json --single-turn --resume SESSION REASON",
     "grok-build": "floati:wake-daemon:grok-build:v1:-p REASON --output-format json --resume SESSION",
-    "zcode": "floati:wake-daemon:zcode:v1:node ENTRY --json --no-color --resume SESSION --prompt REASON",
+    "zcode": "floati:wake-daemon:zcode:v1:node ENTRY --json --no-color --resume SESSION --prompt ENVELOPES; deadline bounds hand-off",
 }
 # WD-R5a (Am.1 5fc3f7d): every adapter DECLARES its resume-probe class. Each
 # declared wake shape above consumes a turn, so all three declare
@@ -58,6 +59,10 @@ PROBE_REASON = (
     "[floati] bind-time resume probe: reply briefly to prove this session can wake"
 )
 PROBE_DEADLINE_SECONDS = 300
+ZCODE_NO_MAIL_REASON = (
+    "[floati] no new mail; resume and report that the inbox was empty"
+)
+ZCODE_ACT_INSTRUCTION = "Act on each envelope and report; do not idle."
 
 
 def _codex_executable_absent() -> ProtocolRefusal:
@@ -274,6 +279,34 @@ def _deadline(value: object) -> int:
     return value
 
 
+def zcode_wake_prompt(envelopes: object) -> str:
+    """Build the zcode resume prompt from drained envelopes, or a typed no-mail reason."""
+
+    if not isinstance(envelopes, (list, tuple)):
+        raise ProtocolRefusal(
+            "wake_daemon_reason_invalid", "wake reason is empty, oversized, or unsafe"
+        )
+    if len(envelopes) == 0:
+        return _reason(ZCODE_NO_MAIL_REASON)
+    parts = []
+    for row in envelopes:
+        if not isinstance(row, Mapping):
+            raise ProtocolRefusal(
+                "wake_daemon_reason_invalid", "wake reason is empty, oversized, or unsafe"
+            )
+        item_id = row.get("id")
+        note = row.get("note")
+        if not isinstance(item_id, str) or not item_id or not isinstance(note, str):
+            raise ProtocolRefusal(
+                "wake_daemon_reason_invalid", "wake reason is empty, oversized, or unsafe"
+            )
+        parts.append("{0}: {1}".format(item_id, note) if note else item_id)
+    prompt = "[floati] {0} new message(s). {1}. {2}".format(
+        len(envelopes), "; ".join(parts), ZCODE_ACT_INSTRUCTION
+    )
+    return _reason(prompt)
+
+
 class _BoundWakeAdapter:
     harness = ""
 
@@ -401,7 +434,11 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
     harness = "codex"
 
     def request_wake(
-        self, binding: object, reason: str, deadline_seconds: int
+        self,
+        binding: object,
+        reason: str,
+        deadline_seconds: int,
+        envelopes: object = None,
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         try:
@@ -454,7 +491,11 @@ class CursorResumeWakeAdapter(_BoundWakeAdapter):
         )
 
     def request_wake(
-        self, binding: object, reason: str, deadline_seconds: int
+        self,
+        binding: object,
+        reason: str,
+        deadline_seconds: int,
+        envelopes: object = None,
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         wake_reason = _reason(reason)
@@ -510,7 +551,11 @@ class GrokBuildResumeWakeAdapter(_BoundWakeAdapter):
         )
 
     def request_wake(
-        self, binding: object, reason: str, deadline_seconds: int
+        self,
+        binding: object,
+        reason: str,
+        deadline_seconds: int,
+        envelopes: object = None,
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         wake_reason = _reason(reason)
@@ -549,7 +594,10 @@ class GrokBuildResumeWakeAdapter(_BoundWakeAdapter):
 class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
     """Wake zcode by resuming the bound session headless.
 
-    Argv is the measured K4 shape: `--json --no-color --resume SESSION --prompt REASON`.
+    Argv is the measured K4 shape: `--json --no-color --resume SESSION --prompt ENVELOPES`.
+    The prompt carries drained envelope ids and notes, or a typed no-mail reason.
+    `request_wake` returns once the resumed turn has started; the deadline
+    bounds that hand-off only.
     Success requires the artifact `sessionId` to name the bound session and a
     non-empty `response`. Empty / invalid / mismatched output emit the three
     zcode reason codes the ledger must record as themselves.
@@ -602,7 +650,11 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
         )
 
     def request_wake(
-        self, binding: object, reason: str, deadline_seconds: int
+        self,
+        binding: object,
+        reason: str,
+        deadline_seconds: int,
+        envelopes: object = None,
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
         entry = _zcode_entry_executable(self._entry_executable)
@@ -611,7 +663,9 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
                 "wake_daemon_zcode_entry_mismatch",
                 "the binding does not name the pinned zcode entry script",
             )
-        wake_reason = _reason(reason)
+        wake_reason = (
+            zcode_wake_prompt(envelopes) if envelopes is not None else _reason(reason)
+        )
         deadline = _deadline(deadline_seconds)
         argv = self.resume_argv(
             current.executable,
@@ -619,7 +673,69 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
             wake_reason,
             node_executable=self._node_executable,
         )
+        if self._runner is _default_runner:
+            return self._run_handoff(argv, current.workspace, deadline)
         return self._run(argv, current.workspace, deadline, current.session_id)
+
+    def _handoff_close_end(self) -> int:
+        try:
+            close_end = int(os.sysconf("SC_OPEN_MAX"))
+        except (OSError, TypeError, ValueError):
+            close_end = 1024
+        if close_end < 4:
+            close_end = 1024
+        return min(close_end, 65536)
+
+    def _run_handoff(
+        self, argv: tuple[str, ...], workspace: Path, deadline: int
+    ) -> WakeAdapterResult:
+        """Return once the resumed turn has started; init owns the child."""
+
+        try:
+            intermediate = os.fork()
+        except OSError:
+            return WakeAdapterResult(
+                "unknown", "wake_daemon_adapter_unavailable", None, None
+            )
+        if intermediate == 0:
+            try:
+                os.chdir(workspace)
+                os.setsid()
+                grandchild = os.fork()
+            except OSError:
+                os._exit(127)
+            if grandchild > 0:
+                os._exit(0)
+            try:
+                devnull = os.open(os.devnull, os.O_RDWR)
+                os.dup2(devnull, 0)
+                os.dup2(devnull, 1)
+                os.dup2(devnull, 2)
+                if devnull > 2:
+                    os.close(devnull)
+                os.closerange(3, self._handoff_close_end())
+                os.execv(argv[0], list(argv))
+            except OSError:
+                os._exit(127)
+        deadline_at = time.monotonic() + deadline
+        status = 0
+        while time.monotonic() < deadline_at:
+            waited, status = os.waitpid(intermediate, os.WNOHANG)
+            if waited == intermediate:
+                break
+            time.sleep(0.01)
+        else:
+            return WakeAdapterResult("woke", None, None, None)
+        if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+            return WakeAdapterResult(
+                "refused",
+                "wake_daemon_adapter_nonzero",
+                os.WEXITSTATUS(status),
+                None,
+            )
+        return WakeAdapterResult(
+            "woke", None, 0 if os.WIFEXITED(status) else None, None
+        )
 
     def probe_resume(
         self,

@@ -44,7 +44,7 @@ _BASE64_IMAGE_PREFIX_CHARS = 64
 _BASE64_WHITESPACE = re.compile(r"[\t\n\r\f\v ]+")
 _BASE64_ALPHABET = re.compile(r"\A[A-Za-z0-9+/]*={0,2}\Z")
 _DATA_BASE64_PREFIX = re.compile(
-    r"\Adata:[^,;\s]+/[^,;\s]+;base64,",
+    r"\Adata:(?:[^,;\s]+/[^,;\s]+)?;base64,",
     re.IGNORECASE,
 )
 _RASTER_PREFIXES = (

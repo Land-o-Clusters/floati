@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect x="492" y="238" width="40" height="92" fill="#55636F"/>
-  <circle cx="512" cy="186" r="68" fill="#F5C518"/>
-  <polygon points="409,330 615,330 632,430 392,430" fill="#F1EFE8"/>
-  <polygon points="387,430 637,430 644,480 380,480" fill="#55636F"/>
-  <polygon points="347,480 677,480 704,810 320,810" fill="#E8622C"/>
-  <polygon points="344,545 680,545 686,610 338,610" fill="#F1EFE8"/>
-  <path d="M 120 762 Q 316 726 512 762 Q 708 798 904 762" stroke="#3E6B8C" stroke-width="46" fill="none" stroke-linecap="round"/>
-  <path d="M 218 852 Q 365 822 512 852 Q 659 882 806 852" stroke="#2F5470" stroke-width="34" fill="none" stroke-linecap="round"/>
+  <g transform="rotate(-6 512 660)">
+    <circle cx="512" cy="172" r="62" fill="#F5C518"/>
+    <rect x="486" y="224" width="52" height="28" rx="12" fill="#55636F"/>
+    <rect x="494" y="248" width="36" height="104" fill="#55636F"/>
+    <rect x="424" y="348" width="176" height="98" rx="20" fill="#F1EFE8"/>
+    <rect x="362" y="444" width="300" height="48" fill="#55636F"/>
+    <path d="M372 492 L652 492 L662 706 Q662 784 512 796 Q362 784 362 706 Z" fill="#E8622C"/>
+    <path d="M369 564 L655 564 L658 628 L366 628 Z" fill="#F1EFE8"/>
+  </g>
+  <path d="M0 660 Q128 612 256 660 T512 660 T768 660 T1024 660 V880 H0 Z" fill="#3E6B8C"/>
+  <path d="M0 762 Q128 730 256 762 T512 762 T768 762 T1024 762 V880 H0 Z" fill="#2F5470"/>
 </svg>

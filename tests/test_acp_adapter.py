@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from floati.errors import ProtocolRefusal
+from tests.temp_roots import REAL_TEMP_ROOT
 
 try:
     from floati.adapters.acp import ACPAdapter, ACPRefusal, MAXIMUM_ACP_LINE_BYTES, probe_reference_harness
@@ -53,10 +60,52 @@ class ACPAdapterTests(unittest.TestCase):
 
     def test_reference_probe_reports_honest_absence_without_launching(self) -> None:
         self.assertIsNotNone(probe_reference_harness, "ACP harness probe must exist")
-        result = probe_reference_harness(which=lambda name: None)
+        result = probe_reference_harness()
         self.assertEqual(
             {"status": "reference_harness_absent", "executable": None, "command": None},
             result,
+        )
+
+    def test_undeclared_probe_ignores_a_path_decoy(self) -> None:
+        decoy_dir = Path(tempfile.mkdtemp(prefix="acp-which-", dir=REAL_TEMP_ROOT))
+        self.addCleanup(lambda: shutil.rmtree(decoy_dir, ignore_errors=True))
+        decoy = decoy_dir / "claude-code-acp"
+        decoy.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        decoy.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": str(decoy_dir)}):
+            result = probe_reference_harness()
+        self.assertEqual(
+            {"status": "reference_harness_absent", "executable": None, "command": None},
+            result,
+        )
+
+    def test_declared_probe_uses_the_house_explicit_executable_fence(self) -> None:
+        directory = Path(
+            tempfile.mkdtemp(prefix="acp-declared-", dir=REAL_TEMP_ROOT)
+        ).resolve(strict=True)
+        self.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
+        tool = directory / "claude-code-acp"
+        tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+        link = directory / "claude-code-acp-link"
+        link.symlink_to(tool)
+
+        result = probe_reference_harness(executable=tool)
+        self.assertEqual("reference_harness_present_unlaunched", result["status"])
+        self.assertEqual(str(tool), result["executable"])
+        self.assertEqual(["claude-code-acp"], result["command"])
+
+        with self.assertRaises(ProtocolRefusal) as symlink:
+            probe_reference_harness(executable=link)
+        self.assertEqual("acp_reference_executable_invalid", symlink.exception.code)
+
+        other = directory / "installer"
+        other.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        other.chmod(0o755)
+        with self.assertRaises(ProtocolRefusal) as unrecognized:
+            probe_reference_harness(executable=other)
+        self.assertEqual(
+            "acp_reference_executable_unrecognized", unrecognized.exception.code
         )
 
 

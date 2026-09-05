@@ -13,6 +13,7 @@ from . import __version__
 from . import cli
 from .command_contract import project_mcp_surface
 from .errors import ProtocolRefusal
+from .mcp_pin import validate_mcp_observation
 from .registry import Registry
 from .root import FloatiRoot, validate_identifier
 from .wake_control import validate_session_id
@@ -186,10 +187,17 @@ def _append_action(argv: List[str], action: argparse.Action, value: object) -> N
 class McpServer:
     """One launch-bound node/session projected as generated MCP tools."""
 
-    def __init__(self, root: str, node: str, session: str) -> None:
+    def __init__(
+        self,
+        root: str,
+        node: str,
+        session: str,
+        server_command: Optional[List[str]] = None,
+    ) -> None:
         self.root = FloatiRoot.open_direct_home(root, create=False)
         self.node = validate_identifier(node, "node")
         self.session = validate_session_id(session)
+        self._server_command = server_command
         self.parser = cli._parser()
         surface = project_mcp_surface(self.parser)
         self._catalog = {
@@ -209,6 +217,41 @@ class McpServer:
             if self._metadata(tool)["exposure"] == "read" or active
         ]
         return json.loads(json.dumps(selected, ensure_ascii=False))
+
+    def integration_observation(self) -> Dict[str, object]:
+        """The closed pin observation of this served surface (WIRE-3).
+
+        Built only from what the serve path knows about itself - the launch
+        argv, the stdio transport, the declared capability and the served
+        catalog - and validated by the R1 pure module, so a surface that
+        cannot be pinned never serves. Digest acquisition stays with the
+        observer; the nullable digests are typed absences here.
+        """
+
+        tools = [
+            {
+                "name": str(tool["name"]),
+                "schema": tool["inputSchema"],
+                "description": tool["description"],
+            }
+            for tool in sorted(
+                self._catalog.values(), key=lambda tool: str(tool["name"])
+            )
+        ]
+        return validate_mcp_observation({
+            "integration_id": self.node,
+            "server_command": (
+                list(self._server_command)
+                if self._server_command is not None
+                else [sys.argv[0], *sys.argv[1:]]
+            ),
+            "server_executable_digest": None,
+            "server_config_digest": None,
+            "transport": "stdio",
+            "declared_capabilities": ["tools"],
+            "network_posture": "none",
+            "tools": tools,
+        })
 
     def _node_is_active(self) -> bool:
         try:
@@ -361,6 +404,7 @@ class _StdioSession:
                 "protocolVersion": selected,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "floati", "version": __version__},
+                "floatiIntegrationPin": self.server.integration_observation(),
             },
         )
 
@@ -445,7 +489,14 @@ def serve_stdio(server: McpServer, stdin: TextIO, stdout: TextIO) -> int:
     return 0
 
 
-def serve_bound_stdio(root: str, node: str, session: str) -> int:
+def serve_bound_stdio(
+    root: str,
+    node: str,
+    session: str,
+    server_command: Optional[List[str]] = None,
+) -> int:
     """Launch the production stdin/stdout pair for one exact identity."""
 
-    return serve_stdio(McpServer(root, node, session), sys.stdin, sys.stdout)
+    return serve_stdio(
+        McpServer(root, node, session, server_command), sys.stdin, sys.stdout
+    )

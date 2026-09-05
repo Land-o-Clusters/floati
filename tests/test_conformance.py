@@ -4,6 +4,7 @@ import contextlib
 import inspect
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from floati import conformance
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 class ConformanceRunnerTests(unittest.TestCase):
@@ -311,9 +313,67 @@ class ACPFixtureConformanceTests(unittest.TestCase):
         artifact = json.loads(result.stdout)
         self.assertEqual("conformant", artifact["status"])
         self.assertEqual(4, artifact["cases"])
-        self.assertIn(
-            artifact["harness_status"],
-            {"reference_harness_absent", "reference_harness_present_unlaunched"},
+        self.assertEqual("reference_harness_absent", artifact["harness_status"])
+
+    def test_acp_fixture_mode_reports_a_declared_reference_harness(self) -> None:
+        directory = Path(
+            tempfile.mkdtemp(prefix="acp-conformance-", dir=REAL_TEMP_ROOT)
+        ).resolve(strict=True)
+        self.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
+        tool = directory / "claude-code-acp"
+        tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+
+        result = subprocess.run(
+            (
+                sys.executable,
+                "-m",
+                "floati.conformance",
+                "--acp-fixture",
+                "--acp-executable",
+                str(tool),
+            ),
+            cwd=Path.cwd(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        artifact = json.loads(result.stdout)
+        self.assertEqual("conformant", artifact["status"])
+        self.assertEqual("reference_harness_present_unlaunched", artifact["harness_status"])
+
+    def test_acp_fixture_mode_refuses_an_invalid_declared_executable(self) -> None:
+        directory = Path(
+            tempfile.mkdtemp(prefix="acp-conformance-bad-", dir=REAL_TEMP_ROOT)
+        ).resolve(strict=True)
+        self.addCleanup(lambda: shutil.rmtree(directory, ignore_errors=True))
+        tool = directory / "claude-code-acp"
+        tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+        link = directory / "claude-code-acp-link"
+        link.symlink_to(tool)
+
+        result = subprocess.run(
+            (
+                sys.executable,
+                "-m",
+                "floati.conformance",
+                "--acp-fixture",
+                "--acp-executable",
+                str(link),
+            ),
+            cwd=Path.cwd(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(20, result.returncode)
+        self.assertEqual("configuration_refused", json.loads(result.stderr)["status"])
+        self.assertEqual(
+            "acp_reference_executable_invalid", json.loads(result.stderr)["detail"]
         )
 
     def test_acp_fixture_mode_refuses_unrelated_configuration(self) -> None:

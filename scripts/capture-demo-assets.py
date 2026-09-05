@@ -71,10 +71,11 @@ def _operator_account_name() -> str:
     return os.environ.get("USER") or os.environ.get("LOGNAME") or Path.home().name
 
 
+OPERATOR_ACCOUNT_TOKEN = _operator_account_name()
 UNSAFE_TEXT = (
     "\x2fUsers/",
     *GOVERNED_TEMP_PREFIXES,
-    _operator_account_name(),
+    OPERATOR_ACCOUNT_TOKEN,
     # The refusal token KEEPS ITS VALUE -- it is what stops the retired name
     # reaching a rendered GIF -- and is hex-built so the guard is not itself
     # a finding of the scrub that now carries the same name.
@@ -141,10 +142,58 @@ def validate_source_sha(value: object) -> str:
     return value
 
 
+PRIVATE_TOKEN_CONTEXT_CHARS = 40
+PRIVATE_TOKEN_MARK = "<token>"
+# Operator-account interior is letters, digits, and underscore. Hyphen, dot,
+# and tilde are component boundaries, so a neighbouring path segment cannot
+# hide the token as an infix of a hyphenated or dotted name.
+_PATH_COMPONENT_CHARACTER = re.compile(r"[A-Za-z0-9_]")
+
+
+def _private_token_context(text: str, index: int, token: str) -> str:
+    raw = text[index : index + PRIVATE_TOKEN_CONTEXT_CHARS]
+    occupied = min(len(token), len(raw))
+    neighbour = raw[occupied:]
+    masked = "".join("x" if char.isalnum() else char for char in neighbour)
+    return PRIVATE_TOKEN_MARK + masked
+
+
+def _path_component_index(text: str, token: str) -> int:
+    folded_text = text.casefold()
+    folded_token = token.casefold()
+    index = 0
+    while True:
+        found = folded_text.find(folded_token, index)
+        if found < 0:
+            return -1
+        preceding = folded_text[found - 1] if found else ""
+        following_at = found + len(folded_token)
+        following = (
+            folded_text[following_at] if following_at < len(folded_text) else ""
+        )
+        if (
+            not preceding or _PATH_COMPONENT_CHARACTER.fullmatch(preceding) is None
+        ) and (
+            not following or _PATH_COMPONENT_CHARACTER.fullmatch(following) is None
+        ):
+            return found
+        index = found + 1
+
+
 def ensure_capture_text_safe(text: str) -> str:
+    folded_text = text.casefold()
     for token in UNSAFE_TEXT:
-        if token.casefold() in text.casefold():
-            raise ValueError(f"capture text contains private token: {token}")
+        if not token:
+            continue
+        if token == OPERATOR_ACCOUNT_TOKEN:
+            found = _path_component_index(text, token)
+        else:
+            found = folded_text.find(token.casefold())
+        if found >= 0:
+            context = _private_token_context(text, found, token)
+            raise ValueError(
+                f"capture text contains private token: {token} at {found}: {context!r}"
+            )
     return text
 
 

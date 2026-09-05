@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -81,12 +82,12 @@ class DaemonOwner:
                 "wake_daemon_owner_unknown", "daemon owner path is a symlink"
             )
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor = os.open(
-            self.path,
-            os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-        )
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        flags |= getattr(os, "O_CLOEXEC", 0)
+        descriptor = os.open(self.path, flags, 0o600)
         try:
+            current = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+            fcntl.fcntl(descriptor, fcntl.F_SETFD, current | fcntl.FD_CLOEXEC)
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, OSError) as exc:
             os.close(descriptor)
@@ -330,6 +331,13 @@ class WakeDaemon:
                 "wake_daemon_decision_invalid", "fresh decision message ids are malformed"
             )
         item_ids = [str(item) for item in raw_item_ids]
+        envelopes = [
+            {
+                "id": str(row["id"]),
+                "note": row["note"] if isinstance(row.get("note"), str) else "",
+            }
+            for row in messages
+        ]
         existing = self._existing_attempt(
             runtime,
             binding,
@@ -387,7 +395,10 @@ class WakeDaemon:
         if callable(arm):
             arm(self._attempt_key(runtime))
         result = self._request_wake(
-            binding, reason, min(300, int(consent["max_poll_seconds"]))
+            binding,
+            reason,
+            min(300, int(consent["max_poll_seconds"])),
+            envelopes=envelopes,
         )
         if result.outcome == "woke":
             attempt_key = self._attempt_key(runtime)
@@ -807,14 +818,29 @@ class WakeDaemon:
         return binding
 
     def _request_wake(
-        self, binding: AdapterBinding, reason: str, deadline: int
+        self,
+        binding: AdapterBinding,
+        reason: str,
+        deadline: int,
+        envelopes: Optional[list] = None,
     ) -> WakeAdapterResult:
         method = getattr(self.adapter, "request_wake", None)
         if not callable(method):
             raise ProtocolRefusal(
                 "wake_daemon_adapter_unknown", "adapter has no wake surface"
             )
-        result = method(binding, reason, deadline)
+        kwargs = {}
+        if envelopes is not None:
+            try:
+                parameters = inspect.signature(method).parameters
+            except (TypeError, ValueError):
+                parameters = {}
+            if "envelopes" in parameters or any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            ):
+                kwargs["envelopes"] = envelopes
+        result = method(binding, reason, deadline, **kwargs)
         if not isinstance(result, WakeAdapterResult) or result.outcome not in {
             "woke", "refused", "unknown"
         }:

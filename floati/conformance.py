@@ -595,7 +595,7 @@ def run_live_root_smoke() -> int:
     return CONFORMANT
 
 
-def run_acp_fixture_conformance() -> int:
+def run_acp_fixture_conformance(*, executable: object = None) -> int:
     """Exercise the finite ACP codec without launching a provider harness."""
 
     adapter = ACPAdapter()
@@ -623,7 +623,11 @@ def run_acp_fixture_conformance() -> int:
     except _Outcome as outcome:
         _emit(outcome.status, outcome.detail, stream=sys.stderr)
         return outcome.exit_code
-    probe = probe_reference_harness()
+    try:
+        probe = probe_reference_harness(executable=executable)
+    except ProtocolRefusal as exc:
+        _emit("configuration_refused", exc.code, stream=sys.stderr)
+        return CONFIGURATION_REFUSED
     _emit(
         "conformant",
         {"cases": 4, "harness_status": probe["status"]},
@@ -667,6 +671,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--tenant")
     parser.add_argument("--live-root-smoke", action="store_true")
     parser.add_argument("--acp-fixture", action="store_true")
+    parser.add_argument("--acp-executable")
     parser.add_argument("--call-timeout", type=float)
     try:
         args = parser.parse_args(argv)
@@ -682,7 +687,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "arguments_invalid",
                     "ACP fixture cannot be combined with live-root smoke, adapter, root, tenant, or call timeout",
                 )
-            return run_acp_fixture_conformance()
+            return run_acp_fixture_conformance(executable=args.acp_executable)
+        if args.acp_executable is not None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "ACP executable declaration requires --acp-fixture",
+            )
         if args.live_root_smoke:
             if (
                 args.adapter is not None

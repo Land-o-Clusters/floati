@@ -13,15 +13,24 @@ from .provider_switch import ProviderSwitchPlan
 from .registry import REGISTRY_KINDS, Registry
 from .role_assignment import RoleAssignmentPlan
 from .root import FloatiRoot, validate_identifier
+from .sandbox_probe import probe_write_set
+from .sandbox_remedy import remedy_for
 from .seat_declaration import SeatDeclaration, WorkspaceBinding
 
 
 class RegistryAdminBackend:
     """Commit exact previewed rows through the registry's single ledger."""
 
-    def __init__(self, root: FloatiRoot) -> None:
+    def __init__(
+        self, root: FloatiRoot, *, repository: Optional[Path] = None
+    ) -> None:
         self.root = root
         self.registry = Registry(root)
+        self.repository = (
+            None
+            if repository is None
+            else Path(repository).expanduser().resolve()
+        )
 
     def _records(self) -> list[Dict[str, Any]]:
         return read_records_snapshot(
@@ -76,6 +85,36 @@ class RegistryAdminBackend:
     def _prepare_workspace(self, node_id: str) -> WorkspaceBinding:
         return WorkspaceBinding.prepare(self.root, node_id)
 
+    def _preflight_declaration(self, plan: NodeAddPlan) -> None:
+        facts = probe_write_set(
+            self.root,
+            plan.node_id,
+            repository=self.repository,
+        )
+        problems = tuple(
+            fact
+            for fact in facts
+            if fact.get("verdict") in {"refused", "unknown"}
+        )
+        if not problems:
+            return
+        detail = "seat declaration write preflight failed: " + "; ".join(
+            f"{fact.get('coordinate')} path="
+            f"{'null' if fact.get('path') is None else fact.get('path')} "
+            f"reason={fact.get('reason_code')}"
+            for fact in problems
+        )
+        refused_paths = tuple(
+            str(fact["path"])
+            for fact in problems
+            if fact.get("path") is not None
+        )
+        raise ProtocolRefusal(
+            "seat_declaration_deaf",
+            detail,
+            remedy=remedy_for(plan.harness, refused_paths),
+        )
+
     def _add_commit_state(
         self, records: Sequence[Mapping[str, Any]]
     ) -> Optional[bool]:
@@ -111,6 +150,7 @@ class RegistryAdminBackend:
 
         try:
             if plan.governance is not None:
+                self._preflight_declaration(plan)
                 publication = SeatDeclaration.create(
                     binding,
                     plan.node_id,
