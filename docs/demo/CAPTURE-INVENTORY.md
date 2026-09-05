@@ -11,9 +11,10 @@ The two generated truth documents are excluded from their own receipt set.
 - `docs/demo/hero-three-fault-replay.gif` — 1533205 bytes — SHA-256 `94af4a20c8f95e2b8250eaba9f92185e4bcd3cfc5acfa492e29916dc5ddc9e89`
 - `docs/demo/install-moment.gif` — 625093 bytes — SHA-256 `9d822a5d1b6765521e742804fe32b72e027e1aebfcd25df59dedf0e04711579a`
 
-## Nested capture families — 1 nested capture manifest
+## Nested capture families — 2 nested capture manifests
 
 - `docs/demo/site-v3/manifest.json` — 10127 bytes — SHA-256 `14c3d973ef3e7c13e50adebce3b3a4d739d9a1471eb4aba1cfe45a9f4b4060c6`
+- `docs/demo/site-v3-readme/manifest.json` — 11677 bytes — SHA-256 `3f4fbeac15b472b5f5f54bba663051180022d55a6b444c7f35a701c10043051c`
 
 ## Generated truth documents
 

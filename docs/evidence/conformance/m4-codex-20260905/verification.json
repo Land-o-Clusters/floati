@@ -1,0 +1,39 @@
+{
+  "process_pids": [
+    88585,
+    92796,
+    93757,
+    94914
+  ],
+  "process_exits": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "commands": 131,
+  "tools": 21,
+  "exposure_counts": {
+    "read": 12,
+    "governed": 9
+  },
+  "responses": 45,
+  "tool_artifacts": 22,
+  "refusals": 11,
+  "refusal_codes": {
+    "arguments_invalid": 5,
+    "note_invalid": 1,
+    "doctor_profile_invalid": 1,
+    "confluence_grant_required": 1,
+    "ack_item_not_delivered": 1,
+    "solo_identity_ambiguous": 1,
+    "work_not_claimed": 1
+  },
+  "remedy_types": {
+    "str": 7,
+    "dict": 4
+  },
+  "doctor_health": "unmeasured_scope_blocked",
+  "socket_observation": "idle_ipv4_ipv6_samples_only",
+  "checks": "observed_structural_assertions_pass"
+}

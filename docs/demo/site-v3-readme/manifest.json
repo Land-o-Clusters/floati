@@ -1,0 +1,418 @@
+{
+  "artifacts": [
+    {
+      "bytes": 31563,
+      "columns": 75,
+      "kind": "png",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-dark-source.png",
+      "rows": 9,
+      "sha256": "6e4d00699297706a1a6f66be292323344daad3e6ace726358b7685492270ff09",
+      "theme": "dark"
+    },
+    {
+      "bytes": 152,
+      "columns": 75,
+      "kind": "transcript",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-dark-source.txt",
+      "rows": 9,
+      "sha256": "9f308df6b9563b1fb0f04f4790f149c7d54af378155242fb0a18df430ce6a052",
+      "theme": "dark"
+    },
+    {
+      "bytes": 31678,
+      "columns": 75,
+      "kind": "png",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-light-source.png",
+      "rows": 9,
+      "sha256": "d05da7fbac15b286afd22132f3d713fd1f79bcfee49734c89e70026636c630b7",
+      "theme": "light"
+    },
+    {
+      "bytes": 152,
+      "columns": 75,
+      "kind": "transcript",
+      "moment": "adapter-boundary",
+      "path": "floati-adapter-boundary-light-source.txt",
+      "rows": 9,
+      "sha256": "9f308df6b9563b1fb0f04f4790f149c7d54af378155242fb0a18df430ce6a052",
+      "theme": "light"
+    },
+    {
+      "bytes": 190399,
+      "columns": 104,
+      "kind": "png",
+      "moment": "board",
+      "path": "floati-board-dark-source.png",
+      "rows": 32,
+      "sha256": "a5e3f8d868397f8f480406d4aecc51646933027f19affe14f6175713a3cabbb9",
+      "theme": "dark"
+    },
+    {
+      "bytes": 3577,
+      "columns": 104,
+      "kind": "transcript",
+      "moment": "board",
+      "path": "floati-board-dark-source.txt",
+      "rows": 32,
+      "sha256": "fae73cfa057f755ed755e95f690d992f08c10831ea6fee4e916f916899b41ff5",
+      "theme": "dark"
+    },
+    {
+      "bytes": 190714,
+      "columns": 104,
+      "kind": "png",
+      "moment": "board",
+      "path": "floati-board-light-source.png",
+      "rows": 32,
+      "sha256": "c2157a06099532a5299855a355956f228a5b04949db1a91119f21109143bb132",
+      "theme": "light"
+    },
+    {
+      "bytes": 3577,
+      "columns": 104,
+      "kind": "transcript",
+      "moment": "board",
+      "path": "floati-board-light-source.txt",
+      "rows": 32,
+      "sha256": "fae73cfa057f755ed755e95f690d992f08c10831ea6fee4e916f916899b41ff5",
+      "theme": "light"
+    },
+    {
+      "bytes": 26693,
+      "columns": 54,
+      "kind": "png",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-dark-source.png",
+      "rows": 7,
+      "sha256": "5f5d27c96e616b21161ffb245b491b15fa08a963836260b4304f8ca4428fe140",
+      "theme": "dark"
+    },
+    {
+      "bytes": 150,
+      "columns": 54,
+      "kind": "transcript",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-dark-source.txt",
+      "rows": 7,
+      "sha256": "89c741a716f35162c6507c09863ec5ca8a27ee483fe8b60ba7bd372cd48ec438",
+      "theme": "dark"
+    },
+    {
+      "bytes": 26705,
+      "columns": 54,
+      "kind": "png",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-light-source.png",
+      "rows": 7,
+      "sha256": "937e699bfd48249611670db80f0b25491a41498aaca972d5f0a0fca5d17503f8",
+      "theme": "light"
+    },
+    {
+      "bytes": 150,
+      "columns": 54,
+      "kind": "transcript",
+      "moment": "dead-receiver",
+      "path": "floati-dead-receiver-light-source.txt",
+      "rows": 7,
+      "sha256": "89c741a716f35162c6507c09863ec5ca8a27ee483fe8b60ba7bd372cd48ec438",
+      "theme": "light"
+    },
+    {
+      "bytes": 245880,
+      "columns": 82,
+      "kind": "png",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-dark-source.png",
+      "rows": 26,
+      "sha256": "f6354e32063083c3cf265afeb42a7a3425986eb936694b259bd224d5a4e55422",
+      "theme": "dark"
+    },
+    {
+      "bytes": 1214,
+      "columns": 82,
+      "kind": "transcript",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-dark-source.txt",
+      "rows": 26,
+      "sha256": "a9b312be89a2405b02788599282c32c1389e9a4950be53c58db476a8690f682f",
+      "theme": "dark"
+    },
+    {
+      "bytes": 246882,
+      "columns": 82,
+      "kind": "png",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-light-source.png",
+      "rows": 26,
+      "sha256": "e2788ce647860663420bbac5624841c955f2d13636f2f0fd043d7b3eed68c90c",
+      "theme": "light"
+    },
+    {
+      "bytes": 1214,
+      "columns": 82,
+      "kind": "transcript",
+      "moment": "failure-injection",
+      "path": "floati-failure-injection-light-source.txt",
+      "rows": 26,
+      "sha256": "a9b312be89a2405b02788599282c32c1389e9a4950be53c58db476a8690f682f",
+      "theme": "light"
+    },
+    {
+      "bytes": 54557,
+      "columns": 60,
+      "kind": "png",
+      "moment": "handoff",
+      "path": "floati-handoff-dark-source.png",
+      "rows": 11,
+      "sha256": "0e2126b397bf3af57d539d735985ffc916c7ced9f18a4ba079ed4dc91134d8bf",
+      "theme": "dark"
+    },
+    {
+      "bytes": 307,
+      "columns": 60,
+      "kind": "transcript",
+      "moment": "handoff",
+      "path": "floati-handoff-dark-source.txt",
+      "rows": 11,
+      "sha256": "4b42778d91a9644f03e1a6aa00957809ca6efab8b2f36e9bc63bbc30d1a02743",
+      "theme": "dark"
+    },
+    {
+      "bytes": 54772,
+      "columns": 60,
+      "kind": "png",
+      "moment": "handoff",
+      "path": "floati-handoff-light-source.png",
+      "rows": 11,
+      "sha256": "4007222a484f4af7b2ca0890007d00e549da115e814b2a8dc6caa16979775ce1",
+      "theme": "light"
+    },
+    {
+      "bytes": 307,
+      "columns": 60,
+      "kind": "transcript",
+      "moment": "handoff",
+      "path": "floati-handoff-light-source.txt",
+      "rows": 11,
+      "sha256": "4b42778d91a9644f03e1a6aa00957809ca6efab8b2f36e9bc63bbc30d1a02743",
+      "theme": "light"
+    },
+    {
+      "bytes": 156542,
+      "columns": 119,
+      "kind": "png",
+      "moment": "help",
+      "path": "floati-help-dark-source.png",
+      "rows": 30,
+      "sha256": "6d2edbd50b9812713e2a4ce213a6a244671bf557732e6022ab501c98e827ed0f",
+      "theme": "dark"
+    },
+    {
+      "bytes": 1039,
+      "columns": 119,
+      "kind": "transcript",
+      "moment": "help",
+      "path": "floati-help-dark-source.txt",
+      "rows": 30,
+      "sha256": "4eb72333227ef1328bdb0eef7048eacc794dfb6ade8c531da06f9376c50fcfb4",
+      "theme": "dark"
+    },
+    {
+      "bytes": 156924,
+      "columns": 119,
+      "kind": "png",
+      "moment": "help",
+      "path": "floati-help-light-source.png",
+      "rows": 30,
+      "sha256": "b35ec615d145cca2b4f9a2a811c16736d41f4cb4ea9624432807e673d84550ee",
+      "theme": "light"
+    },
+    {
+      "bytes": 1039,
+      "columns": 119,
+      "kind": "transcript",
+      "moment": "help",
+      "path": "floati-help-light-source.txt",
+      "rows": 30,
+      "sha256": "4eb72333227ef1328bdb0eef7048eacc794dfb6ade8c531da06f9376c50fcfb4",
+      "theme": "light"
+    },
+    {
+      "bytes": 53546,
+      "columns": 83,
+      "kind": "png",
+      "moment": "identity",
+      "path": "floati-identity-dark-source.png",
+      "rows": 12,
+      "sha256": "378f3e371cc847a4a169fa98ff9798d89b764d2cfd9eb06c6cac639e84c18f77",
+      "theme": "dark"
+    },
+    {
+      "bytes": 338,
+      "columns": 83,
+      "kind": "transcript",
+      "moment": "identity",
+      "path": "floati-identity-dark-source.txt",
+      "rows": 12,
+      "sha256": "9fc316f11c03124a2cf651e327328fc0e02824b857f18d77e74c4d119fb5efe1",
+      "theme": "dark"
+    },
+    {
+      "bytes": 53704,
+      "columns": 83,
+      "kind": "png",
+      "moment": "identity",
+      "path": "floati-identity-light-source.png",
+      "rows": 12,
+      "sha256": "be8e9197329fb0b1ba6d119eb50bf5c53ec012b8a939d2143d65845220d9a74e",
+      "theme": "light"
+    },
+    {
+      "bytes": 338,
+      "columns": 83,
+      "kind": "transcript",
+      "moment": "identity",
+      "path": "floati-identity-light-source.txt",
+      "rows": 12,
+      "sha256": "9fc316f11c03124a2cf651e327328fc0e02824b857f18d77e74c4d119fb5efe1",
+      "theme": "light"
+    },
+    {
+      "bytes": 55849,
+      "columns": 74,
+      "kind": "png",
+      "moment": "lease",
+      "path": "floati-lease-dark-source.png",
+      "rows": 10,
+      "sha256": "df14caac3a7cde21b94e5bdcb41ceea0531a859a4d26c372ea268db8075e9023",
+      "theme": "dark"
+    },
+    {
+      "bytes": 302,
+      "columns": 74,
+      "kind": "transcript",
+      "moment": "lease",
+      "path": "floati-lease-dark-source.txt",
+      "rows": 10,
+      "sha256": "7c23bb10153503e06fc05dac4013aa861daca3bbd7adbac7177be18efc8a27fe",
+      "theme": "dark"
+    },
+    {
+      "bytes": 55974,
+      "columns": 74,
+      "kind": "png",
+      "moment": "lease",
+      "path": "floati-lease-light-source.png",
+      "rows": 10,
+      "sha256": "5294abe28bd7d78ab2db8a0c1f8ccc200b15516c5b9e6c7effe0608fbef68c0d",
+      "theme": "light"
+    },
+    {
+      "bytes": 302,
+      "columns": 74,
+      "kind": "transcript",
+      "moment": "lease",
+      "path": "floati-lease-light-source.txt",
+      "rows": 10,
+      "sha256": "7c23bb10153503e06fc05dac4013aa861daca3bbd7adbac7177be18efc8a27fe",
+      "theme": "light"
+    }
+  ],
+  "captured_at": "2026-09-05T02:00:00.000Z",
+  "font": {
+    "cell_height": 25,
+    "cell_width": 11,
+    "face": ".SF NS Mono Light",
+    "path": "/System/Library/Fonts/SFNSMono.ttf",
+    "sha256": "55caaed55254a28ac793847e8976be16c5ba7cbad1ec2ee2d5d86d4e6b3fa0c1"
+  },
+  "generator": "scripts/capture-shot1-locf1.py",
+  "moments": [
+    {
+      "columns": 104,
+      "data_class": "fixture",
+      "name": "board",
+      "rows": 32,
+      "source": "docs/evidence/captures/hm1-tui-monochrome.txt",
+      "surface": "floati board --demo --no-animation"
+    },
+    {
+      "columns": 60,
+      "data_class": "real",
+      "name": "handoff",
+      "rows": 11,
+      "source": "fresh scratch ledger: send -> inbox -> ack -> refused send",
+      "surface": "floati receipts NODE --root ROOT"
+    },
+    {
+      "columns": 74,
+      "data_class": "real",
+      "name": "lease",
+      "rows": 10,
+      "source": "fresh scratch liveness ledger",
+      "surface": "floati presence show plus expired-authority board testimony"
+    },
+    {
+      "columns": 54,
+      "data_class": "real",
+      "name": "dead-receiver",
+      "rows": 7,
+      "source": "tests/fixtures/capture-shot1/dead-receiver.txt",
+      "surface": "floati doctor --probe --probe-budget 1"
+    },
+    {
+      "columns": 83,
+      "data_class": "real",
+      "name": "identity",
+      "rows": 12,
+      "source": "fresh scratch authority ledger",
+      "surface": "floati grant plus signature verify"
+    },
+    {
+      "columns": 75,
+      "data_class": "real",
+      "name": "adapter-boundary",
+      "rows": 9,
+      "source": "tests/fixtures/capture-shot1/adapter-boundary.txt",
+      "surface": "floati chart --declared-roots FILE"
+    },
+    {
+      "columns": 82,
+      "data_class": "real",
+      "name": "failure-injection",
+      "rows": 26,
+      "source": "docs/evidence/captures/floati-replay-drill.txt",
+      "surface": "gauntlet crash injection replay"
+    },
+    {
+      "columns": 119,
+      "data_class": "real",
+      "name": "help",
+      "rows": 30,
+      "source": "live argparse command surface",
+      "surface": "floati --help"
+    }
+  ],
+  "schema_version": 0,
+  "source_sha": "7f5ce09cb17c879cd55357defd8a4697c4dbaf58",
+  "terminal": {
+    "column_margin": 4,
+    "columns": "content+margin",
+    "row_margin": 2,
+    "rows": "content+margin",
+    "source_scale": 2
+  },
+  "themes": {
+    "dark": {
+      "background": "#12161c",
+      "foreground": "#d8dee9"
+    },
+    "light": {
+      "background": "#f7f3eb",
+      "foreground": "#20252c"
+    }
+  }
+}

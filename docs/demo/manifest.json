@@ -36,6 +36,11 @@
       "bytes": 10127,
       "path": "site-v3/manifest.json",
       "sha256": "14c3d973ef3e7c13e50adebce3b3a4d739d9a1471eb4aba1cfe45a9f4b4060c6"
+    },
+    {
+      "bytes": 11677,
+      "path": "site-v3-readme/manifest.json",
+      "sha256": "3f4fbeac15b472b5f5f54bba663051180022d55a6b444c7f35a701c10043051c"
     }
   ],
   "root": "docs/demo",

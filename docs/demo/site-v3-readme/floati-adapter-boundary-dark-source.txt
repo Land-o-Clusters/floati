@@ -1,0 +1,7 @@
+FLOATI // CHART
+$ floati chart --declared-roots FILE
+
+declared: 1
+foreign: 0
+
+ONE BUS, MANY HARNESSES — adapters keep their dialects at the boundary.

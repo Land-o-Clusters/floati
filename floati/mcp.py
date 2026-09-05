@@ -277,8 +277,60 @@ class McpServer:
     def has_tool(self, name: str) -> bool:
         return isinstance(name, str) and name in self._catalog
 
-    def _invalid_arguments(self, path: Sequence[str]) -> Dict[str, object]:
-        _, artifact = run_cli_artifact([*path, "--mcp-invalid-argument"])
+    def _unknown_tool_result(self, name: str) -> Dict[str, object]:
+        artifact = {
+            "artifact_version": 0,
+            "command": "mcp",
+            "status": "refused",
+            "evidence": {
+                "code": "arguments_invalid",
+                "detail": f"unknown tool: {name}",
+                "remedy": "call tools/list for the tools this server serves",
+            },
+        }
+        return _tool_result(artifact)
+
+    def _invalid_arguments(
+        self,
+        tool: Dict[str, object],
+        arguments: object,
+        path: Sequence[str],
+    ) -> Dict[str, object]:
+        """Refuse in the tool's vocabulary: name the MCP inputs at fault."""
+
+        schema = tool["inputSchema"]
+        properties = schema["properties"]
+        provided = arguments if isinstance(arguments, dict) else {}
+        missing = sorted(set(schema["required"]) - set(provided))
+        unknown = sorted(set(provided) - set(properties))
+        actions = {
+            action.dest: action
+            for action in _leaf_parser(self.parser, path)._actions
+            if not isinstance(action, argparse._SubParsersAction)
+        }
+        wrong_type = sorted(
+            name
+            for name in set(provided) & set(properties)
+            if name in actions and not _matches_type(actions[name], provided[name])
+        )
+        parts = []
+        if missing:
+            parts.append("tool inputs required: " + ", ".join(missing))
+        if unknown:
+            parts.append("unknown tool inputs: " + ", ".join(unknown))
+        if wrong_type:
+            parts.append("tool inputs of the wrong type: " + ", ".join(wrong_type))
+        artifact = {
+            "artifact_version": 0,
+            "command": path[-1],
+            "status": "refused",
+            "evidence": {
+                "code": "arguments_invalid",
+                "detail": "; ".join(parts)
+                or "tool arguments do not satisfy the served input schema",
+                "remedy": "retry the tool call supplying exactly the tool inputs named in detail",
+            },
+        }
         return _tool_result(artifact)
 
     def _bound_value(
@@ -346,8 +398,7 @@ class McpServer:
     ) -> Dict[str, object]:
         tool = self._catalog.get(name)
         if tool is None:
-            _, artifact = run_cli_artifact(["mcp-unknown-tool"])
-            return _tool_result(artifact)
+            return self._unknown_tool_result(name)
         if self._metadata(tool)["exposure"] != "read":
             try:
                 Registry(self.root).require_active(self.node)
@@ -357,7 +408,7 @@ class McpServer:
         path = tuple(str(part) for part in metadata["commandPath"])
         argv = self._argv(tool, arguments)
         if argv is None:
-            return self._invalid_arguments(path)
+            return self._invalid_arguments(tool, arguments, path)
         _, artifact = run_cli_artifact(argv)
         return _tool_result(artifact)
 

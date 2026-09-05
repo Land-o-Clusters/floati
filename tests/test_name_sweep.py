@@ -47,12 +47,33 @@ APPROVED_README_TOP = """<p align="center">
   </picture>
 </h1>
 <p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
-<p align="center">Any harness, any mix — one bus, one board, one set of receipts.</p>
+<p align="center">Any harness, any mix. One bus, one board, one set of receipts.</p>
+
+<p align="center">
+  <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
+  <img alt="platform macOS today" src="https://img.shields.io/badge/platform-macOS%20today-3E4A56">
+  <a href="#what-it-runs-with"><img alt="harnesses 12 measured" src="https://img.shields.io/badge/harnesses-12%20measured-3E4A56"></a>
+</p>
+
+<p align="center">
+  <a href="#get-it">Get it</a> ·
+  <a href="#what-you-can-do-with-it">What you can do</a> ·
+  <a href="#start-alone">Start alone</a> ·
+  <a href="#grow-the-fleet">Grow the fleet</a> ·
+  <a href="#what-it-runs-with">What it runs with</a> ·
+  <a href="#why-it-doesnt-fall-over">Why it doesn't fall over</a> ·
+  <a href="#what-it-costs-to-run">What it costs</a> ·
+  <a href="#leave-cleanly">Leave cleanly</a> ·
+  <a href="#compose-with-it">Compose</a> ·
+  <a href="#verify">Verify</a> ·
+  <a href="#what-we-know-is-wrong">What we know is wrong</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a>
+</p>
 
 """
 
 APPROVED_HERO_LOOP = """<p align="center">
-  <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay" width="1400">
+  <img src="docs/demo/board-glow.gif" alt="The Harbor Board, live: three nodes, each with separate liveness, authority and lock lamps, redrawn as their ledgers change" width="1400">
 </p>"""
 
 PUBLIC_LIVING_DOCS = (

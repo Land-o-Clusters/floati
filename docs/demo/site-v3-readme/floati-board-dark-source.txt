@@ -1,0 +1,30 @@
+⊙ FLOATI // HARBOR BOARD
+~ ≈ ~
+
+╭ NODE ────────────────────────────────────────────────────────────────────────────────────────────╮
+│OBSERVED 2026-07-31T12:00:10.000Z                                                                 │
+│! DENIAL IDEMPOTENCY_CONFLICT builder-review → builder-core                                       │
+│! STALE AUTHORITY app-build holder:builder-app                                                    │
+│! STALE MUTEX builder-review-workspace holder:builder-review                                      │
+│                                                                                                  │
+│NODE               LIVE       AUTH       MUTEX      INBOX  LAST                                   │
+│> builder-review         ○          ○          ○          0  12:00:06.000                         │
+│  builder-app            ○          ○          ●          0  11:59:40.000                         │
+│  builder-core           ●          ●          ○          1  12:00:09.000                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭ WORKERS ─────────────────────────────────────────────────────────────────────────────────────────╮
+│  DEGRADED  x PROCESS DIED · demo-worker-receipt-4 builder-core codex demo-work-2                 │
+│  COMPLETE builder-core acp demo-work-3                                                           │
+│  CLAIM    builder-core codex demo-work-4                                                         │
+│  DRIVING  builder-core codex demo-work-5                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭ WORK DAG ────────────────────────────────────────────────────────────────────────────────────────╮
+│[▰▰▱▱▱▱▱▱▱▱]  20%                                                                                 │
+│  READY     review provisional copy  holder:-                                                     │
+│  CLAIMED   polish harbor board  holder:builder-core                                              │
+│  DONE      verify protocol gate  holder:builder-core                                             │
+│  CLAIMED   claim worker item  holder:builder-core                                                │
+│  CLAIMED   drive worker item  holder:builder-core                                                │
+↑/k ↓/j select  enter detail  a ack  q quit
