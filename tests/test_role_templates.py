@@ -141,5 +141,58 @@ class RoleTemplateTests(unittest.TestCase):
         self.assertEqual("role_template_path_invalid", raised.exception.code)
 
 
+MEASURED_ACK_SLA_MINUTES = 45
+# MEASURED 2026-09-04 on the live fleet ledger's acknowledgment receipts: 601
+# latencies across six active nodes, median 173s, p90 2630s (43.83min), max
+# ~45h (a dark seat). Declared norm = p90 rounded up to the nearest quarter
+# hour = 45. Re-measurement amends this number; it is never invented.
+
+
+class AckSlaDeclarationTests(unittest.TestCase):
+    """ACK-1-F1: the role template declares the measured acknowledgment SLA."""
+
+    def test_shipped_templates_declare_the_measured_ack_sla(self) -> None:
+        library = load_shipped_role_templates(Path("roles/shipped"))
+
+        self.assertEqual(6, len(library))
+        for name, template in library.items():
+            with self.subTest(role=name):
+                self.assertEqual(2, template.template_version)
+                self.assertEqual(
+                    MEASURED_ACK_SLA_MINUTES, template.ack_sla_minutes
+                )
+
+    def test_ack_sla_minutes_is_optional_and_round_trips(self) -> None:
+        payload = template_payload()
+        payload["ack_sla_minutes"] = MEASURED_ACK_SLA_MINUTES
+
+        declared = parse_role_template(payload)
+        undeclared = parse_role_template(template_payload())
+
+        self.assertEqual(MEASURED_ACK_SLA_MINUTES, declared.ack_sla_minutes)
+        self.assertIn("ack_sla_minutes", declared.record)
+        self.assertIsNone(undeclared.ack_sla_minutes)
+        self.assertNotIn("ack_sla_minutes", undeclared.record)
+
+    def test_ack_sla_minutes_changes_the_canonical_digest(self) -> None:
+        declared = parse_role_template(
+            {**template_payload(), "ack_sla_minutes": MEASURED_ACK_SLA_MINUTES}
+        )
+        undeclared = parse_role_template(template_payload())
+
+        self.assertNotEqual(declared.digest, undeclared.digest)
+
+    def test_ack_sla_minutes_type_and_range_refuse(self) -> None:
+        for bad in ("45", 0, -5, True, 1_000_001, 4.5):
+            with self.subTest(value=bad):
+                payload = template_payload()
+                payload["ack_sla_minutes"] = bad
+
+                with self.assertRaises(ProtocolRefusal) as raised:
+                    parse_role_template(payload)
+
+                self.assertEqual("role_template_invalid", raised.exception.code)
+
+
 if __name__ == "__main__":
     unittest.main()

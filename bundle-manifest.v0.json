@@ -203,7 +203,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "eaad69b66250e68a4f1d8548598ba64fe0a91920b3752b66ae6ae03257ed7915"
+      "sha256": "7995e00edf338dc7e5b365a144090c12dbdeca52851c90feac4a599959960c44"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -275,7 +275,7 @@
     },
     {
       "path": "floati/delivery_health.py",
-      "sha256": "5aaaf479d920d0abb0dc829178b39485cc3dc7964e3fe80123ff543a2bad7397"
+      "sha256": "febff11e892ef6bc8a99a4ecd2cb3b5aff7d644a4aebe36e4103ad58257ae3c6"
     },
     {
       "path": "floati/demo.py",
@@ -287,7 +287,7 @@
     },
     {
       "path": "floati/doctor.py",
-      "sha256": "e799c9c84ac320df0fab7bbb01797567b0b99213d8ff9a8dc354e1cc6f7c5fc5"
+      "sha256": "87a245f032e45e9251966dedb0283f3262c8ab3e381ee2234a0ea4840320be28"
     },
     {
       "path": "floati/doctor_probe.py",
@@ -495,7 +495,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "c5ec3b3ce8dbc46221c1db2cb0f670d9232a4ac69b85ffc38e739e404f4dec88"
+      "sha256": "519d0be6e218a54a428e42efa7766de2e2b9e97a676346be8f0a67e8bfa244db"
     },
     {
       "path": "floati/registry.py",
@@ -519,7 +519,7 @@
     },
     {
       "path": "floati/role_templates.py",
-      "sha256": "36edd3cd1712dd9017d2f8a42793d78e6b639031779dfac448b368d2118731ab"
+      "sha256": "7998aa63ecbb271bab3574256b35afedb23101cb183006d2576d53ef734ca7a4"
     },
     {
       "path": "floati/root.py",
@@ -831,27 +831,27 @@
     },
     {
       "path": "roles/shipped/architect.json",
-      "sha256": "44d936c80672943de5a14dba9dba9d320fc59adfdc9be389c5d7ba1889708d6b"
+      "sha256": "62d9d97fe3da9cf0bf839322eb8aef66c7098f717c768949c098a325fa403762"
     },
     {
       "path": "roles/shipped/builder.json",
-      "sha256": "c9aaca951a72ee751e14d2d35899f9eefe6d905115a0420b28097439cbbc53ff"
+      "sha256": "269f325859ab2c0c761b95ebe4531c8aa2087987abc4a023fb3416889b82d6ab"
     },
     {
       "path": "roles/shipped/github-manager.json",
-      "sha256": "a26fae5d6094e8bb75113990e7ec456b0295b577eecb5b83f9e1f26aacc9cdd7"
+      "sha256": "2a4333753bfd54445f9538bae492438202f49966e81242fa71cbea104dbd809d"
     },
     {
       "path": "roles/shipped/researcher.json",
-      "sha256": "58479ff4c42dd650c20ef99505b6aad712a454c35408665b4eacb7df823f004b"
+      "sha256": "f448797094e2043a1c065e0cb8f4979af09152e821945c638a4b7efd471be47a"
     },
     {
       "path": "roles/shipped/reviewer.json",
-      "sha256": "c2cffe8df0f0f661ad6b48fb314fbbf42732cc209d5e33732fa3f93d3f452b15"
+      "sha256": "250ca8a31796de1c2aa77e4626dd5758010bf7450465abb1c8a66bba0066b3b9"
     },
     {
       "path": "roles/shipped/sre.json",
-      "sha256": "a4c88e9bcd2a8a41fe71617017c3285dcc41b88dc6d20df6e10db491b7e5c29f"
+      "sha256": "65c2a571f9095da8f47cc619cee7967078164c4f0ce65ed92f3d21a2cfe68716"
     },
     {
       "path": "schemas/LICENSE",
@@ -1087,7 +1087,7 @@
     },
     {
       "path": "schemas/v0/role-template.schema.json",
-      "sha256": "a87e307b8f00d482695b64b2ffde3488c84bea36d566a61e1158355e782388c6"
+      "sha256": "7553e206f0f599e6e685b6aa04709076e9d510fcf3286dc1e9c79e4490ab695a"
     },
     {
       "path": "schemas/v0/run-created-record.schema.json",

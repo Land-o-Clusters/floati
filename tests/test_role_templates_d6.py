@@ -122,10 +122,11 @@ class D6RoleTemplateCopyTests(unittest.TestCase):
                 record = json.loads(path.read_text(encoding="utf-8"))
                 expected = {
                     "schema_version": 0,
-                    "template_version": 1,
+                    "template_version": 2,
                     "role": role,
                     **copy,
                     "cadence": "envelope-per-row",
+                    "ack_sla_minutes": 45,
                 }
                 self.assertEqual(expected, record)
                 validate_json_schema(record, schema)

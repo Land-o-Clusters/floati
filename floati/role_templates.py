@@ -24,7 +24,7 @@ SHIPPED_ROLE_NAMES = (
     "reviewer",
     "sre",
 )
-_TOP_LEVEL_FIELDS = frozenset(
+_REQUIRED_FIELDS = frozenset(
     {
         "schema_version",
         "template_version",
@@ -37,6 +37,7 @@ _TOP_LEVEL_FIELDS = frozenset(
         "questions",
     }
 )
+_TOP_LEVEL_FIELDS = _REQUIRED_FIELDS | {"ack_sla_minutes"}
 _QUESTION_REQUIRED_FIELDS = frozenset({"key", "ask"})
 _QUESTION_FIELDS = _QUESTION_REQUIRED_FIELDS | {"default"}
 _CADENCE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
@@ -92,10 +93,11 @@ class RoleTemplate:
     cadence: str
     questions: Tuple[RoleQuestion, ...]
     digest: str
+    ack_sla_minutes: Optional[int] = None
 
     @property
     def record(self) -> Dict[str, object]:
-        return {
+        value: Dict[str, object] = {
             "schema_version": self.schema_version,
             "template_version": self.template_version,
             "role": self.role,
@@ -106,10 +108,17 @@ class RoleTemplate:
             "cadence": self.cadence,
             "questions": [question.record for question in self.questions],
         }
+        if self.ack_sla_minutes is not None:
+            value["ack_sla_minutes"] = self.ack_sla_minutes
+        return value
 
 
 def parse_role_template(record: object) -> RoleTemplate:
-    if not isinstance(record, Mapping) or set(record) != _TOP_LEVEL_FIELDS:
+    if (
+        not isinstance(record, Mapping)
+        or not _REQUIRED_FIELDS.issubset(record)
+        or not set(record).issubset(_TOP_LEVEL_FIELDS)
+    ):
         _refuse("role template fields do not match the v0 contract")
     schema_version = record.get("schema_version")
     template_version = record.get("template_version")
@@ -128,6 +137,13 @@ def parse_role_template(record: object) -> RoleTemplate:
     cadence_value = record.get("cadence")
     if not isinstance(cadence_value, str) or not _CADENCE.fullmatch(cadence_value):
         _refuse("cadence identifier is invalid")
+    ack_sla_value = record.get("ack_sla_minutes")
+    if ack_sla_value is not None and (
+        not isinstance(ack_sla_value, int)
+        or isinstance(ack_sla_value, bool)
+        or not 1 <= ack_sla_value <= 1_000_000
+    ):
+        _refuse("ack_sla_minutes must be an integer between 1 and 1000000")
 
     raw_questions = record.get("questions")
     if not isinstance(raw_questions, list) or not 1 <= len(raw_questions) <= 32:
@@ -170,6 +186,7 @@ def parse_role_template(record: object) -> RoleTemplate:
         cadence=cadence_value,
         questions=tuple(questions),
         digest="",
+        ack_sla_minutes=ack_sla_value,
     )
     encoded = json.dumps(
         provisional.record,
@@ -188,6 +205,7 @@ def parse_role_template(record: object) -> RoleTemplate:
         cadence=provisional.cadence,
         questions=provisional.questions,
         digest=hashlib.sha256(encoded).hexdigest(),
+        ack_sla_minutes=provisional.ack_sla_minutes,
     )
 
 

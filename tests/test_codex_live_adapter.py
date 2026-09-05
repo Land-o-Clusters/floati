@@ -36,6 +36,12 @@ WORK_ID = "work-018f0f23abcd71238000000000000000"
 # refusal (or assert an absence) whose whole mechanism is these exact bytes.
 LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 
+# ADAPT-1: fixture deadline derived from MEASURED elapsed, not guessed.
+# 30 serial runs on 2026-09-04: OK elapsed 0.670-0.859 s; process_timeout 0/30.
+# 4 * max(OK elapsed) = 3.436, ceil 4. See
+# docs/evidence/adapt-1-artifact-ambiguous-rate-2026-09-04.md
+QUIESCENT_DESCENDANT_DEADLINE_SECONDS = 4
+
 
 
 class CodexAppServerSessionTests(unittest.TestCase):
@@ -795,8 +801,12 @@ class CodexAppServerAdapterTests(unittest.TestCase):
     def test_background_app_server_descendant_is_quiescent_before_git_finalization(self) -> None:
         adapter = CodexAppServerAdapter(self.command("complete-background-mutate"))
 
-        handle = adapter.spawn(self.item(), deadline_seconds=5)
-        bindings = adapter.drive(handle, self.item(), deadline_seconds=5)
+        handle = adapter.spawn(
+            self.item(), deadline_seconds=QUIESCENT_DESCENDANT_DEADLINE_SECONDS
+        )
+        bindings = adapter.drive(
+            handle, self.item(), deadline_seconds=QUIESCENT_DESCENDANT_DEADLINE_SECONDS
+        )
         time.sleep(0.3)
 
         self.assertEqual(["PROOF.txt"], [row["doc"] for row in bindings])

@@ -1,6 +1,6 @@
 {
   "schema_version": 0,
-  "template_version": 1,
+  "template_version": 2,
   "role": "sre",
   "duties": [
     "Guard fleet availability, delivery truth, and reversible recovery procedures.",
@@ -17,6 +17,7 @@
     "Never inspect or mutate an undeclared foreign root."
   ],
   "cadence": "envelope-per-row",
+  "ack_sla_minutes": 45,
   "questions": [
     {
       "key": "repo",

@@ -96,12 +96,12 @@ def _workspace_layout_finding(row: Dict[str, str]) -> Dict[str, object]:
     )
 
 
-def _role_cadences(
+def _role_bindings(
     source: Path,
     nodes: list[str],
     registry_rows: list[Dict[str, object]],
-) -> Dict[str, str]:
-    """Resolve only digest-bound shipped cadence evidence for active nodes."""
+) -> Dict[str, object]:
+    """Resolve only digest-bound shipped role templates for active nodes."""
 
     from .role_templates import load_shipped_role_templates
 
@@ -121,7 +121,7 @@ def _role_cadences(
         templates = load_shipped_role_templates(source / "roles" / "shipped")
     except ProtocolRefusal as exc:
         raise IntegrityFailure("role_cadence_unavailable", exc.detail) from exc
-    cadences: Dict[str, str] = {}
+    bindings: Dict[str, object] = {}
     for node, record in assigned.items():
         template = templates.get(str(record.get("template_role")))
         if (
@@ -133,8 +133,35 @@ def _role_cadences(
                 "role_cadence_invalid",
                 f"active role evidence for {node} does not match a shipped template",
             )
-        cadences[node] = template.cadence
-    return cadences
+        bindings[node] = template
+    return bindings
+
+
+def _role_cadences(
+    source: Path,
+    nodes: list[str],
+    registry_rows: list[Dict[str, object]],
+) -> Dict[str, str]:
+    """Resolve only digest-bound shipped cadence evidence for active nodes."""
+
+    return {
+        node: template.cadence
+        for node, template in _role_bindings(source, nodes, registry_rows).items()
+    }
+
+
+def _role_ack_slas(
+    source: Path,
+    nodes: list[str],
+    registry_rows: list[Dict[str, object]],
+) -> Dict[str, int]:
+    """Resolve only digest-bound declared acknowledgment SLAs for active nodes."""
+
+    return {
+        node: int(template.ack_sla_minutes)
+        for node, template in _role_bindings(source, nodes, registry_rows).items()
+        if template.ack_sla_minutes is not None
+    }
 
 
 def _git(source: Path, *args: str) -> str:
@@ -1178,12 +1205,16 @@ class Doctor:
                 cadences = _role_cadences(
                     self.source_arg, active_nodes, registry_rows
                 )
+                ack_slas = _role_ack_slas(
+                    self.source_arg, active_nodes, registry_rows
+                )
                 report = DeliveryHealthAnalyzer.analyze(
                     events=events_snapshot,
                     root=root,
                     nodes=active_nodes,
                     now=_utc_now(),
                     cadences=cadences,
+                    ack_slas=ack_slas,
                 )
                 findings.extend(report.findings)
                 from .wake_health import WakeHealthProjection

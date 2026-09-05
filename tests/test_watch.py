@@ -139,12 +139,26 @@ class WatchTests(unittest.TestCase):
         self.assertEqual("refused", artifact["status"])
         self.assertEqual("watch_interval_invalid", artifact["evidence"]["code"])
 
-    def _streaming_child(self, trace: Path | None) -> subprocess.Popen:
+    def _streaming_child(
+        self,
+        trace: Path | None,
+        *,
+        iter_ready: Path | None = None,
+        hold_flush: Path | None = None,
+    ) -> subprocess.Popen:
         environment = dict(self.environment)
         if trace is not None:
             environment["FLOATI_WATCH_TRACE"] = str(trace)
         else:
             environment.pop("FLOATI_WATCH_TRACE", None)
+        if iter_ready is not None:
+            environment["FLOATI_WATCH_ITER_READY"] = str(iter_ready)
+        else:
+            environment.pop("FLOATI_WATCH_ITER_READY", None)
+        if hold_flush is not None:
+            environment["FLOATI_WATCH_HOLD_FLUSH"] = str(hold_flush)
+        else:
+            environment.pop("FLOATI_WATCH_HOLD_FLUSH", None)
         child = subprocess.Popen(
             [
                 sys.executable, "-m", "floati", "watch", "--root", str(self.home),
@@ -173,19 +187,32 @@ class WatchTests(unittest.TestCase):
         )
         return child
 
+    def _wait_for_marker(self, path: Path, needle: str) -> str:
+        deadline = time.monotonic() + WATCH_LIVENESS_BOUND_SECONDS
+        while time.monotonic() < deadline:
+            if path.is_file():
+                recorded = path.read_text(encoding="utf-8")
+                if needle in recorded:
+                    return recorded
+            select.select([], [], [], 0.05)
+        self.fail(f"marker {path.name} never carried {needle!r}")
+
     def test_watch_trace_records_where_the_child_was_when_sigint_arrived(self) -> None:
         """WATCH-1: the trace must NAME the frame, not merely exist.
 
-        Constructed rather than raced: the child is interrupted at a moment we
-        choose, and the trace is then required to say the two things that
-        classify a hang - that Python entered the handler at all, and which
-        frame of the REAL watch loop it entered from. A trace that says only
-        "something happened" would leave the next actor exactly where this row
-        started.
+        Constructed rather than raced: the child signals from inside
+        ``iter_deltas`` before SIGINT is sent, so the recorded stack is that
+        frame and never the ``_watch_loop`` flush that beat it on a loaded
+        Linux runner.
         """
 
         trace = Path(self.temp.name) / "armed-trace.txt"
-        child = self._streaming_child(trace)
+        iter_ready = Path(tempfile.gettempdir()) / (
+            f"floati-watch-iter-ready-{os.getpid()}-{Path(self.temp.name).name}"
+        )
+        self.addCleanup(lambda: iter_ready.unlink(missing_ok=True))
+        child = self._streaming_child(trace, iter_ready=iter_ready)
+        self._wait_for_marker(iter_ready, "WATCH_ITER_DELTAS_READY")
         child.send_signal(signal.SIGINT)
         child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
 
@@ -198,6 +225,31 @@ class WatchTests(unittest.TestCase):
         # runs through the watch loop and the delta iterator it was blocked in.
         self.assertIn("_watch_loop", recorded)
         self.assertIn("iter_deltas", recorded)
+
+    def test_early_sigint_during_flush_is_not_claimed_as_iter_deltas(self) -> None:
+        """WATCH-1-F1 RED: SIGINT during stdout.flush must not satisfy iter_deltas."""
+
+        trace = Path(self.temp.name) / "early-trace.txt"
+        hold_flush = Path(tempfile.gettempdir()) / (
+            f"floati-watch-hold-flush-{os.getpid()}-{Path(self.temp.name).name}"
+        )
+        self.addCleanup(lambda: hold_flush.unlink(missing_ok=True))
+        child = self._streaming_child(trace, hold_flush=hold_flush)
+        self._wait_for_marker(hold_flush, "WATCH_FLUSH_HOLD")
+        child.send_signal(signal.SIGINT)
+        child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+
+        self.assertEqual(0, child.returncode)
+        recorded = trace.read_text(encoding="utf-8")
+        self.assertIn("WATCH_TRACE_ARMED", recorded)
+        self.assertIn("SIGINT_HANDLER_ENTERED", recorded)
+        self.assertIn("_watch_loop", recorded)
+        self.assertIn("wrapped_flush", recorded)
+        self.assertNotIn(
+            "iter_deltas",
+            recorded,
+            "an early SIGINT during flush was reported as the iter_deltas wait",
+        )
 
     def test_watch_signal_behaviour_is_unchanged_when_no_trace_is_requested(self) -> None:
         """WATCH-1: the diagnostic is OFF unless asked for - checked at the GATE.
