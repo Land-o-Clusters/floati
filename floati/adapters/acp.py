@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import copy
 import json
-import shutil
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Optional
+from pathlib import Path
+from typing import Any, Dict, Mapping
+
+from ..errors import ProtocolRefusal
+from ..fleet_update import _explicit_executable
 
 
 MAXIMUM_ACP_LINE_BYTES = 1_048_576
@@ -139,15 +142,19 @@ class ACPAdapter:
             raise ACPRefusal("acp_json_invalid", "ACP JSON must be finite")
 
 
-def probe_reference_harness(
-    *, which: Callable[[str], Optional[str]] = shutil.which
-) -> Dict[str, object]:
-    for executable, command in _REFERENCE_COMMANDS:
-        resolved = which(executable)
-        if resolved is not None:
+def probe_reference_harness(*, executable: object = None) -> Dict[str, object]:
+    if executable is None:
+        return {"status": "reference_harness_absent", "executable": None, "command": None}
+    path = _explicit_executable(executable, "acp_reference_executable_invalid")
+    name = Path(path).name
+    for expected, command in _REFERENCE_COMMANDS:
+        if name == expected:
             return {
                 "status": "reference_harness_present_unlaunched",
-                "executable": resolved,
+                "executable": path,
                 "command": list(command),
             }
-    return {"status": "reference_harness_absent", "executable": None, "command": None}
+    raise ProtocolRefusal(
+        "acp_reference_executable_unrecognized",
+        "declared ACP reference executable is not one of the v0 harness names",
+    )

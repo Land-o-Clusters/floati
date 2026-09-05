@@ -4,8 +4,11 @@ from floati import fixture_ids as public_ids
 
 import hashlib
 import json
+import os
+import signal
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -85,7 +88,12 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         self.addCleanup(setattr, adapters, "CODEX_EXECUTABLE", prior)
 
         adapter = adapters.CodexQueueWakeAdapter(coordinate, runner=runner)
-        result = adapter.request_wake(binding, "[floati] 1 new message: msg-1", 30)
+        result = adapter.request_wake(
+            binding,
+            "[floati] 1 new message: msg-1",
+            30,
+            envelopes=({"id": "msg-1", "note": "not in argv"},),
+        )
 
         self.assertEqual("woke", result.outcome)
         self.assertEqual(
@@ -99,6 +107,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             ),
             runner.calls[0][0],
         )
+        self.assertNotIn("not in argv", runner.calls[0][0])
         self.assertEqual(self.workspace, runner.calls[0][1])
         self.assertEqual(30, runner.calls[0][2])
 
@@ -437,6 +446,187 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         )
         self.assertEqual(self.workspace, runner.calls[0][1])
         self.assertEqual(45, runner.calls[0][2])
+
+    def test_zcode_wake_prompt_carries_envelopes_or_typed_no_mail(self) -> None:
+        from floati.wake_daemon_adapters import (
+            ZCODE_ACT_INSTRUCTION,
+            ZCODE_NO_MAIL_REASON,
+            zcode_wake_prompt,
+        )
+
+        empty = zcode_wake_prompt(())
+        self.assertEqual(ZCODE_NO_MAIL_REASON, empty)
+        self.assertNotIn("\n", empty)
+        prompt = zcode_wake_prompt(
+            (
+                {"id": "msg-01a06eb1d5ed7004b5de7e6e1ce8d616", "note": "drain and act"},
+                {"id": "msg-2", "note": "second"},
+            )
+        )
+        self.assertIn("msg-01a06eb1d5ed7004b5de7e6e1ce8d616", prompt)
+        self.assertIn("drain and act", prompt)
+        self.assertIn("msg-2: second", prompt)
+        self.assertIn(ZCODE_ACT_INSTRUCTION, prompt)
+        self.assertNotIn("\n", prompt)
+
+    def _write_recording_zcode_node(self) -> Path:
+        node = self.base / "recording-zcode-node"
+        node.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys, time\n"
+            "from pathlib import Path\n"
+            "args = sys.argv[1:]\n"
+            "prompt = args[args.index('--prompt') + 1]\n"
+            "session = args[args.index('--resume') + 1]\n"
+            "Path('resume-prompt.txt').write_text(prompt, encoding='utf-8')\n"
+            "Path('resume-pid').write_text(str(__import__('os').getpid()), encoding='utf-8')\n"
+            "delay = Path('resume-delay-seconds')\n"
+            "if delay.is_file():\n"
+            "    time.sleep(float(delay.read_text(encoding='utf-8')))\n"
+            "print(json.dumps({'sessionId': session, 'response': 'ok'}))\n",
+            encoding="utf-8",
+        )
+        node.chmod(0o700)
+        return node
+
+    def _wait_for_resume_files(self, timeout: float = 8.0) -> None:
+        prompt = self.workspace / "resume-prompt.txt"
+        pid_path = self.workspace / "resume-pid"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if prompt.is_file() and pid_path.is_file():
+                return
+            time.sleep(0.02)
+        self.fail("recording harness did not write resume-prompt.txt and resume-pid")
+
+    def _resume_pid(self) -> int:
+        return int((self.workspace / "resume-pid").read_text(encoding="utf-8"))
+
+    def _process_ppid(self, pid: int) -> int:
+        output = subprocess.check_output(
+            ["ps", "-o", "ppid=", "-p", str(pid)],
+            text=True,
+        ).strip()
+        return int(output)
+
+    def _terminate_detached(self, pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+
+    def test_recording_harness_receives_drained_envelopes_in_the_resume_prompt(self) -> None:
+        """RED-first: the fixture harness must see ids and notes, not the probe reason."""
+
+        from floati import wake_daemon_adapters as adapters
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        node = self._write_recording_zcode_node()
+        adapter = adapters.ZcodeResumeWakeAdapter(
+            DaemonCoordinate(self.root, public_ids.builder("a"), "zcode"),
+            node_executable=node,
+        )
+        result = adapter.request_wake(
+            self.binding("zcode"),
+            adapters.PROBE_REASON,
+            15,
+            envelopes=(
+                {"id": "msg-wake-1", "note": "the mail that caused the wake"},
+            ),
+        )
+        self._wait_for_resume_files()
+        recorded = (self.workspace / "resume-prompt.txt").read_text(encoding="utf-8")
+        self.assertEqual("woke", result.outcome)
+        self.assertIn("msg-wake-1", recorded)
+        self.assertIn("the mail that caused the wake", recorded)
+        self.assertIn(adapters.ZCODE_ACT_INSTRUCTION, recorded)
+        self.assertNotIn(adapters.PROBE_REASON, recorded)
+
+    def test_recording_harness_empty_inbox_resumes_with_typed_no_mail_reason(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        node = self._write_recording_zcode_node()
+        adapter = adapters.ZcodeResumeWakeAdapter(
+            DaemonCoordinate(self.root, public_ids.builder("a"), "zcode"),
+            node_executable=node,
+        )
+        result = adapter.request_wake(
+            self.binding("zcode"), adapters.PROBE_REASON, 15, envelopes=()
+        )
+        self._wait_for_resume_files()
+        recorded = (self.workspace / "resume-prompt.txt").read_text(encoding="utf-8")
+        self.assertEqual("woke", result.outcome)
+        self.assertEqual(adapters.ZCODE_NO_MAIL_REASON, recorded)
+
+    def test_zcode_handoff_deadline_does_not_wait_out_the_turn(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        node = self._write_recording_zcode_node()
+        (self.workspace / "resume-delay-seconds").write_text("20", encoding="utf-8")
+        adapter = adapters.ZcodeResumeWakeAdapter(
+            DaemonCoordinate(self.root, public_ids.builder("a"), "zcode"),
+            node_executable=node,
+        )
+        started = time.monotonic()
+        result = adapter.request_wake(
+            self.binding("zcode"),
+            adapters.PROBE_REASON,
+            5,
+            envelopes=({"id": "msg-slow", "note": "long turn"},),
+        )
+        elapsed = time.monotonic() - started
+        self._wait_for_resume_files()
+        pid = self._resume_pid()
+        self.addCleanup(self._terminate_detached, pid)
+        os.kill(pid, 0)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+        self.assertEqual(1, self._process_ppid(pid))
+        recorded = (self.workspace / "resume-prompt.txt").read_text(encoding="utf-8")
+        self.assertEqual("woke", result.outcome)
+        self.assertIsNone(result.reason_code)
+        self.assertIn("msg-slow", recorded)
+        self.assertLess(elapsed, 12)
+
+    def test_detached_grandchild_does_not_keep_the_daemon_owner_lock(self) -> None:
+        from floati import wake_daemon_adapters as adapters
+        from floati.wake_daemon import DaemonOwner
+
+        prior = adapters.ZCODE_ENTRY_SCRIPT
+        adapters.ZCODE_ENTRY_SCRIPT = self.link
+        self.addCleanup(setattr, adapters, "ZCODE_ENTRY_SCRIPT", prior)
+        node = self._write_recording_zcode_node()
+        (self.workspace / "resume-delay-seconds").write_text("20", encoding="utf-8")
+        coordinate = DaemonCoordinate(self.root, public_ids.builder("a"), "zcode")
+        adapter = adapters.ZcodeResumeWakeAdapter(
+            coordinate, node_executable=node
+        )
+        owner = DaemonOwner(coordinate)
+        owner.acquire()
+        self.addCleanup(owner.release)
+        result = adapter.request_wake(
+            self.binding("zcode"),
+            adapters.PROBE_REASON,
+            5,
+            envelopes=({"id": "msg-lock", "note": "hold"},),
+        )
+        self._wait_for_resume_files()
+        pid = self._resume_pid()
+        self.addCleanup(self._terminate_detached, pid)
+        os.kill(pid, 0)
+        owner.release()
+        retry = DaemonOwner(coordinate)
+        retry.acquire()
+        self.addCleanup(retry.release)
+        self.assertEqual("woke", result.outcome)
 
     def test_zcode_result_requires_exact_session_and_a_response(self) -> None:
         from floati import wake_daemon_adapters as adapters

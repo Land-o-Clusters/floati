@@ -128,7 +128,11 @@ def _node_add(args: argparse.Namespace) -> HandlerResult:
             policy_metric_for(args.harness, args.tide_metric),
         )
     preview = io.StringIO()
-    wizard = NodeWizard(root, RegistryAdminBackend(root), id_factory=uuid7_hex)
+    wizard = NodeWizard(
+        root,
+        RegistryAdminBackend(root, repository=Path.cwd()),
+        id_factory=uuid7_hex,
+    )
     if interactive:
         from .tui_doors import DoorTerminalIOError, run_node_add_door
 

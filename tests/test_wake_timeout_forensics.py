@@ -14,7 +14,7 @@ from floati import fixture_ids as public_ids
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.wake_daemon_contract import DaemonCoordinate
-from floati.wake_timeout_forensics import run_with_timeout_forensics
+from floati.wake_timeout_forensics import LSOF_CANDIDATES, run_with_timeout_forensics
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -276,6 +276,22 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
             msg=f"adapter sidecar did not name the blocked call: {row}",
         )
         self.addCleanup(self._terminate_for_cleanup, int(row["pid"]))
+
+    def test_lsof_uses_fixed_candidates_and_never_path(self) -> None:
+        from unittest import mock
+
+        from floati.wake_timeout_forensics import photograph_hung_child
+
+        self.assertEqual(("/usr/sbin/lsof", "/usr/bin/lsof"), LSOF_CANDIDATES)
+        with mock.patch("floati.wake_timeout_forensics.shutil.which") as which:
+            which.side_effect = AssertionError("PATH resolution is forbidden")
+            row = photograph_hung_child(
+                pid=os.getpid(),
+                argv=(sys.executable,),
+                attempt_key="which-1-lsof",
+            )
+        which.assert_not_called()
+        self.assertIn(row["lsof_status"], {"ok", "failed", "unavailable"})
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from floati.mcp_pin import validate_mcp_observation
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -108,14 +109,28 @@ class McpStdioTests(unittest.TestCase):
             ["initialize", "ping", "list", "status", "invalid-tool-input"],
             [response["id"] for response in responses],
         )
+        initialize = responses[0]["result"]
         self.assertEqual(
             {
                 "protocolVersion": LATEST_PROTOCOL,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "floati", "version": __version__},
             },
-            responses[0]["result"],
+            {
+                key: initialize[key]
+                for key in ("protocolVersion", "capabilities", "serverInfo")
+            },
         )
+        self.assertEqual(
+            {
+                "protocolVersion",
+                "capabilities",
+                "serverInfo",
+                "floatiIntegrationPin",
+            },
+            set(initialize),
+        )
+        validate_mcp_observation(initialize["floatiIntegrationPin"])
         self.assertEqual({}, responses[1]["result"])
         self.assertIn(
             "status",

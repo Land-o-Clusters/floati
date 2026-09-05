@@ -6,7 +6,13 @@
   </picture>
 </p>
 
-<h1 align="center">Floati</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-wordmark.svg">
+    <img src="docs/assets/floati-wordmark.svg" alt="floati" width="320">
+  </picture>
+</h1>
 <p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
 <p align="center">Any harness, any mix — one bus, one board, one set of receipts.</p>
 

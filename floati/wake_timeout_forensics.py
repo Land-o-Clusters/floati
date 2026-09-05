@@ -14,7 +14,7 @@ from typing import Mapping, Optional, Sequence
 
 _SAFE_KEY = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _SAMPLE = "/usr/bin/sample"
-_LSOF = "/usr/sbin/lsof"
+LSOF_CANDIDATES = ("/usr/sbin/lsof", "/usr/bin/lsof")
 
 
 def _reap_abandoned(process: subprocess.Popen[str], attempt_directory: Path) -> None:
@@ -51,9 +51,17 @@ def _bounded_cmd(argv: Sequence[str], timeout: int) -> tuple[str, str]:
     return ("ok" if completed.returncode == 0 else "failed"), stdout
 
 
+def _lsof_executable() -> str:
+    for candidate in LSOF_CANDIDATES:
+        path = Path(candidate)
+        if path.is_file() and not path.is_symlink():
+            return candidate
+    return ""
+
+
 def photograph_hung_child(*, pid: int, argv: Sequence[str], attempt_key: str) -> dict[str, object]:
     sample_status, sample_stdout = _bounded_cmd((_SAMPLE, str(pid), "2"), timeout=15)
-    lsof_bin = _LSOF if Path(_LSOF).is_file() else (shutil.which("lsof") or "")
+    lsof_bin = _lsof_executable()
     lsof_status, lsof_stdout = _bounded_cmd(
         (lsof_bin, "-p", str(pid)) if lsof_bin else (),
         timeout=5,

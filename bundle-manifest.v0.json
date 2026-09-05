@@ -67,7 +67,7 @@
     },
     {
       "path": "floati/adapters/acp.py",
-      "sha256": "b1a0586cb7fec2767672df5299e09aef0e83a8943c074e0efa6d3c8a7ef7cff0"
+      "sha256": "7ae6bfd2c5e0417c500073a1abe4543df03cca283dfd2a823dc6a05b4054191e"
     },
     {
       "path": "floati/adapters/antigravity.py",
@@ -151,11 +151,11 @@
     },
     {
       "path": "floati/admin_cli.py",
-      "sha256": "f91e63ab6d28ce3b7105d1f9ae463538d44719170dafe17049416ed3f8646ac4"
+      "sha256": "e1c791fad9d02e9a15a55a58c6abe680108fa0408c8cb5ae06ae5ea52d622930"
     },
     {
       "path": "floati/admin_registry.py",
-      "sha256": "34c69c25e57088082a899c22a6946815d702588f07199225f3e9b50be79903a6"
+      "sha256": "fa78515b0133c9efd2d98c403523322e945b0a408a65202248d4513c112884de"
     },
     {
       "path": "floati/admission.py",
@@ -203,7 +203,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "7995e00edf338dc7e5b365a144090c12dbdeca52851c90feac4a599959960c44"
+      "sha256": "7b82da2d365319b7dc5c8a9cfc36d47a0c583ae72f2144488661e6ccce8eba95"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -235,7 +235,7 @@
     },
     {
       "path": "floati/conformance.py",
-      "sha256": "a8161f80870ff65e4e7c737152d5267ef232a12df8cc2ece50687666a2a23773"
+      "sha256": "4997d6053996f29dbc6a920bdb49354337d30a619c30d49fcee0d6213e0ea8f9"
     },
     {
       "path": "floati/consumption.py",
@@ -431,7 +431,7 @@
     },
     {
       "path": "floati/mcp.py",
-      "sha256": "70d5659cc5b4af185252ce2e083b1b656b0abfa5981aa4140346f6361fad6d99"
+      "sha256": "3db4136a63d6a7221b479dca0dd44ef473cc08ce39446ba46ca5fc95f633b88c"
     },
     {
       "path": "floati/mcp_pin.py",
@@ -615,7 +615,7 @@
     },
     {
       "path": "floati/support_bundle.py",
-      "sha256": "edb74fd34eb9bf68c2b6c772fe144daa1f8da34fed2e19ff3817a972ea0e56f7"
+      "sha256": "2d8d86833da8c9f2eb71566f9dcf1b6e9526cd113af824ad8fec21e8d5f30318"
     },
     {
       "path": "floati/suspension.py",
@@ -747,11 +747,11 @@
     },
     {
       "path": "floati/wake_daemon.py",
-      "sha256": "7f31485595db414d03ee7b94f3c0028998c0198309a1cdb22866408a845b1f42"
+      "sha256": "3d3fc07612f742c8197f4209eab612d19554440796a1b22314ca35b1948c1426"
     },
     {
       "path": "floati/wake_daemon_adapters.py",
-      "sha256": "910f62fe1b677fc54c6f3f980234c7642b4e62fd04c0ce0ea5df86b23def3c25"
+      "sha256": "e5b9e160d60334f6cc24ee54bab053030eca26d7f7514605807d54ed2c5d1fd1"
     },
     {
       "path": "floati/wake_daemon_contract.py",
@@ -779,7 +779,7 @@
     },
     {
       "path": "floati/wake_timeout_forensics.py",
-      "sha256": "5b510409796223bd73a2afbb9b2ccd68068addc1a6e9342ba1e22adc8fcdddaf"
+      "sha256": "52ddaba3e440179a877725b3e41a7602c69a7d68aeb8bdd00d8cf70044720105"
     },
     {
       "path": "floati/wiring_journal.py",

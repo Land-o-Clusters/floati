@@ -343,6 +343,46 @@ class SupportBundleTests(unittest.TestCase):
                     section,
                 )
 
+    def test_data_uri_with_omitted_media_type_is_typed_like_any_carrier(self) -> None:
+        """D1b: catches the mediatype-omitted carrier escaping opaque typing."""
+
+        cases = (
+            ("pdf", b"%PDF-2.0\n"),
+            ("zip", b"PK\x03\x04" + b"\x00" * 8),
+        )
+        for opaque_format, payload in cases:
+            with self.subTest(opaque_format=opaque_format):
+                destination = self.base / f"omitted-mediatype-{opaque_format}.tar.gz"
+                encoded = base64.b64encode(payload).decode("ascii")
+                value = f"data:;base64,{encoded}"
+                self.create(
+                    out=destination,
+                    collectors=(("opaque", lambda value=value: {"value": value}),),
+                )
+                with tarfile.open(destination, "r:gz") as archive:
+                    section = json.loads(
+                        archive.extractfile("collectors/opaque.json").read()
+                    )
+                self.assertEqual(
+                    {
+                        "status": "unavailable",
+                        "reason_code": "snapshot_opaque_member",
+                        "opaque_format": opaque_format,
+                        "key_path": "$.value",
+                    },
+                    section,
+                )
+
+    def test_omitted_media_type_carrier_with_ordinary_text_stays_text(self) -> None:
+        """D1b control: the omitted form must not widen into a media-type fence."""
+
+        encoded = base64.b64encode(b"ordinary support text").decode("ascii")
+        value = f"data:;base64,{encoded}"
+
+        self.create(collectors=(("text", lambda: {"value": value}),))
+        section = json.loads(self.members()["collectors/text.json"])
+        self.assertEqual({"value": value}, section)
+
     def test_data_uri_with_ordinary_base64_remains_json_text(self) -> None:
         """Catches carrier normalization broadening into a media-type fence."""
 

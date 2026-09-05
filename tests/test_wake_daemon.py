@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from floati import fixture_ids as public_ids
 
+import fcntl
 import hashlib
 import json
 import tempfile
@@ -30,7 +31,7 @@ class _Adapter:
     def __init__(self, root: FloatiRoot, coordinate: DaemonCoordinate) -> None:
         self.store = AdapterBindingStore(root)
         self.coordinate = coordinate
-        self.calls: list[tuple[str, str, int]] = []
+        self.calls: list[tuple[str, str, int, object]] = []
         self.outcome = "woke"
         self.reason_code: str | None = None
 
@@ -41,9 +42,13 @@ class _Adapter:
         return "unknown"
 
     def request_wake(
-        self, binding: AdapterBinding, reason: str, deadline_seconds: int
+        self,
+        binding: AdapterBinding,
+        reason: str,
+        deadline_seconds: int,
+        envelopes: object = None,
     ) -> WakeAdapterResult:
-        self.calls.append((binding.session_id, reason, deadline_seconds))
+        self.calls.append((binding.session_id, reason, deadline_seconds, envelopes))
         if self.outcome == "woke":
             reason_code = None
         elif self.reason_code is not None:
@@ -238,6 +243,15 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
         with self.assertRaisesRegex(ProtocolRefusal, "owner_unknown"):
             second.acquire()
 
+    def test_owner_lock_descriptor_is_cloexec(self) -> None:
+        from floati.wake_daemon import DaemonOwner
+
+        owner = DaemonOwner(self.coordinate)
+        owner.acquire()
+        self.addCleanup(owner.release)
+        flags = fcntl.fcntl(owner._descriptor, fcntl.F_GETFD)
+        self.assertTrue(flags & fcntl.FD_CLOEXEC)
+
     def test_global_or_wildcard_pause_cannot_be_expressed(self) -> None:
         from floati.wake_control import WakeController
 
@@ -333,6 +347,10 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         woke = daemon.run_cycle(102.0)
         self.assertEqual("woke", woke["state"])
         self.assertIn(message["id"], self.adapter.calls[0][1])
+        self.assertEqual(
+            [{"id": message["id"], "note": "wake daemon evidence"}],
+            self.adapter.calls[0][3],
+        )
         self.assertEqual("held", daemon.run_cycle(104.0)["state"])
 
     def test_lane_level_envelope_wakes_the_exact_bound_session(self) -> None:

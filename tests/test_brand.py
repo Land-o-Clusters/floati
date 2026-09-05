@@ -78,7 +78,7 @@ class FloatiBrandTests(unittest.TestCase):
 
         self.assertTrue(asset.is_file(), "the accepted buoy master must be committed")
         self.assertEqual(
-            "99d89c3e252e6970979f902a5abe8790ff57ca91266bfe1a28a8cc6cbf13adeb",
+            "07967c3998b5d12c649f51a997d9b67ff59fc9e3853a5c5e926dcf894f1ec9ee",
             hashlib.sha256(asset.read_bytes()).hexdigest(),
         )
         self.assertIn("docs/assets/floati-icon.svg", readme)

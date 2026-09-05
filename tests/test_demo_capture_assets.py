@@ -166,6 +166,29 @@ class DemoCaptureAssetTests(unittest.TestCase):
             capture._expose_install_receipt(second),
         )
 
+    def test_capture_text_fence_names_token_position_and_context(self) -> None:
+        """Catches a fence that names the token but not where it still sits."""
+
+        with mock.patch.dict(os.environ, {"USER": "runner", "LOGNAME": "runner"}):
+            capture = load_capture_module()
+        payload = '{"cache":"/home/runner/.cache/floati/install-receipt","ok":true}'
+        index = payload.casefold().find("runner")
+        raw = payload[index : index + capture.PRIVATE_TOKEN_CONTEXT_CHARS]
+        self.assertEqual(capture.PRIVATE_TOKEN_CONTEXT_CHARS, 40)
+        self.assertEqual(40, len(raw))
+        context = capture._private_token_context(payload, index, "runner")
+        self.assertTrue(context.startswith(capture.PRIVATE_TOKEN_MARK))
+        self.assertNotIn("cache", context)
+        self.assertNotIn("floati", context)
+        with self.assertRaises(ValueError) as caught:
+            capture.ensure_capture_text_safe(payload)
+        detail = str(caught.exception)
+        self.assertEqual(
+            f"capture text contains private token: runner at {index}: {context!r}",
+            detail,
+        )
+        self.assertNotIn(raw, detail)
+
     def test_hosted_runner_receipt_is_refused_without_instrument_roots(self) -> None:
         """RED: a GHA workspace path carries the operator token the fence forbids."""
 
@@ -182,7 +205,15 @@ class DemoCaptureAssetTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError) as caught:
             capture._expose_install_receipt(receipt)
-        self.assertIn("private token: runner", str(caught.exception))
+        detail = str(caught.exception)
+        index = receipt.casefold().find("runner")
+        raw = receipt[index : index + capture.PRIVATE_TOKEN_CONTEXT_CHARS]
+        context = capture._private_token_context(receipt, index, "runner")
+        self.assertIn(f"private token: runner at {index}:", detail)
+        self.assertIn(repr(context), detail)
+        self.assertNotIn(raw, detail)
+        self.assertNotIn("floati", detail)
+        self.assertNotIn("ab12_cd3", detail)
 
     def test_exposure_redacts_workspace_and_staging_roots_before_the_fence(self) -> None:
         """GREEN: instrument literals, not the forbidden word, leave the photograph."""
@@ -223,10 +254,95 @@ class DemoCaptureAssetTests(unittest.TestCase):
         self.assertNotIn("runner", SCRIPT.read_text(encoding="utf-8"))
         with self.assertRaises(ValueError) as word:
             capture._expose_install_receipt("runner")
-        self.assertIn("private token: runner", str(word.exception))
+        self.assertIn("private token: runner at 0:", str(word.exception))
+        leftover_text = "/home/runner/not-an-instrument-root"
         with self.assertRaises(ValueError) as leftover:
-            capture._expose_install_receipt("/home/runner/not-an-instrument-root")
-        self.assertIn("private token: runner", str(leftover.exception))
+            capture._expose_install_receipt(leftover_text)
+        leftover_index = leftover_text.casefold().find("runner")
+        leftover_detail = str(leftover.exception)
+        leftover_raw = leftover_text[
+            leftover_index : leftover_index + capture.PRIVATE_TOKEN_CONTEXT_CHARS
+        ]
+        self.assertIn(
+            f"private token: runner at {leftover_index}:",
+            leftover_detail,
+        )
+        self.assertIn(capture.PRIVATE_TOKEN_MARK, leftover_detail)
+        self.assertNotIn(leftover_raw, leftover_detail)
+        self.assertNotIn("instrument", leftover_detail)
+
+    def test_real_install_receipt_keeps_managed_path_infix(self) -> None:
+        """RED on the real receipt shape: managed_paths names workflow_runner_fence.py."""
+
+        with mock.patch.dict(os.environ, {"USER": "runner", "LOGNAME": "runner"}):
+            capture = load_capture_module()
+        workspace = Path("/home/runner/work/floati/floati")
+        staging = Path("\x2ftmp/floati-capture-install-ab12_cd3")
+        receipt = (
+            '{"artifact_version":0,"command":"install","evidence":{'
+            '"managed_paths":["floati/workflow_runner_fence.py",'
+            '"floati/workspace_layout.py"],'
+            '"wiring_journal":"'
+            + str(staging)
+            + '/installed/.floati-install/wiring-journal.v1.jsonl"},'
+            '"status":"ok"}'
+        )
+        exposed = capture._expose_install_receipt(
+            receipt,
+            workspace_root=workspace,
+            staging_root=staging,
+        )
+        self.assertIn("floati/workflow_runner_fence.py", exposed)
+        self.assertIn(
+            '"wiring_journal":"<temp>/floati-capture-install/'
+            'installed/.floati-install/wiring-journal.v1.jsonl"',
+            exposed,
+        )
+        self.assertNotIn("/home/runner", exposed)
+        self.assertNotIn("\x2ftmp/", exposed)
+
+    def test_account_token_hyphen_dot_and_tilde_are_component_boundaries(self) -> None:
+        """RED: hyphen, dot, and tilde must not hide the operator account."""
+
+        with mock.patch.dict(os.environ, {"USER": "runner", "LOGNAME": "runner"}):
+            capture = load_capture_module()
+        cases = (
+            ("runner-work", "<token>-xxxx"),
+            ("runner.local", "<token>.xxxxx"),
+            ("runner~tmp", "<token>~xxx"),
+            (
+                "/home/runner-work/not-an-instrument-root",
+                "<token>-xxxx/xxx-xx-xxxxxxxxxx-xxxx",
+            ),
+        )
+        for text, expected_context in cases:
+            with self.subTest(text=text):
+                index = text.casefold().find("runner")
+                with self.assertRaises(ValueError) as caught:
+                    capture.ensure_capture_text_safe(text)
+                detail = str(caught.exception)
+                raw = text[index : index + capture.PRIVATE_TOKEN_CONTEXT_CHARS]
+                self.assertEqual(
+                    f"capture text contains private token: runner at {index}: "
+                    f"{expected_context!r}",
+                    detail,
+                )
+                self.assertNotIn(raw, detail)
+                self.assertNotIn("work", detail)
+                self.assertNotIn("local", detail)
+                self.assertNotIn("instrument", detail)
+
+        receipt = (
+            '{"artifact_version":0,"command":"install","evidence":{'
+            '"managed_paths":["floati/workflow_runner_fence.py"],'
+            '"clone":"/home/runner-work/floati"},"status":"ok"}'
+        )
+        with self.assertRaises(ValueError) as hosted:
+            capture._expose_install_receipt(receipt)
+        hosted_detail = str(hosted.exception)
+        self.assertIn(capture.PRIVATE_TOKEN_MARK, hosted_detail)
+        self.assertNotIn("runner-work", hosted_detail)
+        self.assertNotIn("/home/runner", hosted_detail)
 
     def test_install_receipt_keeps_field_and_redacts_governed_parent(self) -> None:
         """Catches capture rendering that leaks or deletes its staging path."""

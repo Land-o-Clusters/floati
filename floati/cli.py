@@ -16,7 +16,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 from .cursor import SparseCursor
 from .copy import (
@@ -1736,10 +1736,30 @@ def _overlap_report(args: argparse.Namespace) -> HandlerResult:
     return "ok", report, OK
 
 
+def _serve_server_command(argv: Sequence[str]) -> List[str]:
+    """The pinned launch command: one absolute executable, then argv verbatim.
+
+    Only argv[0] is normalized, and never by joining the working directory:
+    a bare or synthetic name (python -m launches) cannot be pinned by the cwd
+    it happened to run from, so the executable is the running interpreter -
+    the absolute path the house launcher selected by fixed candidates, never
+    a PATH or cwd resolution.
+    """
+
+    head = argv[0] if argv else ""
+    executable = head if os.path.isabs(head) else sys.executable
+    return [executable, *argv[1:]]
+
+
 def _mcp_serve(args: argparse.Namespace) -> int:
     from .mcp import serve_bound_stdio
 
-    return serve_bound_stdio(args.root, args.actor, args.session)
+    return serve_bound_stdio(
+        args.root,
+        args.actor,
+        args.session,
+        server_command=_serve_server_command(sys.argv),
+    )
 
 
 def _parser() -> _ArtifactParser:
