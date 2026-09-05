@@ -331,7 +331,7 @@ class ContextProjectionTests(unittest.TestCase):
             {
                 "role_record_id": role["id"],
                 "template_role": "builder",
-                "template_version": 1,
+                "template_version": self.templates["builder"].template_version,
                 "template_sha256": self.templates["builder"].digest,
             },
             projected["role_provenance"],
@@ -539,7 +539,7 @@ class ContextProjectionTests(unittest.TestCase):
         ).project()
         for field, replacement in (
             ("template_role", "invented"),
-            ("template_version", 2),
+            ("template_version", self.templates["builder"].template_version + 1),
             ("template_sha256", "0" * 64),
         ):
             with self.subTest(field=field):

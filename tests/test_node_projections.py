@@ -67,7 +67,7 @@ class MutableLedgerSource:
                 "kind": "registry_role_record",
                 "node_id": "builder-a",
                 "template_role": "builder",
-                "template_version": 1,
+                "template_version": templates["builder"].template_version,
                 "template_sha256": templates["builder"].digest,
                 "answers": {
                     "repo": "floati",

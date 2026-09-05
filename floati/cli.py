@@ -943,6 +943,8 @@ def _receipts(args: argparse.Namespace) -> HandlerResult:
 
 
 WATCH_TRACE_VARIABLE = "FLOATI_WATCH_TRACE"
+WATCH_ITER_READY_VARIABLE = "FLOATI_WATCH_ITER_READY"
+WATCH_HOLD_FLUSH_VARIABLE = "FLOATI_WATCH_HOLD_FLUSH"
 
 
 @contextmanager
@@ -973,10 +975,18 @@ def _watch_signal_trace() -> Iterator[None]:
         yield
         return
     import faulthandler
+    import select as select_module
+    import time as time_module
     import traceback
 
     handle = open(target, "a", encoding="utf-8", buffering=1)
     previous = signal.getsignal(signal.SIGINT)
+    previous_iter_deltas = iter_deltas
+    previous_flush = sys.stdout.flush
+    ready_path = os.environ.get(WATCH_ITER_READY_VARIABLE)
+    hold_flush = os.environ.get(WATCH_HOLD_FLUSH_VARIABLE)
+    announced_iter = False
+    held_flush = False
 
     def record_interrupt(signum: int, frame: object) -> None:
         handle.write(f"SIGINT_HANDLER_ENTERED pid={os.getpid()} signum={signum}\n")
@@ -985,6 +995,28 @@ def _watch_signal_trace() -> Iterator[None]:
         handle.flush()
         raise KeyboardInterrupt
 
+    def wrapped_iter_deltas(*args, **kwargs):
+        def sleeper(interval: float) -> None:
+            nonlocal announced_iter
+            if ready_path and not announced_iter:
+                announced_iter = True
+                Path(ready_path).write_text(
+                    "WATCH_ITER_DELTAS_READY\n", encoding="utf-8"
+                )
+            time_module.sleep(interval)
+
+        bound = dict(kwargs)
+        bound["sleeper"] = sleeper
+        return previous_iter_deltas(*args, **bound)
+
+    def wrapped_flush() -> None:
+        nonlocal held_flush
+        previous_flush()
+        if hold_flush and not held_flush:
+            held_flush = True
+            Path(hold_flush).write_text("WATCH_FLUSH_HOLD\n", encoding="utf-8")
+            select_module.select([], [], [])
+
     try:
         faulthandler.enable(file=handle, all_threads=True)
         if hasattr(signal, "SIGUSR1"):
@@ -992,10 +1024,16 @@ def _watch_signal_trace() -> Iterator[None]:
                 signal.SIGUSR1, file=handle, all_threads=True, chain=False
             )
         signal.signal(signal.SIGINT, record_interrupt)
+        if ready_path:
+            globals()["iter_deltas"] = wrapped_iter_deltas
+        if hold_flush:
+            sys.stdout.flush = wrapped_flush
         handle.write(f"WATCH_TRACE_ARMED pid={os.getpid()}\n")
         handle.flush()
         yield
     finally:
+        globals()["iter_deltas"] = previous_iter_deltas
+        sys.stdout.flush = previous_flush
         handle.write("WATCH_TRACE_DISARMED\n")
         handle.flush()
         signal.signal(signal.SIGINT, previous)

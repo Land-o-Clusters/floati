@@ -158,8 +158,59 @@ def _collapse_install_staging_coordinate(text: str) -> str:
     )
 
 
-def _expose_install_receipt(text: str) -> str:
-    exposed = redact_governed_temp_prefixes(text)
+def _exposed_install_staging_coordinate() -> str:
+    return "<temp>/" + INSTALL_CAPTURE_TEMPORARY_PREFIX.removesuffix("-")
+
+
+def _instrument_path_spellings(path: Path) -> tuple[str, ...]:
+    expanded = path.expanduser()
+    spellings = {str(path), str(expanded)}
+    try:
+        resolved = str(expanded.resolve())
+    except OSError:
+        resolved = str(expanded)
+    spellings.add(resolved)
+    if resolved.startswith("\x2fprivate/tmp/"):
+        spellings.add("\x2ftmp/" + resolved[len("\x2fprivate/tmp/") :])
+    if resolved.startswith("/private/var/"):
+        spellings.add("/var/" + resolved[len("/private/var/") :])
+    return tuple(spelling for spelling in spellings if spelling and spelling != ".")
+
+
+def _redact_instrument_host_prefixes(
+    text: str,
+    *,
+    workspace_root: Path | None = None,
+    staging_root: Path | None = None,
+) -> str:
+    replacements: list[tuple[str, str]] = []
+    if workspace_root is not None:
+        for spelling in _instrument_path_spellings(workspace_root):
+            replacements.append((spelling, "<workspace>"))
+    if staging_root is not None:
+        exposed_staging = _exposed_install_staging_coordinate()
+        for spelling in _instrument_path_spellings(staging_root):
+            replacements.append((spelling, exposed_staging))
+    exposed = text
+    for spelling, replacement in sorted(
+        replacements, key=lambda item: len(item[0]), reverse=True
+    ):
+        exposed = exposed.replace(spelling, replacement)
+    return exposed
+
+
+def _expose_install_receipt(
+    text: str,
+    *,
+    workspace_root: Path | None = None,
+    staging_root: Path | None = None,
+) -> str:
+    exposed = _redact_instrument_host_prefixes(
+        text,
+        workspace_root=workspace_root,
+        staging_root=staging_root,
+    )
+    exposed = redact_governed_temp_prefixes(exposed)
     exposed = _collapse_install_staging_coordinate(exposed)
     return ensure_capture_text_safe(exposed)
 
@@ -263,7 +314,11 @@ def _install_frames() -> list[str]:
         )
         if result.returncode != 0:
             raise RuntimeError(f"committed-tree install failed: {result.stderr.strip()}")
-        receipt = _expose_install_receipt(result.stdout.strip())
+        receipt = _expose_install_receipt(
+            result.stdout.strip(),
+            workspace_root=REPOSITORY_ROOT,
+            staging_root=base,
+        )
     logical_lines = receipt.replace(',"', ',\n"').splitlines()
     wrapped = [
         piece

@@ -47,6 +47,7 @@ class NodeAcknowledgmentHealth:
     acknowledged_count: int
     acknowledgment_latencies_seconds: Tuple[int, ...]
     cadence: Optional[str]
+    ack_sla_minutes: Optional[int]
     red: bool
     sentence: str
 
@@ -83,6 +84,7 @@ class DeliveryHealthAnalyzer:
         nodes: List[str],
         now: datetime,
         cadences: Optional[Mapping[str, str]] = None,
+        ack_slas: Optional[Mapping[str, int]] = None,
     ) -> DeliveryHealthReport:
         envelopes_by_node: Dict[str, List[Dict[str, object]]] = {
             node: [] for node in nodes
@@ -205,6 +207,7 @@ class DeliveryHealthAnalyzer:
                 )
             )
             cadence = None if cadences is None else cadences.get(node)
+            ack_sla = None if ack_slas is None else ack_slas.get(node)
             acknowledgment_red = False
             acknowledgment_sentence = _acknowledgment_sentence(
                 node,
@@ -213,6 +216,7 @@ class DeliveryHealthAnalyzer:
                 acknowledged=len(acknowledged),
                 latencies=latencies,
                 cadence=cadence,
+                ack_sla_minutes=ack_sla,
             )
             acknowledgments_by_node[node] = NodeAcknowledgmentHealth(
                 node=node,
@@ -222,6 +226,7 @@ class DeliveryHealthAnalyzer:
                 acknowledged_count=len(acknowledged),
                 acknowledgment_latencies_seconds=latencies,
                 cadence=cadence,
+                ack_sla_minutes=ack_sla,
                 red=acknowledgment_red,
                 sentence=acknowledgment_sentence,
             )
@@ -252,7 +257,7 @@ class DeliveryHealthAnalyzer:
                     "acknowledged_count": len(acknowledged),
                     "latencies": list(latency_rows),
                     "cadence": cadence,
-                    "sla": "undeclared",
+                    "sla": "undeclared" if ack_sla is None else ack_sla,
                 },
             }
         return DeliveryHealthReport(
@@ -291,6 +296,7 @@ def _acknowledgment_sentence(
     acknowledged: int,
     latencies: Tuple[int, ...],
     cadence: Optional[str],
+    ack_sla_minutes: Optional[int] = None,
 ) -> str:
     parts = [
         f"{node}: {delivered_unacknowledged} delivered-unacknowledged",
@@ -304,7 +310,10 @@ def _acknowledgment_sentence(
         parts.append("role cadence unavailable")
     else:
         parts.append(f"cadence {cadence}")
-    parts.append("no acknowledgment SLA declared")
+    if ack_sla_minutes is None:
+        parts.append("no acknowledgment SLA declared")
+    else:
+        parts.append(f"acknowledgment SLA {ack_sla_minutes}m declared")
     return ", ".join(parts)
 
 

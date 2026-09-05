@@ -1,6 +1,6 @@
 {
   "schema_version": 0,
-  "template_version": 1,
+  "template_version": 2,
   "role": "builder",
   "duties": [
     "Implement assigned rows from the approved design and acceptance evidence.",
@@ -17,6 +17,7 @@
     "Never treat a local commit as banked until the named ref is pushed."
   ],
   "cadence": "envelope-per-row",
+  "ack_sla_minutes": 45,
   "questions": [
     {
       "key": "repo",

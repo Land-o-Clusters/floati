@@ -3225,8 +3225,8 @@ def validate_unknown_record(record: Any, expected_tenant: str) -> Dict[str, Any]
 def validate_artifact_bindings(value: object) -> list[Dict[str, str]]:
     """Validate an adapter boundary value with the durable binding contract."""
 
-    def refuse(code: str, detail: str) -> None:
-        raise ProtocolRefusal(code, detail)
+    def refuse(code: str, detail: str, remedy: Any = None) -> None:
+        raise ProtocolRefusal(code, detail, remedy=remedy)
 
     _artifact_bindings(value, refuse)
     return [dict(binding) for binding in value]  # type: ignore[union-attr]

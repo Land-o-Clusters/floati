@@ -103,7 +103,7 @@ class RoleStepWizardTests(unittest.TestCase):
             "kind": "registry_role_record",
             "node_id": "alpha",
             "template_role": "builder",
-            "template_version": 1,
+            "template_version": 2,
             "template_sha256": template.digest,
             "answers": {
                 "repo": "floati",

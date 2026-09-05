@@ -1,6 +1,6 @@
 {
   "schema_version": 0,
-  "template_version": 1,
+  "template_version": 2,
   "role": "github-manager",
   "duties": [
     "Keep the named repository's pull requests, issues, and labels current and truthful.",
@@ -18,6 +18,7 @@
     "Never rewrite published history or touch CI credentials and secrets."
   ],
   "cadence": "envelope-per-row",
+  "ack_sla_minutes": 45,
   "questions": [
     {
       "key": "repo",

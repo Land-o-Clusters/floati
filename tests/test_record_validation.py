@@ -12,7 +12,13 @@ from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.decisions import decision_digest
 from floati.ids import uuid7_hex
 from floati.jsonl import append_record, read_records
-from floati.records import run_admission_digest, validate_record
+from floati.records import (
+    run_admission_digest,
+    validate_artifact_bindings,
+    validate_record,
+    validate_repository_coordinate,
+    validate_unknown_record,
+)
 from floati.root import FloatiRoot
 
 
@@ -835,6 +841,79 @@ class RecordValidationTests(unittest.TestCase):
                     validate_record(dict(row, schema_version=0), "alpha", allowed, integrity=False)
                 with self.assertRaises(ProtocolRefusal):
                     validate_record(dict(row, unexpected=True), "alpha", allowed, integrity=False)
+
+
+class ArtifactBindingDocRefusalTests(unittest.TestCase):
+    """NOTE-1-F1 — invalid docs stay ProtocolRefusal, not TypeError."""
+
+    SHA = "a" * 40
+
+    def binding(self, doc: object) -> list[dict[str, object]]:
+        return [{"repo": "a", "sha": self.SHA, "doc": doc}]
+
+    def assert_doc_invalid(self, doc: object) -> ProtocolRefusal:
+        with self.assertRaises(ProtocolRefusal) as caught:
+            validate_artifact_bindings(self.binding(doc))
+        self.assertIsInstance(caught.exception, ProtocolRefusal)
+        self.assertEqual("doc_invalid", caught.exception.code)
+        self.assertIsInstance(caught.exception.remedy, str)
+        self.assertTrue(str(caught.exception.remedy).strip())
+        return caught.exception
+
+    def test_escape_doc_is_protocol_refusal_with_remedy(self) -> None:
+        refusal = self.assert_doc_invalid("../etc/passwd")
+        self.assertIn("contained", refusal.detail)
+
+    def test_every_invalid_doc_shape_is_protocol_refusal_with_remedy(self) -> None:
+        cases = (
+            None,
+            1,
+            "",
+            "/README.md",
+            "docs//README.md",
+            "docs/./README.md",
+            "docs/../README.md",
+            "../etc/passwd",
+            "x" * 1025,
+            "docs/a\nb.md",
+        )
+        for doc in cases:
+            with self.subTest(doc=doc):
+                self.assert_doc_invalid(doc)
+
+    def test_two_arg_refuse_closures_do_not_route_to_three_arg_helpers(self) -> None:
+        import ast
+
+        source = (Path(__file__).resolve().parents[1] / "floati" / "records.py").read_text(
+            encoding="utf-8"
+        )
+        tree = ast.parse(source)
+        helpers = {"_repository_document", "_bounded_note", "_bounded_string"}
+        routed: list[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for child in node.body:
+                if not isinstance(child, ast.FunctionDef) or child.name != "refuse":
+                    continue
+                names = [argument.arg for argument in child.args.args]
+                if "remedy" in names:
+                    continue
+                for call in ast.walk(node):
+                    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+                        continue
+                    if call.func.id in helpers:
+                        routed.append(node.name)
+        self.assertEqual(
+            [],
+            routed,
+            "a two-arg refuse closure is wired to a three-arg helper",
+        )
+        with self.assertRaises(ProtocolRefusal) as repo:
+            validate_repository_coordinate("../secret")
+        self.assertEqual("repository_invalid", repo.exception.code)
+        with self.assertRaises(IntegrityFailure):
+            validate_unknown_record("not-an-object", "alpha")
 
 
 if __name__ == "__main__":

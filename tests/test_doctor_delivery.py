@@ -26,7 +26,7 @@ from floati.delivery_health import (
     DeliveryHealthAnalyzer,
 )
 from floati.cursor import SparseCursor
-from floati.doctor import Doctor, _role_cadences
+from floati.doctor import Doctor, _role_ack_slas, _role_cadences
 from floati.doctor_probe import DoctorProbe
 from floati.events import EventLog
 from floati.registry import Registry
@@ -83,6 +83,25 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self.assertEqual(
             {"bob": "envelope-per-row"},
             _role_cadences(Path.cwd(), ["bob"], rows),
+        )
+
+    def test_doctor_resolves_only_digest_bound_role_ack_sla(self):
+        templates = load_shipped_role_templates(Path.cwd() / "roles" / "shipped")
+        builder = templates["builder"]
+        rows = [
+            {
+                "kind": "registry_role_record",
+                "node_id": "bob",
+                "state": "active",
+                "template_role": "builder",
+                "template_version": builder.template_version,
+                "template_sha256": builder.digest,
+            }
+        ]
+
+        self.assertEqual(
+            {"bob": builder.ack_sla_minutes},
+            _role_ack_slas(Path.cwd(), ["bob"], rows),
         )
 
     def test_doctor_artifact_supplies_a_datetime_to_live_delivery_health(self):
@@ -232,6 +251,38 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
             finding["acknowledgment"]["latencies"],
         )
         self.assertEqual("undeclared", finding["acknowledgment"]["sla"])
+
+    def test_declared_ack_sla_replaces_the_absence_without_new_red(self):
+        """ACK-1-F1: a declared measured SLA names itself in the finding;
+        declaration is evidence, never a severity change."""
+
+        sender = public_ids.worker("alpha")
+        self.registry.register(sender, "opencode")
+        self.registry.register("bob", "opencode")
+        acknowledged = self._send_at(30, sender, "bob", "acknowledged")
+        self._send_at(25, sender, "bob", "pending")
+        self._drain_at(20, "bob")
+        SparseCursor(self.root).ack(
+            "bob",
+            [acknowledged],
+            acting_session_id="bob-session",
+            now=NOW - timedelta(minutes=5),
+        )
+
+        report = DeliveryHealthAnalyzer.analyze(
+            events=self.log.records(),
+            root=self.root,
+            nodes=[sender, "bob"],
+            cadences={"bob": "envelope-per-row"},
+            ack_slas={"bob": 45},
+            now=NOW,
+        )
+
+        finding = report.acknowledgment_findings_by_node["bob"]
+        self.assertEqual(45, finding["acknowledgment"]["sla"])
+        self.assertIn("acknowledgment SLA 45m declared", finding["detail"])
+        self.assertEqual("info", finding["severity"])
+        self.assertFalse(report.acknowledgments_by_node["bob"].red)
 
     def test_delivered_unacked_before_next_row_is_measured_without_time_guess(self):
         sender = public_ids.worker("alpha")

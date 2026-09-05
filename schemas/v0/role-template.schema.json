@@ -16,16 +16,30 @@
     "questions"
   ],
   "properties": {
-    "schema_version": {"const": 0},
-    "template_version": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "schema_version": {
+      "const": 0
+    },
+    "template_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
     "role": {
       "type": "string",
       "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
     },
-    "duties": {"$ref": "#/$defs/copy_lines"},
-    "decision_rights": {"$ref": "#/$defs/copy_lines"},
-    "stops": {"$ref": "#/$defs/copy_lines"},
-    "fences": {"$ref": "#/$defs/copy_lines"},
+    "duties": {
+      "$ref": "#/$defs/copy_lines"
+    },
+    "decision_rights": {
+      "$ref": "#/$defs/copy_lines"
+    },
+    "stops": {
+      "$ref": "#/$defs/copy_lines"
+    },
+    "fences": {
+      "$ref": "#/$defs/copy_lines"
+    },
     "cadence": {
       "type": "string",
       "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
@@ -37,16 +51,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["key", "ask"],
+        "required": [
+          "key",
+          "ask"
+        ],
         "properties": {
           "key": {
             "type": "string",
             "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
           },
-          "ask": {"$ref": "#/$defs/copy_line"},
-          "default": {"$ref": "#/$defs/copy_line"}
+          "ask": {
+            "$ref": "#/$defs/copy_line"
+          },
+          "default": {
+            "$ref": "#/$defs/copy_line"
+          }
         }
       }
+    },
+    "ack_sla_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
     }
   },
   "$defs": {
@@ -60,7 +86,9 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 64,
-      "items": {"$ref": "#/$defs/copy_line"}
+      "items": {
+        "$ref": "#/$defs/copy_line"
+      }
     }
   }
 }

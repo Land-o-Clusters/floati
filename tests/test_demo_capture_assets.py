@@ -166,6 +166,68 @@ class DemoCaptureAssetTests(unittest.TestCase):
             capture._expose_install_receipt(second),
         )
 
+    def test_hosted_runner_receipt_is_refused_without_instrument_roots(self) -> None:
+        """RED: a GHA workspace path carries the operator token the fence forbids."""
+
+        with mock.patch.dict(os.environ, {"USER": "runner", "LOGNAME": "runner"}):
+            capture = load_capture_module()
+        workspace = Path("/home/runner/work/floati/floati")
+        staging = Path("/home/runner/work/_temp/floati-capture-install-ab12_cd3")
+        receipt = (
+            '{"wiring_journal":"'
+            + str(staging)
+            + '/installed/journal.jsonl","clone":"'
+            + str(workspace)
+            + '","signature":"real-content-deadbeef"}'
+        )
+        with self.assertRaises(ValueError) as caught:
+            capture._expose_install_receipt(receipt)
+        self.assertIn("private token: runner", str(caught.exception))
+
+    def test_exposure_redacts_workspace_and_staging_roots_before_the_fence(self) -> None:
+        """GREEN: instrument literals, not the forbidden word, leave the photograph."""
+
+        with mock.patch.dict(os.environ, {"USER": "runner", "LOGNAME": "runner"}):
+            capture = load_capture_module()
+        workspace = Path("/home/runner/work/floati/floati")
+        first_staging = Path("/home/runner/work/_temp/floati-capture-install-ab12_cd3")
+        second_staging = Path("/home/runner/work/_temp/floati-capture-install-zy98_wv7")
+
+        def planted(staging: Path) -> str:
+            return (
+                '{"wiring_journal":"'
+                + str(staging)
+                + '/installed/journal.jsonl","clone":"'
+                + str(workspace)
+                + '","signature":"real-content-deadbeef"}'
+            )
+
+        first = capture._expose_install_receipt(
+            planted(first_staging),
+            workspace_root=workspace,
+            staging_root=first_staging,
+        )
+        second = capture._expose_install_receipt(
+            planted(second_staging),
+            workspace_root=workspace,
+            staging_root=second_staging,
+        )
+        expected = (
+            '{"wiring_journal":"<temp>/floati-capture-install/'
+            'installed/journal.jsonl","clone":"<workspace>",'
+            '"signature":"real-content-deadbeef"}'
+        )
+        self.assertEqual(expected, first)
+        self.assertEqual(expected, second)
+        self.assertNotIn('"/', first)
+        self.assertNotIn("runner", SCRIPT.read_text(encoding="utf-8"))
+        with self.assertRaises(ValueError) as word:
+            capture._expose_install_receipt("runner")
+        self.assertIn("private token: runner", str(word.exception))
+        with self.assertRaises(ValueError) as leftover:
+            capture._expose_install_receipt("/home/runner/not-an-instrument-root")
+        self.assertIn("private token: runner", str(leftover.exception))
+
     def test_install_receipt_keeps_field_and_redacts_governed_parent(self) -> None:
         """Catches capture rendering that leaks or deletes its staging path."""
 
