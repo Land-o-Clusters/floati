@@ -31,9 +31,8 @@ from .fleet_update_registry import (
     rewrite_transport_pins,
 )
 from .git_process import fixed_git_command, fixed_git_environment
-from .jsonl import read_records_snapshot
 from .manifest import verify_manifest_inventory
-from .registry import REGISTRY_KINDS, Registry
+from .registry import Registry, read_registry_compatible
 from .root import FloatiRoot, validate_identifier
 from .waiter_bundle import waiter_runtime_digest
 
@@ -1436,7 +1435,7 @@ def _owner_review_batch(root: FloatiRoot, bindings: Sequence[Dict[str, str]], ta
     _payload, mapping = _strict_json_file(mapping_path, "fleet_update_mapping_invalid")
     if set(mapping) != {"schema_version", "tenant_id", "mappings"} or mapping.get("schema_version") != 0 or mapping.get("tenant_id") != root.tenant_id or not isinstance(mapping.get("mappings"), list):
         raise ProtocolRefusal("fleet_update_mapping_invalid", "workspace mapping inventory has an unsupported shape")
-    records = read_records_snapshot(root, "registry/entries.jsonl", allowed_kinds=REGISTRY_KINDS)
+    records, _unrecognized, _versions = read_registry_compatible(root)
     latest: Dict[str, Dict[str, object]] = {}
     leases: Dict[str, Dict[str, object]] = {}
     for row in records:

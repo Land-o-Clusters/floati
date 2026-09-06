@@ -58,3 +58,26 @@ def vocabulary_skew_fact(
             timespec="milliseconds"
         ).replace("+00:00", "Z"),
     )
+
+
+def older_readers(
+    unknown_versions: Mapping[str, int] | Sequence[tuple[str, int]],
+) -> list[dict[str, str]]:
+    """Name this reader when the ledger's newest kind is above its vocabulary."""
+
+    items = (
+        unknown_versions.items()
+        if isinstance(unknown_versions, Mapping)
+        else unknown_versions
+    )
+    versions = {str(kind): int(version) for kind, version in items}
+    if not versions:
+        return []
+    newest = max(versions.values())
+    kind = sorted(name for name, version in versions.items() if version == newest)[0]
+    return [
+        {
+            "reader_schema_version": READER_VERSION,
+            "ledger_newest_kind": kind,
+        }
+    ]

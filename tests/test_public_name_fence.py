@@ -9,9 +9,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.export_inventory import export_include_set, materialise_exposed_tree
+from tests.private_artifacts import require_private_artifact
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPOSITORY_ROOT / "scripts" / "public_name_fence.py"
+POLICY_RELATIVE = ".github/public-export-policy.v0.json"
+MEASURED_ARCHITECT_RESIDUE_PATHS = (
+    "docs/evidence/DEMO-UAT-CAPTURE-GIF-CANDIDATES.md",
+    "docs/evidence/DEMO-UAT-CAPTURE-GIF-SET.md",
+    "docs/evidence/DEMO-UAT-CORPUS-FOUNDATIONS.md",
+    "docs/evidence/FLEET-OPS-ISSUE-1-REGISTRY-RETIREMENT-VERB.md",
+    "docs/evidence/FLEET-OPS-ISSUE-2-DOCTOR-BUS-ONLY-PROFILE.md",
+    "docs/evidence/WEEKEND-TRAIN-CAR-3-DELIVERY-HEALTH-DOCTOR-PROBE.md",
+    "docs/evidence/wave2-r1-headless-invocations-2026-08-27.md",
+    "docs/evidence/wave2-r2-pi-deadline-classification-2026-08-27.md",
+    "docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md",
+)
 HOME_PREFIX = bytes.fromhex("2f55736572732f").decode("ascii")
 PRIVATE_TMP_PREFIX = bytes.fromhex("2f707269766174652f746d70").decode("ascii")
 PRIVATE_VAR_TMP_PREFIX = bytes.fromhex("2f707269766174652f7661722f746d70").decode("ascii")
@@ -26,6 +41,8 @@ ARCHITECT_SEAT = bytes.fromhex("6661626c65").decode("ascii")
 BUILD_SEAT_PREFIX = bytes.fromhex("6c616e652d").decode("ascii")
 BUILD_SEAT = bytes.fromhex("616c69636537").decode("ascii")
 SHORT_BUILD_SEAT = bytes.fromhex("736f6c").decode("ascii")
+CITY_SEAT = bytes.fromhex("616c696365").decode("ascii")
+PUDDLE_SEAT = bytes.fromhex("707564646c65").decode("ascii")
 
 
 class PublicNameFenceTests(unittest.TestCase):
@@ -45,40 +62,60 @@ class PublicNameFenceTests(unittest.TestCase):
             self.assertEqual([], module.scan_tree(root))
 
     def test_public_product_source_has_no_private_seat_vocabulary(self) -> None:
-        """A private seat identifier reaching product code or tests is rejected."""
+        """An exact seat id reaching an export-exposed byte surface is rejected."""
 
+        require_private_artifact(self, POLICY_RELATIVE)
         module = self.module()
-        policy_path = REPOSITORY_ROOT / ".github" / "public-export-policy.v0.json"
-        if policy_path.is_file():
-            policy = json.loads(policy_path.read_text(encoding="utf-8"))
-            private_only = set(policy["private_only_paths"])
-            private_prefixes = tuple(policy["class3_prefixes"])
-        else:
-            private_only = set()
-            private_prefixes = ()
-        public_prefixes = (
-            ".github/",
-            "bundle/",
-            "floati/",
-            "roles/",
-            "schemas/",
-            "scripts/",
-            "tests/",
-            "trust/",
-        )
-        findings = [
-            finding
-            for finding in module.scan_tree(REPOSITORY_ROOT)
-            if finding["code"] in {"seat_name", "seat_name_path"}
-            and finding["path"] not in private_only
-            and not str(finding["path"]).startswith(private_prefixes)
-            and (
-                finding["path"] == "README.md"
-                or str(finding["path"]).startswith(public_prefixes)
-            )
-        ]
+        population = set(export_include_set())
+        with tempfile.TemporaryDirectory() as temporary:
+            exposed = Path(temporary) / "exposed"
+            materialise_exposed_tree(exposed)
+            findings = [
+                finding
+                for finding in module.scan_tree(exposed)
+                if finding["code"] in {"seat_name", "seat_name_path"}
+                and finding["path"] in population
+            ]
 
         self.assertEqual([], findings)
+
+    def test_measured_architect_residue_paths_are_not_export_exposed(self) -> None:
+        """The nine measured docs/evidence paths must not carry architect ids after adaptation."""
+
+        require_private_artifact(self, POLICY_RELATIVE)
+        module = self.module()
+        population = set(MEASURED_ARCHITECT_RESIDUE_PATHS)
+        self.assertLessEqual(population, set(export_include_set()))
+        with tempfile.TemporaryDirectory() as temporary:
+            exposed = Path(temporary) / "exposed"
+            materialise_exposed_tree(exposed)
+            findings = sorted(
+                {
+                    finding["path"]
+                    for finding in module.scan_tree(exposed)
+                    if finding["code"] in {"seat_name", "seat_name_path"}
+                    and finding["path"] in population
+                }
+            )
+
+        self.assertEqual([], findings)
+
+    def test_planted_seat_id_in_export_included_evidence_is_refused(self) -> None:
+        """A seat id planted on an export-included evidence path must refuse the fence."""
+
+        require_private_artifact(self, POLICY_RELATIVE)
+        module = self.module()
+        relative = "docs/evidence/conformance/name-fence-2-control-fixture.md"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"assigned to {ARCHITECT_SEAT}\n", encoding="utf-8")
+
+            self.assertEqual(
+                [{"code": "seat_name", "line": 1, "path": relative}],
+                module.scan_tree(root),
+            )
 
     def test_home_prefix_is_detected_in_each_supported_encoding(self) -> None:
         """Dropping an encoding from the byte fence leaves that encoded path publishable."""
@@ -205,6 +242,69 @@ class PublicNameFenceTests(unittest.TestCase):
                         "build-prefix.bin",
                         "verification-explicit.bin",
                     )
+                ],
+                module.scan_tree(root),
+            )
+
+    def test_suffixed_seat_ids_are_caught_while_word_continuations_stay_safe(self) -> None:
+        """NAME-FENCE-2 Am.1: a numeric suffix cannot launder a seat id.
+
+        The trailing guard refused any continuation, so ``<seat>-2`` — a
+        real numbered lane seat — was invisible while the vocabulary held
+        only the base id: tests/test_wake_notice_1.py carried one three
+        times and the fence returned []. Am.2 then widened the guards to
+        treat joins as components, so the seat's word continuation is
+        caught too; the product compound of the verification seat stays
+        exempt (covered beside the encoding-agnostic fixtures).
+        """
+
+        module = self.module()
+        numbered_seat = ARCHITECT_SEAT + "-2"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "numbered.bin").write_text(numbered_seat, encoding="utf-8")
+            (root / "word-continuation.bin").write_text(
+                ARCHITECT_SEAT + "-build", encoding="utf-8"
+            )
+
+            self.assertEqual(
+                [
+                    {"code": "seat_name", "line": 1, "path": "numbered.bin"},
+                    {"code": "seat_name", "line": 1, "path": "word-continuation.bin"},
+                ],
+                module.scan_tree(root),
+            )
+
+    def test_seat_ids_are_caught_as_compound_components(self) -> None:
+        """NAME-FENCE-2 Am.2: joining cannot launder a seat id.
+
+        Hyphen- and underscore-joined compounds carried seat vocabulary
+        past the boundary: a relief-lane compound, a fleet-city compound,
+        an underscore join, and a matrix-audit label were all no-match at
+        Am.1's tip and all present in the live projection. A seat id is
+        now caught as any joined component of a longer token, while the
+        product compound of the verification seat stays exempt.
+        """
+
+        module = self.module()
+        compounds = {
+            "compound-middle.bin": f"{PUDDLE_SEAT}-{CITY_SEAT}-city",
+            "compound-prefix.bin": BUILD_SEAT_PREFIX + PUDDLE_SEAT + "-relief",
+            "compound-suffix.bin": f"matrix-audit-{ARCHITECT_SEAT}-x",
+            "compound-underscore.bin": f"{CITY_SEAT}_city",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, text in compounds.items():
+                (root / name).write_text(text, encoding="utf-8")
+            (root / "product-compound.bin").write_text(
+                VERIFICATION_SEAT + "-build", encoding="utf-8"
+            )
+
+            self.assertEqual(
+                [
+                    {"code": "seat_name", "line": 1, "path": name}
+                    for name in sorted(compounds)
                 ],
                 module.scan_tree(root),
             )

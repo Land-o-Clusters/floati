@@ -31,8 +31,24 @@ PINNED_BOX_LEG_RUN = AT_BOX_LEG_RUN
 # records how many tests actually skipped under run 33980338058.
 PINNED_SKIP_REASONS = {
     # FIXTURE-1's fence (train AV) skips by design in a projection, where the
-    # export policy is absent and classification is the identity.
+    # export policy is absent and classification is the identity. H1-F1 Am.2's
+    # projection-builder leg words the same skip: it cannot build a projection
+    # without a policy either.
     "no export policy in this tree; classification is identity": {
+        "sites": 2,
+        "kind": PRODUCT,
+    },
+    # NET-FENCE-1-F2's private_only twins (tests/test_no_listener_fence.py,
+    # tests/test_h1_f1.py) skip by design in a projection: the excluded half
+    # they pin exists only in the harbor, where the export policy lives.
+    "export_policy_absent: a policy-less projection carries no excluded half, so the private half is a typed skip": {
+        "sites": 2,
+        "kind": PRODUCT,
+    },
+    # BASELINE-1-F1 Am.1 (7e1aa486) runs one test as a child of a
+    # projection-shape run and skips it there by design; pinned on the AZ
+    # union where the car first met this census.
+    "child of a projection-shape run; not this test's subject": {
         "sites": 1,
         "kind": PRODUCT,
     },

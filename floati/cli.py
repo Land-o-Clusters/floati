@@ -1147,6 +1147,22 @@ def _wait(args: argparse.Namespace) -> int:
     return WAIT_CONDITIONS[args.condition](args, _wait_payload(args))
 
 
+def _waiter_arm(args: argparse.Namespace) -> HandlerResult:
+    """Arm waiter consent for one mapped workspace, harness-checked."""
+
+    from .waiter_consent import arm_waiter_consent
+
+    evidence = arm_waiter_consent(
+        Path(_root(args.root).path),
+        Path(args.workspace),
+        args.node,
+        args.harness,
+        args.hook_timeout_seconds,
+        args.wait_deadline_seconds,
+    )
+    return "ok", evidence, OK
+
+
 def _binding(args: argparse.Namespace) -> list[Dict[str, str]]:
     values = (getattr(args, "repo", None), getattr(args, "sha", None), getattr(args, "doc", None))
     if all(value is None for value in values):
@@ -2222,6 +2238,21 @@ def _parser() -> _ArtifactParser:
     wait.add_argument("--workspace", metavar="PATH")
     wait.add_argument("--session-id", metavar="ID")
     wait.set_defaults(direct_handler=_wait)
+
+    waiter = commands.add_parser("waiter")
+    waiter_commands = waiter.add_subparsers(dest="waiter_command", required=True)
+    waiter_arm = waiter_commands.add_parser("arm")
+    waiter_arm.add_argument("--root", required=True, metavar="PATH")
+    waiter_arm.add_argument("--node", required=True, metavar="NODE")
+    waiter_arm.add_argument("--workspace", required=True, metavar="PATH")
+    waiter_arm.add_argument("--harness", required=True, metavar="HARNESS")
+    waiter_arm.add_argument(
+        "--hook-timeout-seconds", required=True, type=int, metavar="N"
+    )
+    waiter_arm.add_argument(
+        "--wait-deadline-seconds", required=True, type=int, metavar="N"
+    )
+    waiter_arm.set_defaults(handler=_waiter_arm)
 
     receipts = commands.add_parser("receipts", floati_mcp_exposure="read")
     receipts.add_argument("node", metavar="NODE")

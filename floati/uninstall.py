@@ -1,4 +1,12 @@
-"""Manifest-exact, data-retaining removal of an installed Floati bundle."""
+"""Manifest-exact, data-retaining removal of an installed Floati bundle.
+
+HOME-1: a removal is a durable action and leaves a durable receipt —
+but only where the operator declares one (``--receipt-dir DIR``,
+absolute). The default writes no file anywhere, least of all bare
+``$HOME``: the U2 tombstone writer (``Path.home() /
+"floati-uninstalled-<ts>.json"``, commit 9cb87558) is the measured
+incident this contract never repeats.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +16,7 @@ import json
 import os
 import re
 import stat
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Sequence, Tuple
 
@@ -382,8 +391,98 @@ class UninstallWriter:
         }
 
 
+RECEIPT_PREFIX = "floati-uninstalled-"
+
+
+def _write_receipt(receipt_dir_arg: str, evidence: Dict[str, Any]) -> Path:
+    """Write the durable removal receipt into the DECLARED directory.
+
+    Absolute is required (a receipt never lands relative to an ambient
+    working directory), a symlinked directory is refused, and the
+    filename keeps the tombstone's shape so the fossils and their
+    successors are greppable by one prefix.
+    """
+
+    receipt_dir = Path(receipt_dir_arg).expanduser()
+    if not receipt_dir.is_absolute():
+        raise ProtocolRefusal(
+            "uninstall_receipt_dir_absolute_required",
+            "--receipt-dir must be an absolute path; a receipt is never "
+            "written relative to an ambient working directory",
+            remedy="pass one absolute directory, e.g. "
+            "--receipt-dir /absolute/path/to/receipts",
+        )
+    if receipt_dir.is_symlink():
+        raise ProtocolRefusal(
+            "uninstall_receipt_dir_symlinked",
+            "--receipt-dir must not be a symlink",
+            remedy="pass the real directory itself, never a symlink to it",
+        )
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    path = receipt_dir / f"{RECEIPT_PREFIX}{stamp}.json"
+    counter = 1
+    while path.exists():
+        path = receipt_dir / f"{RECEIPT_PREFIX}{stamp}-{counter}.json"
+        counter += 1
+    payload = {"schema_version": 1, "command": "uninstall", **evidence}
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return path
+
+
+def _validate_receipt_dir(receipt_dir_arg: str) -> None:
+    """HOME-1 Am.3: validate the declared receipt directory BEFORE any
+    destructive step. A refusal must never arrive after the removal it
+    names - ProtocolRefusal means refused before any mutation."""
+
+    receipt_dir = Path(receipt_dir_arg).expanduser()
+    if not receipt_dir.is_absolute():
+        raise ProtocolRefusal(
+            "uninstall_receipt_dir_absolute_required",
+            "--receipt-dir must be an absolute path; a receipt is never "
+            "written relative to an ambient working directory",
+            remedy="pass one absolute directory, e.g. "
+            "--receipt-dir /absolute/path/to/receipts",
+        )
+    if receipt_dir.is_symlink():
+        raise ProtocolRefusal(
+            "uninstall_receipt_dir_symlinked",
+            "--receipt-dir must not be a symlink",
+            remedy="pass the real directory itself, never a symlink to it",
+        )
+    try:
+        receipt_dir.mkdir(parents=True, exist_ok=True)
+        probe = receipt_dir / f".floati-receipt-probe-{os.getpid()}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError as exc:
+        raise ProtocolRefusal(
+            "uninstall_receipt_dir_unwritable",
+            "--receipt-dir must be writable; a receipt that cannot be "
+            "written must refuse before the removal starts",
+            remedy="choose a writable directory for --receipt-dir",
+        ) from exc
+
+
 def _handle(args: argparse.Namespace) -> Tuple[str, Dict[str, Any], int]:
+    if args.receipt_dir is not None:
+        if args.dry_run:
+            raise ProtocolRefusal(
+                "uninstall_receipt_dir_dry_run_conflict",
+                "--receipt-dir records a real removal; a dry run writes "
+                "no receipt",
+                remedy="drop --receipt-dir to keep planning, or drop "
+                "--dry-run to perform the real removal with its receipt",
+            )
+        _validate_receipt_dir(args.receipt_dir)
     evidence = UninstallWriter(args.destination, dry_run=args.dry_run).run()
+    if args.receipt_dir is not None:
+        evidence = {
+            **evidence,
+            "receipt_written": str(_write_receipt(args.receipt_dir, evidence)),
+        }
     return "ok", evidence, 0
 
 
@@ -392,5 +491,6 @@ def register_cli(commands: argparse._SubParsersAction) -> None:
     uninstall = commands.add_parser("uninstall")
     uninstall.add_argument("--destination", required=True)
     uninstall.add_argument("--dry-run", action="store_true")
+    uninstall.add_argument("--receipt-dir", default=None, metavar="DIR")
     uninstall.add_argument("--json", action="store_true")
     uninstall.set_defaults(handler=_handle)

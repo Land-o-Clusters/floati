@@ -115,6 +115,6 @@ C8 herdr is next. No foreign-bus path was read or written.
 
 ---
 **ADDENDUM (the architect, 2026-08-29, matrix audit):** the failure this document records was
-scoped or fixed after it was written — see `docs/evidence/matrix-audit-fable-2026-08-29.md`
+scoped or fixed after it was written — see `docs/evidence/matrix-audit-the architect-08-29.md`
 for the re-run. The capability-matrix cells citing this receipt are supported by its
 passing sections; this note exists so the headline cannot mislead a later reader.

@@ -827,8 +827,8 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
                     'identity, the sole consumption coordinate, sandbox write coordinates, and an explicitly '
                     'supplied local gateway config. Sandbox checks run by default.',
             'notes': ('The installer-shadow check reads PATH as supplied; a PATH that omits the install '
-                      'scripts directory yields unknown, naming the blocked entry - a partial scan is never '
-                      'reported as no-shadowing.',
+                      'scripts directory yields launcher_not_on_path; an unreadable entry yields path_entry_unreadable. '
+                      'Both name the coordinate and remedy; partial scans never claim no-shadowing.',
                       'Remediation is printed only when its currency prerequisites are established.'),
             'examples': 'floati doctor --root ~/fleet --source /repo/floati --ref origin/lane/hm0 '
                         '--gateway-config ~/gateway.json',
@@ -1203,6 +1203,35 @@ HELP_COPY.update({
             '--session': 'Explicit acting session; ambient runtime identity is not used.',
             '--idempotency-key': 'Stable key for replay of the same boarding coordinate.',
             '--take-over': 'Explicitly replace a different recorded claimant.',
+        },
+    },
+    'waiter': {
+        'description': 'arm exact waiter consent for a declared workspace',
+        'body': 'Arm the Stop-waiter consent that `floati wait` holds a turn on. The verb checks the '
+                'seat against its registered harness, maps the workspace onto the node, and appends '
+                'one armed consent receipt; it writes nothing when a check refuses.',
+        'notes': ('Consent is per node and carries the deadline; the bridge and `floati wait` both '
+                  'refuse to arm anything, so this verb is the one public act that arms it.',),
+        'examples': 'floati waiter arm --help',
+        'option_docs': {},
+    },
+    'waiter arm': {
+        'description': 'map one workspace and arm its waiter consent',
+        'body': 'Check the node is registered as the named harness, write the workspace map row, and '
+                'arm the same consent ledger the Codex installer arms, under the same derived-key '
+                'idempotency: the same numbers return the same receipt, a changed number re-arms.',
+        'notes': (
+            'A harness the node is not registered as refuses before any write.',
+            'The wait deadline must be positive and strictly below the hook timeout.',
+        ),
+        'examples': 'floati waiter arm --root /absolute/fleet --node builder-a --workspace /absolute/workspace --harness zcode --hook-timeout-seconds 30 --wait-deadline-seconds 25',
+        'option_docs': {
+            '--root': 'Exact fleet root.',
+            '--node': 'Registered active node whose consent is armed.',
+            '--workspace': 'Existing absolute workspace directory to map onto the node.',
+            '--harness': 'Harness the seat must be registered as; compared without case.',
+            '--hook-timeout-seconds': 'Hook timeout the armed deadline must stay strictly below.',
+            '--wait-deadline-seconds': 'Bounded hold length the consent arms.',
         },
     },
 })

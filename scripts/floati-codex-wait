@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Immutable installed entry point for the Floati Codex Stop waiter."""
+"""Shim: the installed Codex Stop waiter execs `floati wait`."""
 
 from pathlib import Path
 import sys
@@ -9,8 +9,16 @@ bundle_root = Path(__file__).resolve().parents[1]
 if str(bundle_root) not in sys.path:
     sys.path.insert(0, str(bundle_root))
 
-from floati.codex_wait import main  # noqa: E402
+from floati.cli import main  # noqa: E402
+
+WAIT_PREFIX = ["wait", "--for", "fresh-work"]
+
+
+def _argv(argv: list[str]) -> list[str]:
+    if argv[:3] == WAIT_PREFIX:
+        return argv
+    return WAIT_PREFIX + argv
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(_argv(sys.argv[1:])))

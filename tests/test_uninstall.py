@@ -233,5 +233,166 @@ class UninstallWriterTests(unittest.TestCase):
         self.assertIn(".floati-install/wiring-journal.v1.jsonl", readme)
 
 
+class UninstallReceiptHomeFenceTests(unittest.TestCase):
+    """HOME-1: the uninstall receipt is durable and never lands in $HOME.
+
+    The 114 `~/floati-uninstalled-<ts>.json` strays (measured 21:1xZ) are
+    fossils of the U2 tombstone writer (`TOMBSTONE_PREFIX`, Path.home(),
+    9cb87558) that selftests exercised 08-22 → 08-28; the manifest-exact
+    rewrite (c7515420) removed the writer and left NO durable receipt at
+    all. The row's shape: --receipt-dir makes the receipt durable at an
+    operator-declared absolute directory; without it nothing is written
+    anywhere — least of all bare $HOME.
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.base = Path(self.temporary.name)
+        self.destination = self.base / "install"
+        self.destination.mkdir()
+        (self.destination / "scripts").mkdir()
+        entrypoint = self.destination / "scripts" / "floati"
+        entrypoint.write_bytes(b"#!/bin/sh\n")
+        (self.destination / ".floati-install").mkdir()
+        metadata = self.destination / ".floati-install" / "manifest.v0.json"
+        metadata.write_text(
+            json.dumps(
+                {
+                    "schema_version": 0,
+                    "source_ref": "refs/heads/main",
+                    "source_sha": "a" * 40,
+                    "files": [
+                        {
+                            "path": "scripts/floati",
+                            "sha256": hashlib.sha256(b"#!/bin/sh\n").hexdigest(),
+                        }
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def test_receipt_dir_writes_the_durable_receipt(self) -> None:
+        """RED: --receipt-dir is unrecognized — no durable receipt exists."""
+
+        from floati.mcp import run_cli_artifact
+
+        receipts = self.base / "receipts"
+        exit_code, artifact = run_cli_artifact(
+            [
+                "uninstall",
+                "--destination", str(self.destination),
+                "--receipt-dir", str(receipts),
+            ]
+        )
+        self.assertEqual(0, exit_code, artifact)
+        self.assertEqual("ok", artifact["status"])
+        written = sorted(receipts.glob("floati-uninstalled-*.json"))
+        self.assertEqual(1, len(written), receipts)
+        payload = json.loads(written[0].read_text(encoding="utf-8"))
+        self.assertEqual(1, payload["schema_version"])
+        self.assertEqual("uninstall", payload["command"])
+        self.assertEqual(str(self.destination.resolve()), payload["destination"])
+        self.assertGreater(payload["removed_count"], 0)
+        self.assertEqual(str(written[0]), artifact["evidence"]["receipt_written"])
+
+    def test_receipt_dir_must_be_absolute(self) -> None:
+        """A receipt never lands relative to an ambient working directory."""
+
+        from floati.mcp import run_cli_artifact
+
+        exit_code, artifact = run_cli_artifact(
+            [
+                "uninstall",
+                "--destination", str(self.destination),
+                "--receipt-dir", "receipts/relative",
+            ]
+        )
+        self.assertEqual(20, exit_code, artifact)
+        self.assertEqual(
+            "uninstall_receipt_dir_absolute_required", artifact["evidence"]["code"]
+        )
+        self.assertEqual([], sorted(self.base.rglob("floati-uninstalled-*.json")))
+
+    def test_a_symlinked_receipt_dir_refuses_before_any_destructive_step(self) -> None:
+        """HOME-1 Am.3 RED: the receipt-dir validation ran AFTER the
+        destructive uninstall, so a refused removal had already deleted
+        the destination - exit 20 with the mutation done, against
+        ProtocolRefusal's own contract (refused BEFORE any mutation)."""
+
+        from floati.mcp import run_cli_artifact
+
+        real = self.base / "receipts-real"
+        real.mkdir()
+        symlinked = self.base / "receipts-link"
+        symlinked.symlink_to(real)
+        exit_code, artifact = run_cli_artifact(
+            [
+                "uninstall",
+                "--destination", str(self.destination),
+                "--receipt-dir", str(symlinked),
+            ]
+        )
+        self.assertEqual(20, exit_code, artifact)
+        self.assertEqual(
+            "uninstall_receipt_dir_symlinked", artifact["evidence"]["code"]
+        )
+        self.assertTrue(
+            (self.destination / "scripts" / "floati").is_file(),
+            "the destination was destroyed before the refusal: "
+            "ProtocolRefusal means refused BEFORE any mutation",
+        )
+        self.assertTrue(
+            (self.destination / ".floati-install" / "manifest.v0.json").is_file(),
+            "the install metadata must survive a refused removal",
+        )
+
+    def test_receipt_dir_with_dry_run_is_a_conflict(self) -> None:
+        """A plan writes no receipt — the pair is refused, not ignored."""
+
+        from floati.mcp import run_cli_artifact
+
+        receipts = self.base / "receipts"
+        exit_code, artifact = run_cli_artifact(
+            [
+                "uninstall",
+                "--destination", str(self.destination),
+                "--receipt-dir", str(receipts),
+                "--dry-run",
+            ]
+        )
+        self.assertEqual(20, exit_code, artifact)
+        self.assertEqual(
+            "uninstall_receipt_dir_dry_run_conflict", artifact["evidence"]["code"]
+        )
+        self.assertFalse(receipts.exists(), "a dry run created the receipt directory")
+
+    def test_uninstall_writes_no_file_outside_the_destination(self) -> None:
+        """The fence that failed for six days of selftests: $HOME gains
+        no file. Watched here as a sibling directory that stands in for
+        the operator's home; nothing outside the destination may appear.
+        """
+
+        home = self.base / "home"
+        home.mkdir()
+        marker = home / "floati-uninstalled-20260828T000000Z.json"
+        marker.write_text("the fossil the owner had to delete\n", encoding="utf-8")
+        before = sorted(str(path.relative_to(home)) for path in home.rglob("*"))
+
+        result = UninstallWriter(self.destination).run()
+        self.assertEqual(len(result["removal_receipts"]), result["removed_count"])
+
+        after = sorted(str(path.relative_to(home)) for path in home.rglob("*"))
+        self.assertEqual(before, after, "the uninstall created a file in HOME")
+        self.assertEqual(
+            "the fossil the owner had to delete\n",
+            marker.read_text(encoding="utf-8"),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

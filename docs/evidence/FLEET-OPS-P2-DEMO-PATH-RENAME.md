@@ -83,7 +83,7 @@ Ran 33 tests — FAILED (failures=2) — EXIT:1
 
 - `tests.test_demo_corpus.DemoCorpusContractTests.test_committed_manifest_matches_exact_v0_contract`
   — committed rows still carried the `candidates/` path.
-- `tests.test_name_sweep.NameSweepLivingDocumentationTests.test_readme_begins_with_exact_fable_copy_and_ruled_placeholders`
+- `tests.test_name_sweep.NameSweepLivingDocumentationTests.test_readme_begins_with_exact_the architect_copy_and_ruled_placeholders`
   — README hero markup still carried the `candidates/` path.
 
 GREEN after the move and the two shipped-surface updates:

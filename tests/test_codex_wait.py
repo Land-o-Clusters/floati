@@ -400,6 +400,28 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             take_over=True,
         )
 
+    def arm_codex_role_node(self, node: str) -> None:
+        """Remap the workspace onto a codex-role node and arm its consent.
+
+        The class fixture seat is registered as a "worker", so tests that
+        measure the Codex-typed daemon testimony itself must hold as a seat
+        the registry actually types as Codex.
+        """
+
+        from floati.codex_wait_contract import CodexWaitConsentLedger, resolve_participant
+
+        Registry(self.root).register(node, "codex")
+        self.write_map([{"workspace": str(self.workspace), "node_id": node}])
+        participant = resolve_participant(self.bus_home, self.workspace)
+        assert participant is not None
+        self.participant = participant
+        CodexWaitConsentLedger(self.root).arm(
+            participant.binding,
+            hook_timeout_seconds=10,
+            wait_deadline_seconds=2,
+            idempotency_key="codex-role-consent-" + node,
+        )
+
     def bus_bytes(self) -> dict[str, bytes]:
         return {
             path.relative_to(self.bus_home).as_posix(): path.read_bytes()
@@ -715,6 +737,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
         from floati.codex_wait import run_stop_waiter
 
+        self.arm_codex_role_node(public_ids.worker("codex"))
         executable = self.base / "codex-target"
         executable.write_bytes(b"#!/bin/sh\nexit 0\n")
         executable.chmod(0o700)
@@ -734,12 +757,49 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
-        coordinate = DaemonCoordinate(self.root, public_ids.builder('floati'), "codex")
+        coordinate = DaemonCoordinate(self.root, public_ids.worker("codex"), "codex")
         binding = AdapterBindingStore(self.root).read(coordinate)
         self.assertEqual("thread-bound", binding["session_id"])
         self.assertEqual(str(self.workspace), binding["workspace"])
         self.assertEqual(str(executable), binding["executable"])
         self.assertEqual(adapters.adapter_contract_digest("codex"), binding["adapter_digest"])
+
+    def test_non_codex_seat_hold_leaves_no_codex_daemon_testimony(self) -> None:
+        """WAKE-IDLE-1-F1: a non-Codex seat's hold leaves no Codex testimony.
+
+        The waiter published a Codex-shaped daemon binding for any holding
+        node, so a zcode seat's hold grew a <node>/codex.json beside its
+        real harness binding and doctor grew a phantom wake_daemon_health
+        <node>/codex row for it.
+        """
+        from floati import wake_daemon_adapters as adapters
+        from floati.codex_wait import run_stop_waiter
+
+        executable = self.base / "codex-target"
+        executable.write_bytes(b"#!/bin/sh\nexit 0\n")
+        executable.chmod(0o700)
+        prior = adapters.CODEX_EXECUTABLE
+        adapters.CODEX_EXECUTABLE = executable
+        self.addCleanup(setattr, adapters, "CODEX_EXECUTABLE", prior)
+
+        clock = [0.0]
+        run_stop_waiter(
+            bus_home=self.bus_home,
+            hook_payload={
+                "cwd": str(self.workspace),
+                "session_id": "thread-non-codex-hold",
+            },
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+            monotonic=lambda: clock[0],
+            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+        )
+
+        self.assertFalse(
+            (self.bus_home / "state" / "wake-daemon" / "adapters").exists(),
+            "a holding node the registry does not type as Codex left Codex "
+            "daemon testimony",
+        )
 
     def test_malformed_session_never_creates_a_daemon_binding(self) -> None:
         from floati import wake_daemon_adapters as adapters
@@ -1141,7 +1201,7 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
     def exit_rows(self) -> list[dict]:
         relative = public_ids.compose(
             "receipts/wake-waiter-exit/",
-            public_ids.ledger(public_ids.builder("floati")),
+            public_ids.ledger(self.participant.binding.node_id),
         )
         if not self.root.resolve_relative(relative).exists():
             return []
@@ -1205,6 +1265,7 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
         )
 
     def test_daemon_binding_write_failure_surfaces_and_keeps_the_decision(self) -> None:
+        self.arm_codex_role_node(public_ids.worker("codex"))
         stderr = io.StringIO()
         with mock.patch(
             "floati.wake_daemon_adapters.record_codex_daemon_binding",

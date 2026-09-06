@@ -26,15 +26,15 @@ ROLE_VERB_FILES = frozenset(
     }
 )
 
-PINNED_PROTOCOL_COUNT = 1105
+PINNED_PROTOCOL_COUNT = 1117
 
-PINNED_KIND_NONE_COUNT = 1027
+PINNED_KIND_NONE_COUNT = 1026
 
-PINNED_BOUND_COUNT = 78
+PINNED_BOUND_COUNT = 91
 
 PINNED_MIXED_COUNT = 6
 
-PINNED_UNBOUND_COUNT = 1021
+PINNED_UNBOUND_COUNT = 1020
 
 PINNED_UNRESOLVED_PROTOCOL = 106
 
@@ -100,18 +100,18 @@ PINNED_ROLE_INVALID_OUTSIDE = frozenset(
     }
 )
 
-PINNED_OTHER_COUNT = 984
+PINNED_OTHER_COUNT = 983
 
 PINNED_PROTOCOL_DIGEST = (
-    "c2270c6fa0cbca407340059c53ee69ba37d502066170f3332e4251bcb061e930"
+    "76e59862d81866669379243cc41eac7d1ed160b8cd24c76a403978dcc6bc5fe3"
 )
 
 PINNED_KIND_NONE_DIGEST = (
-    "9f7b739d897910ea587e6da99d47842eb8050fcd664a30a74201e6253699346e"
+    "72908f2114d78fad60fcb2114b18190d60c40aa08286eb861c1010ed6db9d719"
 )
 
 PINNED_OTHER_DIGEST = (
-    "6ea550310b2b84ecee3d32b10868f81ae203213458b758c0fa7a377e7853bbc2"
+    "8496cf4d498e49fe096e8733bf195da91be0b20eae8ca06ce7dbf0ed76e20153"
 )
 
 PINNED_INTEGRITY_DIGEST = (
@@ -124,11 +124,23 @@ PINNED_DURABILITY_DIGEST = (
 
 PINNED_BOUND = frozenset(
     {
+        "ledger_policy_invalid",
+        "ledger_policy_symlink",
+        "uninstall_receipt_dir_absolute_required",
+        "uninstall_receipt_dir_dry_run_conflict",
+        "uninstall_receipt_dir_symlinked",
+        "uninstall_receipt_dir_unwritable",
+        "waiter_arm_identity_invalid",
+        "waiter_harness_mismatch",
+        "wake_daemon_log_prune_marker_unwritable",
+        "wake_daemon_log_prune_receipt_unwritable",
+        "wake_daemon_log_receipt_unwritable",
+        "wake_daemon_log_rotation_exists",
+        "wake_daemon_log_symlink",
         "ack_item_unknown",
         "arguments_invalid",
         "authority_holder_mismatch",
         "deployment_currency_unavailable",
-        "deployment_shadow_unknown",
         "door_cancelled",
         "door_terminal_io_failed",
         "gh_authentication_absent",
@@ -198,6 +210,7 @@ PINNED_BOUND = frozenset(
         "wait_payload_absent",
         "wait_payload_invalid",
         "wake_daemon_codex_executable_absent",
+        "wake_daemon_supervisor_digest_mismatch",
         "wake_daemon_zcode_entry_absent",
         "wake_daemon_zcode_node_absent",
         "wake_idempotency_key_invalid",

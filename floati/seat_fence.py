@@ -8,8 +8,7 @@ import sys
 from typing import Any, Dict, Optional, Sequence
 
 from .errors import ProtocolRefusal
-from .jsonl import read_records_snapshot
-from .registry import REGISTRY_KINDS, Registry
+from .registry import read_registry_compatible
 from .root import FloatiRoot, validate_identifier
 
 
@@ -27,9 +26,8 @@ def validate_seat_fence(
     node = validate_identifier(node_id, "seat_node")
     latest = None
     try:
-        for record in read_records_snapshot(
-            root, Registry(root).relative_path, allowed_kinds=REGISTRY_KINDS
-        ):
+        records, _unrecognized, _versions = read_registry_compatible(root)
+        for record in records:
             if record.get("kind") == "registry_entry" and record.get("node_id") == node:
                 latest = record
     except ProtocolRefusal as exc:

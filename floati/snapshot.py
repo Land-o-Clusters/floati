@@ -15,7 +15,7 @@ from typing import Callable, Dict, FrozenSet, Mapping, Optional, Sequence, Tuple
 from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
 from .framing import FrameError, decode_frames
 from .jsonl import MAX_LEDGER_BYTES, MAX_LEDGER_RECORDS, MAX_RECORD_BYTES
-from .records import validate_record
+from .records import is_known_record_kind, validate_record, validate_unknown_record
 from .root import FloatiRoot
 from .storage_identity import SNAPSHOT_DIRECTORY as SNAPSHOT_DIRECTORY_NAME
 
@@ -309,7 +309,11 @@ class SnapshotStore:
         records = []
         seen = set()
         for raw_record in framed:
+            kind = raw_record.get("kind") if isinstance(raw_record, dict) else None
             try:
+                if not is_known_record_kind(kind):
+                    validate_unknown_record(raw_record, self.root.tenant_id)
+                    continue
                 record = validate_record(
                     raw_record,
                     self.root.tenant_id,

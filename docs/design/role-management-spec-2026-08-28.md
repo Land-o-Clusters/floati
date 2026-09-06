@@ -73,7 +73,7 @@ travels with the fleet). The workflow is COPY-THEN-PERSONALIZE, never edit-the-s
 - "Run them where allowed" (V7) means: floati may EMIT the boot command, copy it to clipboard, or
   hand it to a harness adapter that accepts a launch+prompt — behind the same consent posture as
   wake. Floati never impersonates the user in a harness it has no adapter contract with.
-- Cold Read Rule on every generated sentence; template library copy is Fable-gated.
+- Cold Read Rule on every generated sentence; template library copy is the architect-gated.
 - A template's `stops` and `fences` are rendered VERBATIM into every boot projection — a
   projection may add context but never omit a fence.
 

@@ -22,7 +22,7 @@ FAIL names (exactly three; zero ERROR):
    - AssertionError: expected `[]`, got 6 paths (recounted via `floati.scrub.scan_generated_tree(Path.cwd())`, count=6):
      - `docs/NORTH_STAR.md`
      - `docs/design/brief-grok-ws-c-conformance-2026-08-27.md`
-     - `docs/design/brief-lane-floati-train-p0-2026-08-27.md`
-     - `docs/design/brief-lane-puddle-ws-b-2026-08-27.md`
+     - `docs/design/brief-build lane-train-p0-2026-08-27.md`
+     - `docs/design/brief-build lane-ws-b-2026-08-27.md`
      - `docs/evidence/conformance/C0-machine-harness-inventory.md`
      - `docs/status/WEEKEND_PROGRAM_2026-08-28.md`

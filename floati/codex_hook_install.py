@@ -21,6 +21,7 @@ from .codex_wait_contract import (
     CodexWaitConsentLedger,
     CodexWaitSessionLedger,
     resolve_participant,
+    write_workspace_map,
 )
 from .codex_hook_trust import (
     codex_hook_current_hash,
@@ -57,6 +58,34 @@ _LINUX_AT_FDCWD = -100
 _RENAME_EXCL = 0x00000004
 _RENAME_NOREPLACE = 0x00000001
 _CODEX_WAIT_INTERPRETER = Path("/usr/bin/python3")
+WAITER_LAUNCHER_NAME = "floati-codex-wait"
+WAIT_VERB = ("wait", "--for", "fresh-work")
+
+
+def format_waiter_stop_command(launcher: Path, root: Path) -> str:
+    return " ".join(
+        shlex.quote(part)
+        for part in (
+            str(_CODEX_WAIT_INTERPRETER),
+            str(launcher),
+            *WAIT_VERB,
+            "--root",
+            str(root),
+        )
+    )
+
+
+def parse_waiter_stop_argv(argv: Sequence[str]) -> Optional[tuple[Path, Path]]:
+    """Return (launcher, root) for the old 4-word hook or the wait-verb hook."""
+
+    if not argv or argv[0] != str(_CODEX_WAIT_INTERPRETER):
+        return None
+    if len(argv) == 4 and argv[2] == "--root":
+        return Path(argv[1]), Path(argv[3])
+    if len(argv) == 7 and tuple(argv[2:5]) == WAIT_VERB and argv[5] == "--root":
+        return Path(argv[1]), Path(argv[6])
+    return None
+
 
 
 def _require_codex_wait_interpreter() -> None:
@@ -332,9 +361,10 @@ def plan_waiter_rebind(hooks_path: Path, store: Path, target_digest: str) -> Dic
         argv = shlex.split(command) if isinstance(command, str) else []
     except ValueError as exc:
         raise ProtocolRefusal("fleet_update_waiter_binding_invalid", "waiter hook command is invalid") from exc
-    if len(argv) < 4 or argv[0] != "/usr/bin/python3" or argv[2] != "--root":
+    parsed = parse_waiter_stop_argv(argv)
+    if parsed is None:
         raise ProtocolRefusal("fleet_update_waiter_binding_invalid", "waiter hook command is invalid")
-    current_launcher = Path(argv[1])
+    current_launcher, _root = parsed
     try:
         relative = current_launcher.relative_to(store)
     except ValueError as exc:
@@ -615,11 +645,12 @@ class CodexHookInstaller:
             argv = shlex.split(hook["command"])
         except (TypeError, ValueError):
             return False
-        if len(argv) != 4 or argv[0] != "/usr/bin/python3" or argv[2] != "--root":
+        parsed = parse_waiter_stop_argv(argv)
+        if parsed is None:
             return False
-        if argv[3] != str(self.bus_home):
+        launcher, bus_home = parsed
+        if str(bus_home) != str(self.bus_home):
             return False
-        launcher = Path(argv[1])
         try:
             relative = launcher.relative_to(self.destination)
         except ValueError:
@@ -627,7 +658,7 @@ class CodexHookInstaller:
         return (
             len(relative.parts) == 3
             and re.fullmatch(r"[0-9a-f]{64}", relative.parts[0]) is not None
-            and relative.parts[1:] == ("scripts", "floati-codex-wait")
+            and relative.parts[1:] == ("scripts", WAITER_LAUNCHER_NAME)
         )
 
     def _plan_hook_rewrite(
@@ -674,41 +705,7 @@ class CodexHookInstaller:
         return state, after
 
     def _write_workspace_map(self, workspace: Path, node_id: str) -> str:
-        map_path = self.bus_home / WORKSPACE_MAP_RELATIVE
-        if map_path.exists():
-            try:
-                raw = json.loads(map_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ProtocolRefusal("codex_wait_workspace_map_invalid", "workspace map is unreadable") from exc
-            if not isinstance(raw, dict) or set(raw) != {"schema_version", "tenant_id", "mappings"}:
-                raise ProtocolRefusal("codex_wait_workspace_map_invalid", "workspace map shape is invalid")
-            mappings = raw.get("mappings")
-            if raw.get("schema_version") != 0 or raw.get("tenant_id") != self.bus_home.name or not isinstance(mappings, list):
-                raise ProtocolRefusal("codex_wait_workspace_map_invalid", "workspace map identity is invalid")
-        else:
-            mappings = []
-        canonical = workspace.resolve(strict=True).as_posix()
-        retained = []
-        found = False
-        for entry in mappings:
-            if not isinstance(entry, dict) or set(entry) != {"workspace", "node_id"}:
-                raise ProtocolRefusal("codex_wait_workspace_map_invalid", "workspace mapping is invalid")
-            if entry["workspace"] == canonical:
-                if entry["node_id"] != node_id:
-                    raise ProtocolRefusal("codex_wait_workspace_conflict", "workspace names another node")
-                found = True
-            retained.append(entry)
-        if not found:
-            retained.append({"workspace": canonical, "node_id": node_id})
-        retained.sort(key=lambda row: (row["workspace"], row["node_id"]))
-        encoded = json.dumps(
-            {"schema_version": 0, "tenant_id": self.bus_home.name, "mappings": retained},
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8") + b"\n"
-        if not map_path.exists() or map_path.read_bytes() != encoded:
-            _write_atomic(map_path, encoded)
-        return _digest_bytes(encoded)
+        return write_workspace_map(self.bus_home, workspace, node_id)
 
     def install(
         self,
@@ -733,10 +730,8 @@ class CodexHookInstaller:
             raise ProtocolRefusal("codex_wait_source_incomplete", "waiter runtime source is incomplete")
         planned_bundle_digest = waiter_runtime_digest(self.source_root)
         planned_target = self.destination / planned_bundle_digest
-        launcher = planned_target / "scripts/floati-codex-wait"
-        command = " ".join(
-            (shlex.quote("/usr/bin/python3"), shlex.quote(str(launcher)), "--root", shlex.quote(str(self.bus_home)))
-        )
+        launcher = planned_target / "scripts" / WAITER_LAUNCHER_NAME
+        command = format_waiter_stop_command(launcher, self.bus_home)
         block: Dict[str, object] = {
             "hooks": [
                 {

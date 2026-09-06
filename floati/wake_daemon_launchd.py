@@ -24,6 +24,26 @@ from .wake_daemon_contract import (
 
 LaunchctlRunner = Callable[[tuple[str, ...]], subprocess.CompletedProcess[str]]
 
+# AGENTS.md: every refusal names a remedy, and this one shipped with none - a
+# reader got "installed LaunchAgent plist does not match the deterministic
+# preview" and no action. The cause is almost never drift: the plist's
+# ProgramArguments[0] is the ABSOLUTE PATH of the executable that installed it,
+# so invoking from a different checkout composes a different plist and a
+# different digest. That is a measured incident (MX1-M14), not a hypothesis -
+# the reporter nearly filed it as a defect, then re-ran from the installing
+# executable and the installed plist's sha256 was byte-identical to the digest
+# recorded at install.
+#
+# The remedy names the plist path itself because the verbs that would print it
+# - status, stop, remove - ALL validate first and refuse with this same code.
+# Sending the reader to a verb that refuses is not a remedy.
+SUPERVISOR_DIGEST_MISMATCH_REMEDY = (
+    "the installed LaunchAgent names the absolute path of the executable that "
+    "installed it: read ProgramArguments[0] in {path} and run this verb from "
+    "that checkout, or install the one you want with 'floati wake daemon "
+    "install --root {root} --as {node} --harness {harness}'"
+)
+
 
 def _default_runner(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -81,6 +101,16 @@ class LaunchAgentManager:
         self.consent = DaemonConsentLedger(self.root)
         self.lifecycle = DaemonLifecycleLedger(self.root)
         self.daemon_instance_id = "launchd-" + coordinate.digest[:32]
+
+    def digest_mismatch_remedy(self) -> str:
+        """Name an action for every wake_daemon_supervisor_digest_mismatch."""
+
+        return SUPERVISOR_DIGEST_MISMATCH_REMEDY.format(
+            path=self.plist_path,
+            root=self.root.path,
+            node=self.coordinate.node_id,
+            harness=self.coordinate.harness,
+        )
 
     def preview(self) -> Dict[str, object]:
         consent = self.consent.require_active(self.coordinate)
@@ -320,12 +350,14 @@ class LaunchAgentManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "requested removal digest differs from the deterministic plist",
+                remedy=self.digest_mismatch_remedy(),
             )
         encoded, identity = self._read_installed()
         if hashlib.sha256(encoded).hexdigest() != expected_digest:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "installed LaunchAgent plist differs from the expected digest",
+                remedy=self.digest_mismatch_remedy(),
             )
         quarantine = self.plist_path.with_name(
             f".{self.plist_path.name}.{uuid7_hex()}.remove"
@@ -367,6 +399,7 @@ class LaunchAgentManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "installed LaunchAgent plist does not match the deterministic preview",
+                remedy=self.digest_mismatch_remedy(),
             )
 
     def _read_installed(self) -> tuple[bytes, tuple[int, int]]:
@@ -374,6 +407,7 @@ class LaunchAgentManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "LaunchAgent plist is absent, symlinked, or not a regular file",
+                remedy=self.digest_mismatch_remedy(),
             )
         descriptor = -1
         try:
@@ -390,6 +424,7 @@ class LaunchAgentManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "LaunchAgent plist could not be read exactly",
+                remedy=self.digest_mismatch_remedy(),
             ) from exc
         finally:
             if descriptor >= 0:

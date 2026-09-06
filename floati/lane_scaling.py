@@ -21,7 +21,7 @@ from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact, transact_records
 from .worktree_safety import require_worktree_commits_referenced
 from .records import validate_record, validate_role
-from .registry import REGISTRY_KINDS, Registry
+from .registry import REGISTRY_KINDS, Registry, read_registry_compatible
 from .role_templates import RoleTemplate
 from .role_library import RoleTemplateLibrary
 from .root import FloatiRoot, validate_identifier
@@ -544,13 +544,10 @@ class LaneScalingService:
         ) from original
 
     def receipts(self) -> list[Dict[str, Any]]:
+        records, _unrecognized, _versions = read_registry_compatible(self.root)
         return [
             record
-            for record in read_records_snapshot(
-                self.root,
-                self.registry.relative_path,
-                allowed_kinds=set(REGISTRY_KINDS),
-            )
+            for record in records
             if record["kind"] in {"lane_spawn_receipt", "lane_teardown_receipt"}
         ]
 

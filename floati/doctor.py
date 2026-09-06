@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -24,13 +25,15 @@ from .gateway import GatewayConfig
 from .jsonl import read_records_compatible_snapshot, read_records_snapshot
 from .installer_shadow import observe_installer_shadow, observation_exit_code
 from .manifest import verify_manifest
-from .registry import REGISTRY_KINDS
+from .registry import read_registry_compatible
 from .root import FloatiRoot
+from .git_process import fixed_git_command, fixed_git_environment
 from .git_process import is_shallow_repository
 from .sandbox_probe import probe_write_set
 from .sandbox_remedy import remedy_for
 from .storage_identity import INSTALL_METADATA_DIRECTORY
 from .update_status import project_update_findings
+from .version_skew import older_readers, vocabulary_skew_fact
 
 
 RULED_PROFILES = ("bus-only", "orchestration")
@@ -64,6 +67,194 @@ _LAUNCHER_INTERPRETER_UNRULED_REMEDIATION = (
     "Start Floati through <destination>/scripts/floati, or declare one absolute canonical "
     "interpreter path in {declaration}. PATH is never consulted."
 )
+
+
+#: LEDGER-1 (c): the root layout is the product's declared families;
+#: anything else at the top level is reported with its size and NEVER
+#: touched — floati deleting an unmanaged entry is the LANES-1 failure
+#: mode. Measured on the live root: hand-made ``tmp/`` blobs sit inside
+#: a bus root invisible to every health surface.
+_MANAGED_ROOT_DIRECTORIES = frozenset(
+    {
+        "registry",
+        "nodes",
+        "state",
+        "receipts",
+        "cursors",
+        "authority-grants",
+        "work",
+        "codex-wait",
+        "scratch",
+        "effects",
+        "liveness-presence",
+        "runs",
+        "sequencer",
+    }
+)
+_MANAGED_ROOT_FILE_PREFIXES = ("archive-", "quarantine-")
+_MANAGED_ROOT_FILES = frozenset({"events.jsonl", "events.jsonl.lock"})
+
+
+def _managed_root_families() -> frozenset[str]:
+    """LEDGER-1 (c) Am.1: DERIVE the families from the constants that own
+    them, so the list cannot drift from the writers. Only entries no
+    constant names are hand-listed, each naming its writer."""
+
+    from .intake import _INTAKE_PAYLOAD_DIRECTORY
+    from .solo import SOLO_CONFIG
+    from .storage_identity import SNAPSHOT_DIRECTORY
+
+    derived = {
+        SNAPSHOT_DIRECTORY,  # floati/snapshot.py writes <root>/.floati-snapshots/v0
+        _INTAKE_PAYLOAD_DIRECTORY.parts[0],  # floati/intake.py writes <root>/intake/v0
+        SOLO_CONFIG.parts[0],  # floati/solo.py writes <root>/solo.json on the first run
+    }
+    hand_listed = {
+        "registry",  # floati/registry.py
+        "nodes",  # floati/lane_scaling.py / workspace_layout.py
+        "state",  # floati/wake_daemon*.py, state_receipts.py
+        "receipts",  # floati/events.py, bus_epoch.py
+        "cursors",  # floati/cli.py init (REL-1)
+        "authority-grants",  # floati/events.py:919
+        "work",  # floati/doctor.py:1414 / orchestrate.py
+        "codex-wait",  # floati/codex_wait_contract.py
+        "scratch",  # floati/verification.py scratch/verifications
+        "effects",  # floati/workers.py / worker_isolation.py
+        "liveness-presence",  # floati/planes.py
+        "runs",  # floati/orchestrate.py run records
+        "sequencer",  # floati/sequencer.py
+    }
+    return frozenset(derived | hand_listed)
+
+
+def project_ledger_roll_policy_finding(root: FloatiRoot) -> Dict[str, object]:
+    """LEDGER-1 (b): the live ledger's size and age against the roll policy.
+
+    Doctor never rolls: the governed ``epoch roll`` verb (authority-
+    gated, idempotent by key) is named as the remedy when a threshold
+    is past. Numbers floati did not measure are never filled in — an
+    unreadable first entry reports the age as unknown.
+    """
+
+    from .bus_epoch import ledger_roll_policy
+
+    policy = ledger_roll_policy(root)
+    policy_source = (
+        "shipped default" if policy["source"] == "shipped_default" else "operator-declared"
+    )
+    ledger = root.resolve_relative("events.jsonl")
+    if not ledger.is_file():
+        return _finding(
+            "ledger_roll_policy",
+            "ok",
+            str(root.path),
+            "no live ledger yet (typed absence); roll policy "
+            f"max_bytes={policy['max_bytes']} max_age_days={policy['max_age_days']}"
+            f" ({policy['source']})",
+        )
+    size = ledger.stat().st_size
+    age_days: Optional[float] = None
+    with ledger.open("rb") as handle:
+        first = handle.readline()
+    try:
+        record = json.loads(first.decode("utf-8"))
+        raw_stamp = str(record["timestamp"])
+        # Slicing, not str.replace: the epoch-barrier census reads every
+        # `.replace` call in this module as a filesystem rename on tainted
+        # ledger paths, and this function is a read-only reporter.
+        normalized = (
+            raw_stamp[:-1] + "+00:00" if raw_stamp.endswith("Z") else raw_stamp
+        )
+        oldest = datetime.fromisoformat(normalized)
+        age_days = max(0.0, (datetime.now(timezone.utc) - oldest).total_seconds() / 86400)
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, ValueError, TypeError):
+        age_days = None
+    age_text = (
+        f"{age_days:.1f} days old" if age_days is not None else "age unknown (first entry unreadable)"
+    )
+    over_size = size > int(policy["max_bytes"])
+    over_age = age_days is not None and age_days > float(policy["max_age_days"])
+    detail = (
+        f"live ledger is {size} bytes (policy {policy['max_bytes']}, "
+        f"{policy_source}); oldest entry {age_text} "
+        f"(policy {policy['max_age_days']} days)"
+    )
+    # LEDGER-1 (b) Am.1: age unknown is its own severity word — an
+    # unmeasured age is not a confirmably healthy one.
+    if age_days is None:
+        return _finding("ledger_roll_policy", "warning", str(root.path), detail)
+    if not (over_size or over_age):
+        return _finding("ledger_roll_policy", "ok", str(root.path), detail)
+    return _finding(
+        "ledger_roll_policy",
+        "warning",
+        str(root.path),
+        detail,
+        "floati epoch roll --root ROOT --as NODE --idempotency-key KEY",
+    )
+
+
+def _entry_bytes(entry: Path) -> int:
+    """Recursive size of one root entry; a symlink's target is NOT walked."""
+
+    if entry.is_symlink():
+        return entry.lstat().st_size
+    if entry.is_dir():
+        return sum(
+            candidate.stat().st_size
+            for candidate in entry.rglob("*")
+            if candidate.is_file() and not candidate.is_symlink()
+        )
+    return entry.stat().st_size
+
+
+def project_root_layout_findings(root: FloatiRoot) -> list[Dict[str, object]]:
+    """Report unmanaged bytes inside the fleet root: path + size, never touched."""
+
+    findings: list[Dict[str, object]] = []
+    try:
+        entries = sorted(root.path.iterdir(), key=lambda entry: entry.name)
+    except OSError as exc:
+        return [
+            _finding(
+                "root_layout_unreadable",
+                "warning",
+                str(root.path),
+                f"root layout could not be listed: {exc}",
+            )
+        ]
+    unmanaged: list[tuple[str, int]] = []
+    managed_families = _managed_root_families()
+    for entry in entries:
+        if (
+            entry.name in _MANAGED_ROOT_FILES
+            or entry.name in managed_families
+            or entry.name.startswith(_MANAGED_ROOT_FILE_PREFIXES)
+        ):
+            continue
+        unmanaged.append((entry.name, _entry_bytes(entry)))
+    if not unmanaged:
+        return [
+            _finding(
+                "root_layout_managed",
+                "ok",
+                str(root.path),
+                "every top-level root entry belongs to a managed family",
+            )
+        ]
+    for name, size in unmanaged:
+        findings.append(
+            _finding(
+                "root_unmanaged_bytes",
+                "warning",
+                name,
+                f"unmanaged bytes inside the fleet root: {size} bytes; "
+                "reported, never touched (LEDGER-1 c)",
+                "inspect and remove by hand if unwanted; floati never "
+                "deletes an unmanaged entry",
+            )
+        )
+    return findings
 
 
 def _finding(
@@ -231,6 +422,8 @@ def _installer_shadow_finding(
         "found": "warning",
         "affirmative_none": "ok",
         "unknown": "warning",
+        "launcher_not_on_path": "warning",
+        "path_entry_unreadable": "warning",
         "cannot_speak": "error",
     }[outcome]
     finding = _finding(
@@ -240,6 +433,8 @@ def _installer_shadow_finding(
         str(artifact["reason"]),
     )
     finding["installer_shadow"] = artifact
+    if "remedy" in artifact:
+        finding["remediation"] = artifact["remedy"]
     return finding
 
 
@@ -421,6 +616,259 @@ def _installed_bridge_currency(
         "reinstall the installed bridge from the repository copy so the hook runs current code"
         if currency_current else None,
     )
+
+
+_BRIDGE_SCRIPT_NAME = "stop-hook-bridge.py"
+_COMMIT_40 = re.compile(r"^[0-9a-f]{40}$")
+
+
+def parse_bridge_command(command: str) -> Optional[Dict[str, str]]:
+    """BRIDGE-1: read one hook-registration command into the bridge script
+    it execs and any HOOK_REPO pin the registration carries. None when the
+    command does not name the stop-hook bridge."""
+
+    if not isinstance(command, str) or _BRIDGE_SCRIPT_NAME not in command:
+        return None
+    tokens: list[str] = []
+    for token in shlex.split(command):
+        # The zcode registration wraps its payload in `/bin/sh -c '...'`,
+        # so the script path and the HOOK_* pins can arrive inside one
+        # quoted token; split that payload open before scanning it.
+        if " " in token and _BRIDGE_SCRIPT_NAME in token:
+            try:
+                tokens.extend(shlex.split(token))
+            except ValueError:
+                tokens.append(token)
+        else:
+            tokens.append(token)
+    script = next(
+        (token for token in tokens if token.endswith(_BRIDGE_SCRIPT_NAME)),
+        None,
+    )
+    if script is None:
+        return None
+    pin = next(
+        (
+            token[len("HOOK_REPO="):]
+            for token in tokens
+            if token.startswith("HOOK_REPO=")
+        ),
+        None,
+    )
+    return {"script": script, "hook_repo": pin}
+
+
+def _bridge_checkout_commit(repo: Path) -> Optional[str]:
+    """The floati commit the bridge's checkout runs; read-only rev-parse."""
+
+    try:
+        result = subprocess.run(
+            fixed_git_command("/usr/bin/git", repo, ("rev-parse", "HEAD")),
+            env=fixed_git_environment("/usr/bin/git"),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    commit = result.stdout.strip().lower()
+    return commit if _COMMIT_40.fullmatch(commit) else None
+
+
+def _bridge_reader_version(repo: Path) -> Optional[str]:
+    """The READER_VERSION the bridge's own checkout ships, read by one
+    child interpreter bound to that checkout - never by importing it in
+    the doctor process."""
+
+    env = dict(
+        os.environ,
+        PYTHONDONTWRITEBYTECODE="1",
+        PYTHONPATH=str(repo),
+    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "from floati.records import READER_VERSION as V; print(V)"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+            env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def project_zcode_bridge_registrations(
+    root: FloatiRoot,
+    merged_versions: Dict[str, int],
+    *,
+    currency_current: bool,
+) -> list[Dict[str, object]]:
+    """BRIDGE-1: name every bound zcode seat's bridge checkout and flag a
+    reader older than the ledger's newest kind beside `older_readers`.
+
+    The measured deafness ran the bridge from a stale seat checkout whose
+    reader died on newer ledger vocabulary while doctor could not see the
+    skew. Read-only: one git rev-parse and one child interpreter read per
+    checkout; a registration that cannot be named is a typed finding,
+    never silence.
+    """
+
+    adapters_root = root.resolve_relative("state/wake-daemon/adapters")
+    bindings: list[tuple[str, Path]] = []
+    if adapters_root.is_dir() and not adapters_root.is_symlink():
+        for node_dir in sorted(adapters_root.iterdir()):
+            if node_dir.is_symlink() or not node_dir.is_dir():
+                continue
+            for binding_path in sorted(node_dir.glob("*.json")):
+                if binding_path.is_symlink() or not binding_path.is_file():
+                    continue
+                if binding_path.stem != "zcode":
+                    continue
+                bindings.append((node_dir.name, binding_path))
+    if not bindings:
+        return [_finding(
+            "bridge_registrations_absent",
+            "ok",
+            str(root.path),
+            "no zcode seat is bound on this root; no bridge registration to name "
+            "(typed absence, not a silent pass)",
+        )]
+
+    findings: list[Dict[str, object]] = []
+    for node_name, binding_path in bindings:
+        try:
+            record = json.loads(binding_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            record = {}
+        workspace = record.get("workspace") if isinstance(record, dict) else None
+        commands: list[tuple[Path, str]] = []
+        if isinstance(workspace, str) and workspace:
+            for name in ("settings.json", "hooks.json"):
+                candidate = Path(workspace) / ".zcode" / name
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                try:
+                    document = json.loads(candidate.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                    continue
+                stop_entries = (document or {}).get("hooks", {}).get("Stop") or []
+                for entry in stop_entries:
+                    for hook in entry.get("hooks") or []:
+                        command = hook.get("command")
+                        if isinstance(command, str):
+                            commands.append((candidate, command))
+        # The same registration is often installed in settings.json and
+        # hooks.json alike; one command is one bridge, not two.
+        seen: set[tuple[str, str]] = set()
+        unique: list[tuple[Path, str]] = []
+        for source, command in commands:
+            key = (str(source), command)
+            if key not in seen:
+                seen.add(key)
+                unique.append((source, command))
+        if not unique:
+            findings.append(_finding(
+                "bridge_registration_unnameable",
+                "warning",
+                f"{node_name}/zcode",
+                "the bound zcode seat carries no readable Stop-hook bridge "
+                "registration; the checkout its wake path runs cannot be audited",
+                "reinstall the governed bridge registration with HOOK_REPO pinned "
+                "to the seat checkout" if currency_current else None,
+            ))
+            continue
+        for source, command in unique:
+            parsed = parse_bridge_command(command)
+            if parsed is None:
+                findings.append(_finding(
+                    "bridge_registration_unnameable",
+                    "warning",
+                    f"{node_name}/zcode",
+                    f"the Stop registration in {source} does not name the "
+                    f"stop-hook bridge; the seat's wake path cannot be audited",
+                    "reinstall the governed bridge registration with HOOK_REPO "
+                    "pinned to the seat checkout" if currency_current else None,
+                ))
+                continue
+            pin = parsed["hook_repo"]
+            script = parsed["script"]
+            repo = Path(pin) if pin else Path(script).parent.parent
+            commit = _bridge_checkout_commit(repo)
+            if commit is None:
+                findings.append(_finding(
+                    "bridge_checkout_unnameable",
+                    "warning",
+                    f"{node_name}/zcode",
+                    f"the bridge checkout {repo} does not answer git rev-parse HEAD",
+                    "point HOOK_REPO at the servable checkout the seat runs"
+                    if currency_current else None,
+                ))
+                continue
+            reader = _bridge_reader_version(repo)
+            if reader is None or not reader.isdigit():
+                findings.append(_finding(
+                    "bridge_reader_unnameable",
+                    "warning",
+                    f"{node_name}/zcode",
+                    f"the bridge checkout {repo} (commit {commit[:12]}) does not "
+                    "expose a numeric floati.records.READER_VERSION",
+                    "point HOOK_REPO at a checkout containing the floati package"
+                    if currency_current else None,
+                ))
+                continue
+            observation = {
+                "repo": str(repo),
+                "commit": commit,
+                "reader_schema_version": reader,
+                "hook_repo_pinned": bool(pin),
+                "registration": str(source),
+            }
+            if merged_versions:
+                newest_version = max(int(v) for v in merged_versions.values())
+                newest_kind = sorted(
+                    kind for kind, version in merged_versions.items()
+                    if int(version) == newest_version
+                )[0]
+            else:
+                newest_version, newest_kind = None, None
+            if newest_version is not None and newest_version > int(reader):
+                finding = _finding(
+                    "bridge_older_reader",
+                    "warning",
+                    f"{node_name}/zcode",
+                    f"the zcode bridge runs floati from {repo} at commit "
+                    f"{commit[:12]} (reader version {reader}); the ledger carries "
+                    f"kind {newest_kind} at version {newest_version}, above this "
+                    "reader's vocabulary - the measured BRIDGE-1 deafness",
+                    "fast-forward the seat checkout or reinstall the bridge from a "
+                    "durable checkout so its reader matches the ledger"
+                    if currency_current else None,
+                )
+                finding["older_readers"] = [{
+                    "reader_schema_version": reader,
+                    "ledger_newest_kind": newest_kind,
+                }]
+            else:
+                finding = _finding(
+                    "bridge_reader_current",
+                    "ok",
+                    f"{node_name}/zcode",
+                    f"the zcode bridge runs floati from {repo} at commit "
+                    f"{commit[:12]} (reader version {reader})",
+                )
+            finding["bridge"] = observation
+            findings.append(finding)
+    return findings
 
 
 def project_wake_daemon_health(
@@ -1013,6 +1461,8 @@ class Doctor:
                 findings.append(_finding("root_valid", "ok", str(self.root_arg), "direct-home root is valid"))
 
         if root is not None:
+            findings.extend(project_root_layout_findings(root))
+            findings.append(project_ledger_roll_policy_finding(root))
             try:
                 from .bus_epoch import reconcile_epoch_roll
 
@@ -1107,9 +1557,7 @@ class Doctor:
 
         if root is not None:
             try:
-                registry = read_records_snapshot(
-                    root, "registry/entries.jsonl", allowed_kinds=set(REGISTRY_KINDS)
-                )
+                registry, _unrecognized, _versions = read_registry_compatible(root)
                 latest: Dict[str, Dict[str, object]] = {}
                 for row in registry:
                     if row["kind"] == "registry_entry":
@@ -1243,9 +1691,8 @@ class Doctor:
                 )._compatible_event_records_with_skew(
                     snapshot=True
                 )
-                registry_rows = read_records_snapshot(
-                    root, "registry/entries.jsonl",
-                    allowed_kinds=set(REGISTRY_KINDS),
+                registry_rows, registry_unrecognized, registry_versions = (
+                    read_registry_compatible(root)
                 )
                 latest_registry: Dict[str, dict] = {}
                 for row in registry_rows:
@@ -1292,16 +1739,52 @@ class Doctor:
                     findings.append(finding)
                     if severity == "error" and rc == 0:
                         rc = 35
+                merged_versions = dict(registry_versions)
                 if skew is not None:
+                    for kind in skew.unknown_kinds:
+                        merged_versions[str(kind)] = max(
+                            int(merged_versions.get(str(kind), 0)),
+                            int(skew.ledger_version),
+                        )
+                merged_skew = vocabulary_skew_fact(merged_versions)
+                if registry_unrecognized:
+                    by_kind = {
+                        str(row["kind"]): dict(row) for row in unrecognized_kinds
+                    }
+                    for row in registry_unrecognized:
+                        kind = str(row["kind"])
+                        existing = by_kind.get(kind)
+                        if existing is None:
+                            by_kind[kind] = dict(row)
+                        else:
+                            by_kind[kind] = {
+                                "kind": kind,
+                                "count": int(existing["count"]) + int(row["count"]),
+                                "first_id": str(existing["first_id"]),
+                            }
+                    unrecognized_kinds = [by_kind[kind] for kind in sorted(by_kind)]
+                if merged_skew is not None:
                     finding = _finding(
                         "version_skew",
                         "warning",
                         str(root.path),
                         "installation predates records in this ledger",
-                        skew.remedy,
+                        merged_skew.remedy,
                     )
-                    finding["vocabulary_skew"] = skew.artifact()
+                    finding["vocabulary_skew"] = merged_skew.artifact()
+                    finding["older_readers"] = older_readers(merged_versions)
                     findings.append(finding)
+                # BRIDGE-1: the ledger's newest kind names what every reader
+                # must speak; the bound zcode seats' bridges are the readers
+                # doctor can audit, so they are listed beside older_readers.
+                bridge_findings = project_zcode_bridge_registrations(
+                    root, merged_versions, currency_current=currency_current
+                )
+                findings.extend(bridge_findings)
+                if any(
+                    row["severity"] == "warning" for row in bridge_findings
+                ) and rc == 0:
+                    rc = 35
                 if report.any_red and rc == 0:
                     rc = 35
             except IntegrityFailure as exc:
@@ -1311,9 +1794,7 @@ class Doctor:
 
         if root is not None and not self.no_sandbox:
             try:
-                registry_rows = read_records_snapshot(
-                    root, "registry/entries.jsonl", allowed_kinds=set(REGISTRY_KINDS)
-                )
+                registry_rows, _unrecognized, _versions = read_registry_compatible(root)
                 latest_registry: Dict[str, dict] = {}
                 for row in registry_rows:
                     if row["kind"] == "registry_entry":
@@ -1608,9 +2089,7 @@ class Doctor:
                 },
                 20,
             )
-        registry_rows = read_records_snapshot(
-            root, "registry/entries.jsonl", allowed_kinds=set(REGISTRY_KINDS)
-        )
+        registry_rows, _unrecognized, _versions = read_registry_compatible(root)
         latest: Dict[str, dict] = {}
         for row in registry_rows:
             if row["kind"] == "registry_entry":

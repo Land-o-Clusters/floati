@@ -14,6 +14,8 @@ from floati import fixture_ids as public_ids
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,14 +154,17 @@ class WaitCommandTests(unittest.TestCase):
     def run_script(
         self, fixture: WaitFixture, *, session_id: str
     ) -> tuple[int, str]:
-        from floati import codex_wait
-
+        launcher = Path(__file__).resolve().parents[1] / "scripts" / "floati-codex-wait"
         payload = {"cwd": str(fixture.workspace), "session_id": session_id}
-        stdout = io.StringIO()
-        stdin = io.StringIO(json.dumps(payload))
-        with mock.patch("sys.stdout", stdout), mock.patch("sys.stdin", stdin):
-            status = codex_wait.main(["--root", str(fixture.bus_home)])
-        return status, stdout.getvalue()
+        completed = subprocess.run(
+            [sys.executable, str(launcher), "--root", str(fixture.bus_home)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=str(Path(__file__).resolve().parents[1]),
+            check=False,
+        )
+        return completed.returncode, completed.stdout
 
     def normalize(self, emitted: str, message_id: Optional[str]) -> str:
         """Replace the one value that cannot agree across two fleet roots."""

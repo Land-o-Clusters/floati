@@ -918,27 +918,11 @@ class DeploymentWriter:
             source_script=source / "scripts" / "floati",
         )
         outcome = installer_shadow["outcome"]
-        if outcome == "found":
+        if outcome == "found" or installer_shadow["found"]:
             raise ProtocolRefusal(
                 "deployment_shadow_found",
-                str(installer_shadow["reason"]),
+                "A floati ahead of the installed copy answered first on PATH.",
             )
-        if outcome != "affirmative_none":
-            raise ProtocolRefusal(
-                "deployment_shadow_unknown",
-                (
-                    f'{installer_shadow["reason"]} Blocked PATH entry: '
-                    f'{installer_shadow["blocked_entry"]}.'
-                    if "remedy" in installer_shadow
-                    else str(installer_shadow["reason"])
-                ),
-                (
-                    str(installer_shadow["remedy"])
-                    if "remedy" in installer_shadow
-                    else None
-                ),
-            )
-
         journal_candidate = wiring_journal.journal_path(destination)
         try:
             existing_journal = (
@@ -1122,4 +1106,5 @@ class DeploymentWriter:
             "wiring_join_id": self.join_id,
             "status": "installed" if self.operation == "install" else "updated",
             "installer_shadow": installer_shadow,
+            "warnings": [] if outcome == "affirmative_none" else [installer_shadow],
         }

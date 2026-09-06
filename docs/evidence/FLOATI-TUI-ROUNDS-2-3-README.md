@@ -36,7 +36,7 @@ Production edits followed failing focused coverage.
   completion had no ruled mark wiring.
 - Harbor Chart coverage failed while the companion traffic projector, its own
   schema, the human renderer, and non-`--json` CLI path were absent.
-- README/asset coverage failed before the accepted master and Fable-owned
+- README/asset coverage failed before the accepted master and the architect-owned
   presentation/copy were present.
 
 ## Implemented testimony

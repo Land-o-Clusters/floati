@@ -666,9 +666,11 @@ currency prerequisites are established.
 
 The installer-shadow family scans the caller's PATH, exactly as supplied, for
 entries that would shadow the installed launcher. The verdict is only as
-complete as that PATH: when it omits the install scripts directory, or an
-entry cannot be read, the finding is `unknown` with `blocked_entry` naming
-what was not scanned. A partial scan is never promoted to `affirmative_none`;
+complete as that PATH: omitting the install scripts directory yields
+`launcher_not_on_path`; an entry that cannot be inspected yields
+`path_entry_unreadable`. Each names `blocked_entry` and an actionable remedy.
+Install and update carry uncertain observations as warnings, while any
+observed shadow still refuses deployment. A partial scan is never promoted to `affirmative_none`;
 no-shadowing is claimed only when every entry was actually read.
 
 Publication preparation is documentation and read-only proof only.

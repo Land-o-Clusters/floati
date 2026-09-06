@@ -30,6 +30,22 @@ one. A path added to the harbor after the snapshot still classifies correctly --
 it is not in the baseline, so it falls through to the prefix rules, which is the
 right answer for a path that has never been published.
 
+**BASELINE-1 Am.1: the snapshot is checked against the published tip when one
+is available.** "Sound between exports" is a statement about the world, and the
+fences had no way to notice when it stopped being true -- a baseline older than
+the published tree drops already-published documents from this population, and
+the fences then pass on a smaller world, which is the direction nobody catches.
+`published_baseline` therefore runs a drift check whenever the rehearsal
+declares its fresh public clone in `FLOATI_PUBLIC_ROOT`: the recorded
+`public_commit` must be an ancestor of that clone's tip, else
+`public_export_baseline_stale`. The check is deliberately weaker than currency,
+which only a regeneration can establish -- but a NON-ancestor recording is
+always wrong, and the two ways this goes wrong in practice (a tip that moved
+past the recording; a recording taken against a different history) are both
+non-ancestors. A declared root that is not a clone refuses rather than going
+quiet; an undeclared root is the ordinary case and reads the file as before.
+`scripts/regen_public_baseline.py` is the regeneration the refusal names.
+
 The dated ops history the narrowing excludes is measured in
 `docs/evidence/name-2c-widened-2026-09-02.md`, by policy class, and is
 re-derivable in one command.
@@ -47,6 +63,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -56,6 +73,41 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 EXPORTER_RELATIVE = "scripts/export_public.py"
 POLICY_RELATIVE = ".github/public-export-policy.v0.json"
 BASELINE_RELATIVE = ".github/public-export-baseline.v0.json"
+REGENERATOR_MODULE = "scripts.regen_public_baseline"
+PUBLIC_ROOT_ENV = "FLOATI_PUBLIC_ROOT"
+
+
+def declared_public_root() -> Path | None:
+    """The rehearsal's public clone, when the operator declared one.
+
+    Undeclared is the ordinary case and means "no clone available"; declared but
+    empty is an operator mistake and is not read as a declaration.
+    """
+
+    value = os.environ.get(PUBLIC_ROOT_ENV)
+    if value is None or not value.strip():
+        return None
+    return Path(value)
+
+
+def assert_baseline_current(
+    root: Path = REPOSITORY_ROOT, public_root: Path | None = None
+) -> str | None:
+    """RED when the recorded public commit is not an ancestor of the clone's tip.
+
+    Returns the tip it checked against, or `None` when no public clone is
+    available. The refusal is the regenerator's own typed one, so the remedy the
+    caller sees names the command that fixes it.
+    """
+
+    clone = Path(public_root) if public_root is not None else declared_public_root()
+    if clone is None:
+        return None
+    regenerator = importlib.import_module(REGENERATOR_MODULE)
+    document = json.loads((root / BASELINE_RELATIVE).read_text(encoding="utf-8"))
+    return regenerator.assert_public_commit_current(
+        clone, document.get("public_commit"), "HEAD"
+    )
 
 
 def published_baseline(root: Path = REPOSITORY_ROOT) -> frozenset[str]:
@@ -65,8 +117,13 @@ def published_baseline(root: Path = REPOSITORY_ROOT) -> frozenset[str]:
     harbor -- "was this document public before its prefix became private" is a
     fact about the OTHER repository -- so it is a recorded snapshot, and the
     commit it was taken at is recorded beside it.
+
+    When a public clone is available the snapshot is checked for drift HERE,
+    where the fences read it, rather than in a check beside it that a fence run
+    would not reach.
     """
 
+    assert_baseline_current(root)
     document = json.loads((root / BASELINE_RELATIVE).read_text(encoding="utf-8"))
     if document.get("schema_version") != 0 or isinstance(
         document.get("schema_version"), bool
@@ -147,6 +204,32 @@ def classify_inventory(
     )
 
 
+def classify_inventory_excluded(
+    relatives: Iterable[str], *, root: Path = REPOSITORY_ROOT
+) -> tuple[str, ...]:
+    """NET-FENCE-1-F2: the private_only twin of `classify_inventory`.
+
+    The same classifier call, the complementary half: the paths an export
+    EXCLUDES. A projection-aware pin that compares only included halves
+    goes quiet on exactly the files the policy hides, so the excluded
+    half needs its own pin - and that pin needs this to classify it. In
+    a policy-less projection the identity fallback excludes nothing, so
+    the excluded half is empty there and a private pin is a typed skip.
+    """
+
+    ordered: Sequence[str] = tuple(relatives)
+    if not export_policy_is_present(root):
+        return tuple()
+    exporter = importlib.import_module("scripts.export_public")
+    policy = exporter.ExportPolicy.load(root / POLICY_RELATIVE)
+    baseline = published_baseline(root)
+    return tuple(
+        relative
+        for relative in ordered
+        if exporter.classify_path(relative, baseline, policy).disposition == "exclude"
+    )
+
+
 def export_include_set(root: Path = REPOSITORY_ROOT) -> tuple[str, ...]:
     """Return every tracked path this repository's own exporter would carry."""
 
@@ -179,6 +262,8 @@ def materialise_exposed_tree(
         if export_policy_is_present(root)
         else None
     )
+    policy = export_policy(root) if exporter is not None else None
+    baseline = set(published_baseline(root)) if exporter is not None else None
     written: list[str] = []
     for relative in export_include_set(root):
         source = root / relative
@@ -187,7 +272,12 @@ def materialise_exposed_tree(
         data = source.read_bytes()
         if exporter is not None:
             try:
-                data, _notes = exporter._adapt(relative, data)
+                data, _notes = exporter._adapt(
+                    relative,
+                    data,
+                    policy=policy,
+                    public_paths=baseline,
+                )
             except Exception:  # pragma: no cover - a refusal is not a name finding
                 pass
         target = destination / relative

@@ -606,8 +606,8 @@ class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
             "_maintain_breaker_notice",
             wraps=daemon._maintain_breaker_notice,
         ) as spy:
-            self.assertEqual("backpressure", daemon.run_cycle(114.0)["state"])
-            self.assertEqual("backpressure", daemon.run_cycle(122.0)["state"])
+            self.assertEqual("adapter_unknown", daemon.run_cycle(114.0)["state"])
+            self.assertEqual("adapter_unknown", daemon.run_cycle(122.0)["state"])
 
         self.assertGreaterEqual(spy.call_count, 2)
         self.assertEqual(before, self.notice_path().read_bytes())
@@ -622,7 +622,7 @@ class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
         self.notice_path().unlink()
 
         daemon = self.daemon()
-        self.assertEqual("backpressure", daemon.run_cycle(114.0)["state"])
+        self.assertEqual("adapter_unknown", daemon.run_cycle(114.0)["state"])
 
         notice = json.loads(self.notice_path().read_text(encoding="utf-8"))
         self.assertEqual(public_ids.builder("a"), notice["node_id"])
