@@ -12,8 +12,8 @@ what the product does not do yet.
 - `role transfer-architect --to NODE`: move the single architect role, receipted, refusing any state with zero or two architects.
 - `chart add-root` / `chart remove-root`: a validated writer for the declared-roots file, which is hand-edited today.
 - `update rollback --to SHA`: the rollback the updater already performs internally, as a receipted verb.
-- `wake status` reports the wake breaker per node: open or closed, threshold, last trip reason. Nothing resets it but a consent re-grant.
 - The node-add wizard offers the read-only survey inline when it finds an undeclared bus in scope, and asks before adopting.
+- `wake status` reports the wake breaker per node: open or closed, threshold, last trip reason. Nothing resets it but a consent re-grant.
 - `node add --plan file.json`: the same mutation as the interactive wizard, one engine, two idioms.
 - `role new` / `role edit` / `role validate` / `role import` (local file only): role templates on disk with the same validator the loader uses.
 - `seat board`: one idempotent verb chaining wake-claim takeover, waiter resume and drain, a receipt per step.

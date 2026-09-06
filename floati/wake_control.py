@@ -9,7 +9,7 @@ import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional
 
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
@@ -266,10 +266,12 @@ class WakeController:
         )
 
     def status(self, node_id: str, session_id: str) -> Dict[str, Any]:
+        from .wake_daemon import breaker_status_for_node
+
         node, _session, session_digest = self._identity(node_id, session_id)
         marker_path = self._marker(node, session_digest)
         marker = self._read_marker(marker_path, node, session_digest)
-        return self._artifact(
+        artifact = self._artifact(
             node=node,
             session_digest=session_digest,
             state="paused" if marker is not None else "active",
@@ -277,6 +279,35 @@ class WakeController:
             receipt=None,
             paused_at=None if marker is None else str(marker["paused_at"]),
         )
+        breaker = breaker_status_for_node(self.root, node)
+        artifact["breaker"] = breaker
+        artifact["display"] = _display_with_breaker(artifact["display"], breaker)
+        return artifact
+
+
+def _display_with_breaker(display: str, breaker: Mapping[str, Any]) -> str:
+    coordinates = breaker.get("coordinates")
+    if not isinstance(coordinates, list) or not coordinates:
+        clause = "breaker unbound"
+    else:
+        parts = []
+        for row in coordinates:
+            harness = row.get("harness")
+            state = row.get("state")
+            if state == "underivable":
+                reason = row.get("reason") or "none"
+                parts.append(f"{harness}=underivable reason={reason}")
+                continue
+            reason = row.get("last_trip_reason") or "none"
+            parts.append(
+                f"{harness}={state} threshold={breaker.get('threshold')} "
+                f"last_trip_reason={reason}"
+            )
+        clause = "breaker " + "; ".join(parts)
+    if "; " in display:
+        head, tail = display.split("; ", 1)
+        return f"{head}; {clause}; {tail}"
+    return f"{display} {clause}"
 
 
 def is_session_paused(root: FloatiRoot, node_id: str, session_id: str) -> bool:

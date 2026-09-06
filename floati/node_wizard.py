@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional, Protocol, TextIO, Tuple
 
 from .errors import ProtocolRefusal
+from .foreign_bus_survey import (
+    ForeignBusSurvey,
+    nested_buses_out_of_scope,
+    undeclared_buses_in_scope,
+)
 from .records import validate_role
 from .registry import Registry
 from .root import FloatiRoot, validate_identifier
@@ -22,6 +27,19 @@ from .tide_policy import normalize_threshold
 
 _ID_SUFFIX = re.compile(r"^[0-9a-f]{32}$")
 _RETIRE_NOTICE = "Teardown retires the node and retains its workspace."
+_SURVEY_OFFER_PROMPT = "undeclared bus in scope; run read-only survey? "
+_ADOPT_PROMPT = "adopt and continue node add? "
+
+
+def _yes_no(value: str) -> bool:
+    answer = value.strip().casefold()
+    if answer in {"yes", "y"}:
+        return True
+    if answer in {"no", "n"}:
+        return False
+    raise ProtocolRefusal(
+        "wizard_input_invalid", "survey and adopt answers must be yes or no"
+    )
 
 
 class _ImmutableRecord(Mapping[str, Any]):
@@ -347,6 +365,158 @@ class NodeWizard:
     def add_from_keys(self, values: Iterable[str], output: TextIO) -> Dict[str, Any]:
         return self.commit_add(self.plan_add(values), output)
 
+    _PLAN_REQUIRED = ("node", "harness", "lifetime")
+    _PLAN_OPTIONAL = frozenset({"lease_minutes", "survey", "adopt"})
+    _PLAN_REMEDY = (
+        "write one JSON object with node, harness, lifetime, "
+        "lease_minutes when temporary, and optional survey and adopt booleans"
+    )
+
+    def values_from_plan(self, payload: Mapping[str, Any]) -> Tuple[str, ...]:
+        """Translate one plan object into the same answers `add_from_keys` takes."""
+
+        if not isinstance(payload, Mapping):
+            raise ProtocolRefusal(
+                "node_add_plan_invalid",
+                "plan must be one JSON object",
+                self._PLAN_REMEDY,
+            )
+        unknown = sorted(set(payload) - set(self._PLAN_REQUIRED) - self._PLAN_OPTIONAL)
+        if unknown:
+            raise ProtocolRefusal(
+                "node_add_plan_invalid",
+                "plan has unknown fields: " + ", ".join(unknown),
+                self._PLAN_REMEDY,
+            )
+        missing = [key for key in self._PLAN_REQUIRED if key not in payload]
+        if missing:
+            raise ProtocolRefusal(
+                "node_add_plan_invalid",
+                "plan requires node, harness, and lifetime",
+                self._PLAN_REMEDY,
+            )
+        node = payload["node"]
+        harness = payload["harness"]
+        lifetime = payload["lifetime"]
+        if not all(isinstance(value, str) for value in (node, harness, lifetime)):
+            raise ProtocolRefusal(
+                "node_add_plan_invalid",
+                "plan node, harness, and lifetime must be text",
+                self._PLAN_REMEDY,
+            )
+        values = [node, harness, lifetime]
+        if "lease_minutes" in payload:
+            minutes = payload["lease_minutes"]
+            if isinstance(minutes, bool) or not isinstance(minutes, int):
+                raise ProtocolRefusal(
+                    "node_add_plan_invalid",
+                    "plan lease_minutes must be an integer",
+                    self._PLAN_REMEDY,
+                )
+            values.append(str(minutes))
+        return tuple(values)
+
+    def _plan_flag(self, payload: Mapping[str, Any], key: str) -> Optional[bool]:
+        if key not in payload:
+            return None
+        value = payload[key]
+        if value is not True and value is not False:
+            raise ProtocolRefusal(
+                "wizard_input_invalid",
+                f"plan {key} flag must be boolean",
+                f"write plan {key} as a JSON boolean true or false",
+            )
+        return value
+
+    def add_from_plan(self, payload: Mapping[str, Any], output: TextIO) -> Dict[str, Any]:
+        """Commit the same add as the interactive wizard, from one plan object."""
+
+        values = self.values_from_plan(payload)
+        extra = self._offer_survey_and_adopt(
+            output,
+            survey=self._plan_flag(payload, "survey"),
+            adopt=self._plan_flag(payload, "adopt"),
+        )
+        result = self.add_from_keys(values, output)
+        result.update(extra)
+        return result
+
+    def _offer_survey_and_adopt(
+        self,
+        output: TextIO,
+        *,
+        survey: Optional[bool],
+        adopt: Optional[bool],
+        input_stream: Optional[TextIO] = None,
+    ) -> Dict[str, Any]:
+        found = undeclared_buses_in_scope(self.root.path)
+        extra: Dict[str, Any] = {}
+        if not found:
+            nested = nested_buses_out_of_scope(self.root.path)
+            return {
+                "undeclared_in_scope": [],
+                "survey": "not_offered",
+                "reason": (
+                    "nested_out_of_scope" if nested else "none_in_scope"
+                ),
+            }
+        extra["undeclared_in_scope"] = [
+            {"root": path, "apparent_schema": schema} for path, schema in found
+        ]
+        run_survey = survey
+        if run_survey is None:
+            run_survey = _yes_no(
+                self._read_plain(
+                    input_stream,
+                    output,
+                    _SURVEY_OFFER_PROMPT,
+                    "plain input ended before survey offer",
+                )
+            )
+        if run_survey:
+            artifact = ForeignBusSurvey.around_live_root(self.root.path).run()
+            extra["survey"] = artifact
+            output.write(artifact["notice"] + "\n")
+            for entry in artifact["foreign_buses"]:
+                output.write("survey: " + entry["root"] + "\n")
+            output.flush()
+        consent = adopt
+        if consent is None:
+            consent = _yes_no(
+                self._read_plain(
+                    input_stream,
+                    output,
+                    _ADOPT_PROMPT,
+                    "plain input ended before adopt",
+                )
+            )
+        if not consent:
+            raise ProtocolRefusal(
+                "wizard_undeclared_bus_not_adopted",
+                "node add waits for adopt consent when an undeclared bus is in scope",
+            )
+        extra["adopted"] = True
+        return extra
+
+    @staticmethod
+    def _read_plain(
+        input_stream: Optional[TextIO],
+        output: TextIO,
+        prompt: str,
+        closed_detail: str,
+    ) -> str:
+        if input_stream is None:
+            raise ProtocolRefusal(
+                "wizard_input_invalid",
+                "survey and adopt choices are required when an undeclared bus is in scope",
+            )
+        output.write(prompt)
+        output.flush()
+        value = input_stream.readline()
+        if value == "":
+            raise ProtocolRefusal("wizard_input_closed", closed_detail)
+        return value.rstrip("\r\n")
+
     def add_plain(self, input_stream: TextIO, output: TextIO) -> Dict[str, Any]:
         answers = []
         for prompt in (
@@ -393,8 +563,15 @@ class NodeWizard:
                     "T1 authorizes recommend or direct; no native non-interactive compact verb was measured",
                 )
             tide = (selected.name, threshold, action)
+        extra = self._offer_survey_and_adopt(
+            output,
+            input_stream=input_stream,
+            survey=None,
+            adopt=None,
+        )
         output.write("\n")
         result = self.add_from_keys(answers, output)
+        result.update(extra)
         if tide is not None:
             from .tide_policy import TidePolicyLedger
 

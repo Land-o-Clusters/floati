@@ -31,7 +31,6 @@ from .command_scope import CommandScope, resolve_command_scope
 from .deploy import DeploymentWriter
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .events import EventLog
-from .helptext import help_for
 from .installer_shadow import observe_installer_shadow, observation_exit_code
 from .projection import (
     EffectStatusProjection,
@@ -1080,6 +1079,74 @@ def _watch_loop(
     return exit_code
 
 
+def _wait_for_fresh_work(args: argparse.Namespace, payload: Dict[str, Any]) -> int:
+    """Hold the turn until this node's inbox has fresh work, or the deadline."""
+
+    from .codex_wait import run_stop_waiter
+
+    return run_stop_waiter(
+        bus_home=Path(args.root),
+        hook_payload=payload,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+
+# Each named condition binds to the landed waiter that already decides it. The
+# verb composes; it owns no polling loop, no deadline and no receipt of its own.
+WAIT_CONDITIONS: Dict[str, Callable[[argparse.Namespace, Dict[str, Any]], int]] = {
+    "fresh-work": _wait_for_fresh_work,
+}
+
+
+def _wait_payload(args: argparse.Namespace) -> Dict[str, Any]:
+    """Read the harness stop payload, then let explicit options override it.
+
+    A harness that can template its values passes them as options; one that
+    pipes its stop payload pipes it. Standard input is read only when an
+    option is missing, so the templated form never blocks on a pipe that
+    nobody is going to write.
+    """
+
+    payload: Dict[str, Any] = {}
+    if args.workspace is None or args.session_id is None:
+        if sys.stdin.isatty():
+            raise ProtocolRefusal(
+                "wait_payload_absent",
+                "no harness stop payload was supplied on standard input",
+                "pass --workspace PATH and --session-id ID, or pipe the "
+                "harness stop payload as JSON on standard input",
+            )
+        try:
+            decoded = json.loads(sys.stdin.read() or "{}")
+        except json.JSONDecodeError:
+            decoded = None
+        if not isinstance(decoded, dict):
+            raise ProtocolRefusal(
+                "wait_payload_invalid",
+                "the harness stop payload on standard input is not a JSON object",
+                "pipe one JSON object naming cwd and session_id, or pass "
+                "--workspace PATH and --session-id ID",
+            )
+        payload = dict(decoded)
+    if args.workspace is not None:
+        payload["cwd"] = args.workspace
+    if args.session_id is not None:
+        payload["session_id"] = args.session_id
+    return payload
+
+
+def _wait(args: argparse.Namespace) -> int:
+    """Block on one named condition, whichever harness ends the turn.
+
+    The root is the exact directory --root names. Nothing here consults the
+    environment: a waiter that could be redirected by an ambient variable
+    would hold one fleet's turn while reading another fleet's inbox.
+    """
+
+    return WAIT_CONDITIONS[args.condition](args, _wait_payload(args))
+
+
 def _binding(args: argparse.Namespace) -> list[Dict[str, str]]:
     values = (getattr(args, "repo", None), getattr(args, "sha", None), getattr(args, "doc", None))
     if all(value is None for value in values):
@@ -1399,6 +1466,17 @@ def _update(args: argparse.Namespace) -> HandlerResult:
             "arguments_invalid",
             "update action requires --channel naming the exact HTTPS coordinate",
         )
+    if action == "rollback":
+        if args.version is not None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update rollback does not take --version; name --to",
+            )
+        if args.to is None or args.idempotency_key is None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "update rollback requires --to and --idempotency-key",
+            )
     from .update_consent import UpdateConsentLedger
 
     destination = Path(args.destination)
@@ -1462,6 +1540,17 @@ def _update(args: argparse.Namespace) -> HandlerResult:
             idempotency_key=args.idempotency_key,
         )
         return "ok", evidence, OK
+    if action == "rollback":
+        from .update_apply import rollback_update
+
+        evidence = rollback_update(
+            destination=destination,
+            channel=args.channel,
+            entrypoint=destination / "scripts" / "floati",
+            to_sha=args.to,
+            idempotency_key=args.idempotency_key,
+        )
+        return "ok", evidence, OK
     raise ProtocolRefusal("arguments_invalid", "unsupported update action")
 
 
@@ -1481,12 +1570,12 @@ def _fleet_update_apply(_args: argparse.Namespace) -> HandlerResult:
 
 def _add_fleet_update_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
-    parser.add_argument("--as", dest="actor", required=True)
+    parser.add_argument("--as", dest="actor", required=True, metavar='NODE')
     parser.add_argument("--destination", required=True)
     parser.add_argument("--channel", required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--waiter-binding", required=True)
-    parser.add_argument("--transport-registry", required=True)
+    parser.add_argument("--waiter-binding", required=True, metavar='PATH')
+    parser.add_argument("--transport-registry", required=True, metavar='PATH')
     parser.add_argument("--transport", required=True)
     parser.add_argument("--json", action="store_true")
 
@@ -1500,11 +1589,13 @@ def _add_update_action_arguments(
     parser.add_argument("--ref", default="origin/main")
     parser.add_argument("--committed-tree", action="store_true")
     parser.add_argument("--channel")
-    parser.add_argument("--epoch", type=int)
-    parser.add_argument("--idempotency-key")
+    parser.add_argument("--epoch", type=int, metavar='N')
+    parser.add_argument("--idempotency-key", metavar='KEY')
     parser.add_argument("--version")
+    if action == "rollback":
+        parser.add_argument("--to")
     if action == "check":
-        parser.add_argument("--minisign-executable")
+        parser.add_argument("--minisign-executable", metavar='EXE')
     parser.add_argument("--json", action="store_true")
     parser.set_defaults(handler=_update, update_action=action)
 
@@ -1776,10 +1867,10 @@ def _parser() -> _ArtifactParser:
         dest="overlap_command", required=True
     )
     overlap_report = overlap_commands.add_parser("report")
-    overlap_report.add_argument("--repository", required=True)
-    overlap_report.add_argument("--base-ref", required=True)
-    overlap_report.add_argument("--left-ref", required=True)
-    overlap_report.add_argument("--right-ref", required=True)
+    overlap_report.add_argument("--repository", required=True, metavar='PATH')
+    overlap_report.add_argument("--base-ref", required=True, metavar='REF')
+    overlap_report.add_argument("--left-ref", required=True, metavar='REF')
+    overlap_report.add_argument("--right-ref", required=True, metavar='REF')
     overlap_report.set_defaults(handler=_overlap_report)
 
     init = commands.add_parser("init")
@@ -1805,7 +1896,7 @@ def _parser() -> _ArtifactParser:
     )
     confluence_grant.add_argument("--root", required=True)
     confluence_grant.add_argument("--consumer", required=True)
-    confluence_grant.add_argument("--idempotency-key", required=True)
+    confluence_grant.add_argument("--idempotency-key", required=True, metavar='KEY')
     confluence_grant.set_defaults(handler=_confluence_grant)
 
     confluence_revoke = confluence_commands.add_parser(
@@ -1813,7 +1904,7 @@ def _parser() -> _ArtifactParser:
     )
     confluence_revoke.add_argument("--root", required=True)
     confluence_revoke.add_argument("--consumer", required=True)
-    confluence_revoke.add_argument("--idempotency-key", required=True)
+    confluence_revoke.add_argument("--idempotency-key", required=True, metavar='KEY')
     confluence_revoke.set_defaults(handler=_confluence_revoke)
 
     confluence_status = confluence_commands.add_parser(
@@ -1827,36 +1918,36 @@ def _parser() -> _ArtifactParser:
     )
     confluence_bundle.add_argument("--root", required=True)
     confluence_bundle.add_argument("--consumer", required=True)
-    confluence_bundle.add_argument("--out", required=True)
+    confluence_bundle.add_argument("--out", required=True, metavar='PATH')
     confluence_bundle.set_defaults(handler=_confluence_bundle)
 
     confluence_adopt = confluence_commands.add_parser("adopt")
     confluence_adopt.add_argument("--root", required=True)
     confluence_adopt.add_argument("--consumer", required=True)
     confluence_adopt.add_argument("--session", required=True)
-    confluence_adopt.add_argument("--manager", required=True)
-    confluence_adopt.add_argument("--authority-subject", required=True)
-    confluence_adopt.add_argument("--authority-epoch", type=int, required=True)
-    confluence_adopt.add_argument("--authority-expires-at", required=True)
+    confluence_adopt.add_argument("--manager", required=True, metavar='NODE')
+    confluence_adopt.add_argument("--authority-subject", required=True, metavar='SUBJECT')
+    confluence_adopt.add_argument("--authority-epoch", type=int, required=True, metavar='N')
+    confluence_adopt.add_argument("--authority-expires-at", required=True, metavar='TIMESTAMP')
     confluence_adopt.set_defaults(handler=_confluence_adopt)
 
     confluence_release = confluence_commands.add_parser("release")
     confluence_release.add_argument("--root", required=True)
     confluence_release.add_argument("--consumer", required=True)
     confluence_release.add_argument("--session", required=True)
-    confluence_release.add_argument("--manager", required=True)
-    confluence_release.add_argument("--authority-epoch", type=int, required=True)
+    confluence_release.add_argument("--manager", required=True, metavar='NODE')
+    confluence_release.add_argument("--authority-epoch", type=int, required=True, metavar='N')
     confluence_release.set_defaults(handler=_confluence_release)
 
     register = commands.add_parser("register")
     register.add_argument("--root")
-    register.add_argument("node")
+    register.add_argument("node", metavar="NODE")
     register.add_argument("--harness", required=True)
     register.set_defaults(handler=_register)
 
     retire = commands.add_parser("retire")
     retire.add_argument("--root")
-    retire.add_argument("node")
+    retire.add_argument("node", metavar="NODE")
     retire.set_defaults(handler=_retire)
 
     register_legacy_workspace_options(register, retire)
@@ -1867,7 +1958,7 @@ def _parser() -> _ArtifactParser:
     journal_checkpoint = journal_commands.add_parser("checkpoint")
     journal_checkpoint.add_argument("--root", required=True)
     journal_checkpoint.add_argument("--journal", required=True)
-    journal_checkpoint.add_argument("--journal-id", required=True)
+    journal_checkpoint.add_argument("--journal-id", required=True, metavar='ID')
     journal_checkpoint.add_argument("--kind", dest="kinds", action="append", required=True)
     journal_checkpoint.add_argument("--output", required=True)
     journal_checkpoint.add_argument("--json", action="store_true")
@@ -1876,7 +1967,7 @@ def _parser() -> _ArtifactParser:
     journal_verify = journal_commands.add_parser("verify")
     journal_verify.add_argument("--root", required=True)
     journal_verify.add_argument("--journal", required=True)
-    journal_verify.add_argument("--journal-id", required=True)
+    journal_verify.add_argument("--journal-id", required=True, metavar='ID')
     journal_verify.add_argument("--kind", dest="kinds", action="append", required=True)
     journal_verify.add_argument("--checkpoint", required=True)
     journal_verify.add_argument("--historical", action="store_true")
@@ -1888,8 +1979,8 @@ def _parser() -> _ArtifactParser:
     repair_quarantine = repair_commands.add_parser("quarantine")
     repair_quarantine.add_argument("--root", required=True)
     repair_quarantine.add_argument("--ledger", required=True)
-    repair_quarantine.add_argument("--record-id", required=True)
-    repair_quarantine.add_argument("--idempotency-key", required=True)
+    repair_quarantine.add_argument("--record-id", required=True, metavar='ID')
+    repair_quarantine.add_argument("--idempotency-key", required=True, metavar='KEY')
     repair_quarantine.set_defaults(handler=_repair_quarantine)
 
     signature = commands.add_parser("signature")
@@ -1901,11 +1992,11 @@ def _parser() -> _ArtifactParser:
     signature_sign.add_argument("--root", required=True)
     signature_sign.add_argument("--artifact", required=True)
     signature_sign.add_argument("--signature", required=True)
-    signature_sign.add_argument("--secret-key", required=True)
+    signature_sign.add_argument("--secret-key", required=True, metavar='PATH')
     signature_sign.add_argument("--version", required=True)
-    signature_sign.add_argument("--journal-id")
-    signature_sign.add_argument("--through-seq", type=int)
-    signature_sign.add_argument("--minisign-executable")
+    signature_sign.add_argument("--journal-id", metavar='ID')
+    signature_sign.add_argument("--through-seq", type=int, metavar='N')
+    signature_sign.add_argument("--minisign-executable", metavar='EXE')
     signature_sign.add_argument("--json", action="store_true")
     signature_sign.set_defaults(handler=_signature_sign)
 
@@ -1913,11 +2004,11 @@ def _parser() -> _ArtifactParser:
     signature_verify.add_argument("--root", required=True)
     signature_verify.add_argument("--artifact", required=True)
     signature_verify.add_argument("--signature", required=True)
-    signature_verify.add_argument("--public-key", required=True)
+    signature_verify.add_argument("--public-key", required=True, metavar='PATH')
     signature_verify.add_argument("--version", required=True)
-    signature_verify.add_argument("--journal-id")
-    signature_verify.add_argument("--through-seq", type=int)
-    signature_verify.add_argument("--minisign-executable")
+    signature_verify.add_argument("--journal-id", metavar='ID')
+    signature_verify.add_argument("--through-seq", type=int, metavar='N')
+    signature_verify.add_argument("--minisign-executable", metavar='EXE')
     signature_verify.add_argument("--json", action="store_true")
     signature_verify.set_defaults(handler=_signature_verify)
 
@@ -1927,21 +2018,21 @@ def _parser() -> _ArtifactParser:
         floati_mcp_required=("idempotency_key",),
     )
     send.add_argument("--root")
-    send.add_argument("--from", dest="sender", required=True)
-    send.add_argument("--to", dest="recipient", required=True)
+    send.add_argument("--from", dest="sender", required=True, metavar='NODE')
+    send.add_argument("--to", dest="recipient", required=True, metavar='NODE')
     send.add_argument("--repo", required=True)
     send.add_argument("--sha", required=True)
     send.add_argument("--doc", required=True)
     send.add_argument("--note", required=True)
-    send.add_argument("--reply-to")
-    send.add_argument("--idempotency-key")
-    send.add_argument("--claim")
+    send.add_argument("--reply-to", metavar='ID')
+    send.add_argument("--idempotency-key", metavar='KEY')
+    send.add_argument("--claim", metavar='PATH')
     send.set_defaults(handler=_send)
 
     verify = commands.add_parser("verify")
     verify.add_argument("--root", required=True)
-    verify.add_argument("--as", dest="actor", required=True)
-    verify.add_argument("--claim", required=True)
+    verify.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    verify.add_argument("--claim", required=True, metavar='PATH')
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(handler=_verify)
 
@@ -1949,7 +2040,7 @@ def _parser() -> _ArtifactParser:
         "inbox", floati_mcp_exposure="governed", floati_mcp_omit=("peek",)
     )
     inbox.add_argument("--root")
-    inbox.add_argument("--as", dest="recipient", required=True)
+    inbox.add_argument("--as", dest="recipient", required=True, metavar='NODE')
     inbox.add_argument("--session")
     inbox.add_argument("--peek", action="store_true")
     inbox.set_defaults(handler=_inbox)
@@ -1958,36 +2049,36 @@ def _parser() -> _ArtifactParser:
         "wake-evaluate", help=argparse.SUPPRESS, floati_public=False
     )
     wake_evaluate.add_argument("--root", required=True)
-    wake_evaluate.add_argument("--as", dest="recipient", required=True)
-    wake_evaluate.add_argument("--idempotency-key", required=True)
+    wake_evaluate.add_argument("--as", dest="recipient", required=True, metavar='NODE')
+    wake_evaluate.add_argument("--idempotency-key", required=True, metavar='KEY')
     wake_evaluate.add_argument("--worker-session")
-    wake_evaluate.add_argument("--limit", type=int, default=1000)
+    wake_evaluate.add_argument("--limit", type=int, default=1000, metavar='N')
     wake_evaluate.set_defaults(handler=_wake_evaluate, artifact_schema_version=1)
 
     wake_record = commands.add_parser(
         "wake-record", help=argparse.SUPPRESS, floati_public=False
     )
     wake_record.add_argument("--root", required=True)
-    wake_record.add_argument("--as", dest="recipient", required=True)
+    wake_record.add_argument("--as", dest="recipient", required=True, metavar='NODE')
     wake_record.add_argument("--session", required=True)
-    wake_record.add_argument("--id", dest="message_ids", action="append", required=True)
+    wake_record.add_argument("--id", dest="message_ids", action="append", required=True, metavar='ID')
     wake_record.add_argument("--decision")
     wake_record.add_argument("--message-worker-session")
-    wake_record.add_argument("--idempotency-key", required=True)
-    wake_record.add_argument("--outcome", choices=("woke", "refused"), required=True)
+    wake_record.add_argument("--idempotency-key", required=True, metavar='KEY')
+    wake_record.add_argument("--outcome", choices=("woke", "queued", "refused"), required=True)
     wake_record.add_argument("--reason-code")
     wake_record.set_defaults(handler=_wake_record, artifact_schema_version=1)
 
     ack = commands.add_parser("ack", floati_mcp_exposure="governed")
     ack.add_argument("--root")
-    ack.add_argument("--as", dest="recipient", required=True)
-    ack.add_argument("--id", dest="message_ids", action="append", required=True)
+    ack.add_argument("--as", dest="recipient", required=True, metavar='NODE')
+    ack.add_argument("--id", dest="message_ids", action="append", required=True, metavar='ID')
     ack.add_argument("--session", required=True)
     ack.set_defaults(handler=_ack)
 
     sent = commands.add_parser("sent")
     sent.add_argument("--root")
-    sent.add_argument("--as", dest="sender", required=True)
+    sent.add_argument("--as", dest="sender", required=True, metavar='NODE')
     sent.set_defaults(handler=_sent)
 
     log = commands.add_parser(
@@ -2009,30 +2100,30 @@ def _parser() -> _ArtifactParser:
 
     snapshot_bundle = commands.add_parser("snapshot")
     snapshot_bundle.add_argument("--root", required=True)
-    snapshot_bundle.add_argument("--out", required=True)
-    snapshot_bundle.add_argument("--lines", type=int, default=240)
+    snapshot_bundle.add_argument("--out", required=True, metavar='PATH')
+    snapshot_bundle.add_argument("--lines", type=int, default=240, metavar='N')
     snapshot_bundle.add_argument("--yes", action="store_true")
     snapshot_bundle.set_defaults(handler=_snapshot_bundle)
 
     effects = commands.add_parser("effects", floati_mcp_exposure="read")
     effects.add_argument("--root")
-    effects.add_argument("--run", dest="run_id")
-    effects.add_argument("--attempt", dest="attempt_id")
+    effects.add_argument("--run", dest="run_id", metavar='ID')
+    effects.add_argument("--attempt", dest="attempt_id", metavar='ID')
     effects.set_defaults(handler=_effect_status, artifact_schema_version=1)
 
     effect = commands.add_parser("effect")
     effect_commands = effect.add_subparsers(dest="effect_command", required=True)
     effect_show = effect_commands.add_parser("show")
     effect_show.add_argument("--root")
-    effect_show.add_argument("--operation", dest="operation_id", required=True)
+    effect_show.add_argument("--operation", dest="operation_id", required=True, metavar='ID')
     effect_show.set_defaults(handler=_effect_status, artifact_schema_version=1)
     effect_reconcile = effect_commands.add_parser("reconcile")
     effect_reconcile.add_argument("--root")
-    effect_reconcile.add_argument("--operation", dest="operation_id", required=True)
+    effect_reconcile.add_argument("--operation", dest="operation_id", required=True, metavar='ID')
     effect_reconcile.set_defaults(handler=_effect_reconcile, artifact_schema_version=1)
     effect_compensate = effect_commands.add_parser("compensate")
     effect_compensate.add_argument("--root")
-    effect_compensate.add_argument("--operation", dest="operation_id", required=True)
+    effect_compensate.add_argument("--operation", dest="operation_id", required=True, metavar='ID')
     compensation_mode = effect_compensate.add_mutually_exclusive_group(required=True)
     compensation_mode.add_argument("--preview", action="store_true")
     compensation_mode.add_argument("--confirm")
@@ -2046,25 +2137,25 @@ def _parser() -> _ArtifactParser:
     thread_commands = thread.add_subparsers(dest="thread_command", required=True)
     thread_attach = thread_commands.add_parser("attach")
     thread_attach.add_argument("--root")
-    thread_attach.add_argument("--as", dest="actor", required=True)
-    thread_attach.add_argument("--thread", dest="provider_thread_id", required=True)
-    thread_attach.add_argument("--work-item", dest="work_item_id")
-    thread_attach.add_argument("--run", dest="run_id")
-    thread_attach.add_argument("--attempt", dest="attempt_id")
+    thread_attach.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    thread_attach.add_argument("--thread", dest="provider_thread_id", required=True, metavar='THREAD')
+    thread_attach.add_argument("--work-item", dest="work_item_id", metavar='ID')
+    thread_attach.add_argument("--run", dest="run_id", metavar='ID')
+    thread_attach.add_argument("--attempt", dest="attempt_id", metavar='ID')
     thread_attach.set_defaults(handler=_thread_attach, artifact_schema_version=1)
     thread_observe = thread_commands.add_parser("observe")
     thread_observe.add_argument("--root")
-    thread_observe.add_argument("--attachment", dest="attachment_id", required=True)
-    thread_observe.add_argument("--codex-executable")
+    thread_observe.add_argument("--attachment", dest="attachment_id", required=True, metavar='ID')
+    thread_observe.add_argument("--codex-executable", metavar='EXE')
     thread_observe.set_defaults(handler=_thread_observe, artifact_schema_version=1)
     thread_detach = thread_commands.add_parser("detach")
     thread_detach.add_argument("--root")
-    thread_detach.add_argument("--as", dest="actor", required=True)
-    thread_detach.add_argument("--attachment", dest="attachment_id", required=True)
+    thread_detach.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    thread_detach.add_argument("--attachment", dest="attachment_id", required=True, metavar='ID')
     thread_detach.set_defaults(handler=_thread_detach, artifact_schema_version=1)
     thread_show = thread_commands.add_parser("show")
     thread_show.add_argument("--root")
-    thread_show.add_argument("--attachment", dest="attachment_id", required=True)
+    thread_show.add_argument("--attachment", dest="attachment_id", required=True, metavar='ID')
     thread_show.set_defaults(handler=_thread_show, artifact_schema_version=1)
 
     graph = commands.add_parser("graph", floati_mcp_exposure="read")
@@ -2084,8 +2175,8 @@ def _parser() -> _ArtifactParser:
     doctor.add_argument("--root")
     doctor.add_argument("--source", required=True)
     doctor.add_argument("--ref", default="origin/main")
-    doctor.add_argument("--gateway-config")
-    doctor.add_argument("--profile")
+    doctor.add_argument("--gateway-config", metavar='PATH')
+    doctor.add_argument("--profile", metavar='PROFILE')
     doctor.add_argument(
         "--no-sandbox", action="store_true",
         help="skip the default sandbox write-set checks",
@@ -2099,16 +2190,16 @@ def _parser() -> _ArtifactParser:
     doctor.add_argument(
         "--probe-budget", type=float, default=60.0,
         help="probe drain budget in seconds (default 60)",
-    )
+    metavar='SECONDS', )
     doctor.add_argument("--destination")
     doctor.add_argument(
         "--codex-hooks",
         help="exact Codex hooks.json path for per-hook trust measurement",
-    )
+    metavar='PATH', )
     doctor.add_argument(
         "--codex-config",
         help="exact Codex config.toml path containing hook trust state",
-    )
+    metavar='PATH', )
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(direct_handler=_doctor_command)
 
@@ -2116,11 +2207,24 @@ def _parser() -> _ArtifactParser:
     watch.add_argument("--root")
     watch.add_argument("--destination")
     watch.add_argument("--interval", type=float, default=0.25)
-    watch.add_argument("--iterations", type=int)
+    watch.add_argument("--iterations", type=int, metavar='N')
     watch.set_defaults(direct_handler=_watch)
 
+    wait = commands.add_parser("wait")
+    wait.add_argument(
+        "--for",
+        dest="condition",
+        required=True,
+        choices=sorted(WAIT_CONDITIONS),
+        metavar="CONDITION",
+    )
+    wait.add_argument("--root", required=True, metavar="PATH")
+    wait.add_argument("--workspace", metavar="PATH")
+    wait.add_argument("--session-id", metavar="ID")
+    wait.set_defaults(direct_handler=_wait)
+
     receipts = commands.add_parser("receipts", floati_mcp_exposure="read")
-    receipts.add_argument("node")
+    receipts.add_argument("node", metavar="NODE")
     receipts.add_argument("--root")
     receipts.set_defaults(handler=_receipts)
 
@@ -2134,8 +2238,8 @@ def _parser() -> _ArtifactParser:
     )
     presence_report = presence_commands.add_parser("report")
     presence_report.add_argument("--root")
-    presence_report.add_argument("--as", dest="actor", required=True)
-    presence_report.add_argument("--ttl-seconds", type=int, required=True)
+    presence_report.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    presence_report.add_argument("--ttl-seconds", type=int, required=True, metavar='N')
     presence_report.set_defaults(handler=_presence_report)
     presence_show = presence_commands.add_parser("show")
     presence_show.add_argument("--root")
@@ -2166,12 +2270,12 @@ def _parser() -> _ArtifactParser:
     sequencer_status.set_defaults(handler=_sequencer_status)
     sequencer_serve = sequencer_commands.add_parser("serve")
     sequencer_serve.add_argument("--root")
-    sequencer_serve.add_argument("--as", dest="actor", required=True)
+    sequencer_serve.add_argument("--as", dest="actor", required=True, metavar='NODE')
     sequencer_serve.add_argument("--takeover", action="store_true")
     sequencer_serve.set_defaults(handler=_sequencer_serve)
     sequencer_direct = sequencer_commands.add_parser("direct")
     sequencer_direct.add_argument("--root")
-    sequencer_direct.add_argument("--as", dest="actor", required=True)
+    sequencer_direct.add_argument("--as", dest="actor", required=True, metavar='NODE')
     sequencer_direct.set_defaults(handler=_sequencer_direct)
 
     wake_callback = commands.add_parser(
@@ -2179,12 +2283,12 @@ def _parser() -> _ArtifactParser:
     )
     wake_callback.add_argument("--root", required=True)
     wake_callback.add_argument("--tenant", required=True)
-    wake_callback.add_argument("--run-id", required=True)
-    wake_callback.add_argument("--item-id", required=True)
-    wake_callback.add_argument("--attempt-id", required=True)
+    wake_callback.add_argument("--run-id", required=True, metavar='ID')
+    wake_callback.add_argument("--item-id", required=True, metavar='ID')
+    wake_callback.add_argument("--attempt-id", required=True, metavar='ID')
     wake_callback.add_argument("--wake-at", required=True)
-    wake_callback.add_argument("--scheduler-epoch", type=int, required=True)
-    wake_callback.add_argument("--fence-token", required=True)
+    wake_callback.add_argument("--scheduler-epoch", type=int, required=True, metavar='N')
+    wake_callback.add_argument("--fence-token", required=True, metavar='TOKEN')
     wake_callback.set_defaults(handler=_wake_callback)
 
     work = commands.add_parser("work")
@@ -2193,7 +2297,7 @@ def _parser() -> _ArtifactParser:
     work_add = work_commands.add_parser("add")
     work_add.add_argument("--root")
     work_add.add_argument("--title", required=True)
-    work_add.add_argument("--owner")
+    work_add.add_argument("--owner", metavar='NODE')
     work_add.add_argument("--workspace", action="store_true")
     work_add.add_argument("--needs", action="append", default=[])
     _add_artifact_options(work_add)
@@ -2201,24 +2305,24 @@ def _parser() -> _ArtifactParser:
 
     work_claim = work_commands.add_parser("claim", floati_mcp_exposure="governed")
     work_claim.add_argument("--root")
-    work_claim.add_argument("--id", dest="item_id", required=True)
-    work_claim.add_argument("--as", dest="actor")
-    work_claim.add_argument("--authority-subject")
-    work_claim.add_argument("--authority-epoch", type=int)
+    work_claim.add_argument("--id", dest="item_id", required=True, metavar='ID')
+    work_claim.add_argument("--as", dest="actor", metavar='NODE')
+    work_claim.add_argument("--authority-subject", metavar='SUBJECT')
+    work_claim.add_argument("--authority-epoch", type=int, metavar='N')
     work_claim.add_argument("--now")
     work_claim.set_defaults(handler=_work_claim)
 
     work_complete = work_commands.add_parser("complete", floati_mcp_exposure="governed")
     work_complete.add_argument("--root")
-    work_complete.add_argument("--id", dest="item_id", required=True)
-    work_complete.add_argument("--as", dest="actor")
+    work_complete.add_argument("--id", dest="item_id", required=True, metavar='ID')
+    work_complete.add_argument("--as", dest="actor", metavar='NODE')
     work_complete.add_argument("--now")
     _add_artifact_options(work_complete)
     work_complete.set_defaults(handler=_work_complete)
 
     work_show = work_commands.add_parser("show")
     work_show.add_argument("--root")
-    work_show.add_argument("--id", dest="item_id")
+    work_show.add_argument("--id", dest="item_id", metavar='ID')
     work_show.set_defaults(handler=_work_show)
 
     intake = commands.add_parser("intake")
@@ -2226,23 +2330,23 @@ def _parser() -> _ArtifactParser:
 
     intake_scan = intake_commands.add_parser("scan", floati_mcp_exposure="read")
     intake_scan.add_argument("--root", required=True)
-    intake_scan.add_argument("--from", dest="directory", required=True)
+    intake_scan.add_argument("--from", dest="directory", required=True, metavar='DIR')
     intake_scan.set_defaults(handler=_intake_scan)
 
     intake_show = intake_commands.add_parser("show", floati_mcp_exposure="read")
     intake_show.add_argument("--root", required=True)
-    intake_show.add_argument("--id", dest="snapshot_id")
+    intake_show.add_argument("--id", dest="snapshot_id", metavar='ID')
     intake_show.set_defaults(handler=_intake_show)
 
     intake_adopt = intake_commands.add_parser("adopt")
     intake_adopt.add_argument("--root", required=True)
     intake_adopt.add_argument("--source", choices=("local", "github"), required=True)
-    intake_adopt.add_argument("--from", dest="directory")
-    intake_adopt.add_argument("--path", dest="relative_path")
-    intake_adopt.add_argument("--repo", dest="repository")
-    intake_adopt.add_argument("--issue", type=int)
-    intake_adopt.add_argument("--gh", dest="gh_executable")
-    intake_adopt.add_argument("--owner")
+    intake_adopt.add_argument("--from", dest="directory", metavar='DIR')
+    intake_adopt.add_argument("--path", dest="relative_path", metavar='RELATIVE')
+    intake_adopt.add_argument("--repo", dest="repository", metavar='O/R')
+    intake_adopt.add_argument("--issue", type=int, metavar='N')
+    intake_adopt.add_argument("--gh", dest="gh_executable", metavar='EXE')
+    intake_adopt.add_argument("--owner", metavar='NODE')
     intake_adopt.add_argument("--now")
     intake_adopt.set_defaults(handler=_intake_adopt)
 
@@ -2253,49 +2357,49 @@ def _parser() -> _ArtifactParser:
             required=True,
         )
         command.add_argument("--body")
-        command.add_argument("--body-file")
-        command.add_argument("--label", dest="labels", action="append")
+        command.add_argument("--body-file", metavar='PATH')
+        command.add_argument("--label", dest="labels", action="append", metavar='NAME')
         command.add_argument("--reason", choices=("completed", "not_planned"))
-        command.add_argument("--pr", dest="pull_request")
+        command.add_argument("--pr", dest="pull_request", metavar='N')
 
     intake_preview = intake_commands.add_parser(
         "preview", floati_mcp_exposure="read", floati_mcp_omit=("body_file",)
     )
     intake_preview.add_argument("--root", required=True)
-    intake_preview.add_argument("--snapshot", dest="snapshot_id", required=True)
+    intake_preview.add_argument("--snapshot", dest="snapshot_id", required=True, metavar='ID')
     add_intake_request_arguments(intake_preview)
     intake_preview.set_defaults(handler=_intake_preview)
 
     intake_dispatch = intake_commands.add_parser("dispatch")
     intake_dispatch.add_argument("--root", required=True)
-    intake_dispatch.add_argument("--snapshot", dest="snapshot_id", required=True)
+    intake_dispatch.add_argument("--snapshot", dest="snapshot_id", required=True, metavar='ID')
     add_intake_request_arguments(intake_dispatch)
-    intake_dispatch.add_argument("--confirm-digest", required=True)
-    intake_dispatch.add_argument("--run-id", required=True)
-    intake_dispatch.add_argument("--item-id", required=True)
-    intake_dispatch.add_argument("--attempt-id", required=True)
-    intake_dispatch.add_argument("--fence-token", required=True)
-    intake_dispatch.add_argument("--approval-request", dest="approval_request_id")
-    intake_dispatch.add_argument("--approval-decision", dest="approval_decision_id")
-    intake_dispatch.add_argument("--approval-consumption", dest="approval_consumption_id")
+    intake_dispatch.add_argument("--confirm-digest", required=True, metavar='SHA256')
+    intake_dispatch.add_argument("--run-id", required=True, metavar='ID')
+    intake_dispatch.add_argument("--item-id", required=True, metavar='ID')
+    intake_dispatch.add_argument("--attempt-id", required=True, metavar='ID')
+    intake_dispatch.add_argument("--fence-token", required=True, metavar='TOKEN')
+    intake_dispatch.add_argument("--approval-request", dest="approval_request_id", metavar='ID')
+    intake_dispatch.add_argument("--approval-decision", dest="approval_decision_id", metavar='ID')
+    intake_dispatch.add_argument("--approval-consumption", dest="approval_consumption_id", metavar='ID')
     intake_dispatch.set_defaults(handler=_intake_dispatch)
 
     worker = commands.add_parser("worker")
     worker_commands = worker.add_subparsers(dest="worker_command", required=True)
     worker_run = worker_commands.add_parser("run")
     worker_run.add_argument("--root")
-    worker_run.add_argument("--as", dest="actor", required=True)
+    worker_run.add_argument("--as", dest="actor", required=True, metavar='NODE')
     worker_run.add_argument("--adapter", choices=("claude", "codex", "pi"), required=True)
-    worker_run.add_argument("--claude-executable")
-    worker_run.add_argument("--codex-executable")
-    worker_run.add_argument("--pi-executable")
+    worker_run.add_argument("--claude-executable", metavar='EXE')
+    worker_run.add_argument("--codex-executable", metavar='EXE')
+    worker_run.add_argument("--pi-executable", metavar='EXE')
     worker_run.set_defaults(handler=_worker_run)
 
     mcp = commands.add_parser("mcp")
     mcp_commands = mcp.add_subparsers(dest="mcp_command", required=True)
     mcp_serve = mcp_commands.add_parser("serve")
     mcp_serve.add_argument("--root", required=True)
-    mcp_serve.add_argument("--as", dest="actor", required=True)
+    mcp_serve.add_argument("--as", dest="actor", required=True, metavar='NODE')
     mcp_serve.add_argument("--session", required=True)
     mcp_serve.set_defaults(direct_handler=_mcp_serve)
 
@@ -2315,7 +2419,7 @@ def _parser() -> _ArtifactParser:
     update.add_argument("--json", action="store_true")
     update.set_defaults(handler=_update, update_action=None)
     update_commands = update.add_subparsers(dest="update_command")
-    for update_action in ("consent", "revoke", "status", "check", "apply"):
+    for update_action in ("consent", "revoke", "status", "check", "apply", "rollback"):
         update_action_parser = update_commands.add_parser(
             update_action,
             help=argparse.SUPPRESS,
@@ -2331,8 +2435,8 @@ def _parser() -> _ArtifactParser:
     update_fleet_preview.set_defaults(handler=_fleet_update_preview)
     update_fleet_apply = update_fleet_commands.add_parser("apply")
     _add_fleet_update_arguments(update_fleet_apply)
-    update_fleet_apply.add_argument("--plan-digest", required=True)
-    update_fleet_apply.add_argument("--idempotency-key", required=True)
+    update_fleet_apply.add_argument("--plan-digest", required=True, metavar='SHA256')
+    update_fleet_apply.add_argument("--idempotency-key", required=True, metavar='KEY')
     update_fleet_apply.set_defaults(handler=_fleet_update_apply)
 
     from .bus_epoch import register_cli as register_epoch
@@ -2397,6 +2501,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from .command_contract import schema_version_for_arguments
 
     artifact_schema_version = schema_version_for_arguments(parser, arguments)
+    from .helptext import help_for
+
     static_help = help_for(arguments)
     if static_help is not None:
         print(static_help, end="")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from .helptext import name_line_description
+from .help_copy import name_line_description
 from .host_paths import worker_workspace_root
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
@@ -61,6 +61,7 @@ def _argument_row(
     choices = [] if action.choices is None else list(action.choices)
     return {
         "name": action.dest,
+        "metavar": _safe_default(action.metavar),
         "option_strings": list(action.option_strings),
         "positional": not action.option_strings,
         "required": bool(action.required),

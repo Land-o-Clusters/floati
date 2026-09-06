@@ -1,0 +1,72 @@
+[
+  {
+    "hook_timeout_seconds": 10,
+    "id": "codex-wait-consent-01a0727fe9017e6783e5d877dc02fabf",
+    "idempotency_key": "fixture-consent",
+    "kind": "codex_wait_consent_receipt",
+    "node_id": "builder-a",
+    "schema_version": 1,
+    "state": "armed",
+    "tenant_id": "demo-fleet",
+    "timestamp": "2026-09-05T16:56:20.481Z",
+    "wait_deadline_seconds": 2,
+    "workspace": "/workspaces/seat",
+    "workspace_map_digest": "c55066b961ea9036ddbc080f19ed66eab7a2439f3599eec5dece19938294faa6"
+  },
+  {
+    "acting_session_id": "session-018f7e9b3c137abc8def0123456789ab",
+    "consent_receipt_id": "codex-wait-consent-01a0727fe9017e6783e5d877dc02fabf",
+    "id": "codex-wait-session-01a0727fe9037d288b7b22c70f77b8d2",
+    "idempotency_key": "fixture-claim",
+    "kind": "codex_wait_session_receipt",
+    "node_id": "builder-a",
+    "operation": "arm",
+    "predecessor_receipt_id": null,
+    "schema_version": 1,
+    "state": "armed",
+    "tenant_id": "demo-fleet",
+    "timestamp": "2026-09-05T16:56:20.483Z",
+    "workspace": "/workspaces/seat",
+    "workspace_map_digest": "c55066b961ea9036ddbc080f19ed66eab7a2439f3599eec5dece19938294faa6"
+  },
+  {
+    "id": "codex-wait-exhaustion-01a0727fe9047620a63f2ffc69fb7d15",
+    "idempotency_key": "fixture-exhaustion",
+    "kind": "codex_wait_exhaustion_receipt",
+    "node_id": "builder-a",
+    "outcome": "rearmed",
+    "schema_version": 1,
+    "session_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tenant_id": "demo-fleet",
+    "timestamp": "2026-09-05T16:56:20.484Z",
+    "waited_seconds": 2
+  },
+  {
+    "attempt_binding": "absent_legacy",
+    "doc": "docs/status/QUEUE-2026-09-01.md",
+    "id": "msg-01a0727fe905786bb7e357c814e82d9b",
+    "idempotency_key": "fixture-envelope",
+    "kind": "message_envelope",
+    "note": "the shape every seat posts by hand",
+    "recipient": "architect-a",
+    "repo": "floati",
+    "schema_version": 0,
+    "sender": "builder-a",
+    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tenant_id": "demo-fleet",
+    "timestamp": "2026-09-05T16:56:20.485Z"
+  },
+  {
+    "id": "wake-control-01a0727fe907779691fc9e9efbeeda00",
+    "idempotency_key": "fixture-pause",
+    "kind": "wake_control_receipt",
+    "node_id": "builder-a",
+    "operation": "pause",
+    "predecessor_receipt_id": null,
+    "schema_version": 0,
+    "session_digest": "66c575a841dc77962db05ee18c7bb212f89e2925dd08f822db1acd9043763627",
+    "state": "paused",
+    "tenant_id": "demo-fleet",
+    "timestamp": "2026-09-05T16:56:20.487Z"
+  }
+]

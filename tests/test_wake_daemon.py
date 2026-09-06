@@ -49,7 +49,7 @@ class _Adapter:
         envelopes: object = None,
     ) -> WakeAdapterResult:
         self.calls.append((binding.session_id, reason, deadline_seconds, envelopes))
-        if self.outcome == "woke":
+        if self.outcome in {"woke", "queued"}:
             reason_code = None
         elif self.reason_code is not None:
             reason_code = self.reason_code
@@ -152,6 +152,27 @@ class _WakeDaemonFixture(unittest.TestCase):
 
 
 class WakeDaemonRedTests(_WakeDaemonFixture):
+
+    def test_queued_attempt_survives_transition_failure_without_false_wake(self) -> None:
+        from floati.jsonl import read_records
+        self.bind(resume_state="resume_unproven")
+        self.consent()
+        self.send_unbound()
+        self.adapter.outcome = "queued"
+        daemon = self.daemon()
+        with mock.patch.object(daemon, "_transition", side_effect=OSError("injected transition failure")):
+            with self.assertRaises(OSError):
+                daemon.run_cycle(100.0)
+        result = self.daemon().run_cycle(102.0)
+        self.assertEqual("queued", result["state"])
+        self.assertEqual(1, len(self.adapter.calls))
+        self.assertEqual("resume_unproven", self.adapter.exact_binding().resume_state)
+        runtime = json.loads(daemon.runtime_path.read_text())
+        self.assertEqual([102.0], runtime["wake_timestamps"])
+        rows = read_records(self.root, public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))), allowed_kinds={"wake_attempt_receipt"})
+        self.assertEqual(["queued"], [row["outcome"] for row in rows])
+        lifecycle = read_records(self.root, DaemonConsentLedger._relative(self.coordinate.node_id), allowed_kinds={"wake_daemon_lifecycle_receipt", "wake_daemon_consent_receipt"})
+        self.assertEqual("unknown", lifecycle[-1]["state"])
 
     def test_no_consent_means_no_runtime_or_owner_files(self) -> None:
         daemon = self.daemon()
@@ -388,6 +409,16 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         runtime = daemon.read_runtime()
         self.assertEqual("open", runtime["circuit_state"])
         self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids(public_ids.builder('a'), worker_session_id="cursor-session-1"))
+
+    def test_three_queued_requests_exhaust_budget_without_a_fourth_call(self) -> None:
+        self.adapter.outcome = "queued"
+        daemon = self.daemon()
+        for index, now in enumerate((100.0, 102.0, 104.0)):
+            self.send(f"queued-budget-{index}")
+            self.assertEqual("queued", daemon.run_cycle(now)["state"])
+        self.send("queued-budget-4")
+        self.assertEqual("exhausted", daemon.run_cycle(106.0)["state"])
+        self.assertEqual(3, len(self.adapter.calls))
 
     def test_three_wakes_exhaust_the_rolling_budget_without_a_fourth_call(self) -> None:
         daemon = self.daemon()

@@ -11,8 +11,8 @@ UNNAMED_REMEDY: dict[str, str] = {
 }
 
 # Action text for the WS-I / M4 drill codes this row owns. Installer
-# codes stay off this map so INS-1 can name --ref / shadow without editing
-# deploy.py or installer_shadow.py here.
+# codes stay off this map so the install rows can name --ref / shadow
+# at the emit sites without editing this map.
 DRILL_REMEDIES: Mapping[str, str] = {
     "arguments_invalid": "retry the command supplying the exact flags or values named in detail",
     "ack_item_unknown": "pass --id of a message that inbox listed for this node and session",
@@ -20,9 +20,12 @@ DRILL_REMEDIES: Mapping[str, str] = {
     "authority_holder_mismatch": "act as the grant's exact holder",
     "work_unknown": "pass --id of a work item that work list shows",
     "run_id_invalid": "pass --run as run-<uuid7>",
+    # Shared idempotency-key validator; every verb that takes the flag serves it.
+    "wake_idempotency_key_invalid": "pass --idempotency-key as printable text of 1 to 128 characters",
 }
 
 DOCTOR_CURRENCY_REMEDY = "run doctor --source from a git working tree git can inspect"
+DEPLOY_CURRENCY_REMEDY = "check the tag out and name it with --ref"
 
 RefusalRemedy = Union[str, dict[str, str]]
 

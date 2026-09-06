@@ -48,6 +48,7 @@ APPROVED_README_TOP = """<p align="center">
 </h1>
 <p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
 <p align="center">Any harness, any mix. One bus, one board, one set of receipts.</p>
+<p align="center"><strong>Point your coding agent at this repository. <a href="AGENTS.md"><code>AGENTS.md</code></a> walks it from install to a verified fleet.</strong></p>
 
 <p align="center">
   <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
@@ -274,7 +275,11 @@ class NameSweepLauncherTests(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode)
-        self.assertIn("floati COMMAND [OPTIONS]", completed.stdout)
+        from floati.cli import _parser
+        from floati.command_contract import describe_parser
+        roots = [row['path'][0] for row in describe_parser(_parser())['commands']
+                 if row['public'] and len(row['path']) == 1]
+        self.assertIn("floati {" + "|".join(roots) + "}", completed.stdout)
         self.assertNotRegex(completed.stdout, rf"(?<![./])\b{RETIRED_SHORT}\b")
         self.assertNotIn(RETIRED.capitalize(), completed.stdout)
 

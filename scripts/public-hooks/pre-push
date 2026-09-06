@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""The publication scans as a git pre-push fence on a public Floati clone.
+
+Install once, from the clone root:
+
+    git config core.hooksPath scripts/public-hooks
+
+Every pushed ref then has its committed tree scanned by the byte-level public
+name fence (scripts/public_name_fence.py, the same scan the public CI runs)
+and its not-yet-on-the-remote commit messages scanned with the same token set.
+A push that would publish a private name is refused with one JSON artifact
+naming the finding and a non-zero exit; a clean push carries one ok artifact.
+A deleted ref publishes nothing and rides free.
+
+The gate cannot be silent: git is resolved through a fixed ordered candidate
+list (/usr/bin/git, then /bin/git), never PATH, so a substituted git cannot
+weaken the scan; the fence import and every git call are wrapped, and every
+failure leaves through the same one-JSON-artifact shape with a typed code
+(`fence_unavailable`, `git_failed`) - never a traceback. Provenance is
+deliberately not re-checked here: the export baseline is private-only and
+never travels in a public clone, so there is nothing to verify it against.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tarfile
+import tempfile
+import threading
+from pathlib import Path
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT))
+
+COMMAND = "public-pre-push"
+ZERO_SHA = "0" * 40
+MAX_MESSAGE_COMMITS = 200
+GIT_CANDIDATES = ("/usr/bin/git", "/bin/git")
+
+
+def _artifact(status: str, code: str, detail: str, **extra) -> dict[str, object]:
+    evidence: dict[str, object] = {"code": code, "detail": detail}
+    evidence.update(extra)
+    return {
+        "artifact_version": 0,
+        "command": COMMAND,
+        "status": status,
+        "evidence": evidence,
+    }
+
+
+def _emit(artifact: dict[str, object]) -> int:
+    print(json.dumps(artifact, ensure_ascii=False))
+    return 0 if artifact["status"] == "ok" else 1
+
+
+def _environment() -> dict[str, str]:
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_PAGER": "cat"})
+    return environment
+
+
+def _resolve_git() -> str | None:
+    for candidate in GIT_CANDIDATES:
+        path = Path(candidate)
+        if path.is_file() and os.access(path, os.X_OK):
+            return candidate
+    return None
+
+
+def _load_fence():
+    from scripts.public_name_fence import FENCE_TOKENS, scan_tree
+
+    return FENCE_TOKENS, scan_tree
+
+
+def _git(git: str, *arguments: str) -> bytes:
+    completed = subprocess.run(
+        [git, *arguments],
+        cwd=str(REPOSITORY_ROOT),
+        env=_environment(),
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    return completed.stdout
+
+
+def _tree_findings(git: str, sha: str, scan_tree) -> list[dict[str, object]]:
+    findings: list[dict[str, object]] = []
+    with tempfile.TemporaryDirectory() as temporary:
+        archive = Path(temporary) / "tree.tar"
+        archive.write_bytes(_git(git, "archive", "--format=tar", sha))
+        extracted = Path(temporary) / "tree"
+        extracted.mkdir()
+        with tarfile.open(archive) as handle:
+            for member in handle.getmembers():
+                target = (extracted / member.name).resolve()
+                if not str(target).startswith(str(extracted.resolve())):
+                    continue
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                elif member.isfile():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with handle.extractfile(member) as source, open(target, "wb") as sink:
+                        sink.write(source.read())
+        findings.extend(scan_tree(extracted))
+    return findings
+
+
+def _message_findings(git: str, local_sha: str, remote_sha: str, tokens) -> list[
+    dict[str, object]
+]:
+    if remote_sha == ZERO_SHA:
+        commits = _git(git, "rev-list", local_sha, "--not", "--remotes").decode(
+            "utf-8"
+        ).split()
+    else:
+        commits = _git(git, "rev-list", f"{remote_sha}..{local_sha}").decode(
+            "utf-8"
+        ).split()
+    findings: list[dict[str, object]] = []
+    for commit in commits[-MAX_MESSAGE_COMMITS:]:
+        message = _git(git, "log", "-1", "--format=%B", commit).decode("utf-8")
+        for code, token in tokens:
+            if token in message:
+                findings.append({
+                    "kind": "commit_message",
+                    "commit": commit[:12],
+                    "code": code,
+                })
+    return findings
+
+
+def main() -> int:
+    try:
+        tokens, scan_tree = _load_fence()
+    except Exception as exc:
+        return _emit(_artifact(
+            "refused", "fence_unavailable",
+            f"the public name fence could not be loaded: {type(exc).__name__}",
+        ))
+
+    git = _resolve_git()
+    if git is None:
+        return _emit(_artifact(
+            "refused", "git_failed",
+            "no git at the fixed candidate paths /usr/bin/git, /bin/git; "
+            "PATH is never consulted",
+        ))
+
+    try:
+        pushes: list[tuple[str, str, str]] = []
+        for line in sys.stdin.read().splitlines():
+            parts = line.split()
+            if len(parts) != 4:
+                continue
+            local_ref, local_sha, _remote_ref, remote_sha = parts
+            if local_sha == ZERO_SHA:
+                continue
+            pushes.append((local_ref, local_sha, remote_sha))
+
+        findings: list[dict[str, object]] = []
+        for local_ref, local_sha, remote_sha in pushes:
+            for finding in _tree_findings(git, local_sha, scan_tree):
+                finding["ref"] = local_ref
+                findings.append(finding)
+            for finding in _message_findings(git, local_sha, remote_sha, tokens):
+                findings.append({"ref": local_ref, **finding})
+    except (subprocess.SubprocessError, OSError, tarfile.TarError) as exc:
+        return _emit(_artifact(
+            "refused", "git_failed",
+            f"a git call failed: {type(exc).__name__}",
+        ))
+
+    if findings:
+        return _emit(_artifact(
+            "refused", "public_name_fence_failed",
+            "the push would publish a private name",
+            findings=findings,
+        ))
+    return _emit(_artifact(
+        "ok", "public_pre_push_clean",
+        "publication scans found no private name in the pushed trees or messages",
+        refs=[local_ref for local_ref, _sha, _remote in pushes],
+    ))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

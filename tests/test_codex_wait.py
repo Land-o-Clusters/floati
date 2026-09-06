@@ -241,6 +241,7 @@ class CodexWaitContractTests(unittest.TestCase):
             consent,
             "seat-two",
             idempotency_key="arm-two",
+            take_over=True,
         )
 
         self.assertEqual("arm", first["operation"])
@@ -396,6 +397,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             consent,
             session_id,
             idempotency_key="runtime-arm-" + session_id,
+            take_over=True,
         )
 
     def bus_bytes(self) -> dict[str, bytes]:

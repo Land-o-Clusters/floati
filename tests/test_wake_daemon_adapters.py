@@ -95,7 +95,7 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             envelopes=({"id": "msg-1", "note": "not in argv"},),
         )
 
-        self.assertEqual("woke", result.outcome)
+        self.assertEqual("queued", result.outcome)
         self.assertEqual(
             (
                 str(self.link),

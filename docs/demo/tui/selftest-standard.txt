@@ -1,0 +1,11 @@
+$ python3 -m floati.selftest
+
+  [the full suite runs; its last line is the receipt]
+
+[38;5;208m      ⊙[0m
+[38;5;208m      │[0m
+[38;5;208m     ╱ ╲[0m
+[38;5;208m    ╱[0m[38;5;245m───[0m[38;5;208m╲[0m
+[38;5;208m   ╱     ╲[0m
+[38;5;245m ~~~~~~~~~~~[0m
+{"canonical_ref":"refs/heads/lane/hm0","status":"bundle_verified"}

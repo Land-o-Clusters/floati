@@ -461,8 +461,12 @@ class GitHubIntakeBoundaryTests(unittest.TestCase):
 
         page = help_for(["intake", "adopt", "--help"])
         self.assertIsNotNone(page)
-        self.assertIn("--source local --from DIR --path RELATIVE", page)
-        self.assertIn("--source github --repo O/R --issue N --gh EXE", page)
+        self.assertIn("--source {local,github}", page)
+        self.assertIn("--from DIR", page)
+        self.assertIn("--path RELATIVE", page)
+        self.assertIn("--repo O/R", page)
+        self.assertIn("--issue N", page)
+        self.assertIn("--gh EXE", page)
         self.assertIn("not reachable from MCP", page)
         self.assertIn(GH_AUTHENTICATION_REMEDY, page)
 
@@ -859,8 +863,9 @@ class GitHubOutboundEffectTests(unittest.TestCase):
 
         page = help_for(["intake", "preview", "--help"])
         self.assertIsNotNone(page)
-        self.assertIn("label_add --label NAME [--label NAME ...]", page)
-        self.assertIn("label_remove --label NAME", page)
+        self.assertIn("--label NAME", page)
+        self.assertIn("repeatable", page)
+        self.assertIn("label_add is sorted and deduplicated", page)
         self.assertIn("label_remove accepts exactly one label", page)
         self.assertIn("--pr N", page)
 

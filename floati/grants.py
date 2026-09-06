@@ -151,10 +151,10 @@ def _revoke(args: argparse.Namespace) -> HandlerResult:
 
 def _add_arguments(parser: argparse.ArgumentParser, *, required: bool) -> None:
     parser.add_argument("--root")
-    parser.add_argument("--as", dest="grantor", required=required)
-    parser.add_argument("--holder", required=required)
+    parser.add_argument("--as", dest="grantor", required=required, metavar='NODE')
+    parser.add_argument("--holder", required=required, metavar='NODE')
     parser.add_argument("--subject", required=required)
-    parser.add_argument("--epoch", type=int, required=required)
+    parser.add_argument("--epoch", type=int, required=required, metavar='N')
 
 
 def register_cli(commands: argparse._SubParsersAction) -> None:

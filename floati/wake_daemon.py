@@ -62,6 +62,116 @@ WAKE_BREAKER_REMEDY = (
 )
 
 
+def breaker_status_for_node(root: object, node_id: str) -> Dict[str, object]:
+    """Read the wake-daemon breaker from the durable runtime, never the notice.
+
+    WD-R7 writes a one-shot notice at the closed-to-open crossing and never
+    refreshes it, so the notice lags the runtime (NOTICE-LAG-1). Status
+    surfaces the runtime. This function does not reset the circuit; only a
+    consent re-grant (a new activation epoch) re-initializes it.
+    """
+
+    from .wake_daemon_contract import (
+        AdapterBindingStore,
+        DaemonCoordinate,
+        SUPPORTED_HARNESSES,
+    )
+
+    store = AdapterBindingStore(root)
+    coordinates: list[Dict[str, object]] = []
+    for harness in sorted(SUPPORTED_HARNESSES):
+        try:
+            coordinate = DaemonCoordinate(root, node_id, harness)
+        except ProtocolRefusal:
+            continue
+        try:
+            store.read(coordinate)
+        except ProtocolRefusal as exc:
+            if exc.code == "wake_daemon_binding_absent":
+                continue
+            raise
+        runtime_path = (
+            Path(root.path) / "state" / "wake-daemon" / "runtime" / f"{coordinate.digest}.json"
+        )
+        if runtime_path.is_symlink():
+            coordinates.append(
+                {
+                    "harness": harness,
+                    "state": "underivable",
+                    "reason": "runtime_symlink",
+                    "consecutive_refusals": None,
+                    "last_trip_reason": None,
+                    "current_backoff": None,
+                }
+            )
+            continue
+        if not runtime_path.is_file():
+            coordinates.append(
+                {
+                    "harness": harness,
+                    "state": "underivable",
+                    "reason": "runtime_missing",
+                    "consecutive_refusals": None,
+                    "last_trip_reason": None,
+                    "current_backoff": None,
+                }
+            )
+            continue
+        try:
+            raw = runtime_path.read_bytes()
+            if len(raw) > 65536:
+                raise ValueError("oversized")
+            runtime = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            coordinates.append(
+                {
+                    "harness": harness,
+                    "state": "underivable",
+                    "reason": "runtime_malformed",
+                    "consecutive_refusals": None,
+                    "last_trip_reason": None,
+                    "current_backoff": None,
+                }
+            )
+            continue
+        circuit_state = runtime.get("circuit_state") if isinstance(runtime, dict) else None
+        refusals = runtime.get("consecutive_refusals") if isinstance(runtime, dict) else None
+        backoff = runtime.get("current_backoff") if isinstance(runtime, dict) else None
+        if (
+            not isinstance(runtime, dict)
+            or circuit_state not in {"closed", "open"}
+            or not isinstance(refusals, int)
+            or isinstance(refusals, bool)
+            or not isinstance(backoff, int)
+            or isinstance(backoff, bool)
+        ):
+            coordinates.append(
+                {
+                    "harness": harness,
+                    "state": "underivable",
+                    "reason": "runtime_malformed",
+                    "consecutive_refusals": None,
+                    "last_trip_reason": None,
+                    "current_backoff": None,
+                }
+            )
+            continue
+        coordinates.append(
+            {
+                "harness": harness,
+                "state": circuit_state,
+                "consecutive_refusals": refusals,
+                "last_trip_reason": runtime.get("last_reason_code"),
+                "current_backoff": backoff,
+            }
+        )
+    return {
+        "source": "runtime",
+        "threshold": _BREAKER_THRESHOLD,
+        "coordinates": coordinates,
+    }
+
+
 class DaemonOwner:
     """One nonblocking kernel lock for one root/node/harness coordinate."""
 
@@ -346,7 +456,7 @@ class WakeDaemon:
             message_worker_session_id,
         )
         if existing is not None:
-            if existing["outcome"] == "woke":
+            if existing["outcome"] in {"woke", "queued"}:
                 runtime["wake_timestamps"] = timestamps + [current_time]
                 runtime["current_wake_key"] = None
                 self._schedule_success(runtime, consent, current_time)
@@ -354,9 +464,9 @@ class WakeDaemon:
                     runtime,
                     consent,
                     binding,
-                    result_state="woke",
+                    result_state=str(existing["outcome"]),
                     event="wake_attempt",
-                    lifecycle_state="running",
+                    lifecycle_state="running" if existing["outcome"] == "woke" else "unknown",
                     reason_code=None,
                 )
             reason_code = str(
@@ -400,7 +510,7 @@ class WakeDaemon:
             min(300, int(consent["max_poll_seconds"])),
             envelopes=envelopes,
         )
-        if result.outcome == "woke":
+        if result.outcome in {"woke", "queued"}:
             attempt_key = self._attempt_key(runtime)
             try:
                 durable = WakeAttemptLedger(self.root).record(
@@ -410,11 +520,11 @@ class WakeDaemon:
                     decision_receipt_id=str(receipt["id"]),
                     message_worker_session_id=message_worker_session_id,
                     idempotency_key=attempt_key,
-                    outcome="woke",
+                    outcome=result.outcome,
                 )
-                if durable.get("outcome") != "woke":
+                if durable.get("outcome") != result.outcome:
                     raise IntegrityFailure(
-                        "wake_evidence_unknown", "durable attempt did not confirm woke"
+                        "wake_evidence_unknown", "durable attempt did not confirm adapter outcome"
                     )
             except Exception:
                 self._schedule_failure(runtime, consent, current_time)
@@ -427,6 +537,7 @@ class WakeDaemon:
                     lifecycle_state="unknown",
                     reason_code="wake_evidence_unknown",
                 )
+            # Accepted external requests consume budget even when execution is unknown.
             runtime["wake_timestamps"] = timestamps + [current_time]
             runtime["current_wake_key"] = None
             self._schedule_success(runtime, consent, current_time)
@@ -435,9 +546,9 @@ class WakeDaemon:
                 runtime,
                 consent,
                 binding,
-                result_state="woke",
+                result_state=result.outcome,
                 event="wake_attempt",
-                lifecycle_state="running",
+                lifecycle_state="running" if result.outcome == "woke" else "unknown",
                 reason_code=None,
             )
 
@@ -842,7 +953,7 @@ class WakeDaemon:
                 kwargs["envelopes"] = envelopes
         result = method(binding, reason, deadline, **kwargs)
         if not isinstance(result, WakeAdapterResult) or result.outcome not in {
-            "woke", "refused", "unknown"
+            "woke", "queued", "refused", "unknown"
         }:
             raise IntegrityFailure(
                 "wake_daemon_adapter_unknown", "adapter returned an unknown outcome"

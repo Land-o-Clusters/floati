@@ -30,11 +30,14 @@ _GOVERNED_PROTOCOL_ASSET_ROOTS = (
     "schemas/v0",
     "schemas/v1",
 )
-_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 157
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 161
 _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # Versioned schemas may evolve in place, but their reviewed membership is
-    # fixed. Content bytes deliberately do not participate in this pin.
-    "93c88b117e973f18f8a162af6eb55a95908b59b85e8ad85fe81c7d91c3a6a544"
+    # fixed. Content bytes deliberately do not participate in this pin. The
+    # pin moves because the SET grew, by governed-schema additions only
+    # (the closed schema-v1 hook burn record and the role template write
+    # receipt); the frozen published bundle count above is untouched.
+    "3a66505b1a2139f2b3faf9e2d2278af54d45987a826a354c6dbba6e61375539a"
 )
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (

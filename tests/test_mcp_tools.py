@@ -24,6 +24,7 @@ except ImportError:
     McpServer = None
     run_cli_artifact = None
 from floati.registry import REGISTRY_KINDS, Registry
+from floati.work import WorkLog
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
 
@@ -222,6 +223,32 @@ class McpToolSurfaceTests(unittest.TestCase):
                     "arguments_invalid",
                 )
 
+    def test_deeper_refusals_never_name_cli_flags(self) -> None:
+        """MCP-2-F1: a valid-shape call that fails inside the CLI command is
+        re-shaped to the tool's input names at the boundary - code kept,
+        remedy non-null, no flag survives to the caller."""
+
+        server = self.server()
+        work = WorkLog(self.root)
+        item = work.add("the capture item", public_ids.builder('a'), [])
+
+        result = server.call_tool("work_claim", {
+            "item_id": item["id"],
+            "authority_subject": "capture-live",
+            "authority_epoch": 1,
+        })
+        evidence = self.assert_tool_error(result, "authority_missing")["evidence"]
+        self.assertNotIn("--", json.dumps(evidence))
+        self.assertIsInstance(evidence["remedy"], str)
+        self.assertTrue(evidence["remedy"])
+
+        provided = self.send_arguments(note="n" * 1100, key="mcp2f1-send")
+        evidence = self.assert_tool_error(
+            server.call_tool("send", provided), "note_invalid"
+        )["evidence"]
+        self.assertNotIn("--", json.dumps(evidence))
+        self.assertEqual("shorten note to at most 1024 characters", evidence["remedy"])
+
     def test_mcp_refusals_name_mcp_inputs_never_cli_flags(self) -> None:
         """MCP-2 (public #24): catches CLI vocabulary leaking into tool refusals."""
 
@@ -383,9 +410,60 @@ class McpToolSurfaceTests(unittest.TestCase):
         )
 
         self.assertEqual(20, direct_exit)
-        self.assertEqual(direct_artifact, result["structuredContent"])
-        self.assert_tool_error(result, direct_artifact["evidence"]["code"])
+        served = result["structuredContent"]
+        self.assertEqual(direct_artifact["evidence"]["code"], served["evidence"]["code"])
+        self.assertEqual(direct_artifact["evidence"]["detail"], served["evidence"]["detail"])
+        self.assertIn("--note", direct_artifact["evidence"]["remedy"])
+        self.assertNotIn("--", served["evidence"]["remedy"])
         self.assertEqual([], EventLog(self.root).records())
+
+    def test_dict_remedy_with_a_real_action_keeps_that_action(self) -> None:
+        """MCP-2-F1 Am.1: RefusalRemedy is Union[str, dict] and REM-1 binds
+        dict remedies - the boundary re-speaks a dict remedy field by field;
+        only the unnamed placeholder (kind none) becomes the generic remedy."""
+
+        server = self.server()
+        reshaped = server._reshape_refusal(
+            {
+                "artifact_version": 0,
+                "command": "send",
+                "status": "refused",
+                "evidence": {
+                    "code": "note_invalid",
+                    "detail": "the note exceeds its cap",
+                    "remedy": {
+                        "kind": "retry",
+                        "action": "shorten --note to at most 1024 characters",
+                    },
+                },
+            },
+            ("send",),
+        )
+        self.assertEqual(
+            {
+                "kind": "retry",
+                "action": "shorten note to at most 1024 characters",
+            },
+            reshaped["evidence"]["remedy"],
+        )
+
+        unnamed = server._reshape_refusal(
+            {
+                "artifact_version": 0,
+                "command": "send",
+                "status": "refused",
+                "evidence": {
+                    "code": "authority_missing",
+                    "detail": "no grant names this holder",
+                    "remedy": {"kind": "none", "why": "no action was named for this refusal"},
+                },
+            },
+            ("send",),
+        )
+        self.assertEqual(
+            "correct the condition named in detail and retry the tool call",
+            unnamed["evidence"]["remedy"],
+        )
 
     def test_retirement_is_rechecked_for_listing_and_every_governed_call(self) -> None:
         """Catches process-cached liveness preserving authority after retirement."""
@@ -522,10 +600,8 @@ class McpToolSurfaceTests(unittest.TestCase):
         )
 
         artifact = self.assert_tool_error(result, "node_lease_expired")
-        self.assertEqual(
-            {"kind": "none", "why": "no action was named for this refusal"},
-            artifact["evidence"]["remedy"],
-        )
+        self.assertIsInstance(artifact["evidence"]["remedy"], str)
+        self.assertTrue(artifact["evidence"]["remedy"])
         self.assertEqual([], EventLog(self.root).records())
 
 

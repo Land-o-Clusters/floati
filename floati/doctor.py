@@ -82,6 +82,21 @@ def _finding(
     }
 
 
+def _host_finding(
+    code: str,
+    subject: str,
+    detail: str,
+    remediation: Optional[str] = None,
+) -> Dict[str, object]:
+    """Keep ambient installation observations separate from root health."""
+
+    finding = _finding("host_" + code, "info", subject, detail, remediation)
+    # Normalize the path before adding a scope prefix: the prefix itself is
+    # not a filesystem path and must not bypass artifact_subject redaction.
+    finding["subject"] = "host:" + str(finding["subject"])
+    return finding
+
+
 def _workspace_layout_finding(row: Dict[str, str]) -> Dict[str, object]:
     """Project one read-only layout defect onto the ordinary doctor shape."""
 
@@ -100,8 +115,10 @@ def _role_bindings(
     source: Path,
     nodes: list[str],
     registry_rows: list[Dict[str, object]],
+    *,
+    root: Optional[FloatiRoot] = None,
 ) -> Dict[str, object]:
-    """Resolve only digest-bound shipped role templates for active nodes."""
+    """Resolve only digest-bound declared role templates for active nodes."""
 
     from .role_templates import load_shipped_role_templates
 
@@ -118,7 +135,13 @@ def _role_bindings(
     if not assigned:
         return {}
     try:
-        templates = load_shipped_role_templates(source / "roles" / "shipped")
+        if root is None:
+            templates = load_shipped_role_templates(source / "roles" / "shipped")
+        else:
+            from .role_library import RoleTemplateLibrary
+            templates = RoleTemplateLibrary(
+                root, shipped_directory=source / "roles" / "shipped"
+            ).templates()
     except ProtocolRefusal as exc:
         raise IntegrityFailure("role_cadence_unavailable", exc.detail) from exc
     bindings: Dict[str, object] = {}
@@ -131,7 +154,7 @@ def _role_bindings(
         ):
             raise IntegrityFailure(
                 "role_cadence_invalid",
-                f"active role evidence for {node} does not match a shipped template",
+                f"active role evidence for {node} does not match a declared template",
             )
         bindings[node] = template
     return bindings
@@ -141,12 +164,14 @@ def _role_cadences(
     source: Path,
     nodes: list[str],
     registry_rows: list[Dict[str, object]],
+    *,
+    root: Optional[FloatiRoot] = None,
 ) -> Dict[str, str]:
-    """Resolve only digest-bound shipped cadence evidence for active nodes."""
+    """Resolve only digest-bound declared cadence evidence for active nodes."""
 
     return {
         node: template.cadence
-        for node, template in _role_bindings(source, nodes, registry_rows).items()
+        for node, template in _role_bindings(source, nodes, registry_rows, root=root).items()
     }
 
 
@@ -154,12 +179,14 @@ def _role_ack_slas(
     source: Path,
     nodes: list[str],
     registry_rows: list[Dict[str, object]],
+    *,
+    root: Optional[FloatiRoot] = None,
 ) -> Dict[str, int]:
     """Resolve only digest-bound declared acknowledgment SLAs for active nodes."""
 
     return {
         node: int(template.ack_sla_minutes)
-        for node, template in _role_bindings(source, nodes, registry_rows).items()
+        for node, template in _role_bindings(source, nodes, registry_rows, root=root).items()
         if template.ack_sla_minutes is not None
     }
 
@@ -330,15 +357,29 @@ def installed_bridge_paths() -> Optional[tuple[Path, Path]]:
 def project_installed_bridge_currency(
     source_root: Path, *, currency_current: bool
 ) -> Dict[str, object]:
+    """Observe the host bridge without making host access a root failure."""
+
+    try:
+        return _installed_bridge_currency(source_root, currency_current=currency_current)
+    except (OSError, UnicodeError) as exc:
+        return _host_finding(
+            "wake_bridge_unavailable",
+            "wake_bridge",
+            f"host wake-bridge currency is unobserved: {type(exc).__name__}",
+        )
+
+
+def _installed_bridge_currency(
+    source_root: Path, *, currency_current: bool
+) -> Dict[str, object]:
     """Report installed-wake-bridge drift: installed bridge from <sha>,
     repository at <sha>. Informational, never a refusal - a stale bridge
     still runs; the user is simply told."""
 
     paths = installed_bridge_paths()
     if paths is None:
-        return _finding(
+        return _host_finding(
             "wake_bridge_uninstalled",
-            "ok",
             "no installed wake bridge found",
             "no stop-hook bridge at the ruled install path; the seat wakes by its registration alone",
         )
@@ -354,9 +395,8 @@ def project_installed_bridge_currency(
         if repository_bridge.is_file() else None
     )
     if repository_sha is None:
-        return _finding(
+        return _host_finding(
             "wake_bridge_repository_source_unnameable",
-            "warning",
             str(repository_bridge),
             "repository wake-bridge source cannot be named for comparison",
             (
@@ -364,9 +404,8 @@ def project_installed_bridge_currency(
             ),
         )
     if installed_sha == repository_sha:
-        return _finding(
+        return _host_finding(
             "wake_bridge_current",
-            "ok",
             str(bridge),
             f"installed wake bridge matches the repository (from {installed_sha[:12]})",
         )
@@ -375,9 +414,8 @@ def project_installed_bridge_currency(
         + (f" (sidecar {recorded_sha[:12]})" if recorded_sha else " (no source-SHA sidecar)")
         + f", repository at {repository_sha[:12]}"
     )
-    return _finding(
+    return _host_finding(
         "wake_bridge_drift",
-        "warning",
         str(bridge),
         drift_note,
         "reinstall the installed bridge from the repository copy so the hook runs current code"
@@ -509,11 +547,8 @@ def project_wake_daemon_health(
     # WD-R8: the hook half of the surface - a bound zcode seat proves its
     # registration by observed dispatches, never by read-back. Reported
     # beside trust and breaker state: trust, shadowing, wakeability.
-    # ZC1-C-R1: an uninstalled bridge has no writer that can produce firing
-    # evidence. Its typed absence is projected separately and must not become
-    # a permanent hook_unproven warning for every bound zcode coordinate.
-    if installed_bridge_paths() is None:
-        return findings
+    # A host-wide bridge installation neither proves nor disproves this
+    # root's binding or firing history. Only the root-local records decide.
     for node_name, harness, _binding_path in bindings:
         if harness != "zcode":
             continue
@@ -574,13 +609,27 @@ def _read_sha256_sidecar(path: Path) -> Optional[str]:
 def project_installed_bus_watch_currency(
     source_root: Path, *, currency_current: bool
 ) -> Dict[str, object]:
+    """Observe the host watcher without making host access a root failure."""
+
+    try:
+        return _installed_bus_watch_currency(source_root, currency_current=currency_current)
+    except (OSError, UnicodeError) as exc:
+        return _host_finding(
+            "bus_watch_unavailable",
+            "bus_watch",
+            f"host bus-watch currency is unobserved: {type(exc).__name__}",
+        )
+
+
+def _installed_bus_watch_currency(
+    source_root: Path, *, currency_current: bool
+) -> Dict[str, object]:
     """Project deployed bus-watch drift without refusing an unnameable copy."""
 
     paths = installed_bus_watch_paths()
     if paths is None:
-        return _finding(
+        return _host_finding(
             "bus_watch_uninstalled",
-            "ok",
             str(Path.home() / ".config/opencode/plugins/floati-bus-watch.ts"),
             "no installed OpenCode bus watcher found; deployed-source currency is absent",
         )
@@ -591,9 +640,8 @@ def project_installed_bus_watch_currency(
     except OSError:
         installed_sha = None
     if recorded_sha is None or installed_sha is None or recorded_sha != installed_sha:
-        return _finding(
+        return _host_finding(
             "bus_watch_installed_source_unnameable",
-            "warning",
             str(installed),
             "installed OpenCode bus watcher is present but its install-time source SHA cannot name these bytes",
             (
@@ -610,9 +658,8 @@ def project_installed_bus_watch_currency(
     except OSError:
         repository_sha = None
     if repository_sha is None:
-        return _finding(
+        return _host_finding(
             "bus_watch_repository_source_unnameable",
-            "warning",
             str(repository_watch),
             "repository OpenCode bus-watch source cannot be named for comparison",
             (
@@ -620,15 +667,13 @@ def project_installed_bus_watch_currency(
             ),
         )
     if recorded_sha == repository_sha:
-        return _finding(
+        return _host_finding(
             "bus_watch_current",
-            "ok",
             str(installed),
             f"installed watcher matches the repository (from {recorded_sha[:12]})",
         )
-    return _finding(
+    return _host_finding(
         "bus_watch_drift",
-        "warning",
         str(installed),
         (
             f"installed watcher from {recorded_sha[:12]}, "
@@ -869,13 +914,14 @@ class Doctor:
             None if gateway_config is None else Path(gateway_config).expanduser()
         )
         self.destination_arg = destination
-        self.codex_hooks_defaulted = codex_hooks is None
+        self.codex_hooks_defaulted = codex_hooks is None and codex_config is None
         self.codex_hooks_arg = (
             Path.home() / ".codex" / "hooks.json"
             if codex_hooks is None
             else Path(codex_hooks).expanduser()
         )
         self.codex_config_arg = None if codex_config is None else Path(codex_config).expanduser()
+        self.codex_gateway_host_defaulted = codex_gateway_host is None
         self.codex_gateway_host_arg = (
             CODEX_GATEWAY_HOST
             if codex_gateway_host is None
@@ -1169,10 +1215,17 @@ class Doctor:
             # breaker state, last typed outcome) — surface it here, and keep
             # "nothing bound" a typed absence rather than a silent pass.
             wake_findings = project_wake_daemon_health(root, currency_current=currency_current)
-            wake_findings.append(project_installed_bridge_currency(
-                self.source_arg, currency_current=currency_current
-            ))
             findings.extend(wake_findings)
+            bridge_finding = project_installed_bridge_currency(
+                self.source_arg, currency_current=currency_current
+            )
+            findings.append(bridge_finding)
+            if bridge_finding['code'] == 'host_wake_bridge_uninstalled' and currency_current:
+                for row in wake_findings:
+                    if row['code'] == 'hook_unproven':
+                        row['remediation'] = (
+                            'install the governed wake bridge first; ' + str(row['remediation'])
+                        )
             if any(row["severity"] == "warning" for row in wake_findings) and rc == 0:
                 rc = 35
             if any(row["severity"] == "error" for row in wake_findings) and rc not in (20, 33):
@@ -1203,10 +1256,10 @@ class Doctor:
                     if row.get("state") == "active"
                 )
                 cadences = _role_cadences(
-                    self.source_arg, active_nodes, registry_rows
+                    self.source_arg, active_nodes, registry_rows, root=root
                 )
                 ack_slas = _role_ack_slas(
-                    self.source_arg, active_nodes, registry_rows
+                    self.source_arg, active_nodes, registry_rows, root=root
                 )
                 report = DeliveryHealthAnalyzer.analyze(
                     events=events_snapshot,
@@ -1323,13 +1376,16 @@ class Doctor:
             self.source_arg, currency_current=currency_current
         )
         findings.append(bus_watch_finding)
-        if bus_watch_finding["severity"] == "warning" and rc == 0:
-            rc = 35
-
         gateway_finding = _codex_gateway_finding(
             self.source_arg, self.codex_gateway_host_arg
         )
         if gateway_finding is not None:
+            # Source-owned failures retain weight even for an ambient host path.
+            if self.codex_gateway_host_defaulted and gateway_finding['severity'] != 'error':
+                gateway_finding = _host_finding(
+                    str(gateway_finding['code']), str(gateway_finding['subject']),
+                    str(gateway_finding['detail']), gateway_finding['remediation'],
+                )
             findings.append(gateway_finding)
             if gateway_finding["severity"] == "warning" and rc == 0:
                 rc = 35
@@ -1440,8 +1496,13 @@ class Doctor:
         findings.append(pin_finding)
         from .codex_hook_trust import observe_codex_waiter_hooks
 
+        def hook_finding(code, severity, subject, detail, remediation=None):
+            if self.codex_hooks_defaulted:
+                return _host_finding(code, subject, detail, remediation)
+            return _finding(code, severity, subject, detail, remediation)
+
         if self.codex_hooks_defaulted and not self.codex_hooks_arg.exists():
-            findings.append(_finding(
+            findings.append(hook_finding(
                 "codex_wait_hook_trust",
                 "ok",
                 str(self.codex_hooks_arg),
@@ -1453,28 +1514,28 @@ class Doctor:
                     self.codex_hooks_arg, self.codex_config_arg
                 )
             except ProtocolRefusal as exc:
-                findings.append(_finding(
+                findings.append(hook_finding(
                     exc.code,
                     "warning",
                     str(self.codex_hooks_arg),
                     exc.detail,
                     "Provide the exact Codex hooks and trust config paths, then rerun doctor.",
                 ))
-                if rc == 0:
+                if not self.codex_hooks_defaulted and rc == 0:
                     rc = 35
             else:
                 if not trust_rows:
-                    findings.append(_finding(
+                    findings.append(hook_finding(
                         "codex_wait_hook_trust",
                         "warning",
                         str(self.codex_hooks_arg),
                         "No Floati Codex Stop waiter was found.",
                         "Install the waiter through the governed path, review trust, and relaunch.",
                     ))
-                    if rc == 0:
+                    if not self.codex_hooks_defaulted and rc == 0:
                         rc = 35
                 for trust in trust_rows:
-                    finding = _finding(
+                    finding = hook_finding(
                         "codex_wait_hook_trust",
                         "ok" if trust["hook_armed"] else "warning",
                         str(trust["hook_trust_key"]),
@@ -1487,7 +1548,7 @@ class Doctor:
                     )
                     finding.update(trust)
                     findings.append(finding)
-                    if not trust["hook_armed"] and rc == 0:
+                    if not self.codex_hooks_defaulted and not trust["hook_armed"] and rc == 0:
                         rc = 35
         if root is None:
             fleet_update = {"state": "unavailable"}

@@ -23,6 +23,9 @@ Scope, stated so the fence is read for what it is:
 * **Direct body members, not `ast.walk`.** A method nested inside another
   function, or inside a nested class, is a different binding in a different
   scope. Only the class body's own statements can shadow each other.
+* **Class names, same rule.** Two `class AdapterTests` in one module is the
+  worse deletion: the second body replaces the first, and every `test_` on
+  the first class is gone. The fence names `file::Class` for that.
 * **What this cannot see:** a name defined once here and once by a base class or
   a mixin, which is legitimate override and indistinguishable from a mistake
   without knowing the author's intent; and a module-level `test_` function
@@ -111,6 +114,33 @@ def cross_class_test_names(root: Path) -> dict[str, list[str]]:
     return {
         key: sorted(classes) for key, classes in seen.items() if len(classes) > 1
     }
+
+
+def duplicate_test_classes(root: Path) -> list[str]:
+    """Return `file::Class` for every class name a module body binds twice.
+
+    Direct module members only. A nested class is a different binding.
+    Python binds a module body top to bottom, so the second `class`
+    REPLACES the first: every `test_` on the first body is gone.
+    """
+
+    offenders: list[str] = []
+    for path in test_modules(root):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as error:
+            offenders.append(f"{path.name}::<unparseable>::{error.msg}")
+            continue
+        names = [
+            statement.name
+            for statement in tree.body
+            if isinstance(statement, ast.ClassDef)
+        ]
+        counts = collections.Counter(names)
+        for name, seen in sorted(counts.items()):
+            if seen > 1:
+                offenders.append(f"{path.name}::{name} (defined {seen} times)")
+    return sorted(offenders)
 
 
 class DuplicateTestNameFenceTests(unittest.TestCase):
@@ -295,6 +325,51 @@ class DuplicateTestNameFenceTests(unittest.TestCase):
                 duplicate_test_methods(root),
             )
 
+    def test_a_class_name_bound_twice_in_one_module_is_a_finding(self) -> None:
+        """RED: two class bodies with one name; the first class's tests never run."""
+
+        from contextlib import ExitStack
+
+        source = (
+            "import unittest\n"
+            "\n"
+            "\n"
+            "class AdapterTests(unittest.TestCase):\n"
+            "    def test_first(self) -> None:\n"
+            "        pass\n"
+            "\n"
+            "\n"
+            "class AdapterTests(unittest.TestCase):\n"
+            "    def test_second(self) -> None:\n"
+            "        pass\n"
+        )
+        with ExitStack() as stack:
+            root = self._fixture(stack, test_shadowed_class=source)
+            self.assertEqual(
+                ["test_shadowed_class.py::AdapterTests (defined 2 times)"],
+                duplicate_test_classes(root),
+            )
+
+    def test_two_different_class_names_in_one_module_are_not_a_finding(self) -> None:
+        from contextlib import ExitStack
+
+        source = (
+            "import unittest\n"
+            "\n"
+            "\n"
+            "class GreenTests(unittest.TestCase):\n"
+            "    def test_one(self) -> None:\n"
+            "        pass\n"
+            "\n"
+            "\n"
+            "class NoticeTests(unittest.TestCase):\n"
+            "    def test_one(self) -> None:\n"
+            "        pass\n"
+        )
+        with ExitStack() as stack:
+            root = self._fixture(stack, test_two_classes=source)
+            self.assertEqual([], duplicate_test_classes(root))
+
 
 class RepositoryTestHygieneTests(unittest.TestCase):
     def test_the_fence_has_a_population(self) -> None:
@@ -315,6 +390,11 @@ class RepositoryTestHygieneTests(unittest.TestCase):
         """
 
         self.assertEqual([], duplicate_test_methods(TESTS_DIRECTORY))
+
+    def test_no_test_module_defines_the_same_class_name_twice(self) -> None:
+        """A shadowed class deletes every test the first body bound."""
+
+        self.assertEqual([], duplicate_test_classes(TESTS_DIRECTORY))
 
     def test_the_allowed_cross_class_names_are_real_and_are_not_findings(self) -> None:
         """The allowance is exercised by the REAL tree, not only by a fixture.

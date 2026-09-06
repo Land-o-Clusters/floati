@@ -783,6 +783,7 @@ class CodexHookInstaller:
                 consent,
                 session_id,
                 idempotency_key=f"codex-wait-install-session-{session_key}",
+                take_over=True,
             )
         if after != before:
             _write_atomic(self.hooks_path, after)

@@ -89,7 +89,38 @@ class WakeHealthSurfaceTests(unittest.TestCase):
         self.assertTrue(fact["documented_entrypoint_resolves"])
         self.assertEqual("2026-08-30T12:10:00Z", fact["observed_at"])
         self.assertIn(str(fact["documented_entrypoint"]), str(fact["remedy"]))
+        import shlex
+        notice, command_text = str(fact['remedy']).split(' to: ', 1)
+        self.assertIn('Acting session is not known', notice)
+        self.assertIn('--session', notice)
+        command = shlex.split(command_text)
+        self.assertEqual(["seat", "board"], command[1:3])
+        self.assertEqual(str(self.workspace), command[command.index("--workspace") + 1])
+        self.assertEqual(str(self.root.path), command[command.index("--root") + 1])
+        self.assertEqual(public_ids.builder("health"), command[command.index("--as") + 1])
+        self.assertNotIn("--take-over", command)
+        self.assertNotIn('--session', command)
+        self.assertNotIn(fact['claim_session'], command)
+
         validate_json_schema(fact, Path("schemas/v1/wake-health-fact.schema.json"))
+
+    def test_queued_attempt_does_not_prove_claimant_observed_mail(self) -> None:
+        from floati.wake_hold import WakeHoldController, WakeAttemptLedger
+        from floati.wake_health import WakeHealthProjection
+        node = public_ids.builder("health")
+        decision = WakeHoldController(self.root).evaluate(node, idempotency_key="health-queue")
+        WakeAttemptLedger(self.root).record(
+            recipient=node, acting_session_id="seat-claim", item_ids=[self.message["id"]],
+            decision_receipt_id=decision["receipt"]["id"], message_worker_session_id=None,
+            idempotency_key="health-queue-attempt", outcome="queued",
+        )
+        EventLog(self.root).send(
+            "architect", node, "floati", "a" * 40, "docs/evidence/wake-health.md",
+            "later mail", idempotency_key="health-later-mail",
+        )
+        fact = WakeHealthProjection(self.root).fact(node, self.observation)
+        self.assertIsNone(fact["last_seen_session"])
+        self.assertEqual("stale_claim_with_unread_mail", fact["state"])
 
     def test_status_and_doctor_share_the_same_wake_health_fact(self) -> None:
         status = FleetProjection(self.root).status_artifact(self.observation)

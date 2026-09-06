@@ -15,7 +15,6 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 from .admin_registry import RegistryAdminBackend
 from .bus_epoch import shared_epoch_operation
-from .cursor import SparseCursor
 from .errors import ProtocolRefusal
 from .events import EventLog
 from .ids import uuid7_hex
@@ -23,7 +22,8 @@ from .jsonl import read_records_snapshot, transact, transact_records
 from .worktree_safety import require_worktree_commits_referenced
 from .records import validate_record, validate_role
 from .registry import REGISTRY_KINDS, Registry
-from .role_templates import RoleTemplate, load_shipped_role_templates
+from .role_templates import RoleTemplate
+from .role_library import RoleTemplateLibrary
 from .root import FloatiRoot, validate_identifier
 from .work import WorkLog
 
@@ -254,9 +254,7 @@ class LaneScalingService:
         self.registry = Registry(root)
         self.backend = RegistryAdminBackend(root)
         self.fault_injector = fault_injector
-        self.templates = load_shipped_role_templates(
-            Path(__file__).parents[1] / "roles" / "shipped"
-        )
+        self.templates = RoleTemplateLibrary(root).templates()
 
     def _require_architect(self, actor: str) -> str:
         node = validate_identifier(actor, "actor")
@@ -576,21 +574,7 @@ class LaneScalingService:
                 "lane_teardown_work_outstanding",
                 "outstanding work: " + ",".join(str(item["id"]) for item in outstanding),
             )
-        frames = EventLog(self.root).event_records()
-        retracted = {
-            str(record["retracted_message_id"])
-            for record in frames
-            if record["kind"] == "message_retracted"
-        }
-        acked = SparseCursor(self.root).acked_ids(node)
-        unacked = [
-            str(record["id"])
-            for record in frames
-            if record["kind"] == "message_envelope"
-            and record["recipient"] == node
-            and record["id"] not in acked
-            and record["id"] not in retracted
-        ]
+        unacked = EventLog(self.root).unacked_ids(node)
         if unacked:
             _refuse("lane_teardown_mail_unacked", "unacked mail: " + ",".join(unacked))
 

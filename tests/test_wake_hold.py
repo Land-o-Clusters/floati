@@ -444,6 +444,43 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         self.assertEqual([receipt], durable)
         self.assertEqual(frozenset(), SparseCursor(self.root).acked_ids("bob"))
 
+    def test_old_attempt_fixtures_validate_before_and_after_loosening(self) -> None:
+        import json
+        repository = Path(__file__).parents[1]
+        fixtures = repository / "tests/fixtures/wd-r4-f1"
+        for outcome in ("woke", "refused"):
+            record = json.loads((fixtures / f"old-{outcome}.json").read_text())
+            for schema in (fixtures / "schema-before.json", repository / "schemas/v1/wake-attempt-record.schema.json"):
+                with self.subTest(outcome=outcome, schema=schema.name):
+                    validate_json_schema(record, schema)
+
+    def test_queued_attempt_is_owned_validated_and_idempotent(self) -> None:
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+        from floati.jsonl import read_records
+        message = self.events.send(
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+            "docs/evidence/wake-attempt.md", "queue attempt",
+            idempotency_key="queue-message",
+        )
+        decision = WakeHoldController(self.root).evaluate("bob", idempotency_key="queue-decision")
+        ledger = WakeAttemptLedger(self.root)
+        args = dict(recipient="bob", acting_session_id="queue-session",
+                    item_ids=[message["id"]], decision_receipt_id=decision["receipt"]["id"],
+                    message_worker_session_id=None, idempotency_key="queue-action", outcome="queued")
+        receipt = ledger.record(**args)
+        self.assertEqual("queued", receipt["outcome"])
+        self.assertIsNone(receipt["reason_code"])
+        validate_json_schema(receipt, Path(__file__).parents[1] / "schemas/v1/wake-attempt-record.schema.json")
+        self.assertEqual(receipt, ledger.record(**args))
+        self.assertEqual([receipt], read_records(self.root, "receipts/wakes/bob.jsonl", allowed_kinds={"wake_attempt_receipt"}))
+        for changes, reason in [
+            ({"decision_receipt_id": None}, "wake_decision_missing"),
+            ({"recipient": public_ids.worker('alpha')}, "wake_envelope_not_owned"),
+        ]:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(ProtocolRefusal, reason):
+                    ledger.record(**dict(args, **changes, idempotency_key=reason))
+
     def test_wrong_session_attempt_records_typed_refusal_and_never_acknowledges(self) -> None:
         """Catches a session waking on an envelope owned by a different session without evidence."""
         from floati.cursor import SparseCursor

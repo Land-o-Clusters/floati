@@ -564,7 +564,7 @@ class AdminCliTests(unittest.TestCase):
         second = self.run_cli(
             "wake", "arm", "--root", str(self.root), "--as", public_ids.builder('floati'),
             "--session", "session-two", "--workspace", str(workspace),
-            "--idempotency-key", "arm-two",
+            "--idempotency-key", "arm-two", "--take-over",
         )
 
         self.assertEqual(0, first.returncode, first.stderr)

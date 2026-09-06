@@ -187,7 +187,7 @@
         {
           "if": {"required": ["hook_trust"]},
           "then": {
-            "properties": {"code": {"const": "codex_wait_hook_trust"}},
+            "properties": {"code": {"enum": ["codex_wait_hook_trust", "host_codex_wait_hook_trust"]}},
             "required": [
               "hook_trust_key",
               "hook_trust",
