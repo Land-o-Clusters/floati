@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -384,6 +385,102 @@ def resolve_participant(bus_home: Path, workspace: Path) -> Optional[CodexWaitPa
         binding=WorkspaceBinding(binding.workspace, node, binding.map_digest),
         root=root,
     )
+
+
+def _write_workspace_map_atomically(path: Path, encoded: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.floati-", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        offset = 0
+        while offset < len(encoded):
+            written = os.write(descriptor, encoded[offset:])
+            if written <= 0:
+                raise OSError("short workspace map write")
+            offset += written
+        os.fsync(descriptor)
+        os.close(descriptor)
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def write_workspace_map(bus_home: Path, workspace: Path, node_id: str) -> str:
+    """Map one workspace onto one node in the v0 workspace map.
+
+    The one writer for the map every waiter resolves through: it
+    canonicalizes the workspace, refuses a workspace already mapped to
+    another node, keeps the mappings strictly sorted, and replaces the
+    file atomically only when the bytes change. Callers validate the
+    workspace and the node first; a refusal here leaves any prior map
+    untouched. Returns the sha256 of the mapped bytes.
+    """
+
+    home = Path(bus_home)
+    map_path = home / WORKSPACE_MAP_RELATIVE
+    if map_path.exists():
+        try:
+            raw = json.loads(map_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ProtocolRefusal(
+                "codex_wait_workspace_map_invalid", "workspace map is unreadable"
+            ) from exc
+        if not isinstance(raw, dict) or set(raw) != {
+            "schema_version",
+            "tenant_id",
+            "mappings",
+        }:
+            raise ProtocolRefusal(
+                "codex_wait_workspace_map_invalid", "workspace map shape is invalid"
+            )
+        mappings = raw.get("mappings")
+        if (
+            raw.get("schema_version") != 0
+            or raw.get("tenant_id") != home.name
+            or not isinstance(mappings, list)
+        ):
+            raise ProtocolRefusal(
+                "codex_wait_workspace_map_invalid", "workspace map identity is invalid"
+            )
+    else:
+        mappings = []
+    canonical = workspace.resolve(strict=True).as_posix()
+    retained = []
+    found = False
+    for entry in mappings:
+        if not isinstance(entry, dict) or set(entry) != {"workspace", "node_id"}:
+            raise ProtocolRefusal(
+                "codex_wait_workspace_map_invalid", "workspace mapping is invalid"
+            )
+        if entry["workspace"] == canonical:
+            if entry["node_id"] != node_id:
+                raise ProtocolRefusal(
+                    "codex_wait_workspace_conflict", "workspace names another node"
+                )
+            found = True
+        retained.append(entry)
+    if not found:
+        retained.append({"workspace": canonical, "node_id": node_id})
+    retained.sort(key=lambda row: (row["workspace"], row["node_id"]))
+    encoded = json.dumps(
+        {"schema_version": 0, "tenant_id": home.name, "mappings": retained},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8") + b"\n"
+    if not map_path.exists() or map_path.read_bytes() != encoded:
+        _write_workspace_map_atomically(map_path, encoded)
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class CodexWaitConsentLedger:

@@ -56,7 +56,7 @@ changes a capability.
    noise wearing information's clothes.
 3. **The Claude wake cells are RE-OPENED for re-measurement.** Owner
    testimony: Claude behaves event-driven, at least on desktop — and the
-   fleet's own record backs it: alice-class Claude seats have auto-woken
+   fleet's own record backs it: build lane-class Claude seats have auto-woken
    organically for weeks (the one seat family that always did). The
    `needs_daemon` cell was docs-derived with lifetime explicitly
    unmeasured. The re-measurement: a >=3-cycle organic hold on a live
@@ -68,7 +68,7 @@ changes a capability.
 
 ## CORRECTION + PREFERENCE ORDER (owner, 2026-08-28)
 
-My amendment above cited "alice-class Claude seats" as the wake evidence —
+My amendment above cited "build lane-class Claude seats" as the wake evidence —
 WRONG PROVENANCE, owner-corrected: build lane is not Claude. The admissible
 historical evidence is the incumbent bus's ENGINEER seats (sre, ghops, and
 kin): Claude-hosted, event-driven-woken, weeks of organic operation on the

@@ -226,13 +226,26 @@ def record_codex_daemon_binding(
     *,
     binding_epoch: Optional[int] = None,
 ) -> Mapping[str, object]:
-    """Publish Codex testimony only from the trusted waiter participation path."""
+    """Publish Codex testimony only from the trusted waiter participation path.
+
+    The registry types the seat. A node whose registered harness is not
+    Codex — a zcode seat holding on `floati wait`, for one — publishes
+    nothing: Codex testimony beside a real binding of another harness is
+    the wrong label, so the hold leaves the adapters directory untouched.
+    """
 
     if not isinstance(participant, CodexWaitParticipant):
         raise ProtocolRefusal(
             "wake_daemon_codex_participant_invalid",
             "Codex daemon binding requires trusted waiter participation",
         )
+    from .registry import Registry
+
+    role = Registry(participant.root).require_active(
+        participant.binding.node_id
+    ).get("role")
+    if not isinstance(role, str) or role.casefold() != "codex":
+        return {}
     session = validate_session_id(session_id)
     try:
         executable = CODEX_EXECUTABLE.resolve(strict=True)

@@ -1701,6 +1701,8 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(
             [
                 "root_valid",
+                "root_layout_managed",
+                "ledger_roll_policy",
                 "launcher_interpreter",
                 "effect_reconciliation_interpreter_trust",
                 "registry_live_dirs_match",
@@ -1710,6 +1712,7 @@ class DoctorContractTests(unittest.TestCase):
                 "delivery_health",
                 "acknowledgment_health",
                 "wake_health",
+                "bridge_registrations_absent",
                 "sandbox_write",
                 "sandbox_write",
                 "sandbox_write",

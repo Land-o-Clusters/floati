@@ -24,8 +24,7 @@ counted outbound paths:
 - GitHub issue intake, one `gh issue view` subprocess started only by the
   explicit `intake adopt --source github` command. Its closed environment may
   receive non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; stored `gh` login
-  configuration is hidden. This path does not yet have its own consent receipt
-  ([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
+  configuration is hidden. This path does not yet have its own consent receipt.
 
 Nothing in the product can listen: `tests/test_no_listener_fence.py` pins
 every `bind`/`listen` to the AF_UNIX sequencer, confines network imports to the

@@ -15,7 +15,7 @@ from .errors import ProtocolRefusal
 from .events import EVENT_KINDS, validate_event_records
 from .jsonl import read_records_snapshot
 from .root import FloatiRoot, validate_identifier
-from .registry import REGISTRY_KINDS
+from .registry import read_registry_compatible
 
 
 _MAX_REGISTRY_BYTES = 1024 * 1024
@@ -270,11 +270,7 @@ class MultiBusHarborChart:
 
     def _bus(self, declaration: Mapping[str, Any]) -> Dict[str, Any]:
         root = FloatiRoot.open_direct_home(declaration["root"])
-        registry = read_records_snapshot(
-            root,
-            Path("registry/entries.jsonl"),
-            allowed_kinds=REGISTRY_KINDS,
-        )
+        registry, _unrecognized, _versions = read_registry_compatible(root)
         events = read_records_snapshot(
             root,
             Path("events.jsonl"),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shlex
 import stat
 from pathlib import Path
 from typing import Any, Mapping, Optional, Union
@@ -18,13 +19,17 @@ _OUTCOME_EXITS = {
     "found": FOUND_EXIT,
     "affirmative_none": AFFIRMATIVE_NONE_EXIT,
     "unknown": UNKNOWN_EXIT,
+    "launcher_not_on_path": UNKNOWN_EXIT,
+    "path_entry_unreadable": UNKNOWN_EXIT,
     "cannot_speak": CANNOT_SPEAK_EXIT,
 }
 
 _COLD_READ = {
     "found": "A floati ahead of the installed copy answered first on PATH.",
     "affirmative_none": "Every PATH entry was checked; the installed floati answers first.",
-    "unknown": "Some PATH entries could not be read; shadow state unknown.",
+    "unknown": "The installer destination could not be inspected; shadow state unknown.",
+    "launcher_not_on_path": "The installed launcher directory is not on PATH; shadow state unknown.",
+    "path_entry_unreadable": "A PATH entry could not be inspected; shadow state unknown.",
     "cannot_speak": "No installer destination named; the shadow check could not run.",
 }
 
@@ -92,7 +97,7 @@ def enumerate_installer_shadow(
     source = os.environ if environ is None else environ
     supplied_path = source.get("PATH") if path is None else path
     if not isinstance(supplied_path, str) or not supplied_path:
-        return _artifact("unknown", blocked_entry="PATH")
+        return _blocked_path_artifact([], [], "PATH", [])
 
     excluded_source = _resolved_regular_file(
         source_script if source_script is not None else _loaded_source_script()
@@ -138,11 +143,12 @@ def enumerate_installer_shadow(
 
     if has_installed_command and not authoritative_seen:
         return _artifact(
-            "unknown",
+            "launcher_not_on_path",
             roots,
             found,
             blocked_entry=str(authoritative),
             skipped_entries=skipped_entries,
+            remedy=f'Run export PATH={shlex.quote(str(authoritative))}:"$PATH", then retry the shadow check.',
         )
     if found:
         return _artifact(
@@ -177,6 +183,8 @@ def _artifact(
         artifact["blocked_entry"] = blocked_entry
     if skipped_entries:
         artifact["skipped_entries"] = skipped_entries
+    if remedy is None and outcome == "unknown":
+        remedy = f"Use an absolute, readable installer destination with regular scripts/floati: {blocked_entry}."
     if remedy is not None:
         artifact["remedy"] = remedy
     if outcome in _COLD_READ:
@@ -287,7 +295,7 @@ def _blocked_path_artifact(
     skipped_entries: list[str],
 ) -> dict[str, Any]:
     return _artifact(
-        "unknown",
+        "path_entry_unreadable",
         roots,
         found,
         blocked_entry=blocked_entry,

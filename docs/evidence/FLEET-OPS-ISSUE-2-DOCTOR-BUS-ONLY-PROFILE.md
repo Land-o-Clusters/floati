@@ -84,7 +84,7 @@ forever*, so every retired node still counted as registered. Observed on the
 live bus root immediately after the chartered retirement:
 
 ```
-registered=['the architect', 'build lane', 'build lane', 'lane-puddle-relief',
+registered=['the architect', 'build lane', 'build lane', 'build lane-relief',
             'build lane', 'the architect']
 ```
 

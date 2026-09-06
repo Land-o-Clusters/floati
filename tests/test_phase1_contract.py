@@ -8,7 +8,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from scripts.public_name_fence import _SEAT_PATTERN
+from scripts.public_name_fence import SEAT_NAME_PATTERN
 
 
 REQUIRED_PHASE1_PATHS = (
@@ -74,7 +74,7 @@ class Phase1ContractTests(unittest.TestCase):
         for name in rows:
             self.assertNotIn(" ", name, f"node id must be one argv token: {name!r}")
             self.assertIsNone(
-                _SEAT_PATTERN.search(name),
+                SEAT_NAME_PATTERN.search(name),
                 f"docs/FLEET.md example node carries seat vocabulary: {name!r}",
             )
         self.assertIn("Claude", fleet)

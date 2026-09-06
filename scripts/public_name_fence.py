@@ -68,13 +68,43 @@ _EXACT_SEAT_IDS = "|".join(
     re.escape(token)
     for token in sorted(SEAT_ROLE_LABELS, key=lambda value: (-len(value), value))
 )
-_SEAT_PATTERN = re.compile(
-    rf"(?<![A-Za-z0-9_-])(?:"
+SEAT_NAME_PATTERN = re.compile(
+    # NAME-FENCE-2 Am.2: hyphen and underscore are JOINERS, not word
+    # characters — a seat id is caught as any joined component of a longer
+    # token (a relief-lane compound, a fleet-city compound, an underscore
+    # join, a matrix-audit label), while an alphanumeric continuation
+    # still blocks. The product name stays exempt: it is not in this
+    # alternation; only its explicit seat id is, and the joiners let that
+    # id match inside compounds. This comment names no seat: the fence
+    # must not carry the bytes it forbids.
+    rf"(?<![A-Za-z0-9])(?:"
     rf"{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|"
     rf"{_EXACT_SEAT_IDS}"
-    rf")(?![A-Za-z0-9_-])",
+    rf")(?:-\d+)?(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
+# NAME-FENCE-2-F1: the pattern and its redaction labels are ONE object.
+# The exporter redacts with the same pattern the fence judges with, so a
+# token the fence can catch is a token the redactor already rewrote.
+REDACTION_LABELS = {
+    **SEAT_ROLE_LABELS,
+    _VERIFICATION_SEAT_EXPLICIT: "the verification seat",
+}
+_SEAT_NUMBER_SUFFIX = re.compile(r"-\d+$")
+
+
+def seat_role_label(match: "re.Match[str]") -> str:
+    """The reviewed role label for one SEAT_NAME_PATTERN match.
+
+    The numbered form matches with its suffix in the span; the lookup
+    strips it so the numbered seat redacts to the role label plus the
+    number.
+    """
+
+    token = _SEAT_NUMBER_SUFFIX.sub("", match.group(0)).casefold()
+    return REDACTION_LABELS[token]
+
+
 _SEAT_PATH_PATTERN = re.compile(
     rf"(?<![A-Za-z0-9_])(?:{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|{_EXACT_SEAT_IDS})"
     rf"(?![A-Za-z0-9_])",
@@ -212,7 +242,7 @@ def _seat_name_hits(path: Path, data: bytes) -> list[tuple[int, str]]:
                     (token.start[0], match.group(0))
                     for token in tokens
                     if token.type in (tokenize.STRING, tokenize.COMMENT)
-                    for match in _SEAT_PATTERN.finditer(token.string)
+                    for match in SEAT_NAME_PATTERN.finditer(token.string)
                 ),
                 key=lambda hit: (hit[0], hit[1].casefold()),
             )
@@ -225,7 +255,7 @@ def _seat_name_hits(path: Path, data: bytes) -> list[tuple[int, str]]:
             continue
         hits = [
             (text.count("\n", 0, match.start()) + 1, match.group(0))
-            for match in _SEAT_PATTERN.finditer(text)
+            for match in SEAT_NAME_PATTERN.finditer(text)
         ]
         if hits:
             return hits
@@ -246,7 +276,7 @@ def _seat_name_hits(path: Path, data: bytes) -> list[tuple[int, str]]:
 
         def semantic_token(value: object, field: str | None = None) -> str | None:
             if isinstance(value, str):
-                match = _SEAT_PATTERN.search(value)
+                match = SEAT_NAME_PATTERN.search(value)
                 if match:
                     return match.group(0)
                 if (

@@ -179,7 +179,7 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
                 os.pathsep.join((str(unreadable), str(command_root))),
             )
 
-        self.assertEqual("unknown", artifact["outcome"])
+        self.assertEqual("path_entry_unreadable", artifact["outcome"])
         self.assertEqual([], artifact["enumerated_roots"])
         self.assertEqual([], artifact["found"])
         self.assertEqual(str(unreadable), artifact["blocked_entry"])
@@ -199,7 +199,7 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
         self.assertEqual([], artifact["found"])
         self.assertEqual("Every PATH entry was checked; the installed floati answers first.", artifact["reason"])
 
-    def test_scan_omitting_the_destination_scripts_dir_is_unknown_not_a_shadow(self) -> None:
+    def test_scan_omitting_the_destination_scripts_dir_names_launcher_and_remedy(self) -> None:
         """Characterizes the documented scan-input condition: the authoritative entry
         must be SEEN to prove nothing shadows it, so a PATH without it is unknown."""
         destination, _destination_slip = self.bundle("destination")
@@ -207,11 +207,13 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
 
         artifact = self.observe(destination, str(elsewhere))
 
-        self.assertEqual("unknown", artifact["outcome"])
+        self.assertEqual("launcher_not_on_path", artifact["outcome"])
         self.assertEqual(str((destination / "scripts").resolve()), artifact["blocked_entry"])
         self.assertEqual([], artifact["found"])
+        self.assertIn(str(destination / "scripts"), artifact["remedy"])
+        self.assertIn("PATH", artifact["remedy"])
         self.assertEqual(
-            "Some PATH entries could not be read; shadow state unknown.",
+            "The installed launcher directory is not on PATH; shadow state unknown.",
             artifact["reason"],
         )
 
@@ -227,7 +229,7 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
             os.pathsep.join((str(unreadable), str(destination / "scripts"))),
         ):
             with self.subTest(path=path):
-                self.assertEqual("unknown", self.observe(destination, path)["outcome"])
+                self.assertEqual("path_entry_unreadable", self.observe(destination, path)["outcome"])
 
     def test_explicit_source_script_is_never_reported_as_a_shadow(self) -> None:
         """Counting build material as a predecessor would violate the Item 7 command-root ruling."""
@@ -344,6 +346,22 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
             doctor_artifact,
             REPOSITORY_ROOT / "schemas/v1/doctor-artifact.schema.json",
         )
+
+    def test_doctor_off_path_warning_preserves_remedy_and_valid_schema(self) -> None:
+        """Monitoring must expose the same repair even when the install is off PATH."""
+        from floati.doctor import Doctor
+        from floati.root import FloatiRoot
+        from tests.schema_validation import validate_json_schema
+        home = self.base / "fleet"
+        FloatiRoot.open_direct_home(home, create=True)
+        destination, _ = self.bundle("destination")
+        with patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
+            artifact, _ = Doctor(REPOSITORY_ROOT, home, destination=destination).artifact()
+        finding = next(row for row in artifact["findings"] if row["code"] == "installer_shadow")
+        self.assertEqual("warning", finding["severity"])
+        self.assertEqual("launcher_not_on_path", finding["installer_shadow"]["outcome"])
+        self.assertEqual(finding["installer_shadow"]["remedy"], finding["remediation"])
+        validate_json_schema(artifact, REPOSITORY_ROOT / "schemas/v1/doctor-artifact.schema.json")
 
     def test_watch_v1_places_the_shadow_observation_in_its_snapshot(self) -> None:
         """Putting the leg beside a delta instead of in its snapshot would give watch a divergent read model."""

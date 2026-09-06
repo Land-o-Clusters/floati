@@ -325,6 +325,61 @@ class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
         self.assertEqual("removed", removed["state"])
         self.assertFalse(manager.unit_path.exists())
 
+    def test_every_digest_mismatch_refusal_names_an_action_and_the_exact_path(
+        self,
+    ) -> None:
+        """Catches the remedy shipping on one platform's artifact only.
+
+        Not a mirror of the LaunchAgent case: the two supervisors name
+        DIFFERENT files and different fields (ExecStart, not
+        ProgramArguments[0]), so a remedy that were shared would send a reader
+        on this platform to a plist that does not exist. The text is separate,
+        and text nothing executes is a draft.
+        """
+        manager = self.manager()
+        manager.install()
+        exact = manager.preview()["encoded"]
+        installed_digest = manager.preview()["plist_digest"]
+
+        raised: list[ProtocolRefusal] = []
+
+        manager.unit_path.write_bytes(b"changed\n")
+        with self.assertRaises(ProtocolRefusal) as drifted:
+            manager.start()
+        raised.append(drifted.exception)
+        with self.assertRaises(ProtocolRefusal) as stale:
+            manager.remove(expected_plist_digest=installed_digest)
+        raised.append(stale.exception)
+
+        manager.unit_path.write_bytes(exact)
+        with self.assertRaises(ProtocolRefusal) as wrong_digest:
+            manager.remove(expected_plist_digest="0" * 64)
+        raised.append(wrong_digest.exception)
+
+        manager.unit_path.chmod(0o000)
+        with self.assertRaises(ProtocolRefusal) as unreadable:
+            manager.start()
+        raised.append(unreadable.exception)
+        manager.unit_path.chmod(0o600)
+
+        manager.unit_path.unlink()
+        foreign = self.base / "foreign-remedy.service"
+        foreign.write_bytes(exact)
+        manager.unit_path.symlink_to(foreign)
+        with self.assertRaises(ProtocolRefusal) as symlinked:
+            manager.start()
+        raised.append(symlinked.exception)
+
+        self.assertEqual(
+            ["wake_daemon_supervisor_digest_mismatch"] * 5,
+            [failure.code for failure in raised],
+        )
+        for failure in raised:
+            self.assertIsInstance(failure.remedy, str)
+            self.assertNotEqual("", str(failure.remedy).strip())
+            self.assertIn(str(manager.unit_path), str(failure.remedy))
+            self.assertIn("ExecStart", str(failure.remedy))
+
     def test_revoke_refuses_a_symlinked_unit_without_closing_consent(self) -> None:
         manager = self.manager()
         target = self.base / "foreign.service"

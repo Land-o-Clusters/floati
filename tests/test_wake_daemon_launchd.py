@@ -264,6 +264,67 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
             DaemonConsentLedger(self.root).require_active(self.coordinate)["state"],
         )
 
+    def test_every_digest_mismatch_refusal_names_an_action_and_the_exact_path(
+        self,
+    ) -> None:
+        """Catches the refusal a reader cannot act on.
+
+        AGENTS.md: every refusal names a remedy, and an unnamed one binds to
+        ``{"kind": "none", "why": "no action was named for this refusal"}``.
+        This code shipped with that. It is also the refusal most likely to be
+        mistaken for drift: the installed plist is bound to the ABSOLUTE PATH
+        of the executable that installed it, so invoking the same version from
+        a different checkout composes a different plist and a different digest.
+        A reader who is told only that the digest differs looks for corruption.
+
+        The remedy must carry the plist path IN THE REFUSAL, because every verb
+        that would print it - status, stop, remove - validates first and
+        refuses with this same code. A remedy naming a verb that refuses is a
+        remedy in shape only.
+        """
+        manager = self.manager()
+        manager.install()
+        exact = manager.preview()["encoded"]
+        installed_digest = manager.preview()["plist_digest"]
+
+        raised: list[ProtocolRefusal] = []
+
+        manager.plist_path.write_bytes(b"changed\n")
+        with self.assertRaises(ProtocolRefusal) as drifted:
+            manager.start()
+        raised.append(drifted.exception)
+        with self.assertRaises(ProtocolRefusal) as stale:
+            manager.remove(expected_plist_digest=installed_digest)
+        raised.append(stale.exception)
+
+        manager.plist_path.write_bytes(exact)
+        with self.assertRaises(ProtocolRefusal) as wrong_digest:
+            manager.remove(expected_plist_digest="0" * 64)
+        raised.append(wrong_digest.exception)
+
+        manager.plist_path.chmod(0o000)
+        with self.assertRaises(ProtocolRefusal) as unreadable:
+            manager.start()
+        raised.append(unreadable.exception)
+        manager.plist_path.chmod(0o600)
+
+        manager.plist_path.unlink()
+        foreign = self.base / "foreign.plist"
+        foreign.write_bytes(exact)
+        manager.plist_path.symlink_to(foreign)
+        with self.assertRaises(ProtocolRefusal) as symlinked:
+            manager.start()
+        raised.append(symlinked.exception)
+
+        self.assertEqual(
+            ["wake_daemon_supervisor_digest_mismatch"] * 5,
+            [failure.code for failure in raised],
+        )
+        for failure in raised:
+            self.assertIsInstance(failure.remedy, str)
+            self.assertNotEqual("", str(failure.remedy).strip())
+            self.assertIn(str(manager.plist_path), str(failure.remedy))
+
     def test_revoke_deletes_the_exact_plist_and_does_not_overclaim_process_absence(self) -> None:
         manager = self.manager()
         manager.install()

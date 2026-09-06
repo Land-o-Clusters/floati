@@ -8,6 +8,7 @@ from typing import Dict
 from .events import EventLog
 from .consumption import ConsumptionLedger
 from .jsonl import read_records_snapshot
+from .registry import read_registry_compatible
 from .root import FloatiRoot
 from .workers import WorkerReceipts
 from .runtruth import RunLedger
@@ -21,13 +22,11 @@ class HarborGraph:
         _events, unrecognized = EventLog(self.root).compatible_event_records(
             snapshot=True
         )
-        registry = read_records_snapshot(
-            self.root,
-            Path("registry/entries.jsonl"),
-            allowed_kinds={"registry_entry"},
-        )
+        registry, _unrecognized, _versions = read_registry_compatible(self.root)
         latest_nodes: Dict[str, Dict[str, object]] = {}
         for record in registry:
+            if record.get("kind") != "registry_entry":
+                continue
             latest_nodes[str(record["node_id"])] = record
         nodes = [
             {

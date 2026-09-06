@@ -156,8 +156,13 @@
         },
         {
           "if": {"properties": {"code": {"const": "version_skew"}}},
-          "then": {"required": ["vocabulary_skew"]},
-          "else": {"not": {"required": ["vocabulary_skew"]}}
+          "then": {"required": ["vocabulary_skew", "older_readers"]},
+          "else": {
+            "allOf": [
+              {"not": {"required": ["vocabulary_skew"]}},
+              {"not": {"required": ["older_readers"]}}
+            ]
+          }
         },
         {
           "if": {"properties": {"code": {"const": "bus_epoch_roll_reconciled"}}},
@@ -223,6 +228,23 @@
         "installer_shadow": {"$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"},
         "oldest_unread": {"$ref": "fleet-status-artifact.schema.json#/$defs/oldest_unread"},
         "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},
+        "older_readers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reader_schema_version", "ledger_newest_kind"],
+            "properties": {
+              "reader_schema_version": {"const": "0"},
+              "ledger_newest_kind": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,127}$"
+              }
+            }
+          }
+        },
         "epoch_roll": {"$ref": "#/$defs/epoch_roll"},
         "wake_health": {"$ref": "wake-health-fact.schema.json"},
         "acknowledgment": {"$ref": "#/$defs/acknowledgment_health"},

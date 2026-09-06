@@ -146,6 +146,8 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `doctor` | `floati doctor [--root ROOT] --source SOURCE [--ref REF] [--gateway-config PATH] [--profile PROFILE] [--no-sandbox] [--probe] [--probe-budget SECONDS] [--destination DESTINATION] [--codex-hooks PATH] [--codex-config PATH] [--json]` | diagnose root and bundle integrity |
 | `watch` | `floati watch [--root ROOT] [--destination DESTINATION] [--interval INTERVAL] [--iterations N]` | poll for fleet deltas |
 | `wait` | `floati wait --for CONDITION --root PATH [--workspace PATH] [--session-id ID]` | hold a turn until a named condition |
+| `waiter` | `floati waiter {arm}` | arm exact waiter consent for a declared workspace |
+| `waiter arm` | `floati waiter arm --root PATH --node NODE --workspace PATH --harness HARNESS --hook-timeout-seconds N --wait-deadline-seconds N` | map one workspace and arm its waiter consent |
 | `receipts` | `floati receipts NODE [--root ROOT]` | inspect node receipt history |
 | `supervise` | `floati supervise [--root ROOT]` | report fleet health |
 | `presence` | `floati presence {report&#124;show}` | self-report or inspect node liveness |
@@ -225,7 +227,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `wake daemon stop` | `floati wake daemon stop --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode}` | stop the exact LaunchAgent |
 | `wake daemon remove` | `floati wake daemon remove --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode}` | remove the exact LaunchAgent |
 | `wake daemon revoke` | `floati wake daemon revoke --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode}` | revoke exact daemon consent |
-| `uninstall` | `floati uninstall --destination DESTINATION [--dry-run] [--json]` | remove exact owned tool bytes |
+| `uninstall` | `floati uninstall --destination DESTINATION [--dry-run] [--receipt-dir DIR] [--json]` | remove exact owned tool bytes |
 | `context` | `floati context {status&#124;turnover&#124;policy&#124;reading}` | inspect context evidence and manage Tide signals |
 | `context status` | `floati context status --root ROOT --as NODE [--json]` | report harness evidence |
 | `context turnover` | `floati context turnover --root ROOT --as NODE [--json]` | project the turnover ritual |

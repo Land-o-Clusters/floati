@@ -70,6 +70,7 @@ manifest names, into a directory you choose, and nothing else.
 
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
+cd /absolute/floati
 python3 -m floati install --source /absolute/floati --destination /absolute/install
 ```
 
@@ -82,7 +83,11 @@ python3 -m floati install --source /absolute/floati --destination /absolute/inst
 ```
 
 <p align="center">
-  <img src="docs/demo/install-moment.gif" alt="The install moment: the manifest-exact deploy and its receipt" width="1400">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/install-moment-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/install-moment-light.png">
+    <img src="docs/demo/tui/install-moment-light.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt - status installed, the source SHA it deployed, the wiring journal it opened" width="1400">
+  </picture>
 </p>
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
@@ -90,13 +95,12 @@ directory to your `PATH` or call it by path.
 `pyproject.toml` is the package-metadata authority: Python 3.9 or newer, zero dependencies.
 CI exercises 3.9; macOS today.
 
-Two things the installer does today that you should know before you
-hit them. It refuses to install a checkout whose `HEAD` is not the
-ref you named, and the refusal does not yet tell you to check the tag
-out ([#6](https://github.com/Land-o-Clusters/floati/issues/6)). And
-it refuses when any directory on your `PATH` cannot be read, without
-naming which one ([#7](https://github.com/Land-o-Clusters/floati/issues/7)).
-Both are open and both are ours.
+The installer refuses a checkout whose `HEAD` differs from the named ref.
+It also refuses a detected earlier `floati` on `PATH`. An unreadable PATH
+entry or an installed launcher directory missing from PATH produces a warning
+with the exact coordinate and remedy; install and update still proceed.
+The receipt preserves the observation in `installer_shadow` and `warnings`,
+and doctor reports the same warning.
 
 Afterwards the doctor tells you whether what is on disk still matches
 the manifest, file by file:
@@ -109,6 +113,21 @@ Expect it to be strict on a fresh install: it names every wake bridge
 you have not armed yet and every path it could not read, and reports
 the whole as degraded until you have. Some of those findings do not
 yet carry a remedy ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
+
+CI runs this suite on every push to `main`. It runs on your machine
+too, with one command, and ends in one line:
+
+```bash
+python3 -m floati.selftest
+```
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/selftest-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/selftest-light.png">
+    <img src="docs/demo/tui/selftest-light.png" alt="python3 -m floati.selftest ends in a single receipt line - bundle_verified, naming the canonical ref it checked" width="1400">
+  </picture>
+</p>
 
 ## What you can do with it
 
@@ -224,6 +243,17 @@ show` prints the last report, its TTL and its expiry. Expiry means
 
 <p align="center">
   <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-idle-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-idle-light.png">
+    <img src="docs/demo/tui/board-idle-light.png" alt="The Harbor Board on a fresh fixture fleet: three nodes declared and nothing else yet - no worker, no work, no receipts" width="1400">
+  </picture>
+</p>
+
+Before anything has happened the board says so: three nodes,
+no worker, no work, no receipts. Then mail, claims and receipts land:
+
+<p align="center">
+  <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-live-dark.gif">
     <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-live-light.gif">
     <img src="docs/demo/tui/board-live-light.gif" alt="The Harbor Board redrawing as real mail, claims and receipts land on a fixture fleet: three nodes, liveness in green, nothing in flight" width="1400">
@@ -320,6 +350,17 @@ recording is animated by the demo; it is played back from the fleet's
 own records. The flight recorder replays any finished run the same
 way: claims, worker turns, degradations, denials, completions.
 Playback speed changes the waiting, never the order.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/replay-in-flight-dark.gif">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/replay-in-flight-light.gif">
+    <img src="docs/demo/tui/replay-in-flight-light.gif" alt="The flight recorder replaying a seven-event run at four times speed: a work claim, a worker spawned, driven and bound to its artifact, two completions, then REPLAY COMPLETE" width="1400">
+  </picture>
+</p>
+
+Seven events, replayed at four times speed from the ledger, in the
+order they were written.
 
 ### Bring your agent, or be the human
 
@@ -497,9 +538,8 @@ for the herdr and t3 adapters; one HTTPS fetch for updates; and
 executable to read one issue. That subprocess may receive only a
 non-empty ambient `GH_TOKEN` or `GITHUB_TOKEN`; floati hides `gh`'s
 stored login configuration. The first three run only behind an
-explicit consent receipt. The fourth requires the explicit command but
-does not yet have a consent receipt of its own, and that is open
-([#25](https://github.com/Land-o-Clusters/floati/issues/25)).
+explicit consent receipt. The fourth runs only when you type it, and
+it has no consent receipt of its own yet.
 
 The full promise, and precisely what floati refuses to guess, is
 written down: **[Truth Guarantees](docs/TRUTH-GUARANTEES.md)**. If a

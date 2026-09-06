@@ -26,6 +26,18 @@ SystemctlRunner = Callable[[tuple[str, ...]], subprocess.CompletedProcess[str]]
 SystemctlLocator = Callable[[], Optional[str]]
 SYSTEMCTL_CANDIDATES = ("/usr/bin/systemctl", "/bin/systemctl")
 
+# Same refusal, same missing remedy, same cause as the LaunchAgent's - the unit
+# binds the absolute path of the executable that installed it, here in
+# ExecStart rather than ProgramArguments[0]. Named separately instead of
+# shared, because a remedy that tells a reader to look in the wrong file is
+# worse than no remedy: on this platform there is no plist.
+SUPERVISOR_DIGEST_MISMATCH_REMEDY = (
+    "the installed unit names the absolute path of the executable that "
+    "installed it: read ExecStart in {path} and run this verb from that "
+    "checkout, or install the one you want with 'floati wake daemon install "
+    "--root {root} --as {node} --harness {harness}'"
+)
+
 
 def _default_runner(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -101,6 +113,16 @@ class SystemdUserUnitManager:
         self.consent = DaemonConsentLedger(self.root)
         self.lifecycle = DaemonLifecycleLedger(self.root)
         self.daemon_instance_id = "systemd-" + coordinate.digest[:32]
+
+    def digest_mismatch_remedy(self) -> str:
+        """Name an action for every wake_daemon_supervisor_digest_mismatch."""
+
+        return SUPERVISOR_DIGEST_MISMATCH_REMEDY.format(
+            path=self.unit_path,
+            root=self.root.path,
+            node=self.coordinate.node_id,
+            harness=self.coordinate.harness,
+        )
 
     def preview(self) -> Dict[str, object]:
         consent = self.consent.require_active(self.coordinate)
@@ -347,12 +369,14 @@ class SystemdUserUnitManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "requested removal digest differs from the deterministic unit",
+                remedy=self.digest_mismatch_remedy(),
             )
         encoded, identity = self._read_installed()
         if hashlib.sha256(encoded).hexdigest() != expected_digest:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "installed systemd user unit differs from the expected digest",
+                remedy=self.digest_mismatch_remedy(),
             )
         quarantine = self.unit_path.with_name(
             f".{self.unit_path.name}.{uuid7_hex()}.remove"
@@ -394,6 +418,7 @@ class SystemdUserUnitManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "installed systemd user unit does not match the deterministic preview",
+                remedy=self.digest_mismatch_remedy(),
             )
 
     def _read_installed(self) -> tuple[bytes, tuple[int, int]]:
@@ -401,6 +426,7 @@ class SystemdUserUnitManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "systemd user unit is absent, symlinked, or not a regular file",
+                remedy=self.digest_mismatch_remedy(),
             )
         descriptor = -1
         try:
@@ -417,6 +443,7 @@ class SystemdUserUnitManager:
             raise ProtocolRefusal(
                 "wake_daemon_supervisor_digest_mismatch",
                 "systemd user unit could not be read exactly",
+                remedy=self.digest_mismatch_remedy(),
             ) from exc
         finally:
             if descriptor >= 0:

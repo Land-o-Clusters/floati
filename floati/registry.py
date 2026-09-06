@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .bus_epoch import shared_epoch_operation
 from .copy import (
@@ -13,8 +13,12 @@ from .copy import (
 )
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import _locked_path, read_records, read_records_snapshot, transact
-from .records import validate_role
+from .jsonl import (
+    _locked_path,
+    read_records_compatible_with_versions,
+    transact,
+)
+from .records import READER_VERSION, validate_role
 from .root import FloatiRoot, validate_identifier
 from .seat_declaration import FleetGovernance
 
@@ -30,11 +34,44 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def read_registry_compatible(
+    root: FloatiRoot, *, snapshot: bool = True
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, object]], Dict[str, int]]:
+    """Read known registry rows and report well-formed newer kinds."""
+
+    return read_records_compatible_with_versions(
+        root,
+        Path("registry/entries.jsonl"),
+        allowed_kinds=set(REGISTRY_KINDS),
+        snapshot=snapshot,
+    )
+
+
 class Registry:
     def __init__(self, root: FloatiRoot) -> None:
         self.root = root
         self.relative_path = Path("registry/entries.jsonl")
         self.path = root.resolve_relative(self.relative_path)
+
+    def known_records(self, *, snapshot: bool = True) -> List[Dict[str, Any]]:
+        records, _unrecognized, _versions = read_registry_compatible(
+            self.root, snapshot=snapshot
+        )
+        return records
+
+    def skip_receipt(self) -> Optional[Dict[str, object]]:
+        """Name one unknown kind this reader skipped, with the reader schema."""
+
+        _records, unrecognized, _versions = read_registry_compatible(self.root)
+        if not unrecognized:
+            return None
+        first = unrecognized[0]
+        return {
+            "kind": str(first["kind"]),
+            "reader_schema_version": READER_VERSION,
+            "first_id": str(first["first_id"]),
+            "ledger": self.relative_path.as_posix(),
+        }
 
     @shared_epoch_operation
     def register(self, node_id: str, role: str) -> Dict[str, object]:
@@ -143,9 +180,7 @@ class Registry:
             )
         current = current.astimezone(timezone.utc)
         latest: Optional[Dict[str, object]] = None
-        for record in read_records_snapshot(
-            self.root, self.relative_path, allowed_kinds=REGISTRY_KINDS
-        ):
+        for record in self.known_records():
             if record.get("kind") == "node_lease" and record.get("node_id") == node:
                 latest = record
         if latest is None:
@@ -208,9 +243,7 @@ class Registry:
 
     def active_node_ids(self) -> Tuple[str, ...]:
         latest: Dict[str, Dict[str, object]] = {}
-        for record in read_records_snapshot(
-            self.root, self.relative_path, allowed_kinds=REGISTRY_KINDS
-        ):
+        for record in self.known_records():
             if record.get("kind") == "registry_entry":
                 latest[str(record["node_id"])] = record
         return tuple(sorted(
@@ -219,7 +252,7 @@ class Registry:
         ))
 
     def _latest(self, node_id: str) -> Optional[Dict[str, object]]:
-        for record in reversed(read_records(self.root, self.relative_path, allowed_kinds=REGISTRY_KINDS)):
+        for record in reversed(self.known_records()):
             if record.get("kind") == "registry_entry" and record.get("node_id") == node_id:
                 return record
         return None

@@ -11,7 +11,7 @@ from .consumption import ConsumptionLedger
 from .delivery_health import DeliveryHealthAnalyzer
 from .events import EVENT_KINDS, validate_event_records
 from .jsonl import read_records_compatible_snapshot, read_records_snapshot
-from .registry import REGISTRY_KINDS
+from .registry import read_registry_compatible
 from .root import FloatiRoot
 from .workers import WorkerReceipts, WorkerRefusals
 
@@ -49,9 +49,7 @@ class Supervisor:
         from .tide_policy import TidePolicyLedger
 
         current = _utc(now)
-        registry = read_records_snapshot(
-            self.root, "registry/entries.jsonl", allowed_kinds=set(REGISTRY_KINDS)
-        )
+        registry, _unrecognized, _versions = read_registry_compatible(self.root)
         active_nodes = []
         seen = set()
         for record in reversed(registry):

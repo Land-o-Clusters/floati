@@ -23,7 +23,7 @@ NOW = datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc)
 INS1_FILES = frozenset({"floati/deploy.py", "floati/installer_shadow.py"})
 DRILL_PROTOCOL_CODES = frozenset({
     "deployment_currency_unavailable",
-    "deployment_shadow_unknown",
+    "deployment_shadow_found",
     "arguments_invalid",
     "ack_item_unknown",
     "solo_identity_ambiguous",
@@ -103,10 +103,11 @@ class Rem1RefusalRemedyTests(unittest.TestCase):
         shadow_files = {
             path
             for path, codes in by_file.items()
-            if "deployment_shadow_unknown" in codes
+            if "deployment_shadow_found" in codes
         }
         self.assertEqual(frozenset({"floati/deploy.py"}), shadow_files)
         self.assertTrue(shadow_files <= INS1_FILES)
+        self.assertNotIn("deployment_shadow_unknown", derived)
 
     def test_drill_protocol_codes_serialize_a_non_null_remedy(self) -> None:
         """Catches the refusal path still emitting JSON null for the WS-I / M4 codes."""
@@ -202,10 +203,10 @@ class Rem1RefusalRemedyTests(unittest.TestCase):
 
         with self.assertRaises(ProtocolRefusal) as caught_shadow:
             raise ProtocolRefusal(
-                "deployment_shadow_unknown",
-                "Some PATH entries could not be read; shadow state unknown.",
+                "deployment_shadow_found",
+                "A floati ahead of the installed copy answered first on PATH.",
             )
-        # Constructor default must populate; INS-1 still owns the action text.
+        # A detected shadow remains a refusal; uncertain observations are warnings.
         self.assert_populated_remedy(caught_shadow.exception.remedy)
 
     def test_mcp_invalid_params_error_carries_a_non_null_remedy(self) -> None:

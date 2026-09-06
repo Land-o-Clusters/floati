@@ -1784,6 +1784,70 @@ def _roll(args: argparse.Namespace) -> HandlerResult:
     }, 0
 
 
+#: LEDGER-1 (b): the epoch roll becomes POLICY. The operator may declare
+#: the thresholds in the root; the shipped defaults apply otherwise.
+#: Doctor measures the live ledger against this policy and names the
+#: governed ``epoch roll`` verb as the remedy — the roll itself stays
+#: authority-gated and idempotent by key, never automatic.
+LEDGER_POLICY_RELATIVE = pathlib.Path("state/ledger-policy.json")
+LEDGER_ROLL_POLICY_DEFAULTS = {"max_bytes": 8 * 1024 * 1024, "max_age_days": 30}
+
+
+def ledger_roll_policy(root: FloatiRoot) -> Dict[str, object]:
+    """The operator-declared roll thresholds, or the shipped defaults."""
+
+    # LEDGER-1 (b) Am.1: resolve_relative DEREFERENCES the final symlink,
+    # so the is_symlink guard below was dead code — lstat the raw path
+    # before any resolution.
+    raw = root.path / LEDGER_POLICY_RELATIVE
+    if raw.is_symlink():
+        raise ProtocolRefusal(
+            "ledger_policy_symlink",
+            "the roll policy must not be a symlink",
+            remedy="replace state/ledger-policy.json with a regular file "
+            "naming {schema_version, max_bytes, max_age_days}",
+        )
+    path = root.resolve_relative(LEDGER_POLICY_RELATIVE)
+    if not path.is_file():
+        return {
+            **LEDGER_ROLL_POLICY_DEFAULTS,
+            "source": "shipped_default",
+        }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProtocolRefusal(
+            "ledger_policy_invalid",
+            f"the roll policy is unreadable: {exc}",
+            remedy="rewrite state/ledger-policy.json as one JSON object "
+            "{schema_version: 0, max_bytes, max_age_days}",
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "max_bytes", "max_age_days"}
+        or payload["schema_version"] != 0
+        or isinstance(payload["max_bytes"], bool)
+        or not isinstance(payload["max_bytes"], int)
+        or payload["max_bytes"] <= 0
+        or isinstance(payload["max_age_days"], bool)
+        or not isinstance(payload["max_age_days"], int)
+        or payload["max_age_days"] <= 0
+    ):
+        raise ProtocolRefusal(
+            "ledger_policy_invalid",
+            "the roll policy must be exactly {schema_version: 0, max_bytes, "
+            "max_age_days} with positive integers",
+            remedy="rewrite state/ledger-policy.json as one JSON object "
+            "{schema_version: 0, max_bytes: positive-int, "
+            "max_age_days: positive-int}",
+        )
+    return {
+        "max_bytes": payload["max_bytes"],
+        "max_age_days": payload["max_age_days"],
+        "source": "operator_declared",
+    }
+
+
 def register_cli(commands: argparse._SubParsersAction) -> None:
     epoch = commands.add_parser("epoch")
     operations = epoch.add_subparsers(dest="epoch_command", required=True)

@@ -5,7 +5,7 @@
 - Branch: `codex/hm3i-orchestration-truth`
 - Base SHA: `b10d4b05a5482fbef95a26546d3610c241833ca3`
 - the architect message ID: **UNOBSERVED**. No fleet message was inspected or sent for
-  this task; the Fable-filed charter authority is Puddle
+  this task; the the architect-filed charter authority is Puddle
   `HARBOR_MASTER.md` at `a111202b228d34c2b371bcc5e2c4798206474439`.
 - RED command:
   `PYTHONPYCACHEPREFIX=<temp>/hm3i-item1-red python3 -m unittest -v tests.test_hm3i_contract`
@@ -936,7 +936,7 @@ and full selftest before anyone may make an exact-tip claim.
   v1 doctor/status/watch artifacts carry the shared `installer_shadow` fact;
   absent destination is explicit `cannot_speak`/22 rather than an invented
   clean path result. Item 10's TD5 integration passed 2/2 in 0.269 seconds.
-- Item 7's SECURITY-REVIEW is Fable-authored checkpoint evidence, not a lane
+- Item 7's SECURITY-REVIEW is the architect-authored checkpoint evidence, not a lane
   self-attestation: ruling `e4034d26` sections 1--2, the architect Item 7 GREEN
   `605b942`, policy digest
   `23e5ec9d826d91c8b51d42be1a521d1c572287f04003baeb454b2b1b1c765924`.

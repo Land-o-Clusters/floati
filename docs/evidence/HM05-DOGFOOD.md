@@ -355,7 +355,7 @@ acceptance evidence.
 ## Publication authority and remaining gates
 
 - The `the architect — REGISTERED + PUSH GO (2026-07-31)` section of
-  `RULING-REQUEST-HM05-FABLE-PUSH-GATE.md`, committed in `8ac4607`, records
+  `RULING-REQUEST-HM05-the architect-PUSH-GATE.md`, committed in `8ac4607`, records
   the architect's `PUSH GO` for the existing 13 commits and explicitly directs this
   lane to bind the message plus delivery receipt, commit, and push. That is the
   publication authority for this acceptance finish.

@@ -679,7 +679,7 @@ class DeploymentWriterTests(unittest.TestCase):
         self.assertTrue((destination / "scripts" / "floati").is_file())
         self.assertEqual([str(missing)], result["installer_shadow"]["skipped_entries"])
 
-    def test_first_install_refuses_existing_unreadable_path_with_coordinate_and_remedy(self) -> None:
+    def test_first_install_warns_on_unreadable_path_and_installs(self) -> None:
         """The product caller must preserve the exact blocked entry and operator remedy."""
         destination = self.base / "destination"
         unreadable = self.base / "unreadable-path-entry"
@@ -698,16 +698,16 @@ class DeploymentWriterTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"PATH": path}, clear=False):
             with patch.object(Path, "lstat", autospec=True, side_effect=refuse_exact_entry):
-                with self.assertRaises(ProtocolRefusal) as raised:
-                    self._writer(destination, committed_tree=True).run()
+                result = self._writer(destination, committed_tree=True).run()
 
-        self.assertEqual("deployment_shadow_unknown", raised.exception.code)
-        self.assertIn(str(unreadable), raised.exception.detail)
+        self.assertEqual("path_entry_unreadable", result["installer_shadow"]["outcome"])
+        self.assertEqual([result["installer_shadow"]], result["warnings"])
+        self.assertEqual(str(unreadable), result["installer_shadow"]["blocked_entry"])
         self.assertEqual(
             f"Fix or drop PATH entry {unreadable}, or pass a clean PATH.",
-            raised.exception.remedy,
+            result["installer_shadow"]["remedy"],
         )
-        self.assertFalse(destination.exists())
+        self.assertTrue((destination / "scripts/floati").is_file())
 
     def test_first_install_writes_only_after_affirmative_none_preflight(self) -> None:
         """The source launcher is excluded and an empty complete scan permits the first copy."""
@@ -734,6 +734,39 @@ class DeploymentWriterTests(unittest.TestCase):
             },
             result["installer_shadow"],
         )
+
+    def test_update_off_path_installs_new_bytes_and_preserves_warning(self) -> None:
+        """An off-PATH launcher must not trap an installed reader at its old version."""
+        destination = self.base / "destination"
+        self._writer(destination, committed_tree=True).run()
+        self._advance_source_without_the_schema()
+        result = DeploymentWriter(
+            self.source, destination, "update", ref="HEAD", committed_tree=True,
+            installer_path="/usr/bin:/bin",
+        ).run()
+        self.assertEqual("launcher_not_on_path", result["installer_shadow"]["outcome"])
+        self.assertEqual([result["installer_shadow"]], result["warnings"])
+        self.assertEqual(self._git("rev-parse", "HEAD"), result["source_sha"])
+        self.assertEqual((self.source / "floati/__init__.py").read_bytes(),
+                         (destination / "floati/__init__.py").read_bytes())
+
+    def test_update_refuses_observed_shadow_even_when_scan_is_incomplete(self) -> None:
+        """A later uncertainty cannot erase an already observed shadow."""
+        destination = self.base / "destination"
+        self._writer(destination, committed_tree=True).run()
+        shadow = self.base / "shadow"
+        shadow.mkdir()
+        (shadow / "floati").write_bytes(b"shadow\n")
+        invalid = self.base / "not-a-directory"
+        invalid.write_bytes(b"file\n")
+        before = self._tree_bytes(destination)
+        for path in (str(shadow), os.pathsep.join((str(shadow), str(invalid)))):
+            with self.subTest(path=path):
+                with self.assertRaises(ProtocolRefusal) as raised:
+                    DeploymentWriter(self.source, destination, "update", ref="HEAD",
+                                     committed_tree=True, installer_path=path).run()
+                self.assertEqual("deployment_shadow_found", raised.exception.code)
+                self.assertEqual(before, self._tree_bytes(destination))
 
     def test_update_refuses_found_shadow_before_mutating_an_existing_destination(self) -> None:
         """A prior installation must remain byte-identical when a shadow appears before it."""

@@ -78,7 +78,7 @@ is:
   the typed legacy_workspace_artifacts result before an adapter, deployment
   writer, evidence directory, transcript, Git action, provider, staging area,
   or install metadata is read or created.
-- The exact Fable-owned singular/plural refusal copy is exercised by the
+- The exact the architect-owned singular/plural refusal copy is exercised by the
   Class 2 bank. The guard reads direct child names only; it neither follows
   nor opens the old artifact or a legacy symlink, and it does not migrate or
   delete either one.

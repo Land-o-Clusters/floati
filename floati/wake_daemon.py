@@ -1,4 +1,8 @@
-"""Bounded, exact-session wake daemon engine with durable outcome testimony."""
+"""Bounded, exact-session wake daemon engine with durable outcome testimony.
+
+The daemon's supervisor logs are bounded: see ``maintain_supervisor_logs``
+(LEDGER-1 a), called once per serve cycle.
+"""
 
 from __future__ import annotations
 
@@ -9,16 +13,17 @@ import json
 import math
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, Mapping, Optional
+from typing import Callable, Dict, Iterator, Mapping, Optional
 
 from .bus_epoch import shared_epoch_operation
-from .errors import IntegrityFailure, ProtocolRefusal
+from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot
 from .records import WAKE_ATTEMPT_REFUSED_REASONS
 from .registry import Registry
+from .root import FloatiRoot
 from .snapshot import _owned_epoch_archives
 from .wake_control import WakeController, is_session_paused
 from .wake_daemon_adapters import AdapterBinding, WakeAdapterResult
@@ -51,8 +56,19 @@ _RUNTIME_FIELDS = frozenset({
     "last_reason_code",
     "last_lifecycle_receipt_id",
     "bus_epoch_archive",
+    "breaker_transitions",
+    "awaiting_work",
 })
-_LEGACY_RUNTIME_FIELDS = _RUNTIME_FIELDS - {"bus_epoch_archive"}
+# Fields a runtime written by an older build may not carry. The shape check
+# stays CLOSED - no unknown key is ever accepted - and these are read through
+# a default rather than refused, so a daemon does not have to be re-consented
+# to survive an upgrade.
+_OPTIONAL_RUNTIME_FIELDS = frozenset({
+    "bus_epoch_archive",
+    "breaker_transitions",
+    "awaiting_work",
+})
+_REQUIRED_RUNTIME_FIELDS = _RUNTIME_FIELDS - _OPTIONAL_RUNTIME_FIELDS
 _BREAKER_THRESHOLD = 3
 _WAKE_BUDGET = 3
 _WAKE_BUDGET_WINDOW_SECONDS = 300.0
@@ -67,8 +83,9 @@ def breaker_status_for_node(root: object, node_id: str) -> Dict[str, object]:
 
     WD-R7 writes a one-shot notice at the closed-to-open crossing and never
     refreshes it, so the notice lags the runtime (NOTICE-LAG-1). Status
-    surfaces the runtime. This function does not reset the circuit; only a
-    consent re-grant (a new activation epoch) re-initializes it.
+    surfaces the runtime. This function does not reset the circuit. A
+    successful half-open probe closes it; a consent re-grant also
+    re-initializes it.
     """
 
     from .wake_daemon_contract import (
@@ -159,7 +176,11 @@ def breaker_status_for_node(root: object, node_id: str) -> Dict[str, object]:
         coordinates.append(
             {
                 "harness": harness,
-                "state": circuit_state,
+                "state": (
+                    "half_open_awaiting_work"
+                    if circuit_state == "open" and runtime.get("awaiting_work") is True
+                    else circuit_state
+                ),
                 "consecutive_refusals": refusals,
                 "last_trip_reason": runtime.get("last_reason_code"),
                 "current_backoff": backoff,
@@ -263,6 +284,7 @@ class WakeDaemon:
             Path("state/wake-daemon/runtime") / f"{coordinate.digest}.json"
         )
         self.owner = DaemonOwner(coordinate)
+        self._breaker_close_reason: Optional[str] = None
 
     def wake_health(self, now: datetime) -> Dict[str, object]:
         """Project the same node-bound wake fact exposed by status and Doctor."""
@@ -284,6 +306,7 @@ class WakeDaemon:
                 "active consent and exact adapter binding disagree",
             )
         runtime = self._read_or_initialize(consent, binding)
+        self._breaker_close_reason = None
         if current_time < float(runtime["next_poll_at"]):
             artifact = self._artifact(runtime)
             artifact["state"] = "backpressure"
@@ -312,7 +335,10 @@ class WakeDaemon:
                     lifecycle_state="pause_unknown",
                     reason_code="wake_marker_invalid",
                 )
-            self._schedule_success(runtime, consent, current_time)
+            # Am.1: pause may clear an open circuit, but it never claims a probe.
+            self._schedule_success(
+                runtime, consent, current_time, close_reason="operator_pause"
+            )
             return self._transition(
                 runtime,
                 consent,
@@ -321,18 +347,6 @@ class WakeDaemon:
                 event="paused",
                 lifecycle_state="paused",
                 reason_code=None,
-            )
-
-        if runtime["circuit_state"] == "open":
-            self._schedule_failure(runtime, consent, current_time)
-            return self._transition(
-                runtime,
-                consent,
-                binding,
-                result_state="backpressure",
-                event="backpressure",
-                lifecycle_state="backpressure",
-                reason_code="wake_daemon_circuit_open",
             )
 
         timestamps = [
@@ -403,6 +417,20 @@ class WakeDaemon:
                 message_worker_session_id = None
         if decision_state == "caught_up":
             runtime["current_wake_key"] = None
+            if runtime["circuit_state"] == "open":
+                # Am.1: half-open with no mail is not idle and is not a probe.
+                # Hold half_open_awaiting_work until fresh work exists; the first
+                # mail is the probe. Never wake a seat that has nothing to see.
+                self._schedule_half_open_await(runtime, consent, current_time)
+                return self._transition(
+                    runtime,
+                    consent,
+                    binding,
+                    result_state="half_open_awaiting_work",
+                    event="backpressure",
+                    lifecycle_state="backpressure",
+                    reason_code="wake_daemon_half_open_awaiting_work",
+                )
             self._schedule_idle(runtime, consent, current_time)
             return self._transition(
                 runtime,
@@ -587,6 +615,10 @@ class WakeDaemon:
         with self.owner:
             while not stop_requested():
                 result = self.run_cycle(clock())
+                try:
+                    maintain_supervisor_logs(self.root, self.coordinate.digest)
+                except (OSError, ProtocolRefusal):
+                    pass
                 if stop_requested():
                     break
                 delay = max(0.0, float(result["next_poll_at"]) - clock())
@@ -623,9 +655,19 @@ class WakeDaemon:
             current["bus_epoch_archive"] = current_epoch
             current["next_poll_at"] = 0.0
         if current["activation_epoch"] != consent["activation_epoch"]:
-            current = self._initial_runtime(consent, binding, current_epoch)
+            current = self._initial_runtime(
+                consent,
+                binding,
+                current_epoch,
+                breaker_transitions=int(current["breaker_transitions"]),
+            )
         if current["session_digest"] not in {None, binding.session_digest}:
-            current = self._initial_runtime(consent, binding, current_epoch)
+            current = self._initial_runtime(
+                consent,
+                binding,
+                current_epoch,
+                breaker_transitions=int(current["breaker_transitions"]),
+            )
         current["session_digest"] = binding.session_digest
         return current
 
@@ -634,7 +676,17 @@ class WakeDaemon:
         consent: Mapping[str, object],
         binding: AdapterBinding,
         current_epoch: Optional[str],
+        *,
+        breaker_transitions: int = 0,
     ) -> Dict[str, object]:
+        """Reactivation resets the cycle counters and CARRIES THE BREAKER'S.
+
+        Everything else here is per-activation state and must start over.
+        ``breaker_transitions`` is not: it names WHICH outage this daemon is
+        on, and an outage that heals and returns is a second outage. Reset it
+        and the announcement key repeats, and the bus - correctly - treats the
+        relapse as a replay of the first.
+        """
         return {
             "schema_version": 0,
             "tenant_id": self.root.tenant_id,
@@ -644,9 +696,11 @@ class WakeDaemon:
             "daemon_instance_id": self.daemon_instance_id,
             "activation_epoch": int(consent["activation_epoch"]),
             "cycle_index": 0,
+            "breaker_transitions": int(breaker_transitions),
             "current_wake_key": None,
             "consecutive_refusals": 0,
             "circuit_state": "closed",
+            "awaiting_work": False,
             "next_poll_at": 0.0,
             "current_backoff": int(consent["min_poll_seconds"]),
             "wake_timestamps": [],
@@ -658,14 +712,16 @@ class WakeDaemon:
         }
 
     def _validate_runtime(self, value: object) -> Dict[str, object]:
-        if not isinstance(value, dict) or set(value) not in {
-            _RUNTIME_FIELDS, _LEGACY_RUNTIME_FIELDS
-        }:
+        if not isinstance(value, dict) or not (
+            _REQUIRED_RUNTIME_FIELDS <= set(value) <= _RUNTIME_FIELDS
+        ):
             raise IntegrityFailure(
                 "wake_daemon_runtime_invalid", "daemon runtime state has an open shape"
             )
         value = dict(value)
         value.setdefault("bus_epoch_archive", None)
+        value.setdefault("breaker_transitions", 0)
+        value.setdefault("awaiting_work", False)
         if (
             value.get("schema_version") != 0
             or value.get("tenant_id") != self.root.tenant_id
@@ -673,6 +729,7 @@ class WakeDaemon:
             or value.get("harness") != self.coordinate.harness
             or value.get("coordinate_digest") != self.coordinate.digest
             or value.get("circuit_state") not in {"closed", "open"}
+            or value.get("awaiting_work") not in {True, False}
             or not isinstance(value.get("wake_timestamps"), list)
             or (
                 value.get("bus_epoch_archive") is not None
@@ -687,7 +744,13 @@ class WakeDaemon:
             raise IntegrityFailure(
                 "wake_daemon_runtime_invalid", "daemon runtime identity is invalid"
             )
-        for field in ("activation_epoch", "cycle_index", "consecutive_refusals", "current_backoff"):
+        for field in (
+            "activation_epoch",
+            "cycle_index",
+            "consecutive_refusals",
+            "current_backoff",
+            "breaker_transitions",
+        ):
             item = value.get(field)
             if not isinstance(item, int) or isinstance(item, bool) or item < 0:
                 raise IntegrityFailure(
@@ -808,10 +871,15 @@ class WakeDaemon:
         and a restart cannot leave it gone. Cleared when the circuit closes
         again. Local only - no network, no telemetry, ever."""
 
-        notice_path = self.root.resolve_relative(
-            Path("state/wake-daemon/notices") / f"{self.coordinate.digest}.json"
-        )
+        notice_relative = Path("state/wake-daemon/notices") / f"{self.coordinate.digest}.json"
+        notice_path = self.root.resolve_relative(notice_relative)
         if runtime["circuit_state"] == "closed":
+            if self._breaker_close_reason in {"probe", "operator_pause"}:
+                self._announce_breaker_closed(
+                    runtime,
+                    notice_relative.as_posix(),
+                    close_reason=str(self._breaker_close_reason),
+                )
             notice_path.unlink(missing_ok=True)
             return
         if runtime["circuit_state"] != "open" or notice_path.exists():
@@ -828,8 +896,12 @@ class WakeDaemon:
             "current_backoff": int(runtime["current_backoff"]),
             "last_reason_code": runtime["last_reason_code"],
             "cycle_index": int(runtime["cycle_index"]),
+            "half_open_awaiting_work": bool(runtime.get("awaiting_work")),
             "remedy": WAKE_BREAKER_REMEDY,
         }
+        notice["announcement"] = self._announce_breaker(
+            runtime, notice_relative.as_posix()
+        )
         encoded = (
             json.dumps(notice, sort_keys=True, separators=(",", ":")) + "\n"
         ).encode("utf-8")
@@ -848,6 +920,130 @@ class WakeDaemon:
         finally:
             os.close(descriptor)
         os.replace(temporary, notice_path)
+
+    def _announce_breaker(
+        self, runtime: Mapping[str, object], notice_relative: str
+    ) -> Dict[str, object]:
+        """WAKE-NOTICE-1: the crossing into an open circuit also reaches the bus.
+
+        WD-R7's notice says so once, LOCALLY, and that is where it stopped: on
+        2026-09-05 grok/cursor had been open for 381 refusals and six days and
+        the fleet's architect had no way to learn it except by running doctor.
+        This posts ONE envelope to the root's one declared architect naming the
+        reason code and the notice path.
+
+        Once per TRANSITION, never per cycle: the caller only reaches this on
+        the crossing that writes the notice, so the 378 backpressure cycles
+        one live seat has run since produce nothing.
+
+        Am.1 - THE KEY IS THE TRANSITION COUNT, NEVER cycle_index. cycle_index
+        counts cycles and is reset to 0 by every consent re-grant, while the
+        breaker trips at a fixed threshold, so a genuine close-then-reopen
+        relapse composed a byte-identical key and the bus deduped the second
+        outage as a replay of the first: measured, two outages, one envelope,
+        and a notice naming the healed outage's message id.
+        ``breaker_transitions`` is incremented at the one closed-to-open flip
+        in this engine and carried across reactivation, so it is monotonic per
+        outage and idempotent within one.
+
+        Fail-soft, and never silently: this runs inside every daemon on the
+        machine, so a root that cannot take the envelope must back off rather
+        than kill a fleet - and the reason it could not is written into the
+        same notice, so the operator sees the announcement's fate beside the
+        breaker's.
+        """
+
+        try:
+            from .admin_registry import RegistryAdminBackend
+            from .events import EventLog
+
+            architect = str(
+                RegistryAdminBackend(self.root).current_architect()["node_id"]
+            )
+            binding = self._exact_binding()
+            note = (
+                f"WAKE BREAKER OPEN - {self.coordinate.node_id}/"
+                f"{self.coordinate.harness} has stopped waking its seat: "
+                f"{runtime['last_reason_code']} after "
+                f"{int(runtime['consecutive_refusals'])} consecutive refusals, "
+                f"backoff {int(runtime['current_backoff'])}s. "
+                f"Notice: {notice_relative}. Remedy: {WAKE_BREAKER_REMEDY}"
+            )
+            receipt = EventLog(self.root).send(
+                self.coordinate.node_id,
+                architect,
+                Path(binding.workspace).name,
+                self.coordinate.digest,
+                notice_relative,
+                note,
+                idempotency_key=(
+                    f"wake-breaker-{self.coordinate.digest}-"
+                    f"{int(runtime['breaker_transitions'])}"
+                ),
+            )
+            envelope = receipt.get("message", receipt)
+            return {
+                "recipient": architect,
+                "message_id": str(envelope["id"]),
+            }
+        except (ProtocolRefusal, IntegrityFailure, DurabilityFailure, OSError) as exc:
+            return {"refused": getattr(exc, "code", type(exc).__name__)}
+
+    def _announce_breaker_closed(
+        self,
+        runtime: Mapping[str, object],
+        notice_relative: str,
+        *,
+        close_reason: str = "probe",
+    ) -> Dict[str, object]:
+        """WAKE-NOTICE-1: closing an open circuit reaches the bus.
+
+        Keyed on the same transition count as the open announcement, with a
+        closed suffix, so recovery of outage N cannot replay as outage N's
+        opening and cannot collide with a later relapse.
+
+        Am.1: only a real half-open probe may say "probe succeeded". An
+        operator pause that clears the circuit says cleared_by_operator_pause.
+        """
+
+        try:
+            from .admin_registry import RegistryAdminBackend
+            from .events import EventLog
+
+            architect = str(
+                RegistryAdminBackend(self.root).current_architect()["node_id"]
+            )
+            binding = self._exact_binding()
+            if close_reason == "operator_pause":
+                how = "cleared_by_operator_pause"
+            else:
+                how = "probe succeeded"
+            note = (
+                f"WAKE BREAKER CLOSED - {self.coordinate.node_id}/"
+                f"{self.coordinate.harness} {how} after "
+                f"{int(runtime.get('breaker_transitions', 0))} breaker "
+                f"transition(s); refusals reset, notice cleared. "
+                f"Notice: {notice_relative}."
+            )
+            receipt = EventLog(self.root).send(
+                self.coordinate.node_id,
+                architect,
+                Path(binding.workspace).name,
+                self.coordinate.digest,
+                notice_relative,
+                note,
+                idempotency_key=(
+                    f"wake-breaker-{self.coordinate.digest}-"
+                    f"{int(runtime['breaker_transitions'])}-closed"
+                ),
+            )
+            envelope = receipt.get("message", receipt)
+            return {
+                "recipient": architect,
+                "message_id": str(envelope["id"]),
+            }
+        except (ProtocolRefusal, IntegrityFailure, DurabilityFailure, OSError) as exc:
+            return {"refused": getattr(exc, "code", type(exc).__name__)}
 
     @staticmethod
     def _artifact(runtime: Mapping[str, object]) -> Dict[str, object]:
@@ -987,13 +1183,31 @@ class WakeDaemon:
             f"{int(runtime['cycle_index']) + 1}"
         )
 
-    @staticmethod
     def _schedule_success(
-        runtime: Dict[str, object], consent: Mapping[str, object], now: float
+        self,
+        runtime: Dict[str, object],
+        consent: Mapping[str, object],
+        now: float,
+        *,
+        close_reason: str = "probe",
     ) -> None:
+        if runtime["circuit_state"] == "open":
+            self._breaker_close_reason = close_reason
         minimum = int(consent["min_poll_seconds"])
         runtime["consecutive_refusals"] = 0
         runtime["circuit_state"] = "closed"
+        runtime["awaiting_work"] = False
+        runtime["current_backoff"] = minimum
+        runtime["next_poll_at"] = now + minimum
+
+    @staticmethod
+    def _schedule_half_open_await(
+        runtime: Dict[str, object], consent: Mapping[str, object], now: float
+    ) -> None:
+        """Keep the open circuit; re-check soon for the mail that is the probe."""
+
+        minimum = int(consent["min_poll_seconds"])
+        runtime["awaiting_work"] = True
         runtime["current_backoff"] = minimum
         runtime["next_poll_at"] = now + minimum
 
@@ -1004,6 +1218,7 @@ class WakeDaemon:
         maximum = int(consent["max_poll_seconds"])
         current = max(int(consent["min_poll_seconds"]), int(runtime["current_backoff"]))
         backoff = min(maximum, current * 2)
+        runtime["awaiting_work"] = False
         runtime["current_backoff"] = backoff
         runtime["next_poll_at"] = now + backoff
 
@@ -1015,8 +1230,436 @@ class WakeDaemon:
         current = max(int(consent["min_poll_seconds"]), int(runtime["current_backoff"]))
         backoff = min(maximum, current * 2)
         refusals = int(runtime["consecutive_refusals"]) + 1
+        runtime["awaiting_work"] = False
         runtime["current_backoff"] = backoff
         runtime["next_poll_at"] = now + backoff
         runtime["consecutive_refusals"] = refusals
-        if refusals >= _BREAKER_THRESHOLD:
+        if refusals >= _BREAKER_THRESHOLD and runtime["circuit_state"] != "open":
+            # The ONE line in this engine where the circuit crosses into open.
+            # Counting here, rather than where the notice is written, is what
+            # makes the count a count of TRANSITIONS: a notice deleted while
+            # the circuit is still open is re-derived without advancing it, and
+            # every later refusal in the same outage re-assigns "open" without
+            # passing this guard.
+            runtime["breaker_transitions"] = (
+                int(runtime.get("breaker_transitions", 0)) + 1
+            )
             runtime["circuit_state"] = "open"
+
+
+#: LEDGER-1 (a): the supervisor (launchd/systemd) appends the daemon's
+#: stderr/stdout to ``state/wake-daemon/logs/<digest>.<stream>.log``
+#: forever — measured on the live root at 7.1 MB of one refusal line per
+#: cycle from a circuit-open daemon. The daemon maintains its own logs
+#: each serve cycle: copytruncate rotation past a size threshold (the
+#: supervisor's append descriptor stays valid across an in-place
+#: truncate), a bounded number of retained rotations, and one typed
+#: receipt per rotation under the root's ``receipts/`` plane.
+_LOG_ROTATION_MAX_BYTES = 1024 * 1024
+_LOG_ROTATION_RETAIN = 3
+_LOG_ROTATION_STREAMS = ("stderr", "stdout")
+
+
+def _rotation_timestamp() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+_ROTATION_COUNTER: Dict[str, Iterator[int]] = {}
+
+
+def _rotation_counter(stream: str) -> Iterator[int]:
+    """LEDGER-1a Am.2: a monotonic per-stream counter so two rotations
+    inside one wall-clock second can never share a rotated name."""
+
+    import itertools
+
+    if stream not in _ROTATION_COUNTER:
+        _ROTATION_COUNTER[stream] = itertools.count(1)
+    return _ROTATION_COUNTER[stream]
+
+
+def maintain_supervisor_logs(
+    root: FloatiRoot,
+    coordinate_digest: str,
+    *,
+    max_bytes: int = _LOG_ROTATION_MAX_BYTES,
+    retain: int = _LOG_ROTATION_RETAIN,
+    id_factory: Callable[[], str] = uuid7_hex,
+    stamp: Optional[str] = None,
+) -> list[Dict[str, object]]:
+    """Rotate oversized supervisor logs; one receipt per rotation.
+
+    Copytruncate: the rotated file carries the exact pre-rotation bytes
+    and the active file is truncated in place, so the supervisor's open
+    append descriptor keeps working. Paths in receipts are relative to
+    the root, never ambient. A rotation never names an absolute path.
+    """
+
+    logs_dir = root.resolve_relative(Path("state/wake-daemon/logs"))
+    receipts_dir = root.resolve_relative(
+        Path("receipts") / "wake-daemon-log-rotation" / coordinate_digest
+    )
+    millisecond_stamp = stamp if stamp is not None else _rotation_timestamp()
+    receipts: list[Dict[str, object]] = []
+    for stream, live_fd in (
+        ("stderr", 2),
+        ("stdout", 1),
+    ):
+        active = logs_dir / f"{coordinate_digest}.{stream}.log"
+        if active.is_symlink():
+            raise ProtocolRefusal(
+                "wake_daemon_log_symlink",
+                "supervisor log must not be a symlink",
+                remedy="remove the symlink and let the daemon recreate a "
+                "real log file, then let the next cycle rotate",
+            )
+        if not active.is_file():
+            continue
+        identity = active.stat()
+        if identity.st_size <= max_bytes:
+            continue
+        # LEDGER-1a Am.2: the rotated name carries the SAME millisecond
+        # stamp the receipt uses plus a monotonic per-stream counter, so
+        # same-second rotations cannot collide; an existing target
+        # REFUSES instead of overwriting a rotated file.
+        name_stamp = millisecond_stamp.replace("-", "").replace(":", "")
+        rotated = logs_dir / (
+            f"{coordinate_digest}.{stream}.{name_stamp}-"
+            f"{next(_rotation_counter(stream)):04d}.log"
+        )
+        if rotated.exists():
+            raise ProtocolRefusal(
+                "wake_daemon_log_rotation_exists",
+                f"the rotation target already exists: {rotated.name}",
+                remedy="inspect the logs directory; a rotation never "
+                "overwrites a rotated file",
+            )
+        digest_of_bytes = hashlib.sha256()
+        with active.open("rb") as live:
+            for chunk in iter(lambda: live.read(1024 * 1024), b""):
+                digest_of_bytes.update(chunk)
+        receipt = {
+            "schema_version": 0,
+            "id": f"wake-daemon-log-rotation-{id_factory()}",
+            "timestamp": millisecond_stamp,
+            "tenant_id": root.tenant_id,
+            "kind": "wake_daemon_log_rotation",
+            "coordinate_digest": coordinate_digest,
+            "stream": stream,
+            "rotated_bytes": identity.st_size,
+            "rotated_sha256": digest_of_bytes.hexdigest(),
+            "rotated_to": rotated.relative_to(root.path).as_posix(),
+            "active_bytes_after": 0,
+            "takeover": "daemon_fd",
+        }
+        receipt_path = receipts_dir / f"{receipt['id']}.json"
+        receipt["receipt_path"] = receipt_path.relative_to(root.path).as_posix()
+        # LEDGER-1a Am.1: the receipt is written BEFORE any takeover — a
+        # rotation without its receipt must be impossible, so an
+        # unwritable receipts plane aborts with the log untouched.
+        try:
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_text(
+                json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise ProtocolRefusal(
+                "wake_daemon_log_receipt_unwritable",
+                "the rotation receipt could not be written; the live log "
+                "is untouched and will keep growing until the receipts "
+                "plane is writable",
+                remedy="make receipts/wake-daemon-log-rotation writable, then let the next cycle rotate",
+            ) from exc
+        # RENAME, never truncate: every O_APPEND descriptor the supervisor
+        # or an in-flight child holds follows the inode, so the window
+        # that copytruncate lost lines in does not exist. The fresh live
+        # file is opened and taken over by the daemon's own descriptor.
+        pre_takeover = os.fstat(live_fd)
+        takeover = (
+            pre_takeover.st_ino == identity.st_ino
+            and pre_takeover.st_dev == identity.st_dev
+        )
+        receipt["takeover"] = "daemon_fd" if takeover else "rename_only"
+        os.replace(active, rotated)
+        fresh = os.open(active, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        try:
+            if takeover:
+                os.dup2(fresh, live_fd)
+        finally:
+            os.close(fresh)
+        receipt_path.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        receipts.append(receipt)
+        _prune_rotations(
+            root, coordinate_digest, stream, retain,
+            id_factory=id_factory, stamp=millisecond_stamp,
+        )
+    return receipts
+
+
+def _prune_receipts_dir(root: FloatiRoot, coordinate_digest: str) -> Path:
+    return root.resolve_relative(
+        Path("receipts") / "wake-daemon-log-prune" / coordinate_digest
+    )
+
+
+def _rotation_receipt_naming(
+    root: FloatiRoot, coordinate_digest: str, rotated_relative: str
+) -> Optional[Dict[str, object]]:
+    """The rotation receipt whose rotated_to names the file being pruned,
+    so the prune receipt carries the id it retires. None when the rotation
+    receipt is absent or unreadable - the prune receipt still records the
+    bytes it destroyed."""
+
+    receipts_dir = root.resolve_relative(
+        Path("receipts") / "wake-daemon-log-rotation" / coordinate_digest
+    )
+    if not receipts_dir.is_dir() or receipts_dir.is_symlink():
+        return None
+    for path in sorted(receipts_dir.glob("*.json")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(record, dict) and record.get("rotated_to") == rotated_relative:
+            return record
+    return None
+
+
+def _prune_block_marker_path(
+    root: FloatiRoot, coordinate_digest: str, stream: str
+) -> Path:
+    return root.resolve_relative(
+        Path("state") / "wake-daemon" / "log-prune-blocked"
+        / f"{coordinate_digest}.{stream}.json"
+    )
+
+
+def _record_prune_block(
+    root: FloatiRoot,
+    coordinate_digest: str,
+    stream: str,
+    pending_prunes: int,
+) -> None:
+    """LEDGER-1a-F1: the state plane is the daemon's own writable home,
+    so the marker survives exactly while the receipts plane cannot."""
+
+    _write_prune_block_marker(
+        _prune_block_marker_path(root, coordinate_digest, stream),
+        coordinate_digest,
+        stream,
+        pending_prunes,
+        recorded_at=_rotation_timestamp(),
+    )
+
+
+def _refresh_prune_block(
+    root: FloatiRoot,
+    coordinate_digest: str,
+    stream: str,
+    pending_prunes: int,
+) -> None:
+    """LEDGER-1a-F1 Am.1 FINDING 1: every blocked cycle refreshes the
+    marker's pending_prunes to the backlog actually measured now - the
+    first cycle's count is never allowed to go stale. recorded_at keeps
+    naming the first block; last_blocked_at names this one."""
+
+    path = _prune_block_marker_path(root, coordinate_digest, stream)
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        recorded_at = str(previous.get("recorded_at") or "")
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        recorded_at = ""
+    _write_prune_block_marker(
+        path,
+        coordinate_digest,
+        stream,
+        pending_prunes,
+        recorded_at=recorded_at or _rotation_timestamp(),
+    )
+
+
+#: LEDGER-1a-F1 Am.2: when the marker plane itself is unwritable the
+#: typed refusal can only raise ONCE per (digest, stream) - the marker
+#: can never be written, so the recorded-already check is always false
+#: and a refusal every cycle is the stderr-wall disease again. The flag
+#: lives in process memory and re-arms whenever the condition changes:
+#: the marker becomes recorded, or a prune proves a plane healed.
+_PRUNE_BLOCK_HELD: set = set()
+
+
+def _write_prune_block_marker(
+    path: Path,
+    coordinate_digest: str,
+    stream: str,
+    pending_prunes: int,
+    *,
+    recorded_at: str,
+) -> None:
+    """LEDGER-1a-F1 Am.1 FINDING 2: the marker plane can be unwritable
+    too; that failure is its own typed refusal - a raw PermissionError
+    every cycle is the same disease one layer down."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({
+                "schema_version": 0,
+                "coordinate_digest": coordinate_digest,
+                "stream": stream,
+                "code": "wake_daemon_log_prune_receipt_unwritable",
+                "pending_prunes": pending_prunes,
+                "recorded_at": recorded_at,
+                "last_blocked_at": _rotation_timestamp(),
+            }, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        raise ProtocolRefusal(
+            "wake_daemon_log_prune_marker_unwritable",
+            "the prune-block marker could not be written either; the "
+            "block cannot be recorded where it can be read, and the "
+            "rotated file keeps its bytes",
+            remedy="make state/wake-daemon and "
+            "receipts/wake-daemon-log-prune writable, then let the next "
+            "cycle prune",
+        ) from exc
+
+
+def _clear_prune_block(
+    root: FloatiRoot, coordinate_digest: str, stream: str
+) -> None:
+    """Best effort: a prune that receipted proved a plane healed, so the
+    in-process flag re-arms even when the stale marker cannot be
+    unlinked right now."""
+
+    _PRUNE_BLOCK_HELD.discard((coordinate_digest, stream))
+    try:
+        _prune_block_marker_path(root, coordinate_digest, stream).unlink()
+    except OSError:
+        pass
+
+
+def _prune_rotations(
+    root: FloatiRoot,
+    coordinate_digest: str,
+    stream: str,
+    retain: int,
+    *,
+    id_factory: Callable[[], str] = uuid7_hex,
+    stamp: Optional[str] = None,
+) -> list[Dict[str, object]]:
+    """LEDGER-1a Am.3: retention is receipted, never silent.
+
+    The pruned file's name lives on its rotation receipt; unlinking it
+    without testimony left that receipt naming bytes that no longer
+    exist. Each prune writes one typed receipt (kind
+    wake_daemon_log_prune: the pruned path, the digest of the bytes
+    actually destroyed, and the retaining rule) BEFORE the unlink - a
+    prune without its receipt must be impossible, exactly like a
+    rotation without its receipt.
+
+    LEDGER-1a-F1: while the receipts plane stays unwritable the refusal
+    is recorded ONCE (one raise plus the state-plane block marker) and
+    every further blocked cycle holds quietly - an unhealable condition
+    must not re-announce itself each cycle. The first prune that writes
+    its receipt proves the plane healed and clears the marker.
+    """
+
+    logs_dir = root.resolve_relative(Path("state/wake-daemon/logs"))
+    receipts_dir = _prune_receipts_dir(root, coordinate_digest)
+    prune_stamp = stamp if stamp is not None else _rotation_timestamp()
+    receipts: list[Dict[str, object]] = []
+    rotations = sorted(
+        logs_dir.glob(f"{coordinate_digest}.{stream}.*.log"),
+        key=lambda path: path.name,
+    )
+    stale_rotations = rotations[: max(0, len(rotations) - retain)]
+    for stale in stale_rotations:
+        if stale.is_symlink():
+            raise ProtocolRefusal(
+                "wake_daemon_log_symlink",
+                f"a rotated log must not be a symlink: {stale.name}",
+                remedy="inspect the logs directory and replace the symlink "
+                "with a real file; a rotated log is never a symlink",
+            )
+        digest_of_bytes = hashlib.sha256()
+        with stale.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest_of_bytes.update(chunk)
+        pruned_relative = stale.relative_to(root.path).as_posix()
+        rotation = _rotation_receipt_naming(
+            root, coordinate_digest, pruned_relative
+        )
+        receipt: Dict[str, object] = {
+            "schema_version": 0,
+            "id": f"wake-daemon-log-prune-{id_factory()}",
+            "timestamp": prune_stamp,
+            "tenant_id": root.tenant_id,
+            "kind": "wake_daemon_log_prune",
+            "coordinate_digest": coordinate_digest,
+            "stream": stream,
+            "pruned_path": pruned_relative,
+            "pruned_bytes": stale.stat().st_size,
+            "pruned_sha256": digest_of_bytes.hexdigest(),
+            "retaining_rule": {"kind": "retain_newest", "retain": retain},
+        }
+        if rotation is not None:
+            receipt["rotated_receipt"] = rotation.get("id")
+            receipt["rotated_receipt_path"] = rotation.get("receipt_path")
+        receipt_path = receipts_dir / f"{receipt['id']}.json"
+        receipt["receipt_path"] = receipt_path.relative_to(root.path).as_posix()
+        try:
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_text(
+                json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            marker = _prune_block_marker_path(root, coordinate_digest, stream)
+            if marker.exists():
+                # Recorded already; hold quietly, but refresh the marker's
+                # backlog first - the first cycle's count must never go
+                # stale (LEDGER-1a-F1 Am.1 FINDING 1). The condition changed
+                # (the marker plane healed), so the in-process flag re-arms.
+                _PRUNE_BLOCK_HELD.discard((coordinate_digest, stream))
+                _refresh_prune_block(
+                    root, coordinate_digest, stream, len(stale_rotations)
+                )
+                return receipts
+            key = (coordinate_digest, stream)
+            try:
+                _record_prune_block(
+                    root, coordinate_digest, stream, len(stale_rotations)
+                )
+            except ProtocolRefusal:
+                # LEDGER-1a-F1 Am.2: the marker plane is unwritable too -
+                # the typed refusal raises once per process, then the
+                # condition holds quietly until it changes.
+                if key in _PRUNE_BLOCK_HELD:
+                    return receipts
+                _PRUNE_BLOCK_HELD.add(key)
+                raise
+            raise ProtocolRefusal(
+                "wake_daemon_log_prune_receipt_unwritable",
+                "the prune receipt could not be written; the rotated file "
+                "survives and keeps its bytes until the receipts plane is "
+                "writable (further blocked cycles hold quietly until it "
+                "heals)",
+                remedy="make receipts/wake-daemon-log-prune writable, then "
+                "let the next cycle prune",
+            ) from exc
+        stale.unlink()
+        receipts.append(receipt)
+    if receipts:
+        # At least one prune receipt landed: the plane is writable again.
+        _clear_prune_block(root, coordinate_digest, stream)
+    return receipts

@@ -14,7 +14,7 @@ from .errors import IntegrityFailure, ProtocolRefusal
 from .jsonl import read_records_snapshot
 from .planes import AuthorityGrantStore, MAX_TTL_SECONDS
 from .records import validate_role
-from .registry import Registry
+from .registry import Registry, read_registry_compatible
 from .root import FloatiRoot, validate_identifier
 
 
@@ -196,9 +196,8 @@ def _write_config(
 
 
 def _registry_rows(root: FloatiRoot) -> list[Dict[str, object]]:
-    return read_records_snapshot(
-        root, "registry/entries.jsonl", allowed_kinds={"registry_entry"}
-    )
+    records, _unrecognized, _versions = read_registry_compatible(root)
+    return [row for row in records if row.get("kind") == "registry_entry"]
 
 
 def initialize_solo(

@@ -95,8 +95,8 @@ Probe roster:
 - PASS in one tick: `build lane`.
 - DEAF at the two-second budget: `build lane`, `build lane`, `build lane`,
   `floati-observer`, `floati-witness`, `grok`, `build lane`,
-  `lane-puddle-crossconnection`, `lane-puddle-menubar`,
-  `lane-puddle-plumbing`, and `the architect`.
+  `build lane-crossconnection`, `build lane-menubar`,
+  `build lane-plumbing`, and `the architect`.
 
 `build lane` was in this long-running integration turn and had not reached a
 Stop boundary during its two-second probe window. Its installed P0 waiter was
@@ -107,8 +107,8 @@ Delivery scoreboard RED nodes:
 
 - `build lane`: 19 undelivered, oldest 5,550 minutes.
 - `floati-witness`: 23 undelivered, oldest 5,827 minutes.
-- `lane-puddle-menubar`: 2 undelivered, oldest 11,416 minutes.
-- `lane-puddle-plumbing`: 2 undelivered, oldest 9,939 minutes, no drain on
+- `build lane-menubar`: 2 undelivered, oldest 11,416 minutes.
+- `build lane-plumbing`: 2 undelivered, oldest 9,939 minutes, no drain on
   record.
 - `the architect`: 203 undelivered, oldest 5,425 minutes.
 

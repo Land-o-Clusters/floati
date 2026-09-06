@@ -17,7 +17,7 @@
       "additionalProperties": false,
       "required": ["outcome", "enumerated_roots", "found", "reason"],
       "properties": {
-        "outcome": {"enum": ["found", "affirmative_none", "unknown", "cannot_speak"]},
+        "outcome": {"enum": ["found", "affirmative_none", "unknown", "launcher_not_on_path", "path_entry_unreadable", "cannot_speak"]},
         "enumerated_roots": {
           "type": "array",
           "maxItems": 4096,
@@ -48,6 +48,9 @@
             "A floati ahead of the installed copy answered first on PATH.",
             "Every PATH entry was checked; the installed floati answers first.",
             "Some PATH entries could not be read; shadow state unknown.",
+            "The installer destination could not be inspected; shadow state unknown.",
+            "The installed launcher directory is not on PATH; shadow state unknown.",
+            "A PATH entry could not be inspected; shadow state unknown.",
             "No installer destination named; the shadow check could not run."
           ]
         }

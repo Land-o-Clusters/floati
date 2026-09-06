@@ -8,10 +8,10 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, TYPE_CHECKI
 from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import read_records_snapshot, transact_records
+from .jsonl import transact_records
 from .node_wizard import NodeAddPlan, NodeRetirePlan
 from .provider_switch import ProviderSwitchPlan
-from .registry import REGISTRY_KINDS, Registry, utc_now
+from .registry import REGISTRY_KINDS, Registry, utc_now, read_registry_compatible
 from .role_assignment import RoleAssignmentPlan
 from .root import FloatiRoot, validate_identifier
 from .sandbox_probe import probe_write_set
@@ -41,11 +41,8 @@ class RegistryAdminBackend:
         )
 
     def _records(self) -> list[Dict[str, Any]]:
-        return read_records_snapshot(
-            self.root,
-            self.registry.relative_path,
-            allowed_kinds=REGISTRY_KINDS,
-        )
+        records, _unrecognized, _versions = read_registry_compatible(self.root)
+        return records
 
     def _latest(self, kind: str, node_id: str) -> Optional[Dict[str, Any]]:
         node = validate_identifier(node_id, "node")

@@ -15,7 +15,7 @@ Read-only inspection of `~/.floati-bus/the fleet` found:
 - 17 distinct registry lineages;
 - 20 `receipts/wake-coordination/` directories at inspection time;
 - exactly four coordinator names outside registry lineage:
-  `alice_city`, `city`, `lane-puddle-city`, and `puddle-alice-city`.
+  `build lane_city`, `city`, `build lane-city`, and `puddle-build lane`.
 
 This reproduces the ruled defect shape. The count differs from the ruling's 21
 directories because one canonical registry identity had no coordinator at the

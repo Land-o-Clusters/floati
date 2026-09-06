@@ -17,6 +17,7 @@ from .bus_epoch import (
     shared_epoch_operation,
 )
 from .errors import IntegrityFailure, ProtocolRefusal
+from .events import EVENT_KINDS as _EVENT_KINDS
 from .ids import uuid7_hex
 from .jsonl import (
     VerifiedLedgerCursor,
@@ -251,6 +252,58 @@ def _unavailable(detail: str) -> IntegrityFailure:
     return IntegrityFailure("consumption_state_unavailable", detail)
 
 
+#: The event ledger has ONE permitted vocabulary and it belongs to the writer.
+#: This is deliberately the writer's own set, imported, rather than a second
+#: hand-written copy: on 2026-08-29 the copy here omitted ``delivery_claim`` —
+#: a kind ``floati send --claim`` legally appends — and every wake cycle for
+#: every node on that root refused ``consumption_state_unavailable`` until the
+#: whole bus epoch was rolled. A reader that re-states its ledger's vocabulary
+#: can drift from it; one that imports it cannot.
+WAKE_EVENT_KINDS = frozenset(_EVENT_KINDS)
+
+#: Kinds the projection validates but does not itself interpret. Every event
+#: kind that is neither an envelope nor a retraction lives here by derivation,
+#: so a kind added to the writer is carried, never silently refused.
+_UNINTERPRETED_EVENT_KINDS = WAKE_EVENT_KINDS - {"message_envelope", "message_retracted"}
+
+_EVENT_LEDGER = "events.jsonl"
+_QUARANTINE_VERB = (
+    "floati repair quarantine --root ROOT --ledger events.jsonl "
+    "--record-id {record_id} --idempotency-key KEY"
+)
+_CITABLE_RECORD_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+
+
+def _citable_record_id(record: object) -> Optional[str]:
+    """Return the record's id only when it is safe to print in a refusal.
+
+    A malformed record's id is untrusted input on its way to a terminal, so a
+    non-string, over-long, or non-lexical id is cited by position alone.
+    """
+
+    value = record.get("id") if isinstance(record, Mapping) else None
+    if isinstance(value, str) and _CITABLE_RECORD_ID.fullmatch(value) is not None:
+        return value
+    return None
+
+
+def _malformed_event_detail(index: int, record: object, code: object) -> str:
+    """Name the ledger, the physical position, the record, and the one remedy.
+
+    An anonymous "testimony is malformed" cost this project a bus epoch: the
+    two offending lines were unfindable, so the whole ledger was archived
+    instead of the two records being quarantined.
+    """
+
+    record_id = _citable_record_id(record)
+    named = f" id {record_id}" if record_id else ""
+    remedy = _QUARANTINE_VERB.format(record_id=record_id or "ID")
+    return (
+        f"{_EVENT_LEDGER} record {index + 1}{named} is malformed"
+        f" ({code}); quarantine that one record: {remedy}"
+    )
+
+
 @contextmanager
 def wake_coordination_guard(
     root: FloatiRoot, recipient: str, *, worker_session_id: Optional[str] = None,
@@ -308,29 +361,32 @@ def project_wake_items(
     ):
         raise _unavailable("validated raw prefix testimony is unavailable")
     validated_events: List[Dict[str, object]] = []
-    for event in events:
+    for index, event in enumerate(events):
         try:
             validated_events.append(validate_record(
                 dict(event) if isinstance(event, Mapping) else event,
                 tenant,
-                frozenset({
-                    "message_envelope", "message_retracted",
-                    "bus_epoch_roll_receipt",
-                    "ledger_repair_receipt",
-                }),
+                WAKE_EVENT_KINDS,
                 integrity=True,
             ))
         except (IntegrityFailure, ProtocolRefusal, KeyError, TypeError, ValueError) as exc:
-            raise _unavailable("event or retraction testimony is malformed") from exc
+            raise _unavailable(
+                _malformed_event_detail(
+                    index, event, getattr(exc, "code", type(exc).__name__)
+                )
+            ) from exc
     try:
         from .events import validate_event_records
         validate_event_records(validated_events)
     except IntegrityFailure as exc:
-        raise _unavailable("event or retraction testimony is semantically invalid") from exc
+        raise _unavailable(
+            f"{_EVENT_LEDGER} testimony is semantically invalid"
+            f" ({getattr(exc, 'code', type(exc).__name__)})"
+        ) from exc
     event_by_id: Dict[str, Mapping[str, object]] = {}
     ordered: List[str] = []
     retracted = set()
-    for validated_event in validated_events:
+    for index, validated_event in enumerate(validated_events):
         kind = validated_event["kind"]
         if kind == "message_envelope":
             item_id = validated_event["id"]
@@ -343,10 +399,12 @@ def project_wake_items(
             if not isinstance(item_id, str) or item_id not in event_by_id or item_id in retracted:
                 raise _unavailable("retractions do not follow one current message")
             retracted.add(item_id)
-        elif kind in {"bus_epoch_roll_receipt", "ledger_repair_receipt"}:
+        elif kind in _UNINTERPRETED_EVENT_KINDS:
             continue
         else:
-            raise _unavailable("event prefix contains an unknown kind")
+            raise _unavailable(
+                _malformed_event_detail(index, validated_event, "record_kind_invalid")
+            )
     matching = [
         item_id for item_id in ordered
         if event_by_id[item_id].get("recipient") == node

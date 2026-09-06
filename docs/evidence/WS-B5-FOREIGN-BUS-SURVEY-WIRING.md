@@ -31,7 +31,7 @@ After the train lands, shared CLI reconciliation adds `floati survey` with:
 - repeatable explicit search paths;
 - fixed read-only Codex hook and target inputs selected by the ruled installer;
 - a DRAFT wizard offer that runs only after the operator accepts it;
-- JSON artifact output and Fable-gated human copy;
+- JSON artifact output and the architect-gated human copy;
 - final static help and bundle-manifest regeneration.
 
 No live foreign bus was deeply inspected on this lane. The live machine names
