@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/prep-clear-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "node_id",
+    "workspace",
+    "workspace_map_digest",
+    "acting_session_id",
+    "pushed_tip",
+    "workspace_dirty",
+    "unpushed_commit_count",
+    "complement",
+    "envelope_id",
+    "envelope_recipient",
+    "released_claim_receipt_id",
+    "wake_release_outcome",
+    "wake_release_receipt_id",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^prep-clear-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "prep_clear_receipt"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "workspace": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
+    "workspace_map_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "acting_session_id": {"type": "string", "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true},
+    "pushed_tip": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "workspace_dirty": {"type": "boolean"},
+    "unpushed_commit_count": {"type": "integer", "minimum": 0},
+    "complement": {"type": ["string", "null"], "minLength": 1, "maxLength": 1024, "x-floati-terminal-unsafe": true},
+    "envelope_id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "envelope_recipient": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "released_claim_receipt_id": {"type": "string", "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "wake_release_outcome": {"enum": ["released", "already_released"]},
+    "wake_release_receipt_id": {"type": ["string", "null"], "pattern": "^wake-control-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"wake_release_outcome": {"const": "already_released"}}},
+      "then": {"properties": {"wake_release_receipt_id": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"wake_release_outcome": {"const": "released"}}},
+      "then": {"properties": {"wake_release_receipt_id": {"type": "string"}}}
+    },
+    {
+      "if": {"properties": {"workspace_dirty": {"const": true}}},
+      "then": {"properties": {"complement": {"type": "string"}}}
+    }
+  ]
+}

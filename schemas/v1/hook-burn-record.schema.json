@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/hook-burn-record.schema.json",
+  "title": "Floati Hook Burn Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "release_id",
+    "hook_command_sha256",
+    "hook_group_index",
+    "hooks_path_shape",
+    "invocation_source",
+    "observed_exit_code",
+    "observed_effects",
+    "capture_sha256",
+    "unknown_fields"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^hook-burn-record-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "hook_burn_record"},
+    "release_id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "hook_command_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hook_group_index": {"type": "integer", "minimum": 0, "maximum": 1023},
+    "hooks_path_shape": {"type": "string", "minLength": 3, "maxLength": 512, "pattern": "^<[a-z][a-z0-9-]{0,62}>(?:/[A-Za-z0-9._-]{1,255}){1,32}$"},
+    "invocation_source": {"enum": ["harness_executed", "live_codex_stop"]},
+    "observed_exit_code": {"type": "integer", "minimum": 0, "maximum": 255},
+    "observed_effects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {
+        "enum": [
+          "bus_path_created",
+          "bus_path_modified",
+          "bus_path_removed",
+          "no_observable_effect",
+          "stderr_diagnostic",
+          "stdout_emitted",
+          "stop_decision_blocked"
+        ]
+      }
+    },
+    "capture_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "unknown_fields": {
+      "type": "array",
+      "maxItems": 1,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"enum": ["capture_sha256"]}
+    }
+  }
+}

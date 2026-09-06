@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, 
 
 from .errors import ProtocolRefusal
 from .multi_bus_chart import DeclaredRoots
+from .root import validate_identifier
 
 
 _MAX_JSON_BYTES = 4 * 1024 * 1024
@@ -95,21 +96,112 @@ def _shape(path: Path) -> Optional[str]:
     return None
 
 
+def undeclared_buses_in_scope(root: Path) -> Tuple[Tuple[str, str], ...]:
+    """Bus-shaped immediate siblings of this root. Never reads ledgers. Never walks home."""
+    ours = Path(root).resolve()
+    try:
+        parent = _search_directory(ours.parent)
+        candidates = ForeignBusSurvey._candidates((parent,))
+    except ProtocolRefusal:
+        return ()
+    found: List[Tuple[str, str]] = []
+    for candidate in candidates:
+        if candidate == ours:
+            continue
+        apparent = _shape(candidate)
+        if apparent is None:
+            continue
+        found.append((str(candidate), apparent))
+    return tuple(found)
+
+
+def nested_buses_out_of_scope(root: Path) -> Tuple[Tuple[str, str], ...]:
+    """Bus-shaped grandchildren under non-bus siblings. Depth two, never home, never ledgers."""
+    ours = Path(root).resolve()
+    try:
+        parent = _search_directory(ours.parent)
+        children = list(os.scandir(parent))
+    except (ProtocolRefusal, OSError):
+        return ()
+    nested: List[Tuple[str, str]] = []
+    for child in children:
+        try:
+            if not child.is_dir(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        child_path = (parent / child.name).resolve()
+        if child_path == ours or _shape(child_path) is not None:
+            continue
+        try:
+            grandchildren = list(os.scandir(child_path))
+        except OSError:
+            continue
+        for grandchild in grandchildren:
+            try:
+                if not grandchild.is_dir(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            grand_path = (child_path / grandchild.name).resolve()
+            apparent = _shape(grand_path)
+            if apparent is None:
+                continue
+            nested.append((str(grand_path), apparent))
+    return tuple(nested)
+
+
 class ForeignBusSurvey:
     """Survey only one bounded request; construction performs no observation."""
 
     def __init__(
         self,
-        declared_roots: os.PathLike[str] | str,
+        declared_roots: os.PathLike[str] | str | None = None,
         *,
         search_paths: Sequence[os.PathLike[str] | str],
         hooks_path: Optional[os.PathLike[str] | str],
         targets_paths: Sequence[os.PathLike[str] | str],
+        live_root: Optional[os.PathLike[str] | str] = None,
     ) -> None:
-        self.declared_roots = DeclaredRoots(declared_roots)
+        if (declared_roots is None) == (live_root is None):
+            raise ProtocolRefusal(
+                "survey_declared_roots_required",
+                "survey requires exactly one of a declared-roots file or a live root",
+            )
+        self.declared_roots = (
+            None if declared_roots is None else DeclaredRoots(declared_roots)
+        )
+        self._live_root = None if live_root is None else Path(live_root)
         self.search_path_args = tuple(search_paths)
         self.hooks_path_arg = hooks_path
         self.targets_path_args = tuple(targets_paths)
+
+    @classmethod
+    def around_live_root(cls, root: os.PathLike[str] | str) -> "ForeignBusSurvey":
+        """Survey the parent of one live root without a declared-roots file."""
+        return cls(
+            None,
+            search_paths=(),
+            hooks_path=None,
+            targets_paths=(),
+            live_root=root,
+        )
+
+    def _live_declarations(self) -> Tuple[Dict[str, Any], ...]:
+        if self._live_root is None:
+            raise ProtocolRefusal(
+                "survey_declared_roots_required",
+                "survey requires exactly one of a declared-roots file or a live root",
+            )
+        root = _search_directory(self._live_root)
+        return (
+            {
+                "bus_id": validate_identifier(root.name, "direct_home_tenant"),
+                "root": root,
+                "architect_node": "survey",
+                "downstream": (),
+            },
+        )
 
     @staticmethod
     def _our_workspaces(declarations: Sequence[Mapping[str, Any]]) -> Set[str]:
@@ -215,7 +307,10 @@ class ForeignBusSurvey:
         return bindings
 
     def run(self) -> Dict[str, Any]:
-        declarations = self.declared_roots.load()
+        if self.declared_roots is None:
+            declarations = self._live_declarations()
+        else:
+            declarations = self.declared_roots.load()
         declared_paths = {Path(declaration["root"]) for declaration in declarations}
         search_paths = self._requested_search_paths(declarations)
         workspaces = self._our_workspaces(declarations)

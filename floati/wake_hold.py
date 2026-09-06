@@ -119,8 +119,8 @@ class WakeAttemptLedger:
         if message_worker_session_id is not None:
             SparseCursor._session_component(message_worker_session_id)
         key = _validate_wake_key(idempotency_key)
-        if outcome not in {"woke", "refused"}:
-            raise ProtocolRefusal("wake_outcome_invalid", "wake outcome must be woke or refused")
+        if outcome not in {"woke", "queued", "refused"}:
+            raise ProtocolRefusal("wake_outcome_invalid", "wake outcome must be woke, queued, or refused")
         if (
             not isinstance(item_ids, (list, tuple)) or not 1 <= len(item_ids) <= 1000
             or not all(isinstance(item, str) and item for item in item_ids)
@@ -175,7 +175,7 @@ class WakeAttemptLedger:
             recorded_outcome = "refused"
             recorded_reason = "wake_envelope_not_owned"
 
-        if recorded_outcome == "woke":
+        if recorded_outcome in {"woke", "queued"}:
             delivery_path = SparseCursor(self.root)._delivery_relative_path_for(
                 node, worker_session_id=message_worker_session_id,
             )

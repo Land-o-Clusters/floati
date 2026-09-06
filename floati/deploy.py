@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .errors import IntegrityFailure, ProtocolRefusal
+from .errors import DEPLOY_CURRENCY_REMEDY, IntegrityFailure, ProtocolRefusal
 from .git_process import fixed_git_command, fixed_git_environment, is_shallow_repository
 from .installer_shadow import enumerate_installer_shadow
 from .manifest import MANIFEST_NAME, verify_manifest
@@ -80,12 +80,17 @@ def _git(
         raise ProtocolRefusal(
             "deployment_currency_unavailable",
             f"git could not inspect{subject}: {exc}",
+            remedy=DEPLOY_CURRENCY_REMEDY,
         ) from exc
     if result.returncode != 0:
         detail = result.stderr.strip() or "git inspection failed"
         if inspected_ref is not None:
             detail = f"git could not inspect ref {inspected_ref}: {detail}"
-        raise ProtocolRefusal("deployment_currency_unavailable", detail)
+        raise ProtocolRefusal(
+            "deployment_currency_unavailable",
+            detail,
+            remedy=DEPLOY_CURRENCY_REMEDY,
+        )
     return result.stdout.strip()
 
 
@@ -465,6 +470,7 @@ class DeploymentWriter:
             raise ProtocolRefusal(
                 "deployment_currency_unavailable",
                 "source tree is not clean",
+                remedy=DEPLOY_CURRENCY_REMEDY,
             )
         head = _git(
             source,
@@ -484,6 +490,7 @@ class DeploymentWriter:
             raise ProtocolRefusal(
                 "deployment_currency_unavailable",
                 f"HEAD {head} is not {self.ref} ({target})",
+                remedy=DEPLOY_CURRENCY_REMEDY,
             )
         return head
 

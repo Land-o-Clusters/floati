@@ -291,6 +291,22 @@ class UninstallWriter:
         return sorted(foreign)
 
     @staticmethod
+    def _retained_records(destination: Path, removal_paths: Sequence[str]) -> List[str]:
+        removal = set(removal_paths)
+        metadata = destination / INSTALL_METADATA_DIRECTORY
+        if not metadata.exists():
+            return []
+        retained: List[str] = []
+        for path in metadata.rglob("*"):
+            if not (path.is_file() or path.is_symlink()):
+                continue
+            relative = path.relative_to(destination).as_posix()
+            if relative in removal:
+                continue
+            retained.append(relative)
+        return sorted(retained)
+
+    @staticmethod
     def _remove_empty_owned_directories(destination: Path, entries: Sequence[str]) -> None:
         candidates = set()
         for value in entries:
@@ -311,6 +327,9 @@ class UninstallWriter:
         owned_paths = [entry["path"] for entry in entries]
         receipts = [*entries, metadata_receipt]
         foreign = self._foreign_files(destination, owned_paths)
+        retained = self._retained_records(
+            destination, [receipt["path"] for receipt in receipts]
+        )
         if self.dry_run:
             return {
                 "destination": str(destination),
@@ -318,6 +337,7 @@ class UninstallWriter:
                 "removal_receipts": receipts,
                 "removed_count": 0,
                 "foreign_preserved": foreign,
+                "retained_records": retained,
                 "data_retention_notice": _DATA_NOTICE,
             }
 
@@ -355,6 +375,9 @@ class UninstallWriter:
             "removal_receipts": receipts,
             "removed_count": len(receipts),
             "foreign_preserved": foreign,
+            "retained_records": self._retained_records(
+                destination, [receipt["path"] for receipt in receipts]
+            ),
             "data_retention_notice": _DATA_NOTICE,
         }
 

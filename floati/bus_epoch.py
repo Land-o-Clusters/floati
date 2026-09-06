@@ -1789,6 +1789,6 @@ def register_cli(commands: argparse._SubParsersAction) -> None:
     operations = epoch.add_subparsers(dest="epoch_command", required=True)
     roll = operations.add_parser("roll")
     roll.add_argument("--root", required=True)
-    roll.add_argument("--as", dest="actor", required=True)
-    roll.add_argument("--idempotency-key", required=True)
+    roll.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    roll.add_argument("--idempotency-key", required=True, metavar='KEY')
     roll.set_defaults(handler=_roll)

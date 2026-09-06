@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, TYPE_CHECKING
 
 from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
+from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact_records
 from .node_wizard import NodeAddPlan, NodeRetirePlan
 from .provider_switch import ProviderSwitchPlan
-from .registry import REGISTRY_KINDS, Registry
+from .registry import REGISTRY_KINDS, Registry, utc_now
 from .role_assignment import RoleAssignmentPlan
 from .root import FloatiRoot, validate_identifier
 from .sandbox_probe import probe_write_set
 from .sandbox_remedy import remedy_for
 from .seat_declaration import SeatDeclaration, WorkspaceBinding
+
+if TYPE_CHECKING:
+    from .role_templates import RoleTemplate
+
+
+# The remedy every architect-count refusal names (ARCH-0/ARCH-1).
+ARCHITECT_REMEDY = "run role transfer-architect --to NODE to name the one active architect"
 
 
 class RegistryAdminBackend:
@@ -241,14 +249,255 @@ class RegistryAdminBackend:
         return self._commit(plan.records, decide)
 
     def current_architect(self) -> Dict[str, Any]:
+        """Resolve the one active architect from latest role records (ARCH-0).
+
+        The entry ``role`` field is harness vocabulary; a node's role is its
+        latest ``registry_role_record`` (ruling 2026-09-05, ARCH-1). Zero or
+        more than one architect refuses, naming the transfer verb.
+        """
+
         architects = []
         for node in self.registry.active_node_ids():
-            record = self.registry.require_active(node)
-            if str(record.get("role", "")).casefold() == "architect":
-                architects.append(record)
+            record = self._latest("registry_role_record", node)
+            if (
+                record is not None
+                and record.get("state") == "active"
+                and str(record.get("template_role", "")).casefold() == "architect"
+            ):
+                architects.append(node)
         if len(architects) != 1:
-            raise ProtocolRefusal("role_architect_invalid", "fleet must have one active architect")
-        return dict(architects[0])
+            raise ProtocolRefusal(
+                "role_architect_invalid",
+                "fleet must have one active architect",
+                remedy=ARCHITECT_REMEDY,
+            )
+        return self.registry.require_active(architects[0])
+
+    def transfer_architect(
+        self,
+        *,
+        to: str,
+        idempotency_key: str,
+        fallback_template: "RoleTemplate",
+    ) -> Dict[str, Any]:
+        """Move the architect role in the role-record vocabulary (ARCH-1).
+
+        One transfer commits, under one idempotency key and one transaction:
+        the vacated node's next role record, the target's architect role
+        record, and a `registry_role_transfer` receipt naming both nodes,
+        both before/after roles, and the two record ids. The composed state
+        is checked inside the transaction before any record is written; a
+        result of 0 or >1 architects refuses and writes nothing. The entry
+        `role` field is never touched. A replay under the same key returns
+        the first receipt as a no-op.
+        """
+
+        for record in self._records():
+            if (
+                record.get("kind") == "registry_role_transfer"
+                and record.get("idempotency_key") == idempotency_key
+            ):
+                return {
+                    "receipt": record,
+                    "replayed": True,
+                    "replayed_receipt_id": record["id"],
+                }
+
+        target_node = validate_identifier(to, "node")
+        vacated_entry = self.current_architect()
+        vacated_node = str(vacated_entry["node_id"])
+        if target_node == vacated_node:
+            raise ProtocolRefusal(
+                "role_transfer_invalid",
+                "the named node already holds the architect role; name a different active node",
+            )
+        self.active_node(target_node)
+        vacated_role = self.role_record(vacated_node)
+        if str(vacated_role.get("template_role", "")).casefold() != "architect":
+            raise ProtocolRefusal(
+                "role_transfer_invalid",
+                "the current architect's latest role record is not the architect role",
+            )
+        target_latest = self._latest("registry_role_record", target_node)
+        to_role_before = None if target_latest is None else str(target_latest["template_role"])
+        vacated_next = self._role_after_vacating(
+            vacated_role, target_node=target_node, fallback_template=fallback_template
+        )
+
+        vacated_record: Dict[str, Any] = {
+            "schema_version": 0,
+            "id": "registry-role-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": utc_now(),
+            "kind": "registry_role_record",
+            "node_id": vacated_node,
+            "template_role": vacated_next["template_role"],
+            "template_version": vacated_next["template_version"],
+            "template_sha256": vacated_next["template_sha256"],
+            "answers": vacated_next["answers"],
+            "state": "active",
+            "predecessor_role_record_id": vacated_role["id"],
+        }
+        target_record: Dict[str, Any] = {
+            "schema_version": 0,
+            "id": "registry-role-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": utc_now(),
+            "kind": "registry_role_record",
+            "node_id": target_node,
+            "template_role": vacated_role["template_role"],
+            "template_version": vacated_role["template_version"],
+            "template_sha256": vacated_role["template_sha256"],
+            "answers": dict(vacated_role["answers"]),
+            "state": "active",
+            "predecessor_role_record_id": (
+                None if target_latest is None else target_latest["id"]
+            ),
+        }
+        receipt: Dict[str, Any] = {
+            "schema_version": 0,
+            "id": "registry-role-transfer-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": utc_now(),
+            "kind": "registry_role_transfer",
+            "idempotency_key": idempotency_key,
+            "from_node": vacated_node,
+            "to_node": target_node,
+            "from_role_before": str(vacated_role["template_role"]),
+            "from_role_after": str(vacated_next["template_role"]),
+            "to_role_before": to_role_before,
+            "to_role_after": str(vacated_role["template_role"]),
+            "target_role_record_id": target_record["id"],
+            "vacated_role_record_id": vacated_record["id"],
+            "state": "complete",
+        }
+
+        def decide(existing: list[Dict[str, Any]], records: Sequence[Dict[str, Any]]) -> None:
+            if [row.get("kind") for row in records] != [
+                "registry_role_record", "registry_role_record", "registry_role_transfer",
+            ]:
+                raise ProtocolRefusal(
+                    "role_transfer_preview_invalid", "transfer preview shape is invalid"
+                )
+            for row in existing:
+                if (
+                    row.get("kind") == "registry_role_transfer"
+                    and row.get("idempotency_key") == idempotency_key
+                ):
+                    raise ProtocolRefusal(
+                        "idempotency_conflict",
+                        f"transfer key already names receipt {row['id']}",
+                    )
+            entry_latest: Dict[str, Dict[str, Any]] = {}
+            existing_role_latest: Dict[str, Dict[str, Any]] = {}
+            composed_role_latest: Dict[str, Dict[str, Any]] = {}
+            for row in existing:
+                if row.get("kind") == "registry_entry":
+                    entry_latest[str(row["node_id"])] = row
+                elif row.get("kind") == "registry_role_record":
+                    existing_role_latest[str(row["node_id"])] = row
+            composed_role_latest.update(existing_role_latest)
+            for row in records:
+                if row.get("kind") == "registry_role_record":
+                    composed_role_latest[str(row["node_id"])] = row
+
+            def architects(nodes_latest: Mapping[str, Dict[str, Any]]) -> list[str]:
+                return sorted(
+                    node
+                    for node, entry in entry_latest.items()
+                    if entry.get("state") == "active"
+                    and (nodes_latest.get(node, {}).get("state") == "active")
+                    and str(
+                        nodes_latest.get(node, {}).get("template_role", "")
+                    ).casefold()
+                    == "architect"
+                )
+
+            if architects(existing_role_latest) != [vacated_node]:
+                raise ProtocolRefusal(
+                    "role_architect_invalid",
+                    "fleet must have one active architect",
+                    remedy=ARCHITECT_REMEDY,
+                )
+            if architects(composed_role_latest) != [target_node]:
+                raise ProtocolRefusal(
+                    "role_architect_invalid",
+                    "the transfer would not leave exactly one active architect",
+                    remedy=ARCHITECT_REMEDY,
+                )
+            if vacated_record["predecessor_role_record_id"] != (
+                existing_role_latest.get(vacated_node, {}) or {}
+            ).get("id"):
+                raise ProtocolRefusal(
+                    "role_transfer_preview_invalid", "vacated predecessor is stale"
+                )
+            expected_target_predecessor = existing_role_latest.get(target_node)
+            expected_target_predecessor_id = (
+                None if expected_target_predecessor is None else expected_target_predecessor["id"]
+            )
+            if target_record["predecessor_role_record_id"] != expected_target_predecessor_id:
+                raise ProtocolRefusal(
+                    "role_transfer_preview_invalid", "target predecessor is stale"
+                )
+            if (
+                receipt["vacated_role_record_id"] != vacated_record["id"]
+                or receipt["target_role_record_id"] != target_record["id"]
+                or receipt["from_node"] != vacated_node
+                or receipt["to_node"] != target_node
+            ):
+                raise ProtocolRefusal(
+                    "role_transfer_preview_invalid", "transfer receipt binding is invalid"
+                )
+
+        self._commit((vacated_record, target_record, receipt), decide)
+        return {"receipt": receipt, "replayed": False}
+
+    def _role_after_vacating(
+        self,
+        vacated_role: Dict[str, Any],
+        *,
+        target_node: str,
+        fallback_template: "RoleTemplate",
+    ) -> Dict[str, Any]:
+        """Resolve the role the vacated node holds after handing over."""
+
+        prior: Optional[Dict[str, Any]] = None
+        for record in self._records():
+            if (
+                record.get("kind") == "registry_role_record"
+                and record.get("node_id") == vacated_role["node_id"]
+                and str(record.get("template_role", "")).casefold() != "architect"
+                and record.get("id") != vacated_role["id"]
+            ):
+                prior = record
+        if prior is not None:
+            return {
+                "template_role": prior["template_role"],
+                "template_version": prior["template_version"],
+                "template_sha256": prior["template_sha256"],
+                "answers": dict(prior["answers"]),
+            }
+        inherited = dict(vacated_role.get("answers") or {})
+        missing = sorted(
+            key for key in ("repo", "never_touch") if not str(inherited.get(key) or "").strip()
+        )
+        if missing:
+            raise ProtocolRefusal(
+                "role_transfer_invalid",
+                "cannot compose the shipped default role; the architect record lacks answers: "
+                + ", ".join(missing),
+            )
+        answers = {
+            "repo": str(inherited["repo"]),
+            "never_touch": str(inherited["never_touch"]),
+            "reports_to": target_node,
+        }
+        return {
+            "template_role": fallback_template.role,
+            "template_version": fallback_template.template_version,
+            "template_sha256": fallback_template.digest,
+            "answers": answers,
+        }
 
     def commit_role(self, plan: RoleAssignmentPlan) -> Dict[str, Any]:
         def decide(existing: list[Dict[str, Any]], records: Sequence[Dict[str, Any]]) -> None:

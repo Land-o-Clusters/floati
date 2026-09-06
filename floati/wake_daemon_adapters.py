@@ -469,7 +469,8 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
         digest: str,
         session_id: str,
     ) -> WakeAdapterResult:
-        return WakeAdapterResult("woke", None, exit_code, digest)
+        # The pinned argv contract is unchanged. Acceptance does not observe execution.
+        return WakeAdapterResult("queued", None, exit_code, digest)
 
 
 class CursorResumeWakeAdapter(_BoundWakeAdapter):

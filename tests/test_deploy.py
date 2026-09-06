@@ -628,6 +628,16 @@ class DeploymentWriterTests(unittest.TestCase):
         self.assertFalse((destination / "scripts/floati-codex-wait").exists())
         self.assertEqual(b"durable fleet evidence\n", ledger.read_bytes())
         self.assertIn("demo-fleet/registry/entries.jsonl", removed["foreign_preserved"])
+        journal = destination / ".floati-install" / "wiring-journal.v1.jsonl"
+        self.assertTrue(journal.is_file())
+        self.assertIn(
+            ".floati-install/wiring-journal.v1.jsonl",
+            removed["retained_records"],
+        )
+        self.assertNotIn(
+            ".floati-install/wiring-journal.v1.jsonl",
+            removed["foreign_preserved"],
+        )
 
     def test_first_install_refuses_found_shadow_before_destination_creation(self) -> None:
         """A known preceding executable must block writes before the destination exists."""

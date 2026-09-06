@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -149,6 +151,106 @@ class DeclaredRoots:
                     f"downstream bus is not declared: {sorted(unknown)[0]}",
                 )
         return tuple(sorted(entries, key=lambda item: item["bus_id"]))
+
+    def save(self, entries: Sequence[Mapping[str, Any]]) -> Tuple[Dict[str, Any], ...]:
+        """Rewrite the declared-roots file after schema validation and dedup."""
+
+        payload = {
+            "schema_version": 0,
+            "roots": [
+                {
+                    "bus_id": str(entry["bus_id"]),
+                    "root": str(entry["root"]),
+                    "architect_node": str(entry["architect_node"]),
+                    "downstream": [str(item) for item in entry["downstream"]],
+                }
+                for entry in entries
+            ],
+        }
+        encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        descriptor = -1
+        temporary = ""
+        try:
+            if not self.path.is_absolute():
+                raise ProtocolRefusal(
+                    "declared_roots_absolute_required",
+                    "declared-roots file must be absolute",
+                )
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=f".{self.path.name}.", dir=self.path.parent
+            )
+            with os.fdopen(descriptor, "wb", closefd=True) as stream:
+                descriptor = -1
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            loaded = DeclaredRoots(temporary).load()
+            os.replace(temporary, self.path)
+            temporary = ""
+            return loaded
+        except OSError as exc:
+            raise ProtocolRefusal(
+                "declared_roots_unavailable", "declared-roots file is unavailable"
+            ) from exc
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            if temporary:
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
+
+    def add_root(
+        self,
+        *,
+        bus_id: str,
+        root: str,
+        architect_node: str,
+        downstream: Sequence[str] = (),
+    ) -> Dict[str, Any]:
+        existing = [self._plain(entry) for entry in self.load()]
+        existing.append(
+            {
+                "bus_id": bus_id,
+                "root": root,
+                "architect_node": architect_node,
+                "downstream": list(downstream),
+            }
+        )
+        return self._receipt("add-root", bus_id, self.save(existing))
+
+    def remove_root(self, *, bus_id: str) -> Dict[str, Any]:
+        node = validate_identifier(bus_id, "bus")
+        existing = [self._plain(entry) for entry in self.load()]
+        kept = [entry for entry in existing if entry["bus_id"] != node]
+        if len(kept) == len(existing):
+            raise ProtocolRefusal(
+                "declared_root_unknown", f"declared bus is not present: {node}"
+            )
+        return self._receipt("remove-root", node, self.save(kept))
+
+    @staticmethod
+    def _plain(entry: Mapping[str, Any]) -> Dict[str, Any]:
+        return {
+            "bus_id": str(entry["bus_id"]),
+            "root": str(entry["root"]),
+            "architect_node": str(entry["architect_node"]),
+            "downstream": list(entry["downstream"]),
+        }
+
+    def _receipt(
+        self, operation: str, bus_id: str, loaded: Sequence[Mapping[str, Any]]
+    ) -> Dict[str, Any]:
+        digest = hashlib.sha256(self.path.read_bytes()).hexdigest()
+        return {
+            "operation": operation,
+            "bus_id": validate_identifier(bus_id, "bus"),
+            "declared_roots": str(self.path),
+            "roots": [str(entry["bus_id"]) for entry in loaded],
+            "sha256": digest,
+        }
 
 
 class MultiBusHarborChart:

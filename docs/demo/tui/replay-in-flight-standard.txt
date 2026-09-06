@@ -1,0 +1,21 @@
+ROOT=<scratch>/replay
+$ floati log --root $ROOT --replay --speed 4
+
+FLOATI // FLIGHT RECORDER
+[####################] 7/7
+
+[38;5;208m◆[0m +0000.000s  CLAIM    WORK    builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 claim
+[38;5;208m◆[0m +0007.000s  COMPLETE WORK    builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 complete
+│ +0007.000s  CLAIM    WORKER  builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 claim
+│ +0007.000s  TURN     WORKER  builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 spawn
+│ +0007.000s  TURN     WORKER  builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 drive
+│ +0007.000s  TURN     WORKER  builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 bind_artifact
+│ +0007.000s  COMPLETE WORKER  builder-claude work-01a06fdaeb2f7e1095410870b8ec2858 complete
+
+[38;5;208m      ⊙[0m
+[38;5;208m      │[0m
+[38;5;208m     ╱ ╲[0m
+[38;5;208m    ╱[0m[38;5;245m───[0m[38;5;208m╲[0m
+[38;5;208m   ╱     ╲[0m
+[38;5;245m ~~~~~~~~~~~[0m
+REPLAY COMPLETE

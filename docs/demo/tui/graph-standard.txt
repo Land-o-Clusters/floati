@@ -1,0 +1,23 @@
+ROOT=<scratch>/graph
+$ floati graph --root $ROOT
+
+FLOATI // HARBOR CHART
+tenant: graph
+
+┌────────────────────┐
+│ architect-codex    │
+│ ACTIVE · 0 WORKERS │
+└────────────────────┘
+
+┌────────────────────┐
+│ builder-claude     │
+│ ACTIVE · 0 WORKERS │
+└────────────────────┘
+
+┌────────────────────┐
+│ reviewer-opencode  │
+│ ACTIVE · 0 WORKERS │
+└────────────────────┘
+
+TRAFFIC
+traffic: 0 directed pairs

@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact
+from .bus_epoch import shared_epoch_operation
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
 
@@ -531,13 +532,22 @@ class CodexWaitSessionLedger:
             )
         return value
 
-    def arm(
+    @shared_epoch_operation
+    def arm(self, binding, consent, session_id, *, idempotency_key, take_over=False):
+        from .wake_hold import wake_coordination_guard
+        with wake_coordination_guard(self.root, binding.node_id):
+            return self._arm_already_guarded(binding, consent, session_id,
+                idempotency_key=idempotency_key, take_over=take_over)
+
+    def _arm_already_guarded(
         self,
         binding: WorkspaceBinding,
         consent: Dict[str, object],
         session_id: object,
         *,
         idempotency_key: str,
+        take_over: bool = False,
+        require_current: bool = False,
     ) -> Dict[str, object]:
         node, session = self._identity(binding, consent, session_id)
         key = self._key(idempotency_key)
@@ -545,6 +555,18 @@ class CodexWaitSessionLedger:
         def decide(
             prior: list[Dict[str, object]],
         ) -> tuple[Dict[str, object], Optional[Dict[str, object]]]:
+            matching = self._matching(prior, binding)
+            current = matching[-1] if matching else None
+            if current is not None and current["acting_session_id"] != session and not take_over:
+                from .wake_control import is_session_paused
+                if not is_session_paused(self.root, node, str(current["acting_session_id"])):
+                    claimant = str(current["acting_session_id"])
+                    raise ProtocolRefusal(
+                        "seat_board_claim_contested",
+                        "claimant " + claimant +
+                        " owns the workspace; pass --take-over to replace it",
+                        "pass --take-over to replace claimant " + claimant,
+                    )
             for existing in prior:
                 if existing.get("idempotency_key") != key:
                     continue
@@ -554,6 +576,9 @@ class CodexWaitSessionLedger:
                     and existing.get("acting_session_id") == session
                     and existing.get("consent_receipt_id") == consent["id"]
                 ):
+                    if require_current and (current is None or current["id"] != existing["id"]):
+                        raise ProtocolRefusal("seat_board_authority_superseded",
+                            "this arm key was superseded; inspect the current claim and use a new explicit boarding key")
                     return existing, None
                 raise ProtocolRefusal(
                     "codex_wait_session_idempotency_conflict",
@@ -588,7 +613,13 @@ class CodexWaitSessionLedger:
             allowed_kinds=set(self._KINDS),
         )
 
-    def participate(
+    @shared_epoch_operation
+    def participate(self, binding, consent, session_id):
+        from .wake_hold import wake_coordination_guard
+        with wake_coordination_guard(self.root, binding.node_id):
+            return self._participate_already_guarded(binding, consent, session_id)
+
+    def _participate_already_guarded(
         self,
         binding: WorkspaceBinding,
         consent: Dict[str, object],

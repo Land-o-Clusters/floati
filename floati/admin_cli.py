@@ -26,7 +26,7 @@ from .node_projections import (
 from .node_wizard import NodeWizard
 from .provider_switch import ProviderSwitchWizard
 from .role_assignment import RoleStepWizard
-from .role_templates import RoleTemplate, load_shipped_role_templates
+from .role_templates import RoleTemplate
 from .root import FloatiRoot, resolve_command_root
 from .workspace_layout import register_node, retire_node
 from .state_receipts import record_state_flush
@@ -34,6 +34,11 @@ from .state_receipts import record_state_flush
 
 HandlerResult = Tuple[str, Dict[str, Any], int]
 OK = 0
+_NODE_ADD_PLAN_REMEDY = (
+    "pass --root ROOT --plan FILE with an absolute JSON object "
+    "{node, harness, lifetime, lease_minutes when temporary, "
+    "and optional survey and adopt booleans}"
+)
 _NODE_ADD_FULLY_FLAGGED_REMEDY = TUI_DOOR_COPY[
     "tui.door.node_add_fully_flagged_remedy"
 ]
@@ -43,8 +48,10 @@ def _root(path: str | None) -> FloatiRoot:
     return resolve_command_root(path, create=False)
 
 
-def _templates() -> Dict[str, RoleTemplate]:
-    return load_shipped_role_templates(Path(__file__).parents[1] / "roles" / "shipped")
+def _templates(root: FloatiRoot) -> Dict[str, RoleTemplate]:
+    from .role_library import RoleTemplateLibrary
+
+    return RoleTemplateLibrary(root).templates()
 
 
 def _previewed(result: Mapping[str, Any], preview: io.StringIO) -> Dict[str, Any]:
@@ -56,6 +63,92 @@ def _previewed(result: Mapping[str, Any], preview: io.StringIO) -> Dict[str, Any
             rows.append(json.loads(line[len(prefix) :]))
     evidence["preview_rows"] = rows
     return evidence
+
+
+def _reject_duplicate_plan_keys(pairs: Iterable[Tuple[str, Any]]) -> Dict[str, Any]:
+    from .errors import ProtocolRefusal
+
+    payload: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ProtocolRefusal(
+                "node_add_plan_invalid",
+                "plan must not repeat keys",
+                _NODE_ADD_PLAN_REMEDY,
+            )
+        payload[key] = value
+    return payload
+
+
+def _load_node_add_plan(path: str) -> Dict[str, Any]:
+    from .errors import ProtocolRefusal
+
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        raise ProtocolRefusal(
+            "node_add_plan_path_not_absolute",
+            "plan path must be absolute",
+            _NODE_ADD_PLAN_REMEDY,
+        )
+    try:
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ProtocolRefusal(
+                "node_add_plan_path_invalid",
+                "plan path must be a regular file",
+                _NODE_ADD_PLAN_REMEDY,
+            )
+        raw = json.loads(
+            candidate.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_plan_keys,
+        )
+    except ProtocolRefusal:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ProtocolRefusal(
+            "node_add_plan_invalid",
+            "plan must be one readable JSON object",
+            _NODE_ADD_PLAN_REMEDY,
+        ) from exc
+    if not isinstance(raw, dict):
+        raise ProtocolRefusal(
+            "node_add_plan_invalid",
+            "plan must be one JSON object",
+            _NODE_ADD_PLAN_REMEDY,
+        )
+    return raw
+
+
+def _node_add_from_plan(args: argparse.Namespace) -> HandlerResult:
+    from .errors import ProtocolRefusal
+
+    identity_flags = (args.node, args.harness, args.lifetime, args.lease_minutes)
+    tide_flags = (
+        args.tide_metric,
+        args.tide_threshold,
+        args.tide_action,
+        args.tide_idempotency_key,
+    )
+    if any(value is not None for value in identity_flags + tide_flags):
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "node add --plan cannot be combined with identity or tide flags",
+            _NODE_ADD_PLAN_REMEDY,
+        )
+    if args.root is None:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "node add --plan requires --root",
+            _NODE_ADD_PLAN_REMEDY,
+        )
+    root = _root(args.root)
+    preview = io.StringIO()
+    wizard = NodeWizard(
+        root,
+        RegistryAdminBackend(root, repository=Path.cwd()),
+        id_factory=uuid7_hex,
+    )
+    result = wizard.add_from_plan(_load_node_add_plan(args.plan), preview)
+    return "ok", _previewed(result, preview), OK
 
 
 def _register_node(args: argparse.Namespace) -> HandlerResult:
@@ -74,6 +167,7 @@ def _retire_node(args: argparse.Namespace) -> HandlerResult:
 
 
 def _node_add(args: argparse.Namespace) -> HandlerResult:
+    plan = getattr(args, "plan", None)
     required_values = (args.root, args.node, args.harness, args.lifetime)
     option_values = (
         args.lease_minutes,
@@ -82,6 +176,8 @@ def _node_add(args: argparse.Namespace) -> HandlerResult:
         args.tide_action,
         args.tide_idempotency_key,
     )
+    if plan is not None:
+        return _node_add_from_plan(args)
     interactive = not any(value is not None for value in required_values + option_values)
     if not interactive and not all(value is not None for value in required_values):
         from .errors import ProtocolRefusal
@@ -195,6 +291,15 @@ def _node_retire(args: argparse.Namespace) -> HandlerResult:
     return "ok", _previewed(result, preview), OK
 
 
+def _node_drain(args: argparse.Namespace) -> HandlerResult:
+    from .events import EventLog
+
+    result = EventLog(_root(args.root)).empty_inbox(
+        args.node, acting_session_id=args.session
+    )
+    return "ok", result, OK
+
+
 def _node_spawn(args: argparse.Namespace) -> HandlerResult:
     from .lane_scaling import LaneScalingService, load_role_profiles
 
@@ -239,12 +344,13 @@ def _answer_values(template: RoleTemplate, raw_answers: Iterable[str]) -> list[s
 
 def _node_role(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
-    templates = _templates()
+    templates = _templates(root)
     template = templates.get(args.template)
     if template is None:
         from .errors import ProtocolRefusal
 
-        raise ProtocolRefusal("role_template_unknown", "selected role template is not shipped")
+        raise ProtocolRefusal("role_template_unknown", "selected role template is not in this root library",
+            remedy="pass --template a role that role list shows for this --root")
     preview = io.StringIO()
     values = [args.node, args.template, *_answer_values(template, args.answers)]
     result = RoleStepWizard(
@@ -254,19 +360,98 @@ def _node_role(args: argparse.Namespace) -> HandlerResult:
 
 
 def _role_list(args: argparse.Namespace) -> HandlerResult:
-    _root(args.root)
-    return "ok", {"roles": sorted(_templates())}, OK
+    root = _root(args.root)
+    return "ok", {"roles": sorted(_templates(root))}, OK
 
 
 def _role_show(args: argparse.Namespace) -> HandlerResult:
-    _root(args.root)
-    templates = _templates()
+    root = _root(args.root)
+    templates = _templates(root)
     template = templates.get(args.role)
     if template is None:
         from .errors import ProtocolRefusal
 
-        raise ProtocolRefusal("role_template_unknown", "selected role template is not shipped")
+        raise ProtocolRefusal("role_template_unknown", "selected role template is not in this root library",
+            remedy="name a role that role list shows for this --root")
     return "ok", {"template": template.record, "sha256": template.digest}, OK
+
+
+def _node_prompts(args: argparse.Namespace) -> HandlerResult:
+    from .lifecycle_prompts import project_prompts
+
+    artifact = project_prompts(_root(args.root), args.as_node, args.harness, Path(args.out))
+    return "ok", artifact, OK
+
+
+
+def _role_write(args: argparse.Namespace) -> HandlerResult:
+    from .role_library import RoleTemplateLibrary
+    from .role_templates import _reject_duplicate_keys
+    from .errors import ProtocolRefusal
+    import re
+
+    library = RoleTemplateLibrary(_root(args.root))
+    key = args.idempotency_key
+    if args.role_command == 'new':
+        result = library.new(args.name, from_role=args.from_role, idempotency_key=key)
+    elif args.role_command == 'import':
+        result = library.import_file(Path(args.from_file), idempotency_key=key)
+    else:
+        changes = None
+        if args.set_fields is not None:
+            changes = {}
+            for supplied in args.set_fields:
+                field, separator, value = supplied.partition('=')
+                if not separator or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', field):
+                    raise ProtocolRefusal('role_template_invalid', 'edit fields require field=value',
+                        remedy='pass --set as field=value with a lowercase field name')
+                if field in changes:
+                    raise ProtocolRefusal('role_template_invalid', 'edit field is repeated: ' + field,
+                        remedy='pass each --set field at most once')
+                try:
+                    parsed = json.loads(value, object_pairs_hook=_reject_duplicate_keys,
+                        parse_constant=lambda value: (_ for _ in ()).throw(ValueError('non-finite number')))
+                except json.JSONDecodeError:
+                    if value[:1] in ('[', '{', '"'):
+                        raise ProtocolRefusal('role_template_invalid', field + ' must contain valid JSON',
+                            remedy='pass the --set value as valid JSON, or as bare text that does not start with a quote or bracket')
+                    parsed = value
+                except ValueError:
+                    raise ProtocolRefusal('role_template_invalid', field + ' must contain strict JSON',
+                        remedy='pass a finite JSON number and no duplicate object keys in the --set value')
+                changes[field] = parsed
+        result = library.edit(args.name, changes=changes,
+            from_file=Path(args.from_file) if args.from_file is not None else None,
+            idempotency_key=key)
+    return 'ok', result, OK
+
+
+def _role_validate(args: argparse.Namespace) -> HandlerResult:
+    from .role_library import RoleTemplateLibrary
+
+    template = RoleTemplateLibrary(_root(args.root)).validate_file(Path(args.from_file))
+    return 'ok', {'template': template.record, 'sha256': template.digest}, OK
+
+
+
+def _role_transfer_architect(args: argparse.Namespace) -> HandlerResult:
+    from .errors import ProtocolRefusal
+
+    root = _root(args.root)
+    templates = _templates(root)
+    fallback = templates.get("builder")
+    if fallback is None:
+        raise ProtocolRefusal(
+            "role_template_unknown",
+            "the shipped default role template is not shipped",
+            remedy="reinstall the governed bundle; roles/shipped must carry the builder template",
+        )
+    result = RegistryAdminBackend(root).transfer_architect(
+        to=args.to,
+        idempotency_key=args.idempotency_key,
+        fallback_template=fallback,
+    )
+    return "ok", result, OK
 
 
 def _quota_collect(args: argparse.Namespace) -> HandlerResult:
@@ -342,6 +527,10 @@ def _quota_provider_choices() -> Tuple[str, ...]:
 
 
 def _chart(args: argparse.Namespace) -> HandlerResult:
+    if not args.declared_roots:
+        from .errors import ProtocolRefusal
+
+        raise ProtocolRefusal("arguments_invalid", "chart requires --declared-roots")
     chart = MultiBusHarborChart(args.declared_roots)
     artifact = chart.artifact()
     if not args.json:
@@ -357,6 +546,21 @@ def _chart(args: argparse.Namespace) -> HandlerResult:
             sys.stderr.write(render_multi_bus_chart(artifact))
             sys.stderr.flush()
     return "ok", artifact, OK
+
+
+def _chart_add_root(args: argparse.Namespace) -> HandlerResult:
+    result = DeclaredRoots(args.declared_roots).add_root(
+        bus_id=args.bus_id,
+        root=args.root_path,
+        architect_node=args.architect_node,
+        downstream=args.downstream,
+    )
+    return "ok", result, OK
+
+
+def _chart_remove_root(args: argparse.Namespace) -> HandlerResult:
+    result = DeclaredRoots(args.declared_roots).remove_root(bus_id=args.bus_id)
+    return "ok", result, OK
 
 
 def _survey(args: argparse.Namespace) -> HandlerResult:
@@ -448,7 +652,7 @@ def _projection_source(args: argparse.Namespace, root: FloatiRoot) -> _LiveNodeP
 def _node_boot(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     projection = NodeBootProjection(
-        root, args.node, _projection_source(args, root), _templates()
+        root, args.node, _projection_source(args, root), _templates(root)
     )
     return "ok", projection.project(), OK
 
@@ -456,7 +660,7 @@ def _node_boot(args: argparse.Namespace) -> HandlerResult:
 def _node_teardown(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     projection = NodeTeardownProjection(
-        root, args.node, _projection_source(args, root), _templates()
+        root, args.node, _projection_source(args, root), _templates(root)
     )
     return "ok", projection.project(), OK
 
@@ -464,9 +668,28 @@ def _node_teardown(args: argparse.Namespace) -> HandlerResult:
 def _node_explain(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     projection = NodeExplainProjection(
-        root, args.node, _projection_source(args, root), _templates()
+        root, args.node, _projection_source(args, root), _templates(root)
     )
     return "ok", projection.project(), OK
+
+
+def _node_prep_clear(args: argparse.Namespace) -> HandlerResult:
+    from .prep_clear import PrepClear
+
+    receipt = PrepClear(_root(args.root)).clear(
+        args.actor,
+        Path(args.workspace),
+        args.session,
+        repo=args.repo,
+        doc=args.doc,
+        note=args.note,
+        idempotency_key=args.idempotency_key
+        or "prep-clear-cli-" + uuid7_hex(),
+        complement=args.complement,
+        to=args.to,
+        git_executable=args.git_executable,
+    )
+    return "ok", receipt, OK
 
 
 def _state_flush(args: argparse.Namespace) -> HandlerResult:
@@ -519,6 +742,14 @@ def _wake_status(args: argparse.Namespace) -> HandlerResult:
     return "ok", WakeController(_root(args.root)).status(args.actor, args.session), OK
 
 
+def _seat_board(args: argparse.Namespace) -> HandlerResult:
+    from .seat_board import SeatBoard
+    result = SeatBoard(_root(args.root)).board(args.actor, Path(args.workspace),
+        args.session,
+        idempotency_key=args.idempotency_key, take_over=args.take_over)
+    return "ok", result, OK
+
+
 def _wake_arm(args: argparse.Namespace) -> HandlerResult:
     from .codex_wait_contract import CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant
     from .errors import ProtocolRefusal
@@ -541,6 +772,7 @@ def _wake_arm(args: argparse.Namespace) -> HandlerResult:
         consent,
         args.session,
         idempotency_key=args.idempotency_key,
+        take_over=args.take_over,
     )
     return "ok", artifact, OK
 
@@ -789,29 +1021,29 @@ def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
 
 def _add_wake_identity(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
-    parser.add_argument("--as", dest="actor", required=True)
+    parser.add_argument("--as", dest="actor", required=True, metavar='NODE')
     parser.add_argument("--session", required=True)
 
 
 def _add_wake_daemon_identity(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
-    parser.add_argument("--as", dest="actor", required=True)
+    parser.add_argument("--as", dest="actor", required=True, metavar='NODE')
     parser.add_argument(
         "--harness", choices=("codex", "cursor", "grok-build", "zcode"), required=True
     )
 
 
 def _add_zcode_executable_declarations(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--zcode-node-executable")
-    parser.add_argument("--zcode-entry-executable")
+    parser.add_argument("--zcode-node-executable", metavar='EXE')
+    parser.add_argument("--zcode-entry-executable", metavar='EXE')
 
 
 def _add_projection_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
-    parser.add_argument("--node", required=True)
-    parser.add_argument("--declared-roots", required=True)
-    parser.add_argument("--managed-executable", required=True)
-    parser.add_argument("--profile", required=True)
+    parser.add_argument("--node", required=True, metavar='NODE')
+    parser.add_argument("--declared-roots", required=True, metavar='FILE')
+    parser.add_argument("--managed-executable", required=True, metavar='EXE')
+    parser.add_argument("--profile", required=True, metavar='PROFILE')
     parser.add_argument("--json", action="store_true")
 
 
@@ -823,42 +1055,49 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
 
     add = node_commands.add_parser("add")
     add.add_argument("--root")
-    add.add_argument("--node")
+    add.add_argument("--node", metavar='NODE')
     add.add_argument("--harness")
     add.add_argument("--lifetime", choices=("permanent", "temporary"))
-    add.add_argument("--lease-minutes", type=int)
-    add.add_argument("--tide-metric")
-    add.add_argument("--tide-threshold")
+    add.add_argument("--lease-minutes", type=int, metavar='N')
+    add.add_argument("--tide-metric", metavar='METRIC')
+    add.add_argument("--tide-threshold", metavar='VALUE')
     add.add_argument("--tide-action", choices=("recommend", "direct"))
-    add.add_argument("--tide-idempotency-key")
+    add.add_argument("--tide-idempotency-key", metavar='KEY')
+    add.add_argument("--plan", metavar='FILE')
     add.set_defaults(handler=_node_add)
 
     spawn = node_commands.add_parser("spawn")
     spawn.add_argument("--root", required=True)
-    spawn.add_argument("--as", dest="actor", required=True)
-    spawn.add_argument("--profile", dest="lane_profile", required=True)
-    spawn.add_argument("--ordinal", type=int)
+    spawn.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    spawn.add_argument("--profile", dest="lane_profile", required=True, metavar='PROFILE')
+    spawn.add_argument("--ordinal", type=int, metavar='N')
     spawn.set_defaults(handler=_node_spawn)
 
     retire = node_commands.add_parser("retire")
     retire.add_argument("--root", required=True)
     retire_target = retire.add_mutually_exclusive_group(required=True)
-    retire_target.add_argument("--node")
+    retire_target.add_argument("--node", metavar='NODE')
     retire_target.add_argument("--instance")
-    retire.add_argument("--as", dest="actor")
+    retire.add_argument("--as", dest="actor", metavar='NODE')
     retire.add_argument("--drain", action="store_true")
     retire.set_defaults(handler=_node_retire)
 
+    drain = node_commands.add_parser("drain")
+    drain.add_argument("--root", required=True)
+    drain.add_argument("--node", required=True)
+    drain.add_argument("--session", required=True)
+    drain.set_defaults(handler=_node_drain)
+
     switch = node_commands.add_parser("switch")
     switch.add_argument("--root", required=True)
-    switch.add_argument("--node", required=True)
+    switch.add_argument("--node", required=True, metavar='NODE')
     switch.add_argument("--harness", required=True)
     switch.add_argument("--model", required=True)
     switch.set_defaults(handler=_node_switch)
 
     role_step = node_commands.add_parser("role")
     role_step.add_argument("--root", required=True)
-    role_step.add_argument("--node", required=True)
+    role_step.add_argument("--node", required=True, metavar='NODE')
     role_step.add_argument("--template", required=True)
     role_step.add_argument("--answer", dest="answers", action="append", default=[])
     role_step.set_defaults(handler=_node_role)
@@ -875,11 +1114,32 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     _add_projection_arguments(explain)
     explain.set_defaults(handler=_node_explain)
 
+    prep_clear = node_commands.add_parser("prep-clear")
+    prep_clear.add_argument("--root", required=True)
+    prep_clear.add_argument("--as", dest="actor", required=True)
+    prep_clear.add_argument("--session", required=True)
+    prep_clear.add_argument("--workspace", required=True)
+    prep_clear.add_argument("--repo", required=True)
+    prep_clear.add_argument("--doc", required=True)
+    prep_clear.add_argument("--note", required=True)
+    prep_clear.add_argument("--complement")
+    prep_clear.add_argument("--to")
+    prep_clear.add_argument("--idempotency-key")
+    prep_clear.add_argument("--git-executable")
+    prep_clear.set_defaults(handler=_node_prep_clear)
+
     state_flush = node_commands.add_parser("state-flush")
     state_flush.add_argument("--root", required=True)
-    state_flush.add_argument("--node", required=True)
-    state_flush.add_argument("--prior-mtime-ns", type=int)
+    state_flush.add_argument("--node", required=True, metavar='NODE')
+    state_flush.add_argument("--prior-mtime-ns", type=int, metavar='N')
     state_flush.set_defaults(handler=_state_flush)
+
+    prompts = node_commands.add_parser("prompts")
+    prompts.add_argument("--root", required=True)
+    prompts.add_argument("--as", required=True, dest="as_node", metavar="NODE")
+    prompts.add_argument("--harness", required=True, metavar="HARNESS")
+    prompts.add_argument("--out", required=True, metavar="DIR")
+    prompts.set_defaults(handler=_node_prompts)
 
     role = commands.add_parser("role")
     role_commands = role.add_subparsers(dest="role_command", required=True)
@@ -888,8 +1148,40 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     role_list.set_defaults(handler=_role_list)
     role_show = role_commands.add_parser("show")
     role_show.add_argument("--root", required=True)
-    role_show.add_argument("role")
+    role_show.add_argument("role", metavar="ROLE")
     role_show.set_defaults(handler=_role_show)
+    role_transfer = role_commands.add_parser("transfer-architect")
+    role_transfer.add_argument("--root", required=True)
+    role_transfer.add_argument("--to", required=True, metavar="NODE")
+    role_transfer.add_argument("--idempotency-key", required=True, dest="idempotency_key")
+    role_transfer.set_defaults(handler=_role_transfer_architect)
+
+    role_new = role_commands.add_parser('new')
+    role_new.add_argument('--root', required=True, metavar='ROOT')
+    role_new.add_argument('--name', required=True, metavar='ROLE')
+    role_new.add_argument('--from', dest='from_role', required=True, metavar='ROLE')
+    role_new.add_argument('--idempotency-key', required=True, metavar='KEY')
+    role_new.set_defaults(handler=_role_write)
+
+    role_import = role_commands.add_parser('import')
+    role_import.add_argument('--root', required=True, metavar='ROOT')
+    role_import.add_argument('--from', dest='from_file', required=True, metavar='PATH')
+    role_import.add_argument('--idempotency-key', required=True, metavar='KEY')
+    role_import.set_defaults(handler=_role_write)
+
+    role_edit = role_commands.add_parser('edit')
+    role_edit.add_argument('--root', required=True, metavar='ROOT')
+    role_edit.add_argument('--name', required=True, metavar='ROLE')
+    edit_input = role_edit.add_mutually_exclusive_group(required=True)
+    edit_input.add_argument('--set', dest='set_fields', action='append', metavar='FIELD=VALUE')
+    edit_input.add_argument('--from', dest='from_file', metavar='PATH')
+    role_edit.add_argument('--idempotency-key', required=True, metavar='KEY')
+    role_edit.set_defaults(handler=_role_write)
+
+    role_validate = role_commands.add_parser('validate')
+    role_validate.add_argument('--root', required=True, metavar='ROOT')
+    role_validate.add_argument('--from', dest='from_file', required=True, metavar='PATH')
+    role_validate.set_defaults(handler=_role_validate)
 
     quota = commands.add_parser("quota")
     quota_commands = quota.add_subparsers(dest="quota_command", required=True)
@@ -900,9 +1192,9 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         choices=_quota_provider_choices(),
         required=True,
     )
-    quota_collect.add_argument("--observed-at", required=True)
-    quota_collect.add_argument("--idempotency-key", required=True)
-    quota_collect.add_argument("--executable")
+    quota_collect.add_argument("--observed-at", required=True, metavar='TIMESTAMP')
+    quota_collect.add_argument("--idempotency-key", required=True, metavar='KEY')
+    quota_collect.add_argument("--executable", metavar='EXE')
     quota_collect.set_defaults(handler=_quota_collect)
     quota_show = quota_commands.add_parser("show")
     quota_show.add_argument("--root", required=True)
@@ -914,18 +1206,41 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     quota_show.set_defaults(handler=_quota_show)
 
     chart = commands.add_parser("chart")
-    chart.add_argument("--declared-roots", required=True)
+    chart.add_argument("--declared-roots", metavar='FILE')
     chart.add_argument("--live", action="store_true")
     chart.add_argument("--json", action="store_true")
-    chart.set_defaults(handler=_chart)
+    chart.set_defaults(handler=_chart, json=False, live=False)
+    chart_commands = chart.add_subparsers(dest="chart_command")
+    add_root = chart_commands.add_parser("add-root")
+    add_root.add_argument("--declared-roots", required=True, metavar='FILE')
+    add_root.add_argument("--bus-id", required=True, metavar='ID')
+    add_root.add_argument("--root", dest="root_path", required=True, metavar='PATH')
+    add_root.add_argument("--architect-node", required=True, metavar='NODE')
+    add_root.add_argument("--downstream", action="append", default=[], metavar='ID')
+    add_root.set_defaults(handler=_chart_add_root)
+    remove_root = chart_commands.add_parser("remove-root")
+    remove_root.add_argument("--declared-roots", required=True, metavar='FILE')
+    remove_root.add_argument("--bus-id", required=True, metavar='ID')
+    remove_root.set_defaults(handler=_chart_remove_root)
 
     survey = commands.add_parser("survey")
-    survey.add_argument("--declared-roots", required=True)
-    survey.add_argument("--search-path", dest="search_paths", action="append", default=[])
-    survey.add_argument("--hooks", dest="hooks_path")
-    survey.add_argument("--targets", dest="targets_paths", action="append", default=[])
+    survey.add_argument("--declared-roots", required=True, metavar='FILE')
+    survey.add_argument("--search-path", dest="search_paths", action="append", default=[], metavar='PATH')
+    survey.add_argument("--hooks", dest="hooks_path", metavar='PATH')
+    survey.add_argument("--targets", dest="targets_paths", action="append", default=[], metavar='PATH')
     survey.add_argument("--json", action="store_true")
     survey.set_defaults(handler=_survey)
+
+    seat = commands.add_parser("seat")
+    seat_commands = seat.add_subparsers(dest="seat_command", required=True)
+    board = seat_commands.add_parser("board")
+    board.add_argument("--root", metavar="ROOT", required=True)
+    board.add_argument("--as", metavar="NODE", dest="actor", required=True)
+    board.add_argument("--workspace", metavar="PATH", required=True)
+    board.add_argument("--session", metavar="SESSION", required=True)
+    board.add_argument("--idempotency-key", metavar="KEY", required=True)
+    board.add_argument("--take-over", action="store_true")
+    board.set_defaults(handler=_seat_board, artifact_schema_version=1)
 
     wake = commands.add_parser("wake")
     wake_commands = wake.add_subparsers(dest="wake_command", required=True)
@@ -935,7 +1250,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         floati_mcp_required=("idempotency_key",),
     )
     _add_wake_identity(wake_pause)
-    wake_pause.add_argument("--idempotency-key")
+    wake_pause.add_argument("--idempotency-key", metavar='KEY')
     wake_pause.set_defaults(handler=_wake_pause)
     wake_resume = wake_commands.add_parser(
         "resume",
@@ -943,7 +1258,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         floati_mcp_required=("idempotency_key",),
     )
     _add_wake_identity(wake_resume)
-    wake_resume.add_argument("--idempotency-key")
+    wake_resume.add_argument("--idempotency-key", metavar='KEY')
     wake_resume.set_defaults(handler=_wake_resume)
     wake_status = wake_commands.add_parser("status")
     _add_wake_identity(wake_status)
@@ -951,7 +1266,8 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     wake_arm = wake_commands.add_parser("arm")
     _add_wake_identity(wake_arm)
     wake_arm.add_argument("--workspace", required=True)
-    wake_arm.add_argument("--idempotency-key", required=True)
+    wake_arm.add_argument("--idempotency-key", required=True, metavar='KEY')
+    wake_arm.add_argument("--take-over", action="store_true")
     wake_arm.set_defaults(handler=_wake_arm)
 
     wake_daemon = wake_commands.add_parser("daemon")
@@ -960,18 +1276,18 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     )
     daemon_consent = daemon_commands.add_parser("consent")
     _add_wake_daemon_identity(daemon_consent)
-    daemon_consent.add_argument("--min-poll-seconds", type=int, required=True)
-    daemon_consent.add_argument("--max-poll-seconds", type=int, required=True)
-    daemon_consent.add_argument("--max-backoff-seconds", type=int, required=True)
-    daemon_consent.add_argument("--activation-epoch", type=int, required=True)
+    daemon_consent.add_argument("--min-poll-seconds", type=int, required=True, metavar='N')
+    daemon_consent.add_argument("--max-poll-seconds", type=int, required=True, metavar='N')
+    daemon_consent.add_argument("--max-backoff-seconds", type=int, required=True, metavar='N')
+    daemon_consent.add_argument("--activation-epoch", type=int, required=True, metavar='N')
     daemon_consent.set_defaults(handler=_wake_daemon_consent)
 
     daemon_bind = daemon_commands.add_parser("bind")
     _add_wake_daemon_identity(daemon_bind)
     daemon_bind.add_argument("--session", required=True)
     daemon_bind.add_argument("--workspace", required=True)
-    daemon_bind.add_argument("--executable", required=True)
-    daemon_bind.add_argument("--binding-epoch", type=int, required=True)
+    daemon_bind.add_argument("--executable", required=True, metavar='EXE')
+    daemon_bind.add_argument("--binding-epoch", type=int, required=True, metavar='N')
     daemon_bind.add_argument(
         "--yes", action="store_true",
         help="consent to the turn-costing resume probe without the interactive ask",
@@ -995,7 +1311,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
         "serve", help=argparse.SUPPRESS, floati_public=False
     )
     _add_wake_daemon_identity(daemon_serve)
-    daemon_serve.add_argument("--activation-epoch", type=int, required=True)
+    daemon_serve.add_argument("--activation-epoch", type=int, required=True, metavar='N')
     _add_zcode_executable_declarations(daemon_serve)
     daemon_serve.set_defaults(handler=_wake_daemon_serve)
 

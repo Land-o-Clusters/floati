@@ -15,6 +15,7 @@ from .admin_registry import RegistryAdminBackend
 from .context_absences import load_shipped_context_absences
 from .errors import ProtocolRefusal
 from .role_templates import RoleTemplate, load_shipped_role_templates
+from .role_library import RoleTemplateLibrary
 from .root import FloatiRoot, resolve_command_root, validate_identifier
 
 
@@ -224,9 +225,11 @@ class ContextStatusProjection(_ContextProjection):
 class ContextTurnoverProjection(_ContextProjection):
     """Project the operator-supplied D3/D5 turnover recipe."""
 
-    @staticmethod
-    def _templates() -> Dict[str, RoleTemplate]:
-        return load_shipped_role_templates(Path(__file__).parents[1] / "roles" / "shipped")
+    def _templates(self) -> Dict[str, RoleTemplate]:
+        return RoleTemplateLibrary(self.root).templates()
+
+    def render(self) -> str:
+        return render_context_projection(self.project(), templates=self._templates())
 
     def _role_provenance(self) -> Dict[str, object]:
         raw = _mapping(
@@ -278,7 +281,7 @@ class ContextTurnoverProjection(_ContextProjection):
             or template.template_version != version
             or template.digest != digest
         ):
-            _refuse("context_role_mismatch", "role provenance does not match shipped D1 copy")
+            _refuse("context_role_mismatch", "role provenance does not match declared D1 copy")
         answers = _mapping(
             raw.get("answers"),
             code="context_role_invalid",
@@ -383,7 +386,10 @@ def _render_argv(value: object) -> str:
     return shlex.join(checked)
 
 
-def render_context_projection(artifact: Mapping[str, object]) -> str:
+def render_context_projection(
+    artifact: Mapping[str, object], *,
+    templates: Optional[Mapping[str, RoleTemplate]] = None,
+) -> str:
     """Render one validated E2 artifact as deterministic ASCII text."""
 
     value = _mapping(
@@ -576,15 +582,19 @@ def render_context_projection(artifact: Mapping[str, object]) -> str:
             raise ProtocolRefusal(
                 "context_output_invalid", "turnover template role is invalid"
             ) from exc
-        shipped_template = ContextTurnoverProjection._templates().get(role_key)
+        selected_templates = (
+            load_shipped_role_templates(Path(__file__).parents[1] / "roles" / "shipped")
+            if templates is None else templates
+        )
+        selected_template = selected_templates.get(role_key)
         if (
-            shipped_template is None
-            or shipped_template.template_version != version
-            or shipped_template.digest != digest
+            not isinstance(selected_template, RoleTemplate)
+            or selected_template.template_version != version
+            or selected_template.digest != digest
         ):
             _refuse(
                 "context_output_invalid",
-                "turnover provenance does not match shipped D1 copy",
+                "turnover provenance does not match declared D1 copy",
             )
         steps = _sequence(
             value.get("steps"),
@@ -751,7 +761,7 @@ def _handle_reading_record(args: argparse.Namespace) -> Tuple[str, Dict[str, obj
 
 def _add_identity(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", required=True)
-    parser.add_argument("--as", dest="actor", required=True)
+    parser.add_argument("--as", dest="actor", required=True, metavar='NODE')
     parser.add_argument("--json", action="store_true")
 
 
@@ -782,26 +792,26 @@ def register_cli(commands: argparse._SubParsersAction) -> None:
         "set", description="set one optional T1-authorized tide policy"
     )
     policy_set.add_argument("--root", required=True)
-    policy_set.add_argument("--node", required=True)
+    policy_set.add_argument("--node", required=True, metavar='NODE')
     policy_set.add_argument("--metric", required=True)
     policy_set.add_argument("--threshold", required=True)
     policy_set.add_argument("--action", choices=("recommend", "direct"), required=True)
-    policy_set.add_argument("--idempotency-key", required=True)
+    policy_set.add_argument("--idempotency-key", required=True, metavar='KEY')
     policy_set.add_argument("--json", action="store_true")
     policy_set.set_defaults(handler=_handle_policy_set)
     policy_show = policy_commands.add_parser(
         "show", description="show the active tide policy or typed absence"
     )
     policy_show.add_argument("--root", required=True)
-    policy_show.add_argument("--node", required=True)
+    policy_show.add_argument("--node", required=True, metavar='NODE')
     policy_show.add_argument("--json", action="store_true")
     policy_show.set_defaults(handler=_handle_policy_show)
     policy_clear = policy_commands.add_parser(
         "clear", description="clear one active tide policy"
     )
     policy_clear.add_argument("--root", required=True)
-    policy_clear.add_argument("--node", required=True)
-    policy_clear.add_argument("--idempotency-key", required=True)
+    policy_clear.add_argument("--node", required=True, metavar='NODE')
+    policy_clear.add_argument("--idempotency-key", required=True, metavar='KEY')
     policy_clear.add_argument("--json", action="store_true")
     policy_clear.set_defaults(handler=_handle_policy_clear)
 
@@ -811,13 +821,13 @@ def register_cli(commands: argparse._SubParsersAction) -> None:
         "record", description="record the seated node's class-B context testimony"
     )
     reading_record.add_argument("--root", required=True)
-    reading_record.add_argument("--as", dest="actor", required=True)
+    reading_record.add_argument("--as", dest="actor", required=True, metavar='NODE')
     reading_record.add_argument("--metric", required=True)
     reading_record.add_argument("--value", required=True)
     reading_record.add_argument(
         "--command", dest="testimony_command",
         choices=("/context", "/status", "/usage", "/cost"), required=True,
     )
-    reading_record.add_argument("--idempotency-key", required=True)
+    reading_record.add_argument("--idempotency-key", required=True, metavar='KEY')
     reading_record.add_argument("--json", action="store_true")
     reading_record.set_defaults(handler=_handle_reading_record)

@@ -1,0 +1,22 @@
+$ floati install --source <repo> --destination <scratch>
+
+[38;5;208m      ⊙[0m
+[38;5;208m      │[0m
+[38;5;208m     ╱ ╲[0m
+[38;5;208m    ╱[0m[38;5;245m───[0m[38;5;208m╲[0m
+[38;5;208m   ╱     ╲[0m
+[38;5;245m ~~~~~~~~~~~[0m
+{"artifact_version":0,
+"command":"install",
+"evidence":{"currency_mode":"committed-tree-ci",
+  [...]
+"scripts/floati-codex-wait",
+"scripts/floati-quota-statusline"],
+"operation":"install",
+"ref":"origin/main",
+"source_sha":"a92106a3398de9bc886ae155795348bcd102824c",
+"status":"installed",
+"wiring_join_id":null,
+"wiring_journal":"<scratch>/install-run/installed/.floati-install/wiring-journal.v1.jsonl"}
+,
+"status":"ok"}

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -55,7 +57,7 @@ class WakeHealthProjection:
             Path("receipts/wakes") / f"{node}.jsonl",
             allowed_kinds={"wake_attempt_receipt"},
         )
-        last_attempt = self._latest(attempts)
+        last_attempt = self._latest([row for row in attempts if row.get("outcome") != "queued"])
         last_seen_session = (
             None if last_attempt is None else str(last_attempt["acting_session_id"])
         )
@@ -118,7 +120,7 @@ class WakeHealthProjection:
         ).by_node[node]
         oldest_unread = health.oldest_unread
 
-        entrypoint = Path(__file__).resolve().parents[1] / "scripts" / "floati-codex-wait"
+        entrypoint = Path(__file__).resolve().parents[1] / "scripts" / "floati"
         if pause_state == "paused":
             state = "paused"
         elif breaker_state == "open":
@@ -131,10 +133,27 @@ class WakeHealthProjection:
             state = "unread_mail"
         else:
             state = "healthy"
-        remedy = (
-            f"verify the claim and run {entrypoint} --root {self.root.path} "
-            f"for node {node} at {self._stamp(current)}"
-        )
+        workspace = None if claim is None else claim.get("workspace")
+        if workspace is None:
+            from .codex_wait_contract import WORKSPACE_MAP_RELATIVE, resolve_workspace_binding
+            try:
+                mapping = json.loads(self.root.resolve_relative(WORKSPACE_MAP_RELATIVE).read_text())
+                candidates = [row.get("workspace") for row in mapping.get("mappings", [])
+                              if isinstance(row, dict) and row.get("node_id") == node]
+                valid = [path for path in candidates if isinstance(path, str)
+                         and resolve_workspace_binding(self.root.path, Path(path)) is not None]
+                workspace = valid[0] if len(valid) == 1 else None
+            except (OSError, ValueError, AttributeError):
+                workspace = None
+        if workspace is None:
+            remedy = "declare one exact workspace and acting session for this node, then run floati seat board with --session for that coordinate"
+        else:
+            key = "board-notice-" + hashlib.sha256((node + "\0" + str(workspace) + "\0" + self._stamp(current)).encode()).hexdigest()[:32]
+            remedy = (
+                "Acting session is not known; add --session with your explicitly declared session ID to: "
+                + shlex.join([str(entrypoint), "seat", "board", "--root", str(self.root.path),
+                    "--as", node, "--workspace", str(workspace), "--idempotency-key", key])
+            )
         return {
             "schema_version": 1,
             "node_id": node,

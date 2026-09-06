@@ -668,6 +668,71 @@ class EventLog:
             )
             return messages, delivery, acknowledgment
 
+    def unacked_ids(self, recipient: str) -> List[str]:
+        """Message ids still awaiting acknowledgment for one active recipient."""
+
+        from .cursor import SparseCursor
+
+        node = self.registry.require_active(recipient)["node_id"]
+        frames = self.event_records()
+        retracted = {
+            str(record["retracted_message_id"])
+            for record in frames
+            if record["kind"] == "message_retracted"
+        }
+        acked = SparseCursor(self.root).acked_ids(str(node))
+        return [
+            str(record["id"])
+            for record in frames
+            if record["kind"] == "message_envelope"
+            and record["recipient"] == node
+            and record["id"] not in acked
+            and record["id"] not in retracted
+        ]
+
+    def empty_inbox(
+        self,
+        recipient: str,
+        *,
+        acting_session_id: str,
+    ) -> Dict[str, object]:
+        """Acknowledge remaining mail for one node and leave the node registered."""
+
+        node = str(self.registry.require_active(recipient)["node_id"])
+        acked_ids: List[str] = []
+        acknowledgment_ids: List[str] = []
+        seen: set[str] = set()
+        while True:
+            messages, _delivery, acknowledgment = self.drain(
+                node, acting_session_id=acting_session_id
+            )
+            if not messages:
+                break
+            batch = [str(message["id"]) for message in messages]
+            if seen.intersection(batch):
+                raise ProtocolRefusal(
+                    "node_drain_incomplete",
+                    "drain repeated the same unacked batch",
+                )
+            seen.update(batch)
+            acked_ids.extend(batch)
+            if acknowledgment is not None:
+                acknowledgment_ids.append(str(acknowledgment["id"]))
+        leftover = self.unacked_ids(node)
+        if leftover:
+            raise ProtocolRefusal(
+                "node_drain_incomplete",
+                "unacked mail: " + ",".join(leftover),
+            )
+        return {
+            "node_id": node,
+            "state": "active",
+            "registered": True,
+            "acked_ids": acked_ids,
+            "acknowledgment_ids": acknowledgment_ids,
+            "acting_session_id": acting_session_id,
+        }
+
     @shared_epoch_operation
     def present_compatible(
         self,

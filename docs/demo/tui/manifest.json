@@ -1,0 +1,178 @@
+{
+  "captured_at": "2026-09-05T04:36:53.167Z",
+  "captures": [
+    {
+      "animated": false,
+      "caption": "fixture fleet, real run - three registered nodes, an empty bus, nothing in flight",
+      "files": [
+        {
+          "bytes": 5416,
+          "path": "board-idle-standard.txt",
+          "sha256": "d2894d6f225dbc494018523efce3b6aa6b2471d7ebdc2917b36d0377621c67ab"
+        },
+        {
+          "bytes": 62914,
+          "path": "board-idle-dark.png",
+          "sha256": "569db5dc0993261d64713de97744f6d89d0b26f7a58c870b6ca66782ff7989f9"
+        },
+        {
+          "bytes": 63565,
+          "path": "board-idle-light.png",
+          "sha256": "a2febcb0effc28f4db4489dc300182770ce19b4e372f8bfc1ea909c415f17b52"
+        }
+      ],
+      "frame_count": 1,
+      "name": "board-idle",
+      "real_ledger": true
+    },
+    {
+      "animated": true,
+      "caption": "fixture fleet, real run - each frame re-renders the ledger after real mail, claims and receipts land; no independent agents are live",
+      "files": [
+        {
+          "bytes": 5896,
+          "path": "board-live-standard.txt",
+          "sha256": "e7f7d723996c06e408dc08d49ec962ceb83ed6ece5c8e030ef23769f3c68fc5f"
+        },
+        {
+          "bytes": 340601,
+          "path": "board-live-dark.gif",
+          "sha256": "2ee8de6a8362545c4d565d92079255a0d07846b6d494255bc1d7db56aa76899d"
+        },
+        {
+          "bytes": 343009,
+          "path": "board-live-light.gif",
+          "sha256": "8f405016f96defc222efdc53cf70d75de430496620fa96f03e18424d690585a2"
+        }
+      ],
+      "frame_count": 8,
+      "name": "board-live",
+      "real_ledger": true
+    },
+    {
+      "animated": false,
+      "caption": "fixture fleet, real run - one presence lapsed and one lease ran out, and the board says so",
+      "files": [
+        {
+          "bytes": 6030,
+          "path": "board-degraded-standard.txt",
+          "sha256": "43918d39385dcf2be992b0dd8a31098addf62358cec65b7b6fadad38ec6436df"
+        },
+        {
+          "bytes": 73623,
+          "path": "board-degraded-dark.png",
+          "sha256": "c385a8c2072556d68189cf9b0d17c3279e955695de67c9414e63cf996986b787"
+        },
+        {
+          "bytes": 74455,
+          "path": "board-degraded-light.png",
+          "sha256": "33877d6a24891a72f6c00ebbb7c32d6705871c2b784cf8b637fc42bf4d0294c7"
+        }
+      ],
+      "frame_count": 1,
+      "name": "board-degraded",
+      "real_ledger": true
+    },
+    {
+      "animated": false,
+      "caption": "real run of floati graph on a fixture tenant",
+      "files": [
+        {
+          "bytes": 711,
+          "path": "graph-standard.txt",
+          "sha256": "f643ad07b7e38684d26379cd5f0209290171032128d558c81e0ee38408f18b60"
+        },
+        {
+          "bytes": 39448,
+          "path": "graph-dark.png",
+          "sha256": "a98901266a7a6d672735480d44ca0a4efb3a706a2d1ea3f7794309b2f1e7dd86"
+        },
+        {
+          "bytes": 39461,
+          "path": "graph-light.png",
+          "sha256": "1ed32cbf05fbc19834590cf7bef8b0a675c1e0e4af0a213d8f9e95e7e192b321"
+        }
+      ],
+      "frame_count": 1,
+      "name": "graph",
+      "real_ledger": true
+    },
+    {
+      "animated": true,
+      "caption": "fixture fleet, real run - the flight recorder replays a real ledger event by event",
+      "files": [
+        {
+          "bytes": 1028,
+          "path": "replay-in-flight-standard.txt",
+          "sha256": "3e3755be2aa2d356f3901d6bf95bd5fb668b025bc3de63d487af08baae4e798c"
+        },
+        {
+          "bytes": 260782,
+          "path": "replay-in-flight-dark.gif",
+          "sha256": "9c9c26a69758fa65de56550a4bf5a80617b0d8255e5bbfcda12db87ff4e3d3e4"
+        },
+        {
+          "bytes": 261123,
+          "path": "replay-in-flight-light.gif",
+          "sha256": "e9e0162dc93e854d524394c37659b9133229d34f1f97a215bc9ff63712fcfd46"
+        }
+      ],
+      "frame_count": 7,
+      "name": "replay-in-flight",
+      "real_ledger": true
+    },
+    {
+      "animated": false,
+      "caption": "real run - the installer executed from the committed tree into a scratch destination",
+      "files": [
+        {
+          "bytes": 680,
+          "path": "install-moment-standard.txt",
+          "sha256": "d66f3e96411822553b597a378ed890f5f15d8e2d4f42349a7198dcbc1a0959ab"
+        },
+        {
+          "bytes": 54441,
+          "path": "install-moment-dark.png",
+          "sha256": "48469e4fbb6a56019a046bab4a6742e90e97a42bc62aaa819692bcda59eb8cac"
+        },
+        {
+          "bytes": 54712,
+          "path": "install-moment-light.png",
+          "sha256": "01ec800344ac74262e277439765de594a55bcba73fe9f8cd0b60950f2defe3e8"
+        }
+      ],
+      "frame_count": 1,
+      "name": "install-moment",
+      "real_ledger": true
+    },
+    {
+      "animated": false,
+      "caption": "real run - python3 -m floati.selftest under a real terminal",
+      "files": [
+        {
+          "bytes": 353,
+          "path": "selftest-standard.txt",
+          "sha256": "10dca103e58d186c06ea9f43e4779e524b793a7602b2950528f8f0d7169cf98b"
+        },
+        {
+          "bytes": 22038,
+          "path": "selftest-dark.png",
+          "sha256": "7de6ff5acf6917533d71f7564ba411b9d3f19febd756a7505b9c4b184301ea5c"
+        },
+        {
+          "bytes": 22125,
+          "path": "selftest-light.png",
+          "sha256": "7fdb9f384906407d608e8f4daf76924ef095c4e90c9b00a319fe5578e6405821"
+        }
+      ],
+      "frame_count": 1,
+      "name": "selftest",
+      "real_ledger": true
+    }
+  ],
+  "generator": "scripts/capture-tui-moments.py",
+  "schema_version": 0,
+  "scratch": "<scratch>",
+  "source_sha": "a92106a3398de9bc886ae155795348bcd102824c",
+  "synthetic": false
+}

@@ -204,6 +204,34 @@ class UninstallWriterTests(unittest.TestCase):
 
         self.assertEqual([], rejected)
 
+    def test_uninstall_names_the_retained_wiring_journal(self) -> None:
+        """Catches uninstall leaving the wiring journal unnamed on the receipt."""
+
+        owned = self.install_file("scripts/floati", b"#!/bin/sh\n")
+        self.write_manifest([owned])
+        journal = self.destination / ".floati-install" / "wiring-journal.v1.jsonl"
+        journal.write_text('{"v":1,"kind":"file"}\n', encoding="utf-8")
+
+        result = UninstallWriter(self.destination).run()
+
+        self.assertTrue(journal.is_file(), "wiring journal must outlive uninstall")
+        self.assertIn(
+            ".floati-install/wiring-journal.v1.jsonl",
+            result["retained_records"],
+        )
+        self.assertNotIn(
+            ".floati-install/wiring-journal.v1.jsonl",
+            result["foreign_preserved"],
+        )
+
+    def test_readme_names_the_wiring_journal_as_a_surviving_record(self) -> None:
+        """Catches README still treating the leftover journal as an unnamed exception."""
+
+        readme = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(".floati-install/wiring-journal.v1.jsonl", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

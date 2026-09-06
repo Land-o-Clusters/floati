@@ -297,7 +297,7 @@ class PiRpcAdapterTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("codex|pi", result.stdout)
+        self.assertIn("--adapter {claude,codex,pi}", result.stdout)
 
 
 if __name__ == "__main__":

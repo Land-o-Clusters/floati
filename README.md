@@ -15,6 +15,7 @@
 </h1>
 <p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
 <p align="center">Any harness, any mix. One bus, one board, one set of receipts.</p>
+<p align="center"><strong>Point your coding agent at this repository. <a href="AGENTS.md"><code>AGENTS.md</code></a> walks it from install to a verified fleet.</strong></p>
 
 <p align="center">
   <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
@@ -140,7 +141,7 @@ mean a dispatched node wakes in seconds, not whenever someone
 remembers to check a terminal. Wake is opt-in per fleet, armed by a
 consent receipt (`floati wake arm`) and off by default: nothing wakes
 without your recorded say-so, and `floati wake status` shows exactly
-what is armed. A floati waiter exits silently and at once for any
+what is armed, including the wake-daemon breaker. A floati waiter exits silently and at once for any
 workspace that is not its own; other buses' hooks and mail are never
 touched.
 
@@ -177,7 +178,8 @@ buses, nodes, architect seats, what is downstream, last activity.
 `floati survey` goes further. It reports agent buses on this
 filesystem that floati did *not* install, including whether a foreign
 waiter is bound to one of your workspaces. Read-only, on your
-request. `floati watch` streams the board's deltas as text, and
+request — including from the node-add wizard when an undeclared bus
+sits beside the live root. `floati watch` streams the board's deltas as text, and
 `floati supervise` holds a run open and reports as it goes.
 
 ### Know which node went deaf, and which step died
@@ -217,6 +219,46 @@ Liveness is a separate question from mail. A node reports about
 itself, and only itself, with `floati presence report`; `presence
 show` prints the last report, its TTL and its expiry. Expiry means
 *no report since*, never *down*.
+
+### The board, in its own colours
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-live-dark.gif">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-live-light.gif">
+    <img src="docs/demo/tui/board-live-light.gif" alt="The Harbor Board redrawing as real mail, claims and receipts land on a fixture fleet: three nodes, liveness in green, nothing in flight" width="1400">
+  </picture>
+</p>
+
+The board is a terminal program. Green is live, amber is a lease
+running out, an empty ring is a node that has not been seen. Every
+frame above is a real run of `floati board` against the repository's
+demo fixture, re-rendered after real ledger writes; nothing is drawn
+by the demo. When something is wrong, the board says which thing:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-degraded-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-degraded-light.png">
+    <img src="docs/demo/tui/board-degraded-light.png" alt="The Harbor Board degraded: STALE AUTHORITY named with its holder, one presence lapsed, one claim stalled without a witness" width="1400">
+  </picture>
+</p>
+
+One presence lapsed, one lease ran out, one claim stalled without a
+witness. Each is named, with its holder, on the line where it lives.
+`floati graph` draws the same fleet as a dependency picture:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/graph-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/graph-light.png">
+    <img src="docs/demo/tui/graph-light.png" alt="floati graph on a fixture tenant: nodes, edges and the work item between them, drawn in the terminal" width="1400">
+  </picture>
+</p>
+
+Every capture in this section is from `docs/demo/tui/`, produced by
+the repository's own capture script from real runs; the manifest
+beside them says which fleet each frame ran against.
 
 ### Onboard and tear down nodes
 
@@ -511,8 +553,10 @@ floati uninstall --destination /absolute/install --dry-run
 ```
 
 Manifest-exact removal with receipts. Files floati did not install
-are never touched, and your ledgers are never part of an uninstall.
-The record outlives the tool.
+are never touched, and your ledgers and the install wiring journal
+(`.floati-install/wiring-journal.v1.jsonl`) are never part of an
+uninstall. The uninstall receipt names every retained path; the record
+outlives the tool.
 
 ## Compose with it
 
@@ -525,6 +569,14 @@ that wants to draw your harbor. `floati confluence adopt` and
 back that seam.
 
 ## Verify
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/selftest-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/selftest-light.png">
+    <img src="docs/demo/tui/selftest-light.png" alt="python3 -m floati.selftest under a real terminal: the bundle verified, exit 0" width="1400">
+  </picture>
+</p>
 
 ```bash
 python3 -m unittest discover

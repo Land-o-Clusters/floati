@@ -157,6 +157,7 @@ class WakeWaiterContinuityTests(unittest.TestCase):
                 consent,
                 "seat-takeover",
                 idempotency_key="takeover",
+                take_over=True,
             )
 
         run_stop_waiter(

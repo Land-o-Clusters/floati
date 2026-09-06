@@ -277,6 +277,58 @@ class McpServer:
     def has_tool(self, name: str) -> bool:
         return isinstance(name, str) and name in self._catalog
 
+    def _reshape_refusal(
+        self,
+        artifact: Dict[str, object],
+        path: Sequence[str],
+    ) -> Dict[str, object]:
+        """Speak the tool's vocabulary at the boundary (MCP-2-F1).
+
+        A refusal that failed inside the CLI command still belongs to the
+        caller's language: flag spellings become the tool input names they
+        map to, the code is kept, and the placeholder remedy becomes a real
+        one. Whatever cannot be mapped must not survive as a flag.
+        """
+
+        evidence = artifact.get("evidence")
+        if not isinstance(evidence, dict):
+            return artifact
+        replacements: list[tuple[str, str]] = []
+        for action in _leaf_parser(self.parser, path)._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                continue
+            for option in action.option_strings:
+                if option.startswith("--"):
+                    replacements.append((option, action.dest))
+        replacements.sort(key=lambda pair: -len(pair[0]))
+
+        def reshape(value: object) -> object:
+            if isinstance(value, dict):
+                return {key: reshape(item) for key, item in value.items()}
+            if not isinstance(value, str):
+                return value
+            for option, name in replacements:
+                if option in value:
+                    value = value.replace(option, name)
+            return value
+
+        detail = reshape(evidence.get("detail"))
+        remedy = evidence.get("remedy")
+        unnamed = "correct the condition named in detail and retry the tool call"
+        if isinstance(remedy, dict):
+            # RefusalRemedy is Union[str, dict] (REM-1): a dict remedy naming
+            # a real action keeps its shape, its strings re-spoken; only the
+            # unnamed placeholder (kind none) becomes the generic remedy.
+            remedy = unnamed if remedy.get("kind") == "none" else reshape(remedy)
+        elif not isinstance(remedy, str) or not remedy:
+            remedy = unnamed
+        else:
+            remedy = reshape(remedy)
+        return {
+            **artifact,
+            "evidence": {**evidence, "detail": detail, "remedy": remedy},
+        }
+
     def _unknown_tool_result(self, name: str) -> Dict[str, object]:
         artifact = {
             "artifact_version": 0,
@@ -410,6 +462,8 @@ class McpServer:
         if argv is None:
             return self._invalid_arguments(tool, arguments, path)
         _, artifact = run_cli_artifact(argv)
+        if isinstance(artifact, dict) and artifact.get("status") == "refused":
+            return _tool_result(self._reshape_refusal(artifact, path))
         return _tool_result(artifact)
 
 

@@ -55,8 +55,8 @@ contract for each.
 - **Bootstrap:** `init` (create/validate one direct-home fleet root;
   `--solo NODE --harness H` for one-seat setup) · `register` · `retire`
   (self-retirement only).
-- **Nodes and roles:** `node {add|retire|switch|role|boot|teardown|explain|state-flush}`
-  (preview-first; temporary nodes take `--lease-minutes`) · `role {list|show}`.
+- **Nodes and roles:** `node {add|retire|drain|switch|role|boot|teardown|explain|state-flush}`
+  (preview-first; temporary nodes take `--lease-minutes`) · `role {list|show|new|edit|validate|import}`.
 - **Mail:** `send --root --from --to --repo --sha SHA --doc PATH --note TEXT
   [--reply-to ID] [--idempotency-key KEY]` · `inbox --session SESSION`
   (ack-on-drain by default; `--peek` is explicit) · `ack` (repeat `--id` for one
@@ -101,16 +101,25 @@ contract for each.
   wildcard selectors do not exist. Marker-only and receipted; hook
   registration is never edited. A paused session is recorded state, not
   absence or deafness; `wake status` names what it cannot see (the running
-  session's cache, the harness trust gate).
+  session's cache, the harness trust gate) and reports the wake-daemon breaker
+  from the runtime (open or closed, threshold, last trip reason). A coordinate
+  is underivable with reason runtime_missing, runtime_symlink, or
+  runtime_malformed. Nothing on that verb resets the breaker; only a consent
+  re-grant does.
 - **Codex Stop waiter:** `scripts/floati-codex-wait --root ROOT` is the
   documented installed entrypoint. It derives node, workspace, and acting
   session only from the validated hook payload; those identities are not
   caller-selectable flags.
+- **Seat boarding:** `seat board --root ROOT --as NODE --workspace PATH
+  --idempotency-key KEY --session SESSION [--take-over]` composes claim,
+  resume, and drain in that order. See the boarding contract below.
 - **Cartography:** `chart --declared-roots FILE` (only explicitly declared
-  roots) · `survey` (user-invoked, read-only report of buses floati did not
+  roots) · `chart add-root` / `chart remove-root` (rewrite the declared-roots
+  file) · `survey` (user-invoked, read-only report of buses floati did not
   install — it never writes, drains, acks, registers, or locks a foreign
-  bus).
-- **Lifecycle:** `install` · `update` · `uninstall` (see Install above) · `purge`
+  bus). The node-add wizard offers that survey inline when it detects an
+  undeclared bus in the parent of the live root, and asks before adopting.
+- **Lifecycle:** `install` · `update` · `update rollback --to SHA` · `uninstall` (see Install above) · `purge`
   (moves only explicitly named roots to Trash; never deletes).
 
 **Managed wrappers:** a harness seat provisioned with a managed bus profile
@@ -121,6 +130,37 @@ ack --id MSG_ID [--id MSG_ID ...] --session SESSION_ID`; every id is explicit
 and the acting session is required. A seat's own boot projection (`node boot`)
 prints its exact wrapper shapes — use those verbatim, never a remembered
 shape.
+
+## Seat boarding — an explicit turnover operation
+
+```sh
+floati seat board --root /absolute/fleet --as NODE --workspace /absolute/workspace --idempotency-key KEY --session SESSION
+```
+
+The workspace must carry a matching seat declaration and an installed,
+consented Codex waiter binding. The product CLI requires an explicit
+`--session`; it never reads the runtime environment for identity. Health
+notices require the caller to supply that declaration alongside their exact
+root/node/workspace command. No session discovery or hook installation occurs.
+
+No claim or a claim already belonging to that session can proceed. Any other
+recorded claimant requires explicit `--take-over`; the refusal names it.
+Receipt age never proves that a process is gone. Takeover displaces exactly
+one predecessor and is checked within the claim transaction.
+
+Boarding receipts each stage: claim, resume (including an already-active
+no-op), and exact inbox delivery/acknowledgment. A completed key replays only
+its recorded batch, including an empty batch. It does not consume new mail.
+If a crash leaves a started drain without completion, the same key refuses
+with uncertainty instead of draining again. Inspect the named delivery and
+acknowledgment ledgers before choosing another key. A receipt proves these
+steps; it does not prove a future Stop hook fired.
+
+The vendored Codex gateway supports `<wrapper> <profile> board` only when
+the registered profile explicitly permits it. It derives root, node,
+workspace, and a stable per-session key, and never adds `--take-over`.
+Repeated no-argument calls in the same session replay that boarding key.
+Shipping this source does not install a gateway or alter an existing profile.
 
 ## Install — launcher interpreter resolution (from AGENTS.md)
 
@@ -248,5 +288,38 @@ breaker, pause marker, or a real exhaustion — check `doctor` before assuming q
 - **Your turn ends instantly instead of waiting for mail** — your seat's wake claim is
   probably still armed to a PREVIOUS session (turnover without re-arm). Safe: run
   `floati wake arm --root ROOT --as NODE --session YOUR_SESSION --workspace PATH` —
-  takeover is predecessor-bound and built for this. Do it at every session turnover.
-  Breaking: assuming the hook is broken and disabling it.
+  a live predecessor requires `--take-over`; a paused claim is adoptable without it.
+  Do it at every session turnover. Breaking: assuming the hook is broken and disabling it.
+
+
+## Root-local role authoring
+
+`role list` and `role show ROLE` read the selected root's custom roles together
+with the immutable shipped library. All role consumers use the same validator.
+Custom files live at `roles/custom/NAME.json`; shipped names are reserved and
+cannot be shadowed, imported, or edited.
+
+```text
+floati role new --root ROOT --name specialist --from builder --idempotency-key create-specialist
+floati role edit --root ROOT --name specialist --set cadence=on-demand --idempotency-key edit-specialist
+floati role validate --root ROOT --from local-template.json
+floati role import --root ROOT --from local-template.json --idempotency-key import-specialist
+```
+
+`new --from` names an existing role to clone. `import --from` and `validate --from`
+read one explicit local JSON file; validation is read-only. `edit` accepts either
+repeatable `--set FIELD=VALUE` or one `--from PATH`, never both. Values may be JSON
+or a bare string; duplicate fields, malformed structured JSON, and schema errors
+are refused with a field name. No editor is launched and no template version is
+incremented automatically. An edit cannot rename the role.
+
+Each write records digest-bound v1 prepared/applied receipts in
+`receipts/role-templates.jsonl`. Repeating the same key and inputs returns the
+original completed receipt, even after a later edit. Reusing a key with different
+inputs refuses. An unfinished write blocks other writes to that role; repeat its
+original request to recover. Recovery verifies the prepared digest and syncs the
+file and directory ancestry before recording applied. Foreign replacement bytes
+are preserved and refused. A durability failure means publication is uncertain,
+not that nothing changed; retain its receipt and repeat the exact request.
+Receipt paths are root-relative; source paths and template bodies are not copied
+into receipts. Existing v0 role-assignment records retain their original shape.

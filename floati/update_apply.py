@@ -16,6 +16,7 @@ from .ids import uuid7_hex
 from .manifest import verify_manifest
 from .update_check import (
     OBSERVATION_LEDGER,
+    _SOURCE_SHA,
     validate_release_index,
     validate_observation_ledger_row,
 )
@@ -310,6 +311,7 @@ def apply_update(
             raise ProtocolRefusal(
                 "update_version_unavailable",
                 _draft(f"signed release index does not contain version {version}"),
+                remedy=_draft("name a version listed in the signed release index"),
             )
 
         selected_git = _select_git_executable(git_executable)
@@ -423,3 +425,107 @@ def apply_update(
             temporary.cleanup()
 
     return _transact_jsonl(observations, decide)
+
+
+def _validate_rollback_sha(value: object) -> str:
+    if not isinstance(value, str) or _SOURCE_SHA.fullmatch(value) is None:
+        raise ProtocolRefusal(
+            "update_rollback_to_invalid",
+            _draft("update rollback --to must be one lowercase 40-hex source SHA"),
+            remedy=_draft("pass --to as one lowercase 40-hex source SHA"),
+        )
+    return value
+
+
+def rollback_update(
+    *,
+    destination: Path,
+    channel: str,
+    entrypoint: Path,
+    to_sha: str,
+    idempotency_key: str,
+    git_executable: str | Path | None = None,
+) -> Dict[str, object]:
+    """Revert the last applied update through the same verified apply path."""
+
+    selected = canonical_destination(destination)
+    selected_channel = validate_update_channel(channel)
+    key = validate_idempotency_key(idempotency_key)
+    target = _validate_rollback_sha(to_sha)
+    selected_entrypoint = Path(entrypoint)
+    require_standalone_ownership(selected, entrypoint=selected_entrypoint)
+    consent = UpdateConsentLedger(selected).require_active(selected_channel)
+    observations = selected / INSTALL_DIRECTORY / OBSERVATION_LEDGER
+
+    def decide(rows: list[Dict[str, object]]):
+        validated = [validate_observation_ledger_row(row) for row in rows]
+        prior = next(
+            (
+                row
+                for row in reversed(validated)
+                if row["kind"] == "update_application"
+                and row["destination"] == str(selected)
+                and row["channel"] == selected_channel
+            ),
+            None,
+        )
+        if prior is None:
+            raise ProtocolRefusal(
+                "update_rollback_prior_missing",
+                _draft("no previously applied update exists to roll back"),
+                remedy=_draft("apply a signed update before rollback"),
+            )
+        if prior["previous_source_sha"] != target:
+            raise ProtocolRefusal(
+                "update_rollback_target_mismatch",
+                _draft(
+                    "update rollback --to must name the previous source SHA "
+                    + str(prior["previous_source_sha"])
+                ),
+                remedy=_draft(
+                    "pass --to naming the last apply's previous_source_sha"
+                ),
+            )
+        check = next(
+            (
+                row
+                for row in reversed(validated)
+                if row["kind"] == "update_observation"
+                and row["destination"] == str(selected)
+                and row["channel"] == selected_channel
+                and row["consent_receipt_id"] == consent["id"]
+                and row["public_key_sha256"] == consent["public_key_sha256"]
+            ),
+            None,
+        )
+        if check is None:
+            raise ProtocolRefusal(
+                "update_check_missing",
+                _draft("no signed update check exists for the current consent coordinate"),
+                remedy=_draft("run a new explicit update check before rollback"),
+            )
+        index_bytes, _signature_bytes = _retained_index(selected, check)
+        index = validate_release_index(index_bytes)
+        release = next(
+            (row for row in index["releases"] if row["source_sha"] == target),
+            None,
+        )
+        if release is None:
+            raise ProtocolRefusal(
+                "update_version_unavailable",
+                _draft("signed release index does not contain the rollback source SHA"),
+                remedy=_draft(
+                    "pass --to naming a source SHA listed in the signed release index"
+                ),
+            )
+        return {"version": release["version"]}, None
+
+    resolved = _transact_jsonl(observations, decide)
+    return apply_update(
+        destination=selected,
+        channel=selected_channel,
+        entrypoint=selected_entrypoint,
+        version=str(resolved["version"]),
+        idempotency_key=key,
+        git_executable=git_executable,
+    )

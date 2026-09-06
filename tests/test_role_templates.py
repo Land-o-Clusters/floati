@@ -5,14 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from floati.errors import ProtocolRefusal
+from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.role_templates import (
     SHIPPED_ROLE_NAMES,
     load_role_template,
     load_shipped_role_templates,
     parse_role_template,
 )
+from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 def template_payload(role: str = "architect") -> dict[str, object]:
@@ -139,6 +141,66 @@ class RoleTemplateTests(unittest.TestCase):
                 load_role_template(link)
 
         self.assertEqual("role_template_path_invalid", raised.exception.code)
+
+
+class ShippedTemplateIntegrityTests(unittest.TestCase):
+    """A defect in the product's own bundled files is not an operator refusal."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+
+    def shipped_fixture(self, *, mismatch: str = "") -> Path:
+        """A complete shipped set, optionally with one file's role field renamed."""
+
+        directory = self.base / "shipped"
+        directory.mkdir()
+        for role in SHIPPED_ROLE_NAMES:
+            declared = "renamed-role" if role == mismatch else role
+            (directory / f"{role}.json").write_text(
+                json.dumps(template_payload(declared)), encoding="utf-8"
+            )
+        return directory
+
+    def test_intact_shipped_fixture_loads_every_role(self) -> None:
+        """Controls the fixture: the mismatch test must fail on the mismatch."""
+
+        library = load_shipped_role_templates(self.shipped_fixture())
+
+        self.assertEqual(SHIPPED_ROLE_NAMES, tuple(library))
+
+    def test_shipped_template_role_mismatch_is_an_integrity_failure(self) -> None:
+        """Catches a packaging defect served to the operator as an act to perform."""
+
+        with self.assertRaises(IntegrityFailure) as raised:
+            load_shipped_role_templates(self.shipped_fixture(mismatch="builder"))
+
+        self.assertNotIsInstance(raised.exception, ProtocolRefusal)
+        self.assertEqual("role_template_shipped_invalid", raised.exception.code)
+        self.assertIn("builder.json", raised.exception.detail)
+        self.assertIn("role", raised.exception.detail)
+
+    def test_custom_template_role_mismatch_stays_an_operator_refusal(self) -> None:
+        """Holds the custom half: the operator owns roles/custom and can fix it."""
+
+        from floati.role_library import RoleTemplateLibrary
+
+        root = FloatiRoot.open_direct_home(self.base / "fleet", create=True)
+        custom = root.path / "roles/custom"
+        custom.mkdir(parents=True, exist_ok=True)
+        (custom / "local-review.json").write_text(
+            json.dumps(template_payload("other-role")), encoding="utf-8"
+        )
+
+        with self.assertRaises(ProtocolRefusal) as raised:
+            RoleTemplateLibrary(root).templates()
+
+        self.assertEqual("role_template_name_mismatch", raised.exception.code)
+        self.assertEqual(
+            "rename the file under roles/custom, or set its role field to the filename",
+            raised.exception.remedy,
+        )
 
 
 MEASURED_ACK_SLA_MINUTES = 45

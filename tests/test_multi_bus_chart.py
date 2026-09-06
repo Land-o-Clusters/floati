@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from floati import fixture_ids as public_ids
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from pathlib import Path
 from floati.errors import ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.jsonl import append_record
-from floati.multi_bus_chart import MultiBusHarborChart, render_multi_bus_chart
+from floati.multi_bus_chart import DeclaredRoots, MultiBusHarborChart, render_multi_bus_chart
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
 
@@ -162,6 +163,61 @@ class MultiBusHarborChartTests(unittest.TestCase):
         MultiBusHarborChart(self.registry_path, now=NOW).artifact()
 
         self.assertEqual(before, self._snapshot())
+
+    def test_add_root_rewrites_the_file_and_remove_root_keeps_one_declared_bus(self) -> None:
+        """Catches chart remaining a read-only declaration with no writer."""
+
+        gamma = FloatiRoot.open_direct_home(self.base / "gamma", create=True)
+        self._registry(gamma, "architect-c", "Architect", "2026-08-27T21:54:00.000Z")
+        declared = DeclaredRoots(self.registry_path)
+        before = self.registry_path.read_bytes()
+
+        added = declared.add_root(
+            bus_id="gamma",
+            root=str(gamma.path),
+            architect_node="architect-c",
+        )
+        self.assertEqual("add-root", added["operation"])
+        self.assertEqual(["alpha", "beta", "gamma"], added["roots"])
+        self.assertNotEqual(before, self.registry_path.read_bytes())
+        self.assertEqual(
+            hashlib.sha256(self.registry_path.read_bytes()).hexdigest(),
+            added["sha256"],
+        )
+        validate_json_schema(
+            json.loads(self.registry_path.read_text(encoding="utf-8")),
+            Path("schemas/v0/declared-roots.schema.json"),
+        )
+
+        with self.assertRaises(ProtocolRefusal) as duplicate:
+            declared.add_root(
+                bus_id="gamma",
+                root=str(gamma.path),
+                architect_node="architect-c",
+            )
+        self.assertEqual("declared_roots_invalid", duplicate.exception.code)
+
+        removed = declared.remove_root(bus_id="gamma")
+        self.assertEqual("remove-root", removed["operation"])
+        self.assertEqual(["alpha", "beta"], removed["roots"])
+        self.assertEqual(
+            ["alpha", "beta"],
+            [entry["bus_id"] for entry in declared.load()],
+        )
+
+        with self.assertRaises(ProtocolRefusal) as missing:
+            declared.remove_root(bus_id="gamma")
+        self.assertEqual("declared_root_unknown", missing.exception.code)
+
+    def test_save_refuses_an_empty_rewrite_without_replacing_the_file(self) -> None:
+        """Catches a writer dropping the last declared root."""
+
+        declared = DeclaredRoots(self.registry_path)
+        before = self.registry_path.read_bytes()
+        with self.assertRaises(ProtocolRefusal) as empty:
+            declared.save([])
+        self.assertEqual("declared_roots_invalid", empty.exception.code)
+        self.assertEqual(before, self.registry_path.read_bytes())
 
     def test_declared_roots_file_validates_against_the_published_schema(self) -> None:
         """Catches runtime accepting a declaration shape the published contract omits."""

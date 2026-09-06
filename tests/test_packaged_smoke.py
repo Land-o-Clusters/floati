@@ -136,6 +136,8 @@ class PackagedSmokeBattery(unittest.TestCase):
             self.assertTrue(
                 artifact["evidence"].get("code"),
                 "a typed refusal must name its code")
+
+    def test_readme_first_run_path_is_clean(self) -> None:
         self._assert_readme_first_run_path_is_clean()
 
     def _assert_readme_first_run_path_is_clean(self) -> None:
@@ -244,7 +246,7 @@ class PackagedSmokeBattery(unittest.TestCase):
         self.assertEqual("healthy", doctor["status"], doctor)
         unresolved = [
             row for row in doctor["evidence"]["findings"]
-            if row["severity"] != "ok" and row["remediation"] is None
+            if row["severity"] not in {"ok", "info"}
         ]
         self.assertEqual([], unresolved, doctor)
 

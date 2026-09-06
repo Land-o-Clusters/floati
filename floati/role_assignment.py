@@ -124,7 +124,6 @@ class RoleStepWizard:
         *,
         code: str,
         expected_node: Optional[str] = None,
-        require_architect: bool = False,
     ) -> Dict[str, Any]:
         if (
             not isinstance(record, dict)
@@ -138,13 +137,13 @@ class RoleStepWizard:
             raise ProtocolRefusal(code, "active registry evidence is invalid")
         try:
             node = validate_identifier(record.get("node_id"), "node")
-            role = validate_role(record.get("role"))
+            # The entry role field is harness vocabulary; it is validated as
+            # text but never read as a node's role (ruling 2026-09-05, ARCH-1).
+            validate_role(record.get("role"))
         except ProtocolRefusal as exc:
             raise ProtocolRefusal(code, "active registry evidence is invalid") from exc
         if expected_node is not None and node != expected_node:
             raise ProtocolRefusal(code, "active registry evidence names another node")
-        if require_architect and role.casefold() != "architect":
-            raise ProtocolRefusal(code, "current architect evidence has another role")
         return dict(record)
 
     @staticmethod
@@ -184,7 +183,6 @@ class RoleStepWizard:
                 architect = self._registry_entry(
                     self.backend.current_architect(),
                     code="role_architect_invalid",
-                    require_architect=True,
                 )
                 resolved[question.key] = str(architect["node_id"])
             else:

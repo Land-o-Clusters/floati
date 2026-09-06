@@ -62,6 +62,21 @@ _WAKE_HOLD_DECISION_PREIMAGE = WAKE_HOLD_DECISION_DOMAIN.encode("ascii") + b"\0"
 READER_VERSION = "0"
 _COMMON = frozenset(("schema_version", "id", "tenant_id", "timestamp", "kind"))
 WAKE_HOLD_KINDS = frozenset({"delivery_receipt", "wake_hold_receipt"})
+HOOK_BURN_EFFECT_CLASSES = frozenset(
+    {
+        "bus_path_created",
+        "bus_path_modified",
+        "bus_path_removed",
+        "no_observable_effect",
+        "stderr_diagnostic",
+        "stdout_emitted",
+        "stop_decision_blocked",
+    }
+)
+HOOK_BURN_INVOCATION_SOURCES = frozenset({"harness_executed", "live_codex_stop"})
+HOOK_BURN_NULLABLE_FIELDS = frozenset({"capture_sha256"})
+_HOOK_BURN_PATH_SHAPE = re.compile(r"<[a-z][a-z0-9-]{0,62}>(?:/[A-Za-z0-9._-]{1,255}){1,32}")
+_HOOK_BURN_RELEASE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
 WAKE_ATTEMPT_REFUSED_REASONS = frozenset(
     {
         "wake_envelope_not_owned",
@@ -183,6 +198,7 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "authority_grant": ("authority-", _COMMON | {"subject_id", "holder", "epoch", "claimed_at", "renewed_at", "expires_at", "released_at", "ttl_seconds", "deadline_seconds", "state"}),
     "delivery_receipt": ("delivery-", _COMMON | {"recipient", "item_ids", "presentation_count"}),
     "wake_hold_receipt": ("wake-hold-", _COMMON | {"recipient", "worker_session_id", "idempotency_key", "limit", "item_ids", "event_prefix_digest", "delivery_prefix_digest", "acknowledgment_prefix_digest", "decision_digest"}),
+    "seat_board_receipt": ("seat-board-", _COMMON | {"node_id", "acting_session_id", "coordinate_digest", "idempotency_key", "step", "arm_receipt_id", "predecessor_receipt_id", "resume_receipt_id", "resume_outcome", "delivery_receipt_id", "ack_receipt_id", "item_ids"}),
     "wake_attempt_receipt": ("wake-attempt-", _COMMON | {"node_id", "acting_session_id", "message_worker_session_id", "idempotency_key", "item_ids", "decision_receipt_id", "outcome", "reason_code"}),
     "bus_epoch_roll_receipt": (
         "bus-epoch-roll-receipt-",
@@ -261,12 +277,27 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
         "fleet-update-completed-",
         _COMMON | {"plan_digest", "actor", "consent_receipt_id", "operation", "step_kind", "pre_digest", "post_digest", "step_ordinal", "step_coordinate", "commit_disposition", "step_evidence", "state", "predecessor_receipt_id", "idempotency_key", "owner_review_batch_digest", "reader_consequences", "seat_binding_consequences", "seat_exclusions", "step_receipt_ids", "moves", "unchanged", "previous_source_sha", "target_source_sha", "epoch_roll_state", "registry_before_sha256", "registry_after_sha256"},
     ),
+    "role_template_write_receipt": (
+        "role-template-write-",
+        _COMMON | {"operation", "role", "path", "state", "request_sha256",
+                   "before_sha256", "after_sha256", "template_sha256",
+                   "idempotency_key", "predecessor_receipt_id"},
+    ),
     "registry_role_record": (
         "registry-role-",
         _COMMON
         | {
             "node_id", "template_role", "template_version", "template_sha256",
             "answers", "state", "predecessor_role_record_id",
+        },
+    ),
+    "registry_role_transfer": (
+        "registry-role-transfer-",
+        _COMMON
+        | {
+            "idempotency_key", "from_node", "to_node",
+            "from_role_before", "from_role_after", "to_role_before", "to_role_after",
+            "target_role_record_id", "vacated_role_record_id", "state",
         },
     ),
     "lane_spawn_receipt": (
@@ -352,12 +383,30 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
             "unknown_sources", "self_reported_fields",
         },
     ),
+    "prep_clear_receipt": (
+        "prep-clear-",
+        _COMMON | {
+            "node_id", "workspace", "workspace_map_digest", "acting_session_id",
+            "pushed_tip", "workspace_dirty", "unpushed_commit_count",
+            "complement", "envelope_id", "envelope_recipient",
+            "released_claim_receipt_id", "wake_release_outcome",
+            "wake_release_receipt_id", "idempotency_key",
+        },
+    ),
     "run_environment_observed": (
         "run-environment-observed-",
         _COMMON | {
             "run_id", "item_id", "attempt_id", "adapter", "harness_version",
             "model_observed", "provider_observed", "workspace_base_commit",
             "toolchain_fingerprint", "unknown_fields", "self_reported_fields",
+        },
+    ),
+    "hook_burn_record": (
+        "hook-burn-record-",
+        _COMMON | {
+            "release_id", "hook_command_sha256", "hook_group_index",
+            "hooks_path_shape", "invocation_source", "observed_exit_code",
+            "observed_effects", "capture_sha256", "unknown_fields",
         },
     ),
     "mcp_integration_pin": (
@@ -412,6 +461,7 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
 }
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
     "run_manifest_fact": _SPECS["run_manifest_fact"][1],
+    "hook_burn_record": _SPECS["hook_burn_record"][1],
     "mcp_integration_pin": _SPECS["mcp_integration_pin"][1],
     "bus_epoch_roll_receipt": _SPECS["bus_epoch_roll_receipt"][1],
     "tide_policy_record": _SPECS["tide_policy_record"][1],
@@ -711,7 +761,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             epoch=normalized_epoch,
         )
     is_v1_record = (
-        kind in ({"ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "dispatch_decision", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        kind in ({"seat_board_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
         and isinstance(record["schema_version"], int)
         and not isinstance(record["schema_version"], bool)
         and record["schema_version"] == 1
@@ -724,10 +774,14 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         record["schema_version"] != 1 or isinstance(record["schema_version"], bool)
     ):
         refuse("schema_version_invalid", f"{kind} must use integer version one")
+    if kind == "role_template_write_receipt" and normalized_version != 1:
+        refuse("schema_version_invalid", "role template writes require schema version 1")
     if kind == "run_manifest_fact" and normalized_version != 1:
         refuse("schema_version_invalid", "run manifests require schema version 1")
     if kind == "mcp_integration_pin" and normalized_version != 1:
         refuse("schema_version_invalid", "MCP integration pins require schema version 1")
+    if kind == "hook_burn_record" and normalized_version != 1:
+        refuse("schema_version_invalid", "hook burn records require schema version 1")
     if kind in {"attempt_suspended_for_approval", "approval_consumed_for_resume"} and normalized_version != 1:
         refuse("schema_version_invalid", f"{kind} must use integer version one")
     if kind in {
@@ -755,6 +809,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         refuse("schema_version_invalid", "ledger repair receipts require schema version 1")
     if kind == "bus_epoch_roll_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "bus epoch roll receipts require schema version 1")
+    if kind == "prep_clear_receipt" and normalized_version != 1:
+        refuse("schema_version_invalid", "prep-clear receipts require schema version 1")
     if not is_v1_record and kind not in {"segment_opened", "segment_sealed"} and (
         record["schema_version"] != 0 or isinstance(record["schema_version"], bool)
     ):
@@ -1272,6 +1328,27 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 or set(move_keys) & set(unchanged_keys)
             ):
                 refuse("fleet_update_completion_invalid", "fleet update completion fields are invalid")
+    elif kind == "role_template_write_receipt":
+        ident("role")
+        _enum(record["operation"], {"new", "import", "edit"}, "operation", refuse)
+        _enum(record["state"], {"prepared", "applied"}, "state", refuse)
+        if record["path"] != "roles/custom/" + record["role"] + ".json":
+            refuse("role_template_path_invalid", "role template path must match its custom role")
+        for field in ("request_sha256", "after_sha256", "template_sha256"):
+            _sha256(record[field], field, refuse)
+        if record["operation"] == "edit":
+            _sha256(record["before_sha256"], "before_sha256", refuse)
+        elif record["before_sha256"] is not None:
+            refuse("role_template_before_invalid", "new and imported roles must not name prior file evidence")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
+        predecessor = record["predecessor_receipt_id"]
+        if record["state"] == "prepared":
+            if predecessor is not None:
+                refuse("role_template_predecessor_invalid", "prepared role template write has no predecessor")
+        else:
+            _record_ref(predecessor, "role-template-write-", "predecessor_receipt_id", refuse)
     elif kind == "registry_role_record":
         ident("node_id")
         ident("template_role")
@@ -1288,6 +1365,22 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _record_ref(
                 predecessor, "registry-role-", "predecessor_role_record_id", refuse
             )
+    elif kind == "registry_role_transfer":
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        ident("from_node")
+        ident("to_node")
+        ident("from_role_before")
+        ident("from_role_after")
+        ident("to_role_after")
+        if record["to_role_before"] is not None:
+            ident("to_role_before")
+        _record_ref(
+            record["target_role_record_id"], "registry-role-", "target_role_record_id", refuse
+        )
+        _record_ref(
+            record["vacated_role_record_id"], "registry-role-", "vacated_role_record_id", refuse
+        )
+        _enum(record["state"], {"complete"}, "state", refuse)
     elif kind == "lane_spawn_receipt":
         ident("profile")
         ident("node_id")
@@ -1797,6 +1890,35 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _sha256(record[field], field, refuse)
         if record["decision_digest"] != wake_hold_decision_digest(record):
             refuse("wake_hold_decision_digest_invalid", "decision_digest must cover wake hold semantics")
+    elif kind == "seat_board_receipt":
+        if normalized_version != 1:
+            refuse("schema_version_invalid", "boarding receipts require version one")
+        _identifier(record["node_id"]) or refuse("node_id_invalid", "node_id must be an identifier")
+        _bounded_string(record["acting_session_id"], 1, 512, "acting_session_id", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["acting_session_id"]) or _terminal_unsafe(record["idempotency_key"]):
+            refuse("seat_board_coordinate_invalid", "boarding identity is terminal-unsafe")
+        if not isinstance(record["coordinate_digest"], str) or re.fullmatch(r"[0-9a-f]{64}", record["coordinate_digest"]) is None:
+            refuse("seat_board_coordinate_invalid", "boarding coordinate digest is invalid")
+        _enum(record["step"], {"started", "armed", "resumed", "drain_started", "completed"}, "step", refuse)
+        if record["resume_outcome"] is not None:
+            _enum(record["resume_outcome"], {"resumed", "already_active"}, "resume_outcome", refuse)
+        for field, prefix in (("arm_receipt_id", "codex-wait-session-"), ("predecessor_receipt_id", "codex-wait-session-"), ("resume_receipt_id", "wake-control-"), ("delivery_receipt_id", "delivery-"), ("ack_receipt_id", "ack-")):
+            if record[field] is not None:
+                _record_ref(record[field], prefix, field, refuse)
+        items = record["item_ids"]
+        if not isinstance(items, list) or len(items) > 1000 or any(not isinstance(item, str) for item in items) or len(set(items)) != len(items):
+            refuse("seat_board_items_invalid", "boarding items are not a bounded unique batch")
+        for item in items:
+            _record_ref(item, "msg-", "item_ids", refuse)
+        if (record["resume_outcome"] == "resumed" and record["resume_receipt_id"] is None) or (record["resume_outcome"] == "already_active" and record["resume_receipt_id"] is not None):
+            refuse("seat_board_step_invalid", "resume outcome does not match its native evidence")
+        if record["step"] != "started" and record["arm_receipt_id"] is None:
+            refuse("seat_board_step_invalid", "boarding step lacks arm evidence")
+        if record["step"] in {"resumed", "drain_started", "completed"} and record["resume_outcome"] is None:
+            refuse("seat_board_step_invalid", "boarding step lacks resume evidence")
+        if record["step"] == "completed" and items and (record["delivery_receipt_id"] is None or record["ack_receipt_id"] is None):
+            refuse("seat_board_step_invalid", "completed batch lacks delivery or acknowledgment evidence")
     elif kind == "wake_attempt_receipt":
         ident("node_id")
         _opaque_identifier(record["acting_session_id"], "acting_session_id", refuse)
@@ -1817,13 +1939,13 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             or len(set(items)) != len(items)
         ):
             refuse("item_ids_invalid", "wake attempt item_ids must be a nonempty unique message-id list")
-        _enum(record["outcome"], {"woke", "refused"}, "outcome", refuse)
+        _enum(record["outcome"], {"woke", "queued", "refused"}, "outcome", refuse)
         decision_id = record["decision_receipt_id"]
         reason_code = record["reason_code"]
-        if record["outcome"] == "woke":
+        if record["outcome"] in {"woke", "queued"}:
             _record_ref(decision_id, "wake-hold-", "decision_receipt_id", refuse)
             if reason_code is not None:
-                refuse("reason_code_invalid", "a successful wake has no refusal reason")
+                refuse("reason_code_invalid", "an accepted wake attempt has no refusal reason")
         else:
             if decision_id is not None:
                 _record_ref(decision_id, "wake-hold-", "decision_receipt_id", refuse)
@@ -1844,6 +1966,57 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         if record["wait_deadline_seconds"] >= record["hook_timeout_seconds"]:
             refuse("wait_deadline_invalid", "wait deadline must be below hook timeout")
         _enum(record["state"], {"armed", "disarmed"}, "state", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
+    elif kind == "prep_clear_receipt":
+        ident("node_id")
+        ident("envelope_recipient")
+        _bounded_string(record["workspace"], 1, 4096, "workspace", refuse)
+        if _terminal_unsafe(record["workspace"]) or not str(record["workspace"]).startswith("/"):
+            refuse("workspace_invalid", "workspace must be an absolute terminal-safe path")
+        _sha256(record["workspace_map_digest"], "workspace_map_digest", refuse)
+        _opaque_identifier(record["acting_session_id"], "acting_session_id", refuse)
+        if _terminal_unsafe(record["acting_session_id"]):
+            refuse("acting_session_id_invalid", "acting session is terminal-unsafe")
+        _git_sha(record["pushed_tip"], refuse)
+        if not isinstance(record["workspace_dirty"], bool):
+            refuse("workspace_dirty_invalid", "workspace dirt must be a boolean observation")
+        unpushed = record["unpushed_commit_count"]
+        if not isinstance(unpushed, int) or isinstance(unpushed, bool) or unpushed < 0:
+            refuse("unpushed_commit_count_invalid", "unpushed commit count must be a non-negative integer")
+        complement = record["complement"]
+        if complement is not None:
+            _bounded_string(complement, 1, 1024, "complement", refuse)
+            if _terminal_unsafe(complement) or "\n" in complement:
+                refuse("complement_invalid", "the complement must be one terminal-safe line")
+        # LC-R4: an incomplete stop must name what it does not cover.
+        if (record["workspace_dirty"] or unpushed) and complement is None:
+            refuse(
+                "prep_clear_complement_missing",
+                "a wind-down over a dirty or unpushed workspace must record its complement",
+            )
+        _record_ref(record["envelope_id"], "msg-", "envelope_id", refuse)
+        _record_ref(
+            record["released_claim_receipt_id"],
+            "codex-wait-session-",
+            "released_claim_receipt_id",
+            refuse,
+        )
+        _enum(
+            record["wake_release_outcome"],
+            {"released", "already_released"},
+            "wake_release_outcome",
+            refuse,
+        )
+        release_id = record["wake_release_receipt_id"]
+        if record["wake_release_outcome"] == "released":
+            _record_ref(release_id, "wake-control-", "wake_release_receipt_id", refuse)
+        elif release_id is not None:
+            refuse(
+                "wake_release_receipt_id_invalid",
+                "an already-released claim names no new wake control receipt",
+            )
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
         if _terminal_unsafe(record["idempotency_key"]):
             refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
@@ -2503,6 +2676,96 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 refuse("run_environment_unknown_invalid", "each absent observation must be named exactly once")
             if record[field] is not None and field not in self_reported:
                 refuse("run_environment_provenance_missing", "each observed value must name its provenance")
+    elif kind == "hook_burn_record":
+        # A burn record is testimony about ONE observed hook invocation. Every
+        # refusal here names the way a record could claim behaviour it never
+        # witnessed, or could carry the host it ran on into a durable artifact.
+        if (
+            not isinstance(record["release_id"], str)
+            or _HOOK_BURN_RELEASE.fullmatch(record["release_id"]) is None
+        ):
+            refuse(
+                "hook_burn_release_invalid",
+                "release_id must spell the package version the burn ran against",
+                remedy="record the version floati/__init__.py assigns in the tree that ran the burn",
+            )
+        _sha256(record["hook_command_sha256"], "hook_command_sha256", refuse)
+        group_index = _json_integer(record["hook_group_index"])
+        if group_index is None or not 0 <= group_index <= 1023:
+            refuse(
+                "hook_burn_hook_identity_invalid",
+                "hook_group_index must name the Stop array position that ran",
+                remedy="record the integer index of the executed Stop group",
+            )
+        shape = record["hooks_path_shape"]
+        if (
+            not isinstance(shape, str)
+            or _HOOK_BURN_PATH_SHAPE.fullmatch(shape) is None
+        ):
+            refuse(
+                "hook_burn_path_shape_hostful",
+                "hooks_path_shape must keep the path shape and lose the host prefix",
+                remedy="replace the host root with a <placeholder> segment before recording the path",
+            )
+        _enum(
+            record["invocation_source"],
+            HOOK_BURN_INVOCATION_SOURCES,
+            "invocation_source",
+            refuse,
+        )
+        exit_code = _json_integer(record["observed_exit_code"])
+        if exit_code is None or not 0 <= exit_code <= 255:
+            refuse(
+                "hook_burn_exit_code_invalid",
+                "observed_exit_code must be the status the invocation actually returned",
+                remedy="record the integer exit status the hook invocation returned",
+            )
+        effects = record["observed_effects"]
+        if (
+            not isinstance(effects, list)
+            or not 1 <= len(effects) <= 16
+            or any(effect not in HOOK_BURN_EFFECT_CLASSES for effect in effects)
+            or effects != sorted(set(effects))
+        ):
+            refuse(
+                "hook_burn_effects_invalid",
+                "observed_effects must be a sorted unique subset of the closed effect vocabulary",
+                remedy="derive the effect classes from the observed run rather than naming new ones",
+            )
+        unknown = record["unknown_fields"]
+        if (
+            not isinstance(unknown, list)
+            or any(
+                not isinstance(field, str) or field not in HOOK_BURN_NULLABLE_FIELDS
+                for field in unknown
+            )
+            or unknown != sorted(set(unknown))
+        ):
+            refuse(
+                "hook_burn_unknown_invalid",
+                "unknown_fields must be a sorted unique subset of nullable burn fields",
+                remedy="name only the nullable burn fields that were not measured",
+            )
+        for field in sorted(HOOK_BURN_NULLABLE_FIELDS):
+            if record[field] is None and field not in unknown:
+                refuse(
+                    "hook_burn_unknown_unnamed",
+                    f"null {field} must be named in unknown_fields",
+                    remedy=f"add {field} to unknown_fields or record its measured value",
+                )
+            if field in unknown and record[field] is not None:
+                refuse(
+                    "hook_burn_unknown_contradicted",
+                    f"unknown field {field} must be null",
+                    remedy=f"remove {field} from unknown_fields or clear its value",
+                )
+        if record["capture_sha256"] is None:
+            refuse(
+                "hook_burn_unwitnessed",
+                "a burn record without a capture digest is a declaration, not an observation",
+                remedy="capture the invocation's status, streams and touched paths and record their digest",
+            )
+        _sha256(record["capture_sha256"], "capture_sha256", refuse)
     elif kind == "run_manifest_fact":
         _attempt_id(record["attempt_id"], "attempt_id", refuse)
         _run_id(record["run_id"], refuse)

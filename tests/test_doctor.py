@@ -618,6 +618,59 @@ class DoctorContractTests(unittest.TestCase):
         self.assertIn("registry_live_dirs_mismatch", self._codes(artifact))
         self.assertNotIn("registry_live_dirs_expected_absent", self._codes(artifact))
 
+    def test_default_codex_surfaces_are_host_facts_without_root_exit_weight(self) -> None:
+        hooks = Path(os.environ['HOME']) / '.codex' / 'hooks.json'
+        hooks.parent.mkdir(parents=True)
+        hooks.write_text(json.dumps({'hooks': {'Stop': [{'hooks': [{
+            'type': 'command', 'timeout': 1800,
+            'command': '/usr/bin/python3 /opt/floati-codex-wait --root \x2ftmp/foreign-fixture',
+        }]}]}}))
+        hooks.with_name('config.toml').write_text('')
+        self._vendor_codex_gateway(b'governed fixture\n')
+        gateway = self.base / 'ambient-gateway'
+        gateway.write_bytes(b'drifted fixture\n')
+        with patch('floati.doctor.CODEX_GATEWAY_HOST', gateway):
+            artifact, rc = self.doctor(no_sandbox=True).artifact()
+        self.assertEqual(0, rc)
+        for code in ('host_codex_wait_hook_trust', 'host_codex_gateway_vendored_source_drift'):
+            row = next(row for row in artifact['findings'] if row['code'] == code)
+            self.assertEqual('info', row['severity'])
+            self.assertTrue(row['subject'].startswith('host:'))
+
+    def test_missing_bridge_remedy_precedes_unproven_hook_turn(self) -> None:
+        self._write_zcode_binding()
+        with patch('floati.doctor.installed_bridge_paths', return_value=None):
+            artifact, rc = self.doctor(no_sandbox=True).artifact()
+        row = next(row for row in artifact['findings'] if row['code'] == 'hook_unproven')
+        self.assertEqual(35, rc)
+        self.assertIn('install', row['remediation'].split(';')[0])
+        self.assertIn('bridge', row['remediation'].split(';')[0])
+
+    def test_malformed_default_hooks_are_host_info_but_explicit_config_is_weighted(self) -> None:
+        hooks = Path(os.environ['HOME']) / '.codex' / 'hooks.json'
+        hooks.parent.mkdir(parents=True)
+        hooks.write_text('{')
+        artifact, rc = self.doctor(no_sandbox=True).artifact()
+        self.assertEqual(0, rc)
+        row = next(row for row in artifact['findings'] if row['code'] == 'host_codex_wait_hook_trust_unavailable')
+        self.assertEqual('info', row['severity'])
+        explicit, explicit_rc = self.doctor(codex_config=hooks.with_name('config.toml'), no_sandbox=True).artifact()
+        self.assertEqual(35, explicit_rc)
+        row = next(row for row in explicit['findings'] if row['code'] == 'codex_wait_hook_trust_unavailable')
+        self.assertEqual('warning', row['severity'])
+
+    def test_default_host_gateway_does_not_hide_source_digest_error(self) -> None:
+        from floati.doctor import CODEX_GATEWAY_DIGEST
+        self._vendor_codex_gateway(b'governed fixture\n')
+        digest = self.source / CODEX_GATEWAY_DIGEST
+        record = json.loads(digest.read_text())
+        record['sha256'] = '0' * 64
+        digest.write_text(json.dumps(record))
+        artifact, rc = self.doctor(no_sandbox=True).artifact()
+        self.assertEqual(33, rc)
+        row = next(row for row in artifact['findings'] if row['code'] == 'codex_gateway_vendored_source_digest_mismatch')
+        self.assertEqual('error', row['severity'])
+
     def test_codex_gateway_digest_match_is_a_stamped_ok_fact(self) -> None:
         """A doctor run that cannot attest the installed gateway source is rejected."""
 
@@ -887,7 +940,7 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(0, rc)
         rows = [
             row for row in artifact["findings"]
-            if row["code"] == "codex_wait_hook_trust"
+            if row["code"] == "host_codex_wait_hook_trust"
         ]
         self.assertEqual(1, len(rows))
         self.assertEqual("trusted", rows[0]["hook_trust"])
@@ -908,12 +961,12 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual(0, rc)
         rows = [
             item for item in artifact["findings"]
-            if item["code"] == "codex_wait_hook_trust"
+            if item["code"] == "host_codex_wait_hook_trust"
         ]
         self.assertEqual(1, len(rows))
         row = rows[0]
-        self.assertEqual("ok", row["severity"])
-        self.assertEqual("~/.codex/hooks.json", row["subject"])
+        self.assertEqual("info", row["severity"])
+        self.assertEqual("host:~/.codex/hooks.json", row["subject"])
         self.assertIsNone(row["remediation"])
 
     def test_cli_requires_the_explicit_profile_flag_and_refuses_an_unruled_value(self) -> None:
@@ -1199,10 +1252,98 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_drift")
-        self.assertEqual("warning", finding["severity"])
+        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_drift")
+        self.assertEqual("info", finding["severity"])
         self.assertIn("installed wake bridge from", finding["detail"])
         self.assertIn("repository at", finding["detail"])
+
+    def test_ambient_hook_drift_is_a_host_fact_not_scratch_root_health(self) -> None:
+        """External bridge/watch bytes cannot change the declared root verdict."""
+
+        source_bridge = self.source / "hooks" / "stop-hook-bridge.py"
+        source_bridge.parent.mkdir()
+        source_bridge.write_bytes(b"source bridge\n")
+        self._git("add", "hooks")
+        self._git("commit", "--quiet", "-m", "bridge source fixture")
+        self._vendor_bus_watch(b"source watcher\n")
+        before, before_rc = self.doctor(no_sandbox=True).artifact()
+        fixture_home = Path(os.environ["HOME"])
+        installed = (
+            (fixture_home / ".local/share/floati/hooks/stop-hook-bridge.py",
+             "stop-hook-bridge.sha256", "host_wake_bridge_drift"),
+            (fixture_home / ".config/opencode/plugins/floati-bus-watch.ts",
+             "floati-bus-watch.sha256", "host_bus_watch_drift"),
+        )
+        for path, sidecar_name, _code in installed:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"unrelated host install\n")
+            path.with_name(sidecar_name).write_text(
+                hashlib.sha256(path.read_bytes()).hexdigest() + "\n"
+            )
+        root_before = root_entries(self.home)
+
+        after, after_rc = self.doctor(no_sandbox=True).artifact()
+
+        self.assertEqual(before_rc, after_rc, "ambient hook drift changed root exit")
+        self.assertEqual(before["state"], after["state"])
+        self.assertEqual(root_before, root_entries(self.home))
+        by_code = {row["code"]: row for row in after["findings"]}
+        for path, _sidecar_name, code in installed:
+            with self.subTest(code=code):
+                self.assertIn(code, by_code)
+                self.assertEqual("info", by_code[code]["severity"])
+                self.assertTrue(by_code[code]["subject"].startswith("host:"))
+                self.assertTrue(by_code[code]["subject"].endswith(path.relative_to(fixture_home).as_posix()))
+                self.assertNotIn(str(fixture_home), by_code[code]["subject"])
+                self.assertIsNotNone(by_code[code]["remediation"])
+        self.assertNotIn("wake_bridge_drift", by_code)
+        self.assertNotIn("bus_watch_drift", by_code)
+        validate_json_schema(
+            after,
+            Path(__file__).resolve().parents[1] / "schemas/v1/doctor-artifact.schema.json",
+        )
+
+    def test_root_firing_receipt_survives_absent_ambient_bridge(self) -> None:
+        """A global install cannot suppress proof recorded by this root."""
+        import floati.doctor as doctor_module
+
+        node = self._write_zcode_binding()
+        path = self.root.resolve_relative(
+            Path("state/zcode-hook/firings") / f"{node}.jsonl"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"timestamp": "2026-09-05T00:00:00Z", "injected": 2}) + "\n")
+        with mock.patch.object(doctor_module, "installed_bridge_paths", return_value=None):
+            artifact, _rc = self.doctor(no_sandbox=True).artifact()
+
+        finding = next(
+            (row for row in artifact["findings"] if row["code"] == "hook_firing_observed"),
+            None,
+        )
+        self.assertIsNotNone(finding, "ambient absence hid the root firing receipt")
+        self.assertEqual("ok", finding["severity"])
+        self.assertIn("2026-09-05T00:00:00Z", finding["detail"])
+
+    def test_unreadable_ambient_hooks_are_host_facts_not_root_failures(self) -> None:
+        """An inaccessible unrelated installation cannot abort root diagnostics."""
+
+        before, before_rc = self.doctor(no_sandbox=True).artifact()
+        for accessor, code in (
+            ("installed_bridge_paths", "host_wake_bridge_unavailable"),
+            ("installed_bus_watch_paths", "host_bus_watch_unavailable"),
+        ):
+            with self.subTest(accessor=accessor), mock.patch(
+                "floati.doctor." + accessor, side_effect=PermissionError("fixture denied")
+            ):
+                try:
+                    after, after_rc = self.doctor(no_sandbox=True).artifact()
+                except OSError as exc:
+                    self.fail(f"ambient host read aborted root diagnostics: {type(exc).__name__}")
+                self.assertEqual(before_rc, after_rc)
+                self.assertEqual(before["state"], after["state"])
+                finding = next(row for row in after["findings"] if row["code"] == code)
+                self.assertEqual("info", finding["severity"])
+                self.assertTrue(finding["subject"].startswith("host:"))
 
     def test_installed_bridge_in_sync_is_an_ok_fact(self) -> None:
         import floati.doctor as doctor_module
@@ -1225,8 +1366,8 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_current")
-        self.assertEqual("ok", finding["severity"])
+        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_current")
+        self.assertEqual("info", finding["severity"])
         self.assertEqual(0, rc)
 
     def test_absent_installed_bridge_is_a_typed_absence(self) -> None:
@@ -1235,8 +1376,8 @@ class DoctorContractTests(unittest.TestCase):
         with mock.patch.object(doctor_module, "installed_bridge_paths", return_value=None):
             artifact, rc = self.doctor().artifact()
 
-        finding = next(row for row in artifact["findings"] if row["code"] == "wake_bridge_uninstalled")
-        self.assertEqual("ok", finding["severity"])
+        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_uninstalled")
+        self.assertEqual("info", finding["severity"])
         self.assertIn("typed", finding["detail"].lower() + finding["subject"].lower() + "typed absence")
 
     def test_installed_bridge_without_repository_source_is_unnameable(self) -> None:
@@ -1261,13 +1402,13 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        self.assertEqual(35, rc)
+        self.assertEqual(0, rc)
         finding = next(
             row
             for row in artifact["findings"]
-            if row["code"] == "wake_bridge_repository_source_unnameable"
+            if row["code"] == "host_wake_bridge_repository_source_unnameable"
         )
-        self.assertEqual("warning", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIn(
             "complete Floati source", str(finding["remediation"])
         )
@@ -1302,7 +1443,7 @@ class DoctorContractTests(unittest.TestCase):
         path.write_text(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
         return node
 
-    def test_absent_bridge_suppresses_hook_unproven_for_bound_zcode(self) -> None:
+    def test_bound_zcode_without_firing_is_unproven_even_without_ambient_bridge(self) -> None:
         import floati.doctor as doctor_module
 
         self._write_zcode_binding()
@@ -1314,13 +1455,13 @@ class DoctorContractTests(unittest.TestCase):
         absence = next(
             row
             for row in artifact["findings"]
-            if row["code"] == "wake_bridge_uninstalled"
+            if row["code"] == "host_wake_bridge_uninstalled"
         )
-        self.assertEqual("ok", absence["severity"])
-        self.assertFalse(
+        self.assertEqual("info", absence["severity"])
+        self.assertTrue(
             any(row["code"] == "hook_unproven" for row in artifact["findings"])
         )
-        self.assertEqual(0, rc)
+        self.assertEqual(35, rc)
 
     def test_a_bound_zcode_hook_with_no_observed_firing_is_hook_unproven(self) -> None:
         """WD-R8: read-back proves what was written; only a firing proves
@@ -1414,14 +1555,14 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        self.assertEqual(35, rc)
+        self.assertEqual(0, rc)
         finding = next(
-            (row for row in artifact["findings"] if row["code"] == "bus_watch_drift"),
+            (row for row in artifact["findings"] if row["code"] == "host_bus_watch_drift"),
             None,
         )
         self.assertIsNotNone(finding, "doctor omitted the bus-watch drift finding")
         assert finding is not None
-        self.assertEqual("warning", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIn(f"installed watcher from {installed_sha[:12]}", finding["detail"])
         self.assertIn(f"repository at {repository_sha[:12]}", finding["detail"])
         self.assertIn("reinstall", finding["remediation"])
@@ -1448,12 +1589,12 @@ class DoctorContractTests(unittest.TestCase):
 
         self.assertEqual(0, rc)
         finding = next(
-            (row for row in artifact["findings"] if row["code"] == "bus_watch_current"),
+            (row for row in artifact["findings"] if row["code"] == "host_bus_watch_current"),
             None,
         )
         self.assertIsNotNone(finding, "doctor omitted the current bus-watch fact")
         assert finding is not None
-        self.assertEqual("ok", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIn(digest[:12], finding["detail"])
 
     def test_absent_installed_bus_watch_is_a_typed_absence(self) -> None:
@@ -1461,12 +1602,12 @@ class DoctorContractTests(unittest.TestCase):
 
         self.assertEqual(0, rc)
         finding = next(
-            (row for row in artifact["findings"] if row["code"] == "bus_watch_uninstalled"),
+            (row for row in artifact["findings"] if row["code"] == "host_bus_watch_uninstalled"),
             None,
         )
         self.assertIsNotNone(finding, "doctor omitted the uninstalled typed absence")
         assert finding is not None
-        self.assertEqual("ok", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIsNone(finding["remediation"])
 
     def test_installed_bus_watch_without_valid_sidecar_is_unnameable(self) -> None:
@@ -1486,18 +1627,18 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        self.assertEqual(35, rc)
+        self.assertEqual(0, rc)
         finding = next(
             (
                 row
                 for row in artifact["findings"]
-                if row["code"] == "bus_watch_installed_source_unnameable"
+                if row["code"] == "host_bus_watch_installed_source_unnameable"
             ),
             None,
         )
         self.assertIsNotNone(finding, "doctor omitted the installed-source absence")
         assert finding is not None
-        self.assertEqual("warning", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIsNotNone(finding["remediation"])
         self.assertIn("reinstall", finding["remediation"])
 
@@ -1519,18 +1660,18 @@ class DoctorContractTests(unittest.TestCase):
         ):
             artifact, rc = self.doctor().artifact()
 
-        self.assertEqual(35, rc)
+        self.assertEqual(0, rc)
         finding = next(
             (
                 row
                 for row in artifact["findings"]
-                if row["code"] == "bus_watch_repository_source_unnameable"
+                if row["code"] == "host_bus_watch_repository_source_unnameable"
             ),
             None,
         )
         self.assertIsNotNone(finding, "doctor omitted the repository-source absence")
         assert finding is not None
-        self.assertEqual("warning", finding["severity"])
+        self.assertEqual("info", finding["severity"])
         self.assertIsNotNone(finding["remediation"])
         self.assertIn("complete Floati source", finding["remediation"])
 
@@ -1565,7 +1706,7 @@ class DoctorContractTests(unittest.TestCase):
                 "registry_live_dirs_match",
                 "wake_namespace_registry_subset",
                 "wake_daemon_health",
-                "wake_bridge_uninstalled",
+                "host_wake_bridge_uninstalled",
                 "delivery_health",
                 "acknowledgment_health",
                 "wake_health",
@@ -1576,12 +1717,12 @@ class DoctorContractTests(unittest.TestCase):
                 "sandbox_write",
                 "manifest_exact_set",
                 "deploy_currency_current",
-                "bus_watch_uninstalled",
+                "host_bus_watch_uninstalled",
                 "symlink_identity_valid",
                 "consumption_coordinate_valid",
                 "installer_shadow",
                 "herdr_protocol_pins",
-                "codex_wait_hook_trust",
+                "host_codex_wait_hook_trust",
             ],
             [finding["code"] for finding in artifact["findings"]],
         )
@@ -1589,13 +1730,14 @@ class DoctorContractTests(unittest.TestCase):
             finding["severity"] == "ok"
             for finding in artifact["findings"]
             if finding["code"] not in {
-                "installer_shadow", "sandbox_write", "codex_wait_hook_trust",
+                "installer_shadow", "sandbox_write", "host_codex_wait_hook_trust",
+                "host_wake_bridge_uninstalled", "host_bus_watch_uninstalled",
             }
         ))
         self.assertTrue(all(
             finding["remediation"] is None
             for finding in artifact["findings"]
-            if finding["code"] not in {"sandbox_write", "codex_wait_hook_trust"}
+            if finding["code"] not in {"sandbox_write", "host_codex_wait_hook_trust"}
         ))
         shadow = next(row for row in artifact["findings"] if row["code"] == "installer_shadow")
         self.assertEqual("warning", shadow["severity"])

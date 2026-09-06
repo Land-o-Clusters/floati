@@ -428,6 +428,68 @@ class RecordValidationTests(unittest.TestCase):
                     )
                 self.assertEqual("role_invalid", replay.exception.code)
 
+    def transfer_receipt_fixture(self) -> dict:
+        """One registry_role_transfer receipt exactly as the writer emits it."""
+
+        return {
+            "schema_version": 0,
+            "id": "registry-role-transfer-" + uuid7_hex(),
+            "tenant_id": "alpha",
+            "timestamp": "2026-09-05T17:49:39.319Z",
+            "kind": "registry_role_transfer",
+            "idempotency_key": "transfer-e2e-1",
+            "from_node": "architect-a",
+            "to_node": "lane-b",
+            "from_role_before": "architect",
+            "from_role_after": "builder",
+            "to_role_before": None,
+            "to_role_after": "architect",
+            "target_role_record_id": "registry-role-" + uuid7_hex(),
+            "vacated_role_record_id": "registry-role-" + uuid7_hex(),
+            "state": "complete",
+        }
+
+    def test_registry_role_transfer_old_record_fixture_and_closed_contract(self) -> None:
+        """ARCH-1 clause 4: the transfer receipt is its own closed v0 kind.
+
+        An old committed record keeps validating under both integrity modes,
+        and every governed edge refuses by name: the exact field set, the
+        idempotency key bounds, the state enum, the role-record references,
+        and the nullable target-role vocabulary.
+        """
+
+        kinds = frozenset({"registry_role_transfer"})
+        fixture = self.transfer_receipt_fixture()
+        validate_record(dict(fixture), "alpha", kinds, integrity=False)
+        validate_record(dict(fixture), "alpha", kinds, integrity=True)
+
+        def refutes(field: str, value: object, code: str) -> None:
+            drifted = deepcopy(fixture)
+            drifted[field] = value
+            with self.assertRaises(ProtocolRefusal) as raised:
+                validate_record(drifted, "alpha", kinds, integrity=False)
+            self.assertEqual(code, raised.exception.code, field)
+
+        drifted = deepcopy(fixture)
+        drifted["extra_field"] = "not in the closed contract"
+        with self.assertRaises(ProtocolRefusal) as raised:
+            validate_record(drifted, "alpha", kinds, integrity=False)
+        self.assertEqual("record_fields_invalid", raised.exception.code)
+
+        refutes("idempotency_key", "", "idempotency_key_invalid")
+        refutes("state", "active", "state_invalid")
+        refutes(
+            "target_role_record_id",
+            "registry-" + uuid7_hex(),
+            "target_role_record_id_invalid",
+        )
+        refutes(
+            "vacated_role_record_id",
+            "registry-role-transfer-" + uuid7_hex(),
+            "vacated_role_record_id_invalid",
+        )
+        refutes("to_role_before", "bad node", "to_role_before_invalid")
+
     def test_ledger_kind_is_mandatory_and_exact(self) -> None:
         with self.assertRaises(ProtocolRefusal) as missing:
             append_record(self.root, self.path, self.valid())
