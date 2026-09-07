@@ -184,7 +184,7 @@ class DeliveryVerifier:
         claim = next(
             (
                 row
-                for row in self.events.event_records()
+                for row in self.events.strict_event_records()
                 if row.get("kind") == "delivery_claim" and row.get("id") == claim_id
             ),
             None,

@@ -13,12 +13,22 @@ def artifact_subject(subject: Union[str, Path]) -> str:
     candidate = Path(rendered)
     if not candidate.is_absolute():
         return rendered
+    home = Path.home()
+    if not home.is_absolute():
+        return rendered
+    homes = [home]
     try:
-        relative = candidate.relative_to(Path.home())
-    except ValueError:
-        return rendered
-    if any(part == ".." for part in relative.parts):
-        return rendered
-    if relative == Path("."):
-        return "~"
-    return "~/" + relative.as_posix()
+        homes.append(home.resolve())
+    except (OSError, RuntimeError):
+        pass
+    for prefix in homes:
+        try:
+            relative = candidate.relative_to(prefix)
+        except ValueError:
+            continue
+        if any(part == ".." for part in relative.parts):
+            return rendered
+        if relative == Path("."):
+            return "~"
+        return "~/" + relative.as_posix()
+    return rendered

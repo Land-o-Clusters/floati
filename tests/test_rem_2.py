@@ -26,21 +26,21 @@ ROLE_VERB_FILES = frozenset(
     }
 )
 
-PINNED_PROTOCOL_COUNT = 1117
+PINNED_PROTOCOL_COUNT = 1143
 
 PINNED_KIND_NONE_COUNT = 1026
 
-PINNED_BOUND_COUNT = 91
+PINNED_BOUND_COUNT = 117
 
 PINNED_MIXED_COUNT = 6
 
 PINNED_UNBOUND_COUNT = 1020
 
-PINNED_UNRESOLVED_PROTOCOL = 106
+PINNED_UNRESOLVED_PROTOCOL = 108
 
-PINNED_INTEGRITY_COUNT = 108
+PINNED_INTEGRITY_COUNT = 110
 
-PINNED_DURABILITY_COUNT = 14
+PINNED_DURABILITY_COUNT = 19
 
 PINNED_ROOT_SHARED = frozenset(
     {
@@ -102,45 +102,23 @@ PINNED_ROLE_INVALID_OUTSIDE = frozenset(
 
 PINNED_OTHER_COUNT = 983
 
-PINNED_PROTOCOL_DIGEST = (
-    "76e59862d81866669379243cc41eac7d1ed160b8cd24c76a403978dcc6bc5fe3"
-)
+PINNED_PROTOCOL_DIGEST = "757bc16538d28453e7a66ef8403f8e8bfd4b1742c7d439ff56d98607e1c3380f"
 
-PINNED_KIND_NONE_DIGEST = (
-    "72908f2114d78fad60fcb2114b18190d60c40aa08286eb861c1010ed6db9d719"
-)
+PINNED_KIND_NONE_DIGEST = "72908f2114d78fad60fcb2114b18190d60c40aa08286eb861c1010ed6db9d719"
 
-PINNED_OTHER_DIGEST = (
-    "8496cf4d498e49fe096e8733bf195da91be0b20eae8ca06ce7dbf0ed76e20153"
-)
+PINNED_OTHER_DIGEST = "8496cf4d498e49fe096e8733bf195da91be0b20eae8ca06ce7dbf0ed76e20153"
 
-PINNED_INTEGRITY_DIGEST = (
-    "8ba8eeaf34b24aeb48784639cfbfe3840dd626cbe7c6f78e4e269b97ad26c055"
-)
+PINNED_INTEGRITY_DIGEST = "f4c7e9af32aad2a134dd305976725c4eacc565f2f0a5df62b6ec935753002a12"
 
-PINNED_DURABILITY_DIGEST = (
-    "4221f3f405085af5ba032af31bfa8c6cce781a6500915a6610d36ed72c911746"
-)
+PINNED_DURABILITY_DIGEST = "842f19fa79234dc6831ed5c278ac88a3289e337afa7d0f76706325b6adf13205"
 
 PINNED_BOUND = frozenset(
     {
-        "ledger_policy_invalid",
-        "ledger_policy_symlink",
-        "uninstall_receipt_dir_absolute_required",
-        "uninstall_receipt_dir_dry_run_conflict",
-        "uninstall_receipt_dir_symlinked",
-        "uninstall_receipt_dir_unwritable",
-        "waiter_arm_identity_invalid",
-        "waiter_harness_mismatch",
-        "wake_daemon_log_prune_marker_unwritable",
-        "wake_daemon_log_prune_receipt_unwritable",
-        "wake_daemon_log_receipt_unwritable",
-        "wake_daemon_log_rotation_exists",
-        "wake_daemon_log_symlink",
         "ack_item_unknown",
         "arguments_invalid",
         "authority_holder_mismatch",
         "deployment_currency_unavailable",
+        "doctor_home_invalid",
         "door_cancelled",
         "door_terminal_io_failed",
         "gh_authentication_absent",
@@ -151,7 +129,30 @@ PINNED_BOUND = frozenset(
         "hook_confinement_result_invalid",
         "hook_precondition_release_unreadable",
         "hook_trust_config_writable",
+        "installed_reader_identity_invalid",
         "interactive_terminal_required",
+        "lane_base_unreachable",
+        "lane_declaration_invalid",
+        "lane_declaration_missing",
+        "lane_repo_undeclared",
+        "lane_retirement_preflight_failed",
+        "lane_row_invalid",
+        "lane_workspace_dirty",
+        "lane_workspace_exists",
+        "lane_workspace_fence_isolation_unavailable",
+        "lane_workspace_force_reason_required",
+        "lane_workspace_identity_mismatch",
+        "lane_workspace_in_use",
+        "lane_workspace_inspection_unavailable",
+        "lane_workspace_ledger_bytes_limit",
+        "lane_workspace_ledger_record_limit",
+        "lane_workspace_node_unknown",
+        "lane_workspace_record_id_conflict",
+        "lane_workspace_record_invalid",
+        "lane_workspace_unpushed",
+        "lane_workspace_unrecorded",
+        "ledger_policy_invalid",
+        "ledger_policy_symlink",
         "lifecycle_prompts_name_reserved",
         "lifecycle_prompts_target_foreign",
         "node_add_plan_invalid",
@@ -167,6 +168,9 @@ PINNED_BOUND = frozenset(
         "prep_clear_stop_incomplete",
         "prep_clear_workspace_invalid",
         "prep_clear_workspace_unreadable",
+        "profile_operations_unsupported",
+        "profile_update_binding_invalid",
+        "reader_older_than_ledger",
         "role_architect_invalid",
         "role_invalid",
         "role_template_edit_invalid",
@@ -188,6 +192,10 @@ PINNED_BOUND = frozenset(
         "signature_tool_absent",
         "snapshot_identity_fence_failed",
         "solo_identity_ambiguous",
+        "uninstall_receipt_dir_absolute_required",
+        "uninstall_receipt_dir_dry_run_conflict",
+        "uninstall_receipt_dir_symlinked",
+        "uninstall_receipt_dir_unwritable",
         "update_check_missing",
         "update_consent_changed",
         "update_consent_epoch_stale",
@@ -209,7 +217,15 @@ PINNED_BOUND = frozenset(
         "version_skew",
         "wait_payload_absent",
         "wait_payload_invalid",
+        "waiter_arm_identity_invalid",
+        "waiter_harness_mismatch",
         "wake_daemon_codex_executable_absent",
+        "wake_daemon_exception_detail_invalid",
+        "wake_daemon_log_prune_marker_unwritable",
+        "wake_daemon_log_prune_receipt_unwritable",
+        "wake_daemon_log_receipt_unwritable",
+        "wake_daemon_log_rotation_exists",
+        "wake_daemon_log_symlink",
         "wake_daemon_supervisor_digest_mismatch",
         "wake_daemon_zcode_entry_absent",
         "wake_daemon_zcode_node_absent",

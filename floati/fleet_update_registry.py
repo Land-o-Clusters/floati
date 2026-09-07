@@ -110,7 +110,8 @@ def planned_transport_registry_bytes(
     name = validate_identifier(transport_name, "transport")
     _document, spans = _pin_spans(raw, name)
     after = raw.decode("utf-8")
-    for field, value in (("source_sha", source_sha), ("manifest_sha256", manifest_sha256)):
+    for field in sorted(_PINS, key=lambda field: spans[field][0], reverse=True):
+        value = {"source_sha": source_sha, "manifest_sha256": manifest_sha256}[field]
         start, end = spans[field]
         after = after[:start] + json.dumps(value) + after[end:]
     return after.encode("utf-8")
@@ -250,7 +251,7 @@ def rewrite_transport_pins(registry_path: Path, transport_name: str, *, manifest
         raise ProtocolRefusal("fleet_update_transport_registry_drift", "registry inode changed after preview")
     _document, spans = _pin_spans(before, name); text = before.decode("utf-8")
     wanted = {"manifest_sha256": manifest_sha256, "source_sha": source_sha}; after_text = text
-    for field in reversed(_PINS):
+    for field in sorted(_PINS, key=lambda field: spans[field][0], reverse=True):
         start, end = spans[field]; after_text = after_text[:start] + json.dumps(wanted[field]) + after_text[end:]
     after = after_text.encode("utf-8"); descriptor = -1; temporary = ""; replaced = False
     try:
@@ -279,7 +280,7 @@ def rewrite_transport_pins(registry_path: Path, transport_name: str, *, manifest
         # Exact removal of both values proves prefix/middle/suffix preservation.
         # Spans are decoder character offsets, not UTF-8 byte offsets.
         without_before, without_after = text, after_text
-        for field in reversed(_PINS):
+        for field in sorted(_PINS, key=lambda field: spans[field][0], reverse=True):
             b0, b1 = spans[field]; a0, a1 = read_spans[field]
             without_before = without_before[:b0] + without_before[b1:]
             without_after = without_after[:a0] + without_after[a1:]

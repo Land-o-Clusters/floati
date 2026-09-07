@@ -104,6 +104,10 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `describe` | `floati describe --json` | project the live command contract |
 | `overlap` | `floati overlap {report}` | derive local overlap evidence |
 | `overlap report` | `floati overlap report --repository PATH --base-ref REF --left-ref REF --right-ref REF` | emit one local overlap fact |
+| `lane` | `floati lane {open&#124;close}` | open and close recorded lane workspaces |
+| `lane open` | `floati lane open --root ROOT --as NODE --row ROW --repo REPO [--base REF]` | create one recorded row worktree |
+| `lane close` | `floati lane close --root ROOT --as NODE --row ROW [--force] [--why TEXT]` | remove one recorded row worktree |
+| `sweep` | `floati sweep --root ROOT [--apply]` | inspect recorded and unmanaged lane workspaces |
 | `init` | `floati init [--root ROOT] [--solo [SOLO]] [--harness HARNESS] [--topology {star,mesh}] [--coordinator COORDINATOR] [--coordinator-authority {dispatch_bounded_work,gate_results_before_merge,decide_non_owner_tier_questions}] [--owner-tier {publishing,credentials,key_custody}]` | create a direct fleet home |
 | `confluence` | `floati confluence {grant&#124;revoke&#124;status&#124;bundle&#124;adopt&#124;release}` | the read seam for a consuming observer app |
 | `confluence grant` | `floati confluence grant --root ROOT --consumer CONSUMER --idempotency-key KEY` | record one explicit read grant |
@@ -175,10 +179,10 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `mcp` | `floati mcp {serve}` | expose launch-bound agent tools |
 | `mcp serve` | `floati mcp serve --root ROOT --as NODE --session SESSION` | serve one launch-bound MCP session |
 | `install` | `floati install --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree] [--json]` | install the exact governed bundle |
-| `update` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [{fleet}]` | update the exact governed bundle |
-| `update fleet` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] fleet {preview&#124;apply}` | plan or apply one explicit fleet-wide update |
-| `update fleet preview` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] fleet preview --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json]` | derive one immutable fleet update plan |
-| `update fleet apply` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] fleet apply --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json] --plan-digest SHA256 --idempotency-key KEY` | apply one consented immutable fleet update plan |
+| `update` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] [{fleet}]` | update the exact governed bundle |
+| `update fleet` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet {preview&#124;apply}` | plan or apply one explicit fleet-wide update |
+| `update fleet preview` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet preview --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json]` | derive one immutable fleet update plan |
+| `update fleet apply` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet apply --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json] --plan-digest SHA256 --idempotency-key KEY` | apply one consented immutable fleet update plan |
 | `epoch` | `floati epoch {roll}` | govern one whole bus epoch |
 | `epoch roll` | `floati epoch roll --root ROOT --as NODE --idempotency-key KEY` | archive and replace one bus epoch |
 | `grant` | `floati grant [--root ROOT] [--as NODE] [--holder NODE] [--subject SUBJECT] [--epoch N] [{revoke}]` | append exact work authority |

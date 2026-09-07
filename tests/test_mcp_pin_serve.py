@@ -167,6 +167,10 @@ class McpServeHandlerTests(unittest.TestCase):
         self.registry.register(self.node, "Codex")
         self.original_cwd = os.getcwd()
         self.addCleanup(os.chdir, self.original_cwd)
+        self.launch_argv = [
+            'floati', 'mcp', 'serve', '--root', str(self.root.path),
+            '--as', self.node, '--session', 'session-a',
+        ]
 
     def handler_server_command(self, cwd: str) -> list:
         """Run the real serve handler from one cwd and read the carried pin."""
@@ -191,7 +195,7 @@ class McpServeHandlerTests(unittest.TestCase):
         os.chdir(cwd)
         with mock.patch.object(sys, "stdin", stdin), mock.patch.object(
             sys, "stdout", stdout
-        ):
+        ), mock.patch.object(sys, 'argv', self.launch_argv):
             self.assertEqual(0, cli._mcp_serve(arguments))
         responses = [
             json.loads(line) for line in stdout.getvalue().splitlines() if line
@@ -207,15 +211,17 @@ class McpServeHandlerTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertTrue(os.path.isabs(first[0]))
-        self.assertEqual(sys.argv[1:], first[1:])
+        self.assertEqual(self.launch_argv[1:], first[1:])
 
     def test_serve_handler_pin_never_contains_cwd_joined_tokens(self) -> None:
         cwd = self.temporary.name
         command = self.handler_server_command(cwd)
 
-        for token in command:
+        for token in self.launch_argv:
+            if os.path.isabs(token):
+                continue
             self.assertFalse(
-                token.startswith(cwd + "/"),
+                str(Path(cwd) / token) in command,
                 f"CWD-joined fake path in the pinned command: {token!r}",
             )
 

@@ -264,6 +264,13 @@ def _decode_path_records(
                 "one bus epoch roll receipt is permitted only as physical record one",
             )
         try:
+            if not is_known_record_kind(kind):
+                from .installed_reader import installed_reader_identity, refuse_older_reader
+
+                identity = installed_reader_identity()
+                if identity is not None:
+                    validate_unknown_record(raw_record, tenant)
+                    refuse_older_reader(str(kind), identity)
             if unrecognized is not None and not is_known_record_kind(kind):
                 record = validate_unknown_record(raw_record, tenant)
                 summary = unrecognized.setdefault(
@@ -495,14 +502,19 @@ def append_record(authority: Authority, relative: Union[Path, str], record: Dict
         _append_frame(path, encoded)
 
 
-def transact(authority: FloatiRoot, relative: Union[Path, str], decide: Callable[[List[Dict[str, Any]]], Tuple[Any, Optional[Dict[str, Any]]]], *, allowed_kinds: Optional[Set[str]] = None, max_bytes: int = MAX_RECORD_BYTES) -> Any:
+def transact(authority: FloatiRoot, relative: Union[Path, str], decide: Callable[[List[Dict[str, Any]]], Tuple[Any, Optional[Dict[str, Any]]]], *, allowed_kinds: Optional[Set[str]] = None, max_bytes: int = MAX_RECORD_BYTES, skip_unknown_kinds: bool = False) -> Any:
     kinds = _kinds(allowed_kinds)
     path, tenant = _resolve(authority, relative, write=True)
     lock_path, lock_relative = _lock_beside(path, relative)
     with _epoch_writer_guard(authority, relative), _locked_path(
         lock_path, exclusive=True, relative=lock_relative
     ):
-        existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
+        summaries: Optional[Dict[str, Dict[str, object]]] = (
+            {} if skip_unknown_kinds else None
+        )
+        existing = _read_path_records(
+            path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
+        )
         result, record = decide(existing)
         if record is not None:
             if record.get("kind") == "wake_hold_receipt":
@@ -525,6 +537,7 @@ def transact_records(
     *,
     allowed_kinds: Optional[Set[str]] = None,
     max_bytes: int = MAX_RECORD_BYTES,
+    skip_unknown_kinds: bool = False,
 ) -> Any:
     """Validate and append one bounded record batch under one ledger lock."""
 
@@ -534,7 +547,12 @@ def transact_records(
     with _epoch_writer_guard(authority, relative), _locked_path(
         lock_path, exclusive=True, relative=lock_relative
     ):
-        existing = _read_path_records(path, tenant, kinds, max_bytes=max_bytes)
+        summaries: Optional[Dict[str, Dict[str, object]]] = (
+            {} if skip_unknown_kinds else None
+        )
+        existing = _read_path_records(
+            path, tenant, kinds, max_bytes=max_bytes, unrecognized=summaries
+        )
         result, candidates = decide(existing)
         batch = tuple(candidates)
         if not batch:
@@ -1061,6 +1079,7 @@ class VerifiedLedgerCursor:
         kinds: FrozenSet[str],
         domain: str,
         max_bytes: int,
+        skip_unknown: bool = False,
     ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
         try:
             before = path.stat()
@@ -1079,18 +1098,41 @@ class VerifiedLedgerCursor:
                 "ledger_identity_changed_during_read",
                 f"{path.name} changed identity or length during replay",
             )
+        summaries: Optional[Dict[str, Dict[str, object]]] = (
+            {} if skip_unknown else None
+        )
         records = _decode_path_records(
             path, tenant, kinds, data, max_bytes=max_bytes,
+            unrecognized=summaries,
         )
         frames = data.splitlines(keepends=True)
-        if len(frames) != len(records):
-            raise IntegrityFailure(
-                "noncanonical_frame",
-                "durable framing does not match validated records",
-            )
+        if skip_unknown:
+            # SKEW-2: unknown-kind frames stay inside the verified byte
+            # prefix (the digests cover every durable frame) while the
+            # validated records carry only known kinds, so the canonical
+            # check pairs each known record with its own frame.
+            known_frames = [
+                frame
+                for frame, raw in zip(frames, decode_frames(data))
+                if is_known_record_kind(
+                    raw.get("kind", "<absent>") if isinstance(raw, dict) else "<absent>"
+                )
+            ]
+            if len(known_frames) != len(records):
+                raise IntegrityFailure(
+                    "noncanonical_frame",
+                    "durable framing does not match validated records",
+                )
+        else:
+            known_frames = frames
+            if len(frames) != len(records):
+                raise IntegrityFailure(
+                    "noncanonical_frame",
+                    "durable framing does not match validated records",
+                )
         digest = self._initial_digest(domain)
         prefixes = [digest.hexdigest()]
-        for record, frame in zip(records, frames):
+        for record, frame in zip(records, known_frames):
             if frame != encode_frame(record):
                 raise IntegrityFailure(
                     "noncanonical_frame",
@@ -1112,6 +1154,7 @@ class VerifiedLedgerCursor:
         kinds: FrozenSet[str],
         domain: str,
         max_bytes: int,
+        skip_unknown: bool = False,
     ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
         if not path.exists():
             if self._identity is None and self._prefixes:
@@ -1127,7 +1170,8 @@ class VerifiedLedgerCursor:
             or identity != self._identity
             or stat.st_size < self._byte_length
         ):
-            return self._full_replay(path, tenant, kinds, domain, max_bytes)
+            return self._full_replay(path, tenant, kinds, domain, max_bytes,
+                                     skip_unknown=skip_unknown)
         if stat.st_size > MAX_LEDGER_BYTES:
             raise IntegrityFailure(
                 "ledger_too_large", f"{path.name} exceeds {MAX_LEDGER_BYTES} bytes"
@@ -1169,7 +1213,8 @@ class VerifiedLedgerCursor:
                 f"{path.name} changed identity or length during incremental read",
             )
         if retained_prefix_changed:
-            return self._full_replay(path, tenant, kinds, domain, max_bytes)
+            return self._full_replay(path, tenant, kinds, domain, max_bytes,
+                                     skip_unknown=skip_unknown)
         if stat.st_size == self._byte_length:
             return self.snapshot()
         line_offset = len(self._records)
@@ -1191,11 +1236,27 @@ class VerifiedLedgerCursor:
         frames = appended.splitlines(keepends=True)
         seen = {str(record["id"]) for record in self._records}
         validated: List[Dict[str, Any]] = []
+        digest_indices: List[int] = []
         for index, raw_record in enumerate(decoded):
             line_number = line_offset + index + 1
             record_id = raw_record.get("id", "<absent>") if isinstance(raw_record, dict) else "<absent>"
             kind = raw_record.get("kind", "<absent>") if isinstance(raw_record, dict) else "<absent>"
+            # SKEW-2: a well-formed future kind stays inside the verified
+            # byte prefix (the digest advances over its frame) but never
+            # enters the validated records, so the cursor's once-per-ledger
+            # contract survives vocabulary the reader predates.
+            if skip_unknown and not is_known_record_kind(kind):
+                validate_unknown_record(raw_record, tenant)
+                continue
+            digest_indices.append(index)
             try:
+                if not is_known_record_kind(kind):
+                    from .installed_reader import installed_reader_identity, refuse_older_reader
+
+                    identity = installed_reader_identity()
+                    if identity is not None:
+                        validate_unknown_record(raw_record, tenant)
+                        refuse_older_reader(str(kind), identity)
                 record = validate_record(raw_record, tenant, kinds, integrity=True)
             except IntegrityFailure as exc:
                 raise IntegrityFailure(
@@ -1218,8 +1279,12 @@ class VerifiedLedgerCursor:
             raise IntegrityFailure("ledger_cursor_uninitialized", "incremental digest state is absent")
         digest = self._digest.copy()
         prefixes = list(self._prefixes)
-        for frame in frames:
-            digest.update(frame)
+        # SKEW-2: the digest chain runs over the canonical frames of the
+        # validated records (the wake-hold testimony contract pins
+        # prefixes to records + 1); a skipped frame is consumed - it is
+        # never re-read - but advances neither the chain nor the records.
+        for index in digest_indices:
+            digest.update(frames[index])
             prefixes.append(digest.hexdigest())
         self._identity = identity
         self._byte_length = int(stat.st_size)
@@ -1236,6 +1301,7 @@ class VerifiedLedgerCursor:
         allowed_kinds: Optional[Set[str]] = None,
         domain: str,
         max_bytes: int = MAX_RECORD_BYTES,
+        skip_unknown_kinds: bool = False,
     ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
         if not isinstance(domain, str) or not domain.isascii() or not domain:
             raise ProtocolRefusal(
@@ -1243,7 +1309,10 @@ class VerifiedLedgerCursor:
             )
         kinds = _kinds(allowed_kinds)
         path, tenant = _resolve(authority, relative, write=False)
-        binding = (path.resolve(strict=False), tenant, kinds, domain, max_bytes)
+        binding = (
+            path.resolve(strict=False), tenant, kinds, domain, max_bytes,
+            skip_unknown_kinds,
+        )
         if self._binding is None:
             self._binding = binding
         elif self._binding != binding:
@@ -1252,10 +1321,12 @@ class VerifiedLedgerCursor:
                 "verified ledger cursor is already bound to another ledger contract",
             )
         if isinstance(authority, TenantObservation):
-            return self._read_locked(path, tenant, kinds, domain, max_bytes)
+            return self._read_locked(path, tenant, kinds, domain, max_bytes,
+                                     skip_unknown=skip_unknown_kinds)
         lock_path, lock_relative = _lock_beside(path, relative)
         with _locked_path(lock_path, exclusive=False, relative=lock_relative):
-            return self._read_locked(path, tenant, kinds, domain, max_bytes)
+            return self._read_locked(path, tenant, kinds, domain, max_bytes,
+                                     skip_unknown=skip_unknown_kinds)
 
 
 def read_records_compatible_with_versions(
@@ -1294,6 +1365,7 @@ def read_records_with_prefix_digests(
     domain: str,
     max_bytes: int = MAX_RECORD_BYTES,
     cursor: Optional[VerifiedLedgerCursor] = None,
+    skip_unknown_kinds: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
     """Read validated canonical frames and every inclusive SHA-256 prefix.
 
@@ -1309,4 +1381,5 @@ def read_records_with_prefix_digests(
         allowed_kinds=allowed_kinds,
         domain=domain,
         max_bytes=max_bytes,
+        skip_unknown_kinds=skip_unknown_kinds,
     )

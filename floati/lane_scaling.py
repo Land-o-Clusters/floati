@@ -618,6 +618,16 @@ class LaneScalingService:
 
     @shared_epoch_operation
     def retire(self, *, actor: str, instance: str, drain: bool) -> Dict[str, Any]:
+        from .lane_retirement import retirement_lane_scope
+
+        with retirement_lane_scope(self.root) as completed_lanes:
+            return self._retire_with_lanes(
+                actor=actor, instance=instance, drain=drain, completed_lanes=completed_lanes,
+            )
+
+    def _retire_with_lanes(self, *, actor, instance, drain, completed_lanes):
+        from .lane_retirement import close_retiring_node_lanes, preflight_retirement_records
+
         architect = self._require_architect(actor)
         if drain is not True:
             _refuse("lane_teardown_drain_required", "numbered instance retirement requires --drain")
@@ -627,7 +637,9 @@ class LaneScalingService:
             _refuse("lane_instance_profile_mismatch", "instance harness does not match its profile")
         self._drain(node)
         workspace = self.root.path / "nodes" / node
-        recursive = self._require_removable(workspace)
+        lane_ledger = workspace / "lanes.jsonl"
+        retain_lane_history = lane_ledger.exists() or lane_ledger.is_symlink()
+        recursive = False if retain_lane_history else self._require_removable(workspace)
         timestamp = _timestamp()
 
         def decide(existing: list[Dict[str, Any]]):
@@ -675,13 +687,13 @@ class LaneScalingService:
                 "node_id": node,
                 "actor": architect,
                 "state": "complete",
-                "removed": [str(workspace)],
+                "removed": [] if retain_lane_history else [str(workspace)],
                 "retained": [
                     self.registry.relative_path.as_posix(),
                     "events.jsonl",
                     "receipts/",
                     "work/items.jsonl",
-                ],
+                ] + ([str(workspace)] if retain_lane_history else []),
             }
             records.append(receipt)
             for record in records:
@@ -691,7 +703,9 @@ class LaneScalingService:
                     frozenset(REGISTRY_KINDS),
                     integrity=False,
                 )
-            if workspace.exists():
+            preflight_retirement_records(self.root, existing, records, REGISTRY_KINDS)
+            close_retiring_node_lanes(self.root, node, completed_lanes)
+            if workspace.exists() and not retain_lane_history:
                 if recursive:
                     shutil.rmtree(workspace)
                 else:

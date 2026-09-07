@@ -627,10 +627,10 @@ class DoctorContractTests(unittest.TestCase):
         }]}]}}))
         hooks.with_name('config.toml').write_text('')
         self._vendor_codex_gateway(b'governed fixture\n')
-        gateway = self.base / 'ambient-gateway'
+        gateway = Path(os.environ['HOME']) / '.codex/bin/codex-fleet-bus'
+        gateway.parent.mkdir(parents=True)
         gateway.write_bytes(b'drifted fixture\n')
-        with patch('floati.doctor.CODEX_GATEWAY_HOST', gateway):
-            artifact, rc = self.doctor(no_sandbox=True).artifact()
+        artifact, rc = self.doctor(no_sandbox=True).artifact()
         self.assertEqual(0, rc)
         for code in ('host_codex_wait_hook_trust', 'host_codex_gateway_vendored_source_drift'):
             row = next(row for row in artifact['findings'] if row['code'] == code)
@@ -912,7 +912,7 @@ class DoctorContractTests(unittest.TestCase):
         """Catches bare doctor omitting the only check that can name a trust lapse."""
         from floati.codex_hook_trust import codex_hook_current_hash
 
-        codex_home = self.base / "default-codex-home"
+        codex_home = (self.base / "default-codex-home").resolve()
         hooks_path = codex_home / ".codex" / "hooks.json"
         hooks_path.parent.mkdir(parents=True)
         block = {
@@ -1713,6 +1713,7 @@ class DoctorContractTests(unittest.TestCase):
                 "acknowledgment_health",
                 "wake_health",
                 "bridge_registrations_absent",
+                "harness_binary_inventory_absent",
                 "sandbox_write",
                 "sandbox_write",
                 "sandbox_write",

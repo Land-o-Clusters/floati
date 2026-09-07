@@ -6,6 +6,7 @@ from floati.identity_fence import (
     RETIRED_PRODUCT_SHORT_NAME as RETIRED_SHORT,
 )
 
+import hashlib
 import importlib.util
 import os
 import re
@@ -24,9 +25,6 @@ from tests.export_inventory import (
     published_baseline,
 )
 from tests.private_artifacts import require_private_artifact
-
-
-PRIVATE_FLEET = bytes.fromhex("707564646c652d666c656574").decode("ascii")
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -196,15 +194,6 @@ PRIVATE_ACCOUNT_PATTERNS = (
     re.compile(re.escape(HOME_PREFIX) + r"[^/\s`<>]+", re.IGNORECASE),
     re.compile(re.escape(str(Path.home())), re.IGNORECASE),
     re.compile(re.escape(OWNER_USERNAME), re.IGNORECASE),
-)
-
-TENANT_PATTERNS = (
-    *PRIVATE_ACCOUNT_PATTERNS,
-    re.compile(r"CMs-M5", re.IGNORECASE),
-    re.compile(rf"\.{RETIRED}-bus/{re.escape(PRIVATE_FLEET)}", re.IGNORECASE),
-    re.compile(re.escape(PRIVATE_FLEET), re.IGNORECASE),
-    re.compile(r"~/Projects/puddle", re.IGNORECASE),
-    re.compile(rf"/absolute/{RETIRED}", re.IGNORECASE),
 )
 
 RETIRED_PRODUCT_NAME = re.compile(
@@ -714,20 +703,27 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         self.assert_docs_teach_floati_not_the_retired_name(PRIVATE_LIVING_DOCS)
 
     def assert_docs_are_tenant_neutral(self, relatives: tuple[str, ...]) -> None:
+        # NAME-FENCE-1 Am.1: the digest half is keyed, and the key lives in
+        # the private_only operator declaration -- the sweep is live in the
+        # harbor and skips, stated, where the declaration does not ship.
+        from floati.tenant_fence import (
+            DECLARATION_RELATIVE,
+            operator_key,
+            prepare_tenant_scan_text,
+            tenant_violation_codes,
+        )
+
+        require_private_artifact(self, DECLARATION_RELATIVE)
+        key = operator_key(REPOSITORY_ROOT)
         for relative in relatives:
-            text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
-            if relative == "README.md":
-                text = text.replace(
-                    f'"tenant_id":"{PRIVATE_FLEET}"',
-                    '"tenant_id":"real-receipt"',
-                )
-            if relative == "docs/PUBLICATION-CHECKLIST.md":
-                # The publication ruling preserves one live durable coordinate;
-                # it does not make that coordinate acceptable elsewhere.
-                text = text.replace(PRIVATE_FLEET, "preserved-live-coordinate", 1)
-            for pattern in TENANT_PATTERNS:
-                with self.subTest(relative=relative, pattern=pattern.pattern):
-                    self.assertIsNone(pattern.search(text))
+            text = prepare_tenant_scan_text(
+                relative,
+                (REPOSITORY_ROOT / relative).read_text(encoding="utf-8"),
+                key=key,
+            )
+            violations = tenant_violation_codes(text, key=key)
+            with self.subTest(relative=relative, violations=violations):
+                self.assertEqual((), violations)
 
     def test_public_living_docs_are_tenant_neutral(self) -> None:
         """Catches an owner path, host identity, or private fleet in public copy."""
@@ -769,6 +765,65 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         self.assertNotIn(public_ids.builder(RETIRED), frame)
 
 
+class NameFenceTenantPathExportTests(unittest.TestCase):
+    """NAME-FENCE-1: the fence must not publish the private path it forbids."""
+
+    # Am.2: HMAC-SHA256 of the UTF-8, casefolded tenant-path pattern under
+    # the operator key from the excluded declaration. Am.1 left the bare
+    # SHA-256 of the same 17 low-entropy bytes here, and a bare hash of a
+    # low-entropy pattern IS enumeration recovery - publishing, in a file
+    # that ships, the one form of the secret this fence exists to keep out
+    # of public bytes. Keyed, the literal carries no reconstructible form.
+    # Length is the pattern's UTF-8 size. Windows are taken only at "~/",
+    # which is not the forbidden path.
+    _DIGEST = "5619b9f135b302cff90a45151a2faa05abd247a4cff236fe6b7836f8a24282a9"
+    _LENGTH = 17
+    _ANCHOR = b"~/"
+
+    def test_export_include_set_does_not_carry_the_tenant_path_pattern(self) -> None:
+        """The fence's own TENANT path pattern must not appear in exported bytes."""
+
+        # Am.2: the compare is keyed, and the key lives in the private_only
+        # declaration - live in the harbor, a stated skip where it does not
+        # ship (the projection), the same shape as the tenant-neutral sweep.
+        from floati.tenant_fence import (
+            DECLARATION_RELATIVE,
+            hmac_digest,
+            operator_key,
+        )
+
+        require_private_artifact(self, DECLARATION_RELATIVE)
+        key = operator_key(REPOSITORY_ROOT)
+
+        hits: list[str] = []
+        for relative in export_include_set():
+            path = REPOSITORY_ROOT / relative
+            if not path.is_file() or path.is_symlink():
+                continue
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            index = 0
+            while True:
+                found = data.find(self._ANCHOR, index)
+                if found < 0:
+                    break
+                window = data[found : found + self._LENGTH]
+                if len(window) == self._LENGTH:
+                    try:
+                        candidate = window.decode("utf-8")
+                    except UnicodeDecodeError:
+                        candidate = None
+                    if candidate is not None and hmac_digest(
+                        key, candidate
+                    ) == self._DIGEST:
+                        hits.append(relative)
+                        break
+                index = found + 1
+        self.assertEqual([], hits)
+
+
 class InstallerShadowDocumentationTests(unittest.TestCase):
     """Issue #3: the installer-shadow scan-input requirement must be stated."""
 
@@ -797,3 +852,15 @@ class InstallerShadowDocumentationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrivateToolsAccountFenceTests(unittest.TestCase):
+    def test_real_tools_tree_has_no_private_account_coordinates(self):
+        offenders = []
+        for path in sorted((REPOSITORY_ROOT / 'tools').rglob('*')):
+            if not path.is_file() or path.suffix not in {'.py', '.md', '.json', '.sh'}:
+                continue
+            text = path.read_text(encoding='utf-8')
+            if any(pattern.search(text) for pattern in PRIVATE_ACCOUNT_PATTERNS):
+                offenders.append(str(path.relative_to(REPOSITORY_ROOT)))
+        self.assertEqual([], offenders)

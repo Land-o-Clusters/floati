@@ -15,14 +15,20 @@ name finds it, which is what this module does.
 
 Scope, stated so the fence is read for what it is:
 
-* **Class-scoped, by design.** Two classes in one file may both define
-  `test_first_wake_of_an_unproven_binding_flips_it_proven` -- that is two tests
-  with one name and both of them run. `tests/test_wake_daemon.py` does exactly
-  this, twice, deliberately, and a fence that flagged it would be reporting the
-  English language. The defect is one name bound twice in ONE body.
+* **File-scoped as of TEST-DUP-WAKE-DAEMON (2026-09-07); class-scoped before.**
+  This fence deliberately allowed one test name bound by two classes in one
+  file -- `tests/test_wake_daemon.py` did exactly that, twice, and the
+  allowance named the file. The deliberate example is what decayed: the two
+  generations of `test_first_wake_verdict_leaves_proven_and_absent_bindings_alone`
+  drifted one input apart inside one file while every instrument reported both
+  as running. Both bodies still run (distinct classes, distinct ids -- nothing
+  is shadowed), but one name bound twice in one file is two generations of one
+  test waiting to drift, so the file-scoped finder now names it with the line
+  numbers of every binding. The class-scoped finder stays: it names the
+  SHADOWING shape, where the second binding deletes the first.
 * **Direct body members, not `ast.walk`.** A method nested inside another
   function, or inside a nested class, is a different binding in a different
-  scope. Only the class body's own statements can shadow each other.
+  scope and cannot shadow or collide with a file sibling.
 * **Class names, same rule.** Two `class AdapterTests` in one module is the
   worse deletion: the second body replaces the first, and every `test_` on
   the first class is gone. The fence names `file::Class` for that.
@@ -94,26 +100,42 @@ def duplicate_test_methods(root: Path) -> list[str]:
     return sorted(offenders)
 
 
-def cross_class_test_names(root: Path) -> dict[str, list[str]]:
-    """Return `file::name` -> the classes sharing it, for names in 2+ classes.
+def file_scoped_duplicate_test_names(root: Path) -> list[str]:
+    """Return `file::name (lines a, b)` for every test name a module binds twice.
 
-    The fence's scope, made visible. Every entry here is ALLOWED: each of these
-    definitions is bound and runs. If this fence ever grows a file-scoped mode,
-    this is the list it would wrongly accuse.
+    The TEST-DUP-WAKE-DAEMON fence: one name bound twice in one file, by any
+    two bodies -- two classes, a class and the module, two module functions --
+    is two generations of one test waiting to drift. Derived by walking every
+    `tests/*.py` blob's AST; never a hand list. Direct members only: a `def`
+    nested inside a helper binds a different name in a different scope.
     """
 
-    seen: dict[str, list[str]] = collections.defaultdict(list)
+    offenders: list[str] = []
     for path in test_modules(root):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except SyntaxError:
+        except SyntaxError as error:  # a file that cannot be parsed is its own finding
+            offenders.append(f"{path.name}::<unparseable>::{error.msg}")
             continue
-        for definition in _class_definitions(tree):
-            for name in set(_test_method_names(definition)):
-                seen[f"{path.name}::{name}"].append(definition.name)
-    return {
-        key: sorted(classes) for key, classes in seen.items() if len(classes) > 1
-    }
+        names: dict[str, list[int]] = collections.defaultdict(list)
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                members: list[ast.stmt] = list(node.body)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                members = [node]
+            else:
+                continue
+            for statement in members:
+                if (
+                    isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and statement.name.startswith("test_")
+                ):
+                    names[statement.name].append(statement.lineno)
+        for name, lines in sorted(names.items()):
+            if len(lines) > 1:
+                rendered = ", ".join(str(line) for line in sorted(lines))
+                offenders.append(f"{path.name}::{name} (lines {rendered})")
+    return sorted(offenders)
 
 
 def duplicate_test_classes(root: Path) -> list[str]:
@@ -228,8 +250,13 @@ class DuplicateTestNameFenceTests(unittest.TestCase):
                 duplicate_test_methods(root),
             )
 
-    def test_the_same_name_in_two_classes_is_not_a_finding(self) -> None:
-        """The scope, asserted: two classes, one name, both bound, both run."""
+    def test_the_same_name_in_two_classes_is_a_file_scoped_finding(self) -> None:
+        """The scope, amended: two classes, one name, both run -- and named.
+
+        The class-scoped finder still reports nothing, because nothing is
+        shadowed; the file-scoped finder names the collision with both line
+        numbers, because two generations of one test in one file drift.
+        """
 
         from contextlib import ExitStack
 
@@ -251,9 +278,75 @@ class DuplicateTestNameFenceTests(unittest.TestCase):
 
             self.assertEqual([], duplicate_test_methods(root))
             self.assertEqual(
-                {"test_two_classes.py::test_shared_name": ["GreenTests", "NoticeTests"]},
-                cross_class_test_names(root),
+                ["test_two_classes.py::test_shared_name (lines 5, 10)"],
+                file_scoped_duplicate_test_names(root),
             )
+
+    def test_a_file_scoped_clean_module_is_clean(self) -> None:
+        """The control for the RED: distinct names, one binding each."""
+
+        from contextlib import ExitStack
+
+        source = (
+            "import unittest\n"
+            "\n"
+            "\n"
+            "class GreenTests(unittest.TestCase):\n"
+            "    def test_one(self) -> None:\n"
+            "        pass\n"
+            "\n"
+            "\n"
+            "class NoticeTests(unittest.TestCase):\n"
+            "    def test_two(self) -> None:\n"
+            "        pass\n"
+        )
+        with ExitStack() as stack:
+            root = self._fixture(stack, test_two_classes=source)
+
+            self.assertEqual([], file_scoped_duplicate_test_names(root))
+
+    def test_a_module_function_and_a_class_method_sharing_a_name_is_a_finding(self) -> None:
+        """The file is the scope: a module-level `test_` collides too."""
+
+        from contextlib import ExitStack
+
+        source = (
+            "def test_shared_name() -> None:\n"
+            "    pass\n"
+            "\n"
+            "\n"
+            "class NoticeTests(unittest.TestCase):\n"
+            "    def test_shared_name(self) -> None:\n"
+            "        pass\n"
+        )
+        with ExitStack() as stack:
+            root = self._fixture(stack, test_module_and_class=source)
+
+            self.assertEqual(
+                ["test_module_and_class.py::test_shared_name (lines 1, 6)"],
+                file_scoped_duplicate_test_names(root),
+            )
+
+    def test_a_nested_definition_is_not_a_file_scoped_finding(self) -> None:
+        """A `def` inside a helper is a different scope, here as in the class walk."""
+
+        from contextlib import ExitStack
+
+        source = (
+            "import unittest\n"
+            "\n"
+            "\n"
+            "class ExampleTests(unittest.TestCase):\n"
+            "    def test_one(self) -> None:\n"
+            "        def test_one() -> None:\n"
+            "            pass\n"
+            "\n"
+            "        test_one()\n"
+        )
+        with ExitStack() as stack:
+            root = self._fixture(stack, test_nested=source)
+
+            self.assertEqual([], file_scoped_duplicate_test_names(root))
 
     def test_a_nested_definition_does_not_shadow_the_class_member(self) -> None:
         """A `def` inside a helper is a different scope and must not be counted."""
@@ -396,26 +489,17 @@ class RepositoryTestHygieneTests(unittest.TestCase):
 
         self.assertEqual([], duplicate_test_classes(TESTS_DIRECTORY))
 
-    def test_the_allowed_cross_class_names_are_real_and_are_not_findings(self) -> None:
-        """The allowance is exercised by the REAL tree, not only by a fixture.
+    def test_no_test_module_binds_the_same_test_name_twice(self) -> None:
+        """The TEST-DUP-WAKE-DAEMON fence over the real tree.
 
-        If this ever drops to zero the fence still passes, and its scope would
-        then be untested against real data -- so the existence of the allowance
-        is asserted here, beside the assertion that it is not a finding.
+        `tests/test_wake_daemon.py` carried two generations of one test name
+        in two classes -- both ran, nothing was shadowed, and the generations
+        still drifted one input apart. The finding names the file, the name,
+        and every binding line, so the resolution is a decision about named
+        bodies rather than a hunt.
         """
 
-        allowed = cross_class_test_names(TESTS_DIRECTORY)
-
-        self.assertTrue(allowed)
-        offenders = set(duplicate_test_methods(TESTS_DIRECTORY))
-        for key, classes in allowed.items():
-            with self.subTest(name=key):
-                self.assertGreater(len(classes), 1)
-                self.assertFalse(
-                    any(offender.startswith(key.split("::")[0]) and
-                        offender.endswith(f"::{key.split('::')[1]} (defined 2 times)")
-                        for offender in offenders)
-                )
+        self.assertEqual([], file_scoped_duplicate_test_names(TESTS_DIRECTORY))
 
 
 if __name__ == "__main__":

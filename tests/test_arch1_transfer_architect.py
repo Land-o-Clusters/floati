@@ -262,5 +262,84 @@ class TransferArchitectTests(unittest.TestCase):
         )
 
 
+    def test_transfer_writes_the_declared_template_by_digest(self) -> None:
+        """ARCH-DECL-1-F1: the transfer pins the DECLARED template, not a copy.
+
+        Measured on the live root: the transfer copied the predecessor's
+        stale pin (template_version 1, template_sha256 7ac392eb…) into
+        the new architect record while the declared template is version
+        2, so doctor's delivery health refused with
+        `delivery_health_unavailable` — "active role evidence for the
+        seated architect node does not match a declared template". The
+        reader is right: a role record the product writes must validate
+        against the template the product ships, by digest.
+        """
+
+        from floati.doctor import _role_cadences
+
+        self._register("architect-x")
+        self._register("builder-x")
+        stale: Dict[str, Any] = {
+            "schema_version": 0,
+            "id": "registry-role-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": (
+                datetime.now(timezone.utc)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z")
+            ),
+            "kind": "registry_role_record",
+            "node_id": "architect-x",
+            "template_role": "architect",
+            "template_version": 1,
+            "template_sha256": (
+                "7ac392ebe9f68676e117282d81e65cccfb7d19cf249e1159f012bfa89b689d24"
+            ),
+            "answers": {
+                "repo": "floati",
+                "never_touch": "foreign-project",
+                "reports_to": "owner-tier",
+            },
+            "state": "active",
+            "predecessor_role_record_id": None,
+        }
+        self.backend.commit_role(
+            RoleAssignmentPlan(
+                node_id="architect-x", template_role="architect", record=stale
+            )
+        )
+
+        exit_code, artifact = self._transfer("builder-x", "arch-decl-1")
+        self.assertEqual(0, exit_code, artifact)
+
+        declared = self.templates["architect"]
+        target = next(
+            row
+            for row in self._role_records()
+            if row["node_id"] == "builder-x" and row["template_role"] == "architect"
+        )
+        self.assertEqual(declared.template_version, target["template_version"])
+        self.assertEqual(declared.digest, target["template_sha256"])
+        vacated = next(
+            row
+            for row in reversed(self._role_records())
+            if row["node_id"] == "architect-x"
+        )
+        builder = self.templates["builder"]
+        self.assertEqual(builder.template_version, vacated["template_version"])
+        self.assertEqual(builder.digest, vacated["template_sha256"])
+
+        cadences = _role_cadences(
+            Path(__file__).resolve().parents[1],
+            ["architect-x", "builder-x"],
+            self._role_records(),
+            root=self.root,
+        )
+        self.assertEqual(
+            {"architect-x": builder.cadence, "builder-x": declared.cadence},
+            cadences,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

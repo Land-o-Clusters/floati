@@ -72,10 +72,29 @@ _REQUIRED_RUNTIME_FIELDS = _RUNTIME_FIELDS - _OPTIONAL_RUNTIME_FIELDS
 _BREAKER_THRESHOLD = 3
 _WAKE_BUDGET = 3
 _WAKE_BUDGET_WINDOW_SECONDS = 300.0
+CYCLE_EXCEPTION_MESSAGE_BOUND = 128
 WAKE_BREAKER_REMEDY = (
     "rebind the wake daemon to a dedicated headless session - an interactive "
     "session with a large rollout may be unresumable - then rerun doctor"
 )
+
+
+def _bounded_exception_message(detail: object, fallback: str) -> str:
+    """One bounded, terminal-safe line of exception testimony.
+
+    SKEW-2-F1: the cycle_exception receipt names what raised, never a
+    traceback. Control, surrogate, and bidirectional-control characters
+    are dropped (the same vocabulary the ledger refuses), the remainder
+    is truncated to CYCLE_EXCEPTION_MESSAGE_BOUND, and an empty result
+    falls back to the exception type name so the field is never empty.
+    """
+
+    text = "" if detail is None else str(detail)
+    printable = "".join(
+        character for character in text if character.isprintable()
+    )
+    bounded = printable[:CYCLE_EXCEPTION_MESSAGE_BOUND]
+    return bounded or fallback
 
 
 def breaker_status_for_node(root: object, node_id: str) -> Dict[str, object]:
@@ -604,6 +623,65 @@ class WakeDaemon:
             reason_code=reason_code,
         )
 
+    def _serve_refusal_record_path(self, code: str) -> Path:
+        return self.root.resolve_relative(
+            Path("state") / "wake-daemon" / "serve-refusal"
+            / f"{self.coordinate.digest}.{code}.json"
+        )
+
+    def _hold_serve_refusal(self, exc: BaseException) -> None:
+        """SERVE-PASS-1: a refusal the cycle holds quietly is recorded once.
+
+        The swallow keeps the daemon alive, but a refusal nothing records
+        is a silent failure. The first raise of a (coordinate, code)
+        condition writes one typed record into the daemon's own state
+        plane and the process then holds quietly for that condition --
+        never per cycle. The write is best effort: when the state plane
+        is unwritable too, the hold lives in process memory alone and
+        nothing re-raises here.
+        """
+
+        code = str(getattr(exc, "code", type(exc).__name__))
+        key = (self.coordinate.digest, code)
+        if key in _SERVE_REFUSAL_HELD:
+            return
+        _SERVE_REFUSAL_HELD.add(key)
+        record = {
+            "schema_version": 0,
+            "kind": "wake_daemon_serve_refusal",
+            "coordinate_digest": self.coordinate.digest,
+            "node_id": self.coordinate.node_id,
+            "code": code,
+            "detail": str(exc),
+            "remedy": getattr(exc, "remedy", None),
+            "recorded_at": _rotation_timestamp(),
+        }
+        try:
+            path = self._serve_refusal_record_path(code)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def _rearm_serve_refusals(self) -> None:
+        """A cycle that maintained cleanly proved every held condition
+        healed: the hold re-arms and the record goes with the condition
+        it named, so a relapse is a second outage with its own record,
+        never a replay of the first."""
+
+        for key in [
+            key for key in _SERVE_REFUSAL_HELD if key[0] == self.coordinate.digest
+        ]:
+            _SERVE_REFUSAL_HELD.discard(key)
+            code = key[1]
+            try:
+                self._serve_refusal_record_path(code).unlink()
+            except OSError:
+                pass
+
     def serve(
         self,
         stop_requested: Callable[[], bool],
@@ -614,15 +692,99 @@ class WakeDaemon:
         self.consent.require_active(self.coordinate)
         with self.owner:
             while not stop_requested():
-                result = self.run_cycle(clock())
+                try:
+                    result = self.run_cycle(clock())
+                except Exception as exc:
+                    result = self._recover_cycle_exception(exc, clock)
                 try:
                     maintain_supervisor_logs(self.root, self.coordinate.digest)
-                except (OSError, ProtocolRefusal):
-                    pass
+                except (OSError, ProtocolRefusal) as exc:
+                    self._hold_serve_refusal(exc)
+                else:
+                    self._rearm_serve_refusals()
                 if stop_requested():
                     break
                 delay = max(0.0, float(result["next_poll_at"]) - clock())
                 sleep(delay)
+
+    def _recover_cycle_exception(
+        self, exc: BaseException, clock: Callable[[], float]
+    ) -> Dict[str, object]:
+        """Record one typed lifecycle receipt and schedule the next poll.
+
+        SKEW-2: a cycle fault is testimony, never silence. The daemon
+        records one typed receipt naming the fault and keeps polling; the
+        serve loop itself must survive whatever a cycle raises.
+        """
+
+        current_time = self._time(clock())
+        consent = self.consent.require_active(self.coordinate)
+        binding = self._exact_binding()
+        runtime = self._read_or_initialize(consent, binding)
+        self._schedule_failure(runtime, consent, current_time)
+        if isinstance(exc, (IntegrityFailure, ProtocolRefusal)):
+            reason_code = exc.code
+            detail: object = exc.detail
+        else:
+            reason_code = "wake_daemon_cycle_exception"
+            # SKEW-2-F1 Am.1: str(exc) runs user-controlled __str__ and can
+            # itself raise; a fault inside the handler would kill serve(),
+            # the silence this recovery exists to prevent. None falls back
+            # to the type name in the bounded message.
+            try:
+                detail = str(exc)
+            except Exception:
+                detail = None
+        # SKEW-2-F1 Am.2: the type name is user-chosen too (type("x\x01", …))
+        # and flows through the same field validator, so it takes the same
+        # bounded-printable filter as the message.
+        exception_type = _bounded_exception_message(
+            type(exc).__name__, "unprintable_exception_type"
+        )
+        try:
+            return self._transition(
+                runtime,
+                consent,
+                binding,
+                result_state="adapter_unknown",
+                event="cycle_exception",
+                lifecycle_state="unknown",
+                reason_code=reason_code,
+                exception_type=exception_type,
+                exception_message=_bounded_exception_message(detail, exception_type),
+            )
+        except Exception as receipt_failure:
+            # The recovery path may never raise. When the full receipt
+            # refuses, write a minimal typed receipt naming the refusal;
+            # when even that fails, continue the loop with the runtime's
+            # scheduled backoff — silence with a schedule beats silence.
+            fallback_reason = (
+                receipt_failure.code
+                if isinstance(receipt_failure, ProtocolRefusal)
+                else "wake_daemon_cycle_exception"
+            )
+            try:
+                lifecycle = self.lifecycle.record(
+                    self.coordinate,
+                    daemon_instance_id=str(runtime["daemon_instance_id"]),
+                    activation_epoch=int(consent["activation_epoch"]),
+                    event="cycle_exception",
+                    state="unknown",
+                    reason_code=fallback_reason,
+                    adapter_digest=binding.adapter_digest,
+                    plist_digest=None,
+                    session_digest=binding.session_digest,
+                    predecessor_receipt_id=runtime["last_lifecycle_receipt_id"],
+                    idempotency_key=(
+                        f"{runtime['daemon_instance_id']}"
+                        f"-{runtime['cycle_index']}-cycle_exception"
+                    ),
+                )
+                runtime["last_lifecycle_receipt_id"] = lifecycle["id"]
+                self._write_runtime(runtime)
+            except Exception:
+                pass
+            return self._artifact(runtime)
 
     def read_runtime(self) -> Dict[str, object]:
         if self.runtime_path.is_symlink() or not self.runtime_path.is_file():
@@ -808,6 +970,8 @@ class WakeDaemon:
         event: str,
         lifecycle_state: str,
         reason_code: Optional[str],
+        exception_type: Optional[str] = None,
+        exception_message: Optional[str] = None,
     ) -> Dict[str, object]:
         runtime["cycle_index"] = int(runtime["cycle_index"]) + 1
         runtime["last_state"] = result_state
@@ -826,6 +990,8 @@ class WakeDaemon:
             idempotency_key=(
                 f"{runtime['daemon_instance_id']}-{runtime['cycle_index']}-{event}"
             ),
+            exception_type=exception_type,
+            exception_message=exception_message,
         )
         runtime["last_lifecycle_receipt_id"] = lifecycle["id"]
         self._write_runtime(runtime)
@@ -1494,6 +1660,12 @@ def _refresh_prune_block(
 #: lives in process memory and re-arms whenever the condition changes:
 #: the marker becomes recorded, or a prune proves a plane healed.
 _PRUNE_BLOCK_HELD: set = set()
+
+#: SERVE-PASS-1: the conditions serve() is currently holding quietly,
+#: keyed (coordinate digest, refusal code). Process memory, like the
+#: prune-block flag: the durable half lives in the state plane, and the
+#: flag re-arms the moment a cycle maintains cleanly.
+_SERVE_REFUSAL_HELD: set = set()
 
 
 def _write_prune_block_marker(

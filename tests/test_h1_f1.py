@@ -61,18 +61,18 @@ PIN_RELATIVE = "tests/h1_f1_reader_map.txt"
 # Printed pins on this tree (AX 9ee9d60d), Am.2: the included census only —
 # the 22 readers the export policy excludes (.github, unpublished docs/,
 # tools/) no longer reach a projection and no longer pin counts here.
-PINNED_FILES = 31
-PINNED_HITS = 62
+PINNED_FILES = 34
+PINNED_HITS = 67
 PINNED_CLASS_FILES = {
-    "install": 11,
-    "update-readback": 5,
+    "install": 12,
+    "update-readback": 7,
     "manifest": 3,
     "export-baseline": 2,
     "docs": 10,
 }
 PINNED_CLASS_HITS = {
-    "install": 28,
-    "update-readback": 16,
+    "install": 30,
+    "update-readback": 19,
     "manifest": 3,
     "export-baseline": 2,
     "docs": 13,
@@ -101,6 +101,9 @@ def classify(path: str) -> str:
         return "export-baseline"
     if (
         path == "floati/fleet_update.py"
+        # READER-SKEW-1 Am.1: the currency reader observes install ancestry
+        # and its test pins the observation - both update-readback readers.
+        or path in ("floati/reader_currency.py", "tests/test_reader_currency.py")
         or path.startswith("tests/test_fu1_")
         or path == "tests/test_doctor.py"
     ):
@@ -113,6 +116,8 @@ def classify(path: str) -> str:
             "floati/entrypoint_contract.py",
             "tools/codex/codex-fleet-bus.py",
             "tests/test_codex_hook_install.py",
+            # READER-SKEW-1 Am.1: the installed-reader seam and its test.
+            "tests/test_installed_reader.py",
             "tests/test_hook_preconditions.py",
             "tests/test_operator_contracts.py",
             "tests/test_deploy.py",

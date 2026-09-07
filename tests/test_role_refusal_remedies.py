@@ -26,9 +26,12 @@ ROLE_CODE_PREFIX = "role_template_"
 SHARED_VALIDATOR_CODES = frozenset({"role_invalid", "wake_idempotency_key_invalid"})
 # Counted at this tip. Exact, not a floor: reason codes recur across sites, so
 # the per-code assertions below still pass after one duplicate-coded site is
-# deleted, and a floor passes as long as the walk still reaches forty. Only an
-# equality can see a site leave. Raise it deliberately when a site is added.
-DERIVED_ROLE_REFUSAL_SITES = 41
+# deleted, and a floor passes as long as the walk still reaches the count. Only
+# an equality can see a site leave. Raise it deliberately when a site is added.
+# Am.1: the walk now reaches the RegistryAdminBackend methods the role
+# handlers call (admin_registry.py), which is where ARCH-DECL-1-F1 put its
+# four transfer-refusals; the count moved 40 -> 44 with them.
+DERIVED_ROLE_REFUSAL_SITES = 44
 
 
 def _callee_name(node: ast.Call) -> str | None:
@@ -106,6 +109,54 @@ def derived_role_refusal_sites() -> list[tuple]:
         _refusal_sites("floati/admin_cli.py", [functions[n] for n in sorted(reached)],
                        prefix=ROLE_CODE_PREFIX)
     )
+
+    # The handlers delegate the write to RegistryAdminBackend methods, and
+    # those raise their own role_template_ refusals (ARCH-DECL-1-F1 put the
+    # transfer's four there). Walk the backend methods the reached handlers
+    # name, closed transitively inside admin_registry.py, or a refusal that
+    # moves behind the backend becomes invisible to this census.
+    registry = REPOSITORY_ROOT / "floati/admin_registry.py"
+    backend_tree = ast.parse(registry.read_text(encoding="utf-8"))
+    backend_methods: dict[str, ast.FunctionDef] = {}
+    for node in ast.walk(backend_tree):
+        if isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef):
+                    backend_methods[item.name] = item
+
+    def _attribute_callees(scope: ast.AST) -> set[str]:
+        names = set()
+        for node in ast.walk(scope):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in backend_methods:
+                    names.add(node.func.attr)
+        return names
+
+    backend_reached: set[str] = set()
+    frontier = [
+        functions[name] for name in sorted(reached) if name in functions
+    ]
+    for scope in frontier:
+        backend_reached |= _attribute_callees(scope)
+    stack = sorted(backend_reached)
+    while stack:
+        current = stack.pop()
+        for called in _attribute_callees(backend_methods[current]) | {
+            _callee_name(node)
+            for node in ast.walk(backend_methods[current])
+            if isinstance(node, ast.Call)
+            and _callee_name(node) in backend_methods
+        }:
+            if called not in backend_reached:
+                backend_reached.add(called)
+                stack.append(called)
+    sites.extend(
+        _refusal_sites(
+            "floati/admin_registry.py",
+            [backend_methods[n] for n in sorted(backend_reached)],
+            prefix=ROLE_CODE_PREFIX,
+        )
+    )
     return sites
 
 
@@ -147,7 +198,8 @@ class RoleRefusalRemedyTests(unittest.TestCase):
             f"{DERIVED_ROLE_REFUSAL_SITES}; per module {dict(sorted(per_module.items()))}",
         )
         self.assertEqual(
-            frozenset(ROLE_MODULES) | {"floati/admin_cli.py"},
+            frozenset(ROLE_MODULES)
+            | {"floati/admin_cli.py", "floati/admin_registry.py"},
             frozenset(module for module, _, _, _, _ in sites),
         )
         unbound = [
