@@ -229,11 +229,33 @@ class EventLog:
         )
 
     def event_records(self) -> List[Dict[str, object]]:
-        """Return the authoritative append-only message/retraction ledger in frame order."""
+        """Known event frames; well-formed future kinds are skipped (SKEW-2)."""
+
+        records, _unrecognized = self.compatible_event_records()
+        return records
+
+    def strict_event_records(self) -> List[Dict[str, object]]:
+        """Authoritative read that refuses any kind outside EVENT_KINDS."""
 
         records = read_records(self.root, self.relative_path, allowed_kinds=EVENT_KINDS)
         self._validate_event_records(records)
         return records
+
+    def skip_receipt(self) -> Optional[Dict[str, object]]:
+        """Name one unknown event kind this reader skipped, with the reader schema."""
+
+        from .records import READER_VERSION
+
+        _records, unrecognized = self.compatible_event_records()
+        if not unrecognized:
+            return None
+        first = unrecognized[0]
+        return {
+            "kind": str(first["kind"]),
+            "reader_schema_version": READER_VERSION,
+            "first_id": str(first["first_id"]),
+            "ledger": self.relative_path.as_posix(),
+        }
 
     def compatible_event_records(
         self, *, snapshot: bool = False
@@ -492,6 +514,7 @@ class EventLog:
                 self.relative_path,
                 decide,
                 allowed_kinds=EVENT_KINDS,
+                skip_unknown_kinds=True,
             )
             return self._send_receipt(
                 durable,
@@ -604,7 +627,13 @@ class EventLog:
                 )
             return retraction, retraction
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=EVENT_KINDS)
+        return transact(
+            self.root,
+            self.relative_path,
+            decide,
+            allowed_kinds=EVENT_KINDS,
+            skip_unknown_kinds=True,
+        )
 
     @shared_epoch_operation
     def present(

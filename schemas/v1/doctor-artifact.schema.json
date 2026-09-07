@@ -150,6 +150,11 @@
       "required": ["code", "severity", "subject", "detail", "remediation"],
       "allOf": [
         {
+          "if": {"properties": {"code": {"const": "lane_workspaces"}}},
+          "then": {"required": ["lane_workspaces"]},
+          "else": {"not": {"required": ["lane_workspaces"]}}
+        },
+        {
           "if": {"properties": {"code": {"const": "delivery_health"}}},
           "then": {"required": ["oldest_unread"]},
           "else": {"not": {"required": ["oldest_unread"]}}
@@ -220,11 +225,44 @@
         }
       ],
       "properties": {
+        "lane_workspaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodes", "unmanaged_bytes"],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["node_id", "open_lanes", "oldest_open_age_seconds"],
+                "properties": {
+                  "node_id": {"$ref": "#/$defs/identifier"},
+                  "open_lanes": {"type": "integer", "minimum": 0},
+                  "oldest_open_age_seconds": {"type": ["number", "null"], "minimum": 0}
+                }
+              }
+            },
+            "unmanaged_bytes": {"type": ["integer", "null"], "minimum": 0}
+          }
+        },
         "code": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?$"},
         "severity": {"enum": ["ok", "info", "warning", "error"]},
         "subject": {"type": "string", "minLength": 1, "maxLength": 4096},
         "detail": {"type": "string", "minLength": 1, "maxLength": 8192},
         "remediation": {"type": ["string", "null"], "maxLength": 4096},
+        "installed_reader": {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "source_sha", "reference_sha", "commits_behind", "state"],
+          "properties": {
+            "kind": {"enum": ["transport", "waiter"]},
+            "source_sha": {"type": ["string", "null"], "pattern": "^[a-f0-9]{40}$"},
+            "reference_sha": {"type": ["string", "null"], "pattern": "^[a-f0-9]{40}$"},
+            "commits_behind": {"type": ["integer", "null"], "minimum": 0},
+            "state": {"enum": ["absent", "unavailable", "diverged", "behind", "current", "ahead"]}
+          }
+        },
         "installer_shadow": {"$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"},
         "oldest_unread": {"$ref": "fleet-status-artifact.schema.json#/$defs/oldest_unread"},
         "vocabulary_skew": {"$ref": "#/$defs/vocabulary_skew"},

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from functools import wraps
 import argparse
 import json
 import os
@@ -22,6 +23,7 @@ from .codex_wait_contract import (
     resolve_participant,
 )
 from .errors import ProtocolRefusal
+from .installed_reader import raise_reader_failure, reader_failure
 from .ids import uuid7_hex
 from .wake_control import validate_session_id
 from .wake_exit import WakeExitLedger
@@ -45,7 +47,8 @@ def _report_evidence_failure(
             f"{operation}: {type(failure).__name__}\n"
         )
         stderr.flush()
-    except Exception:
+    except Exception as exc:
+        raise_reader_failure(exc)
         return
 
 
@@ -69,6 +72,7 @@ def _record_exit(
             idempotency_key=f"{invocation_id}-exit-{reason_code}",
         )
     except Exception as exc:
+        raise_reader_failure(exc)
         _report_evidence_failure(stderr, "wake_exit", exc)
 
 
@@ -96,7 +100,8 @@ def _reopen_consent(
         reopened = CodexWaitConsentLedger(participant.root).require_armed(
             participant.binding
         )
-    except Exception:
+    except Exception as exc:
+        raise_reader_failure(exc)
         reopened = None
     deadline_seconds = None if reopened is None else reopened.get("wait_deadline_seconds")
     usable = isinstance(deadline_seconds, int) and not isinstance(deadline_seconds, bool)
@@ -112,6 +117,7 @@ def _reopen_consent(
             invocation_id=invocation_id,
         )
     except Exception as exc:
+        raise_reader_failure(exc)
         _report_evidence_failure(stderr, "consent_reopen", exc)
         # Reopen testimony is evidence. A failed write does not withdraw consent.
     if not usable:
@@ -171,6 +177,43 @@ def _breaker_tripped(
     return len(hits) > BREAKER_MAX_INVOCATIONS
 
 
+def _forward_reader_refusal(operation):
+    @wraps(operation)
+    def run(**kwargs):
+        output = kwargs['stdout']
+        published = False
+
+        class Output:
+            def write(self, value):
+                nonlocal published
+                if value:
+                    published = True
+                return output.write(value)
+
+            def flush(self):
+                return output.flush()
+
+        kwargs['stdout'] = Output()
+        try:
+            return operation(**kwargs)
+        except Exception as exc:
+            refusal = reader_failure(exc)
+            if refusal is None:
+                raise
+            # A completed block cannot be retracted. A schema change racing
+            # publication is a typed stderr diagnostic, never a second stdout.
+            stdout = kwargs['stderr'] if published else output
+            stdout.write(json.dumps({
+                'artifact_version': 0, 'command': 'codex-wait', 'status': 'refused',
+                'evidence': {'code': refusal.code, 'detail': refusal.detail,
+                             'remedy': refusal.remedy},
+            }, sort_keys=True) + '\n')
+            stdout.flush()
+            return 20
+    return run
+
+
+@_forward_reader_refusal
 def run_stop_waiter(
     *,
     bus_home: Path,
@@ -192,11 +235,13 @@ def run_stop_waiter(
         return 0
     try:
         consent = CodexWaitConsentLedger(participant.root).require_armed(participant.binding)
-    except Exception:
+    except Exception as exc:
+        raise_reader_failure(exc)
         return 0
     try:
         session_id = validate_session_id(hook_payload.get("session_id"))
-    except Exception:
+    except Exception as exc:
+        raise_reader_failure(exc)
         return 0
     session_digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
     invocation_id = "codex-stop-" + uuid7_hex()
@@ -207,6 +252,7 @@ def run_stop_waiter(
             session_id,
         )
     except Exception as exc:
+        raise_reader_failure(exc)
         _report_evidence_failure(stderr, "session_authority", exc)
         _record_exit(
             participant, session_digest=session_digest,
@@ -222,9 +268,11 @@ def run_stop_waiter(
 
         record_codex_daemon_binding(participant, session_id)
     except ProtocolRefusal as exc:
+        raise_reader_failure(exc)
         if exc.code != "wake_daemon_codex_executable_absent":
             _report_evidence_failure(stderr, "daemon_binding", exc)
     except Exception as exc:
+        raise_reader_failure(exc)
         _report_evidence_failure(stderr, "daemon_binding", exc)
         # Binding is testimony, not a participation gate. A failed write may
         # name the op on stderr but must not delete the waiter's later decision.
@@ -240,6 +288,7 @@ def run_stop_waiter(
             )
             return 0
     except Exception as exc:
+        raise_reader_failure(exc)
         _report_evidence_failure(stderr, "pause_state", exc)
         _record_exit(
             participant, session_digest=session_digest,
@@ -326,6 +375,7 @@ def run_stop_waiter(
                 participant.root
             ).participate(participant.binding, consent, session_id)
         except Exception as exc:
+            raise_reader_failure(exc)
             _report_evidence_failure(stderr, "session_authority", exc)
             _record_exit(
                 participant, session_digest=session_digest,
@@ -351,6 +401,7 @@ def run_stop_waiter(
                 idempotency_key=invocation_key,
             )
         except Exception as exc:
+            raise_reader_failure(exc)
             _report_evidence_failure(stderr, "wake_evaluation", exc)
             _record_exit(
                 participant, session_digest=session_digest,
@@ -374,9 +425,22 @@ def run_stop_waiter(
                 f"{participant.binding.node_id}: " + ", ".join(item_ids)
             )
             try:
+                from .jsonl import read_records_snapshot
+
+                read_records_snapshot(
+                    participant.root,
+                    Path('receipts/wakes') / (participant.binding.node_id + '.jsonl'),
+                    allowed_kinds={'wake_attempt_receipt'},
+                )
+            except Exception as exc:
+                # Keep ordinary best-effort receipt behavior, but detect an
+                # older installed reader before publishing the hook decision.
+                raise_reader_failure(exc)
+            try:
                 stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
                 stdout.flush()
-            except Exception:
+            except Exception as exc:
+                raise_reader_failure(exc)
                 return 0
             try:
                 WakeAttemptLedger(participant.root).record(
@@ -389,6 +453,7 @@ def run_stop_waiter(
                     outcome="woke",
                 )
             except Exception as exc:
+                raise_reader_failure(exc)
                 _report_evidence_failure(stderr, "wake_attempt", exc)
                 _record_exit(
                     participant,
@@ -416,6 +481,7 @@ def run_stop_waiter(
                     idempotency_key=invocation_key + "-exhaustion",
                 )
             except Exception as exc:
+                raise_reader_failure(exc)
                 _report_evidence_failure(stderr, "exhaustion", exc)
             try:
                 stdout.write(
@@ -428,7 +494,8 @@ def run_stop_waiter(
                     + "\n"
                 )
                 stdout.flush()
-            except Exception:
+            except Exception as exc:
+                raise_reader_failure(exc)
                 return 0
             return 0
         sleep(min(float(poll_interval_seconds), max(0.0, deadline - now)))

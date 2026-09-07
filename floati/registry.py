@@ -129,6 +129,10 @@ class Registry:
     def retire(self, node_id: str) -> Dict[str, object]:
         """Append one retirement row for a node that is retiring itself."""
 
+        from .lane_retirement import (
+            close_retiring_node_lanes, preflight_retirement_records, retirement_lane_scope,
+        )
+
         node = validate_identifier(node_id, "node")
 
         def decide(records: list[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
@@ -152,9 +156,12 @@ class Registry:
                 "role": validate_role(latest["role"]),
                 "state": "retired",
             }
+            preflight_retirement_records(self.root, records, [record], REGISTRY_KINDS)
+            close_retiring_node_lanes(self.root, node, completed_lanes)
             return record, record
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=REGISTRY_KINDS)
+        with retirement_lane_scope(self.root) as completed_lanes:
+            return transact(self.root, self.relative_path, decide, allowed_kinds=REGISTRY_KINDS)
 
     def require_active(self, node_id: str) -> Dict[str, object]:
         node = self.resolve_node_id(node_id)

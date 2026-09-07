@@ -29,7 +29,7 @@ from .codex_hook_trust import (
     observe_rebound_waiter,
 )
 from .errors import ProtocolRefusal
-from .waiter_bundle import waiter_runtime_digest, waiter_runtime_files
+from .waiter_bundle import waiter_runtime_digest, waiter_runtime_files, write_waiter_provenance
 
 
 _LIBC = ctypes.CDLL(None, use_errno=True)
@@ -534,6 +534,7 @@ def stage_waiter_runtime(
             copied.chmod(source.stat().st_mode & 0o777)
         if waiter_runtime_digest(staging) != expected_digest:
             raise ProtocolRefusal("fleet_update_waiter_invalid", "staged waiter runtime bytes diverged")
+        write_waiter_provenance(source_root, staging)
         _fsync_waiter_tree(staging)
         _fault(_fault_hook, "before_waiter_generation_replace")
         try:
@@ -614,6 +615,7 @@ class CodexHookInstaller:
                     installed.chmod(source.stat().st_mode & 0o777)
                 if waiter_runtime_digest(staging) != bundle_digest:
                     raise ProtocolRefusal("codex_wait_install_digest_mismatch", "installed bytes differ")
+                write_waiter_provenance(self.source_root, staging)
                 os.replace(staging, target)
             finally:
                 if staging.exists():

@@ -1107,7 +1107,8 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
                     'external bindings.',
             'notes': ('rollback --to SHA reverts the last applied update to that previous source SHA; it '
                       'refuses when no prior apply exists.',
-                      'Foreign files are preserved; the writer never-prune-foreign.',),
+                      'Foreign files are preserved; the writer never-prune-foreign.',
+                      'For a governed Codex transport, pair --profile-registry with --fleet-profile to validate operations and repin the exact installed source.',),
             'examples': 'floati update --source /repo/floati --destination /opt/floati --ref origin/main\n'
                         'floati update fleet preview --help',
             'option_docs': {'--source': 'Absolute committed source checkout for legacy single-install '
@@ -1115,6 +1116,8 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
                             '--destination': 'Absolute install destination.',
                             '--ref': 'Named Git ref.',
                             '--committed-tree': 'Explicit committed-tree CI mode.',
+                            '--profile-registry': 'Canonical Codex fleet profile registry for this ordinary update.',
+                            '--fleet-profile': 'Declared profile whose transport destination is being updated.',
                             '--json': 'Emits the same safe lifecycle artifact without terminal rendering.'}},
  'update fleet': {'description': 'plan or apply one explicit fleet-wide update',
                   'body': 'Operate only the fleet root, installation, waiter inventory, registry, and '
@@ -1232,6 +1235,56 @@ HELP_COPY.update({
             '--harness': 'Harness the seat must be registered as; compared without case.',
             '--hook-timeout-seconds': 'Hook timeout the armed deadline must stay strictly below.',
             '--wait-deadline-seconds': 'Bounded hold length the consent arms.',
+        },
+    },
+})
+
+
+HELP_COPY.update({
+    'lane': {
+        'description': 'open and close recorded lane workspaces',
+        'body': 'Create and remove row worktrees under the fleet\'s explicitly declared external lanes root.',
+        'notes': ('Only product-created workspaces are recorded and eligible for removal.',),
+        'examples': 'floati lane open --help\nfloati lane close --help',
+        'option_docs': {},
+    },
+    'lane open': {
+        'description': 'create one recorded row worktree',
+        'body': 'Resolve a declared repository alias and exact local base commit, create the row worktree, and record its ownership.',
+        'notes': ('Declare state/lanes-root.json and state/lane-repositories.json before opening a lane. No fetch or implicit root discovery occurs.',
+                  'Existing paths or branches refuse; inherited seat-fence keys are overridden only in the new worktree.'),
+        'examples': 'floati lane open --root /absolute/fleet --as builder --row row-one --repo product',
+        'option_docs': {
+            '--root': 'Exact fleet root containing the lane declarations.',
+            '--as': 'Active node owning this row workspace.',
+            '--row': 'Row identifier used in the workspace path and branch.',
+            '--repo': 'Alias in state/lane-repositories.json.',
+            '--base': 'Local Git ref; otherwise use the repository declaration\'s default base.',
+        },
+    },
+    'lane close': {
+        'description': 'remove one recorded row worktree',
+        'body': 'Preflight the recorded workspace, remove it through Git, and append its closing receipt while retaining its branch.',
+        'notes': ('Dirty files, unpublished commits, and runtime references block ordinary closure.',
+                  'Force overrides only dirty and unpublished work with an explicit reason; unavailable inspection and runtime use still refuse.'),
+        'examples': 'floati lane close --root /absolute/fleet --as builder --row row-one',
+        'option_docs': {
+            '--root': 'Exact fleet root containing the opening record.',
+            '--as': 'Node owning the recorded row workspace.',
+            '--row': 'Recorded row identifier to close.',
+            '--force': 'Permit removal of dirty or unpublished work only with --why.',
+            '--why': 'Explicit reason retained in the forced closing record.',
+        },
+    },
+    'sweep': {
+        'description': 'inspect recorded and unmanaged lane workspaces',
+        'body': 'List recorded lanes eligible through landed or struck board rows or retired nodes; separately report unmanaged paths, ages, and bytes.',
+        'notes': ('Preview is read-only. Apply preflights the eligible set and closes only recorded lanes.',
+                  'Unmanaged directories are never adopted or removed; their presence produces a degraded result.'),
+        'examples': 'floati sweep --root /absolute/fleet\nfloati sweep --root /absolute/fleet --apply',
+        'option_docs': {
+            '--root': 'Exact fleet root with the explicit lane declarations.',
+            '--apply': 'Close the recorded eligible set after all removal preflights pass.',
         },
     },
 })

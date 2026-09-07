@@ -26,6 +26,7 @@ from .jsonl import (
     _locked_path,
     _transact_wake_hold_records,
     read_records,
+    read_records_compatible,
     read_records_snapshot,
     read_records_with_prefix_digests,
     transact,
@@ -130,7 +131,9 @@ class WakeAttemptLedger:
             raise ProtocolRefusal("item_ids_invalid", "wake attempt needs unique message ids")
         requested = list(item_ids)
 
-        events = read_records(self.root, "events.jsonl", allowed_kinds=EVENT_KINDS)
+        events, _unrecognized = read_records_compatible(
+            self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
+        )
         validate_event_records(events)
         envelopes = {
             str(row["id"]): row for row in events if row["kind"] == "message_envelope"
@@ -620,6 +623,7 @@ class WakeHoldController:
             events, event_prefixes = read_records_with_prefix_digests(
                 self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS), domain=self._EVENT_DOMAIN,
                 cursor=self._prefix_cursor("events", "", None),
+                skip_unknown_kinds=True,
             )
             validate_event_records(events)
             deliveries, delivery_prefixes = read_records_with_prefix_digests(

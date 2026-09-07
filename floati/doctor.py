@@ -36,10 +36,22 @@ from .update_status import project_update_findings
 from .version_skew import older_readers, vocabulary_skew_fact
 
 
+def _codex_home_path(relative: str) -> Path:
+    try:
+        home = Path.home()
+        if not home.is_absolute():
+            raise ValueError("HOME must be absolute")
+        return home.resolve() / ".codex" / relative
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ProtocolRefusal(
+            "doctor_home_invalid", "HOME does not name a resolvable absolute account home directory.",
+            "Set HOME to an absolute account home directory or supply explicit Codex hooks and gateway paths.",
+        ) from exc
+
+
 RULED_PROFILES = ("bus-only", "orchestration")
 CODEX_GATEWAY_SOURCE = Path("tools/codex/codex-fleet-bus.py")
 CODEX_GATEWAY_DIGEST = Path("tools/codex/codex-fleet-bus.sha256.json")
-CODEX_GATEWAY_HOST = Path.home() / ".codex/bin/codex-fleet-bus"
 BUS_WATCH_SOURCE = Path("scripts/bus-watch/floati-bus-watch.ts")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _INTERPRETER_TRUST_OK_DETAIL = (
@@ -271,6 +283,83 @@ def _finding(
         "detail": detail,
         "remediation": remediation,
     }
+
+
+def project_harness_binary_inventory(
+    root: FloatiRoot, *, currency_current: bool
+) -> list[Dict[str, object]]:
+    """HARNESS-VER-1 (public issue #18): per declared harness, the
+    declared executable's measured version and every earlier-on-PATH
+    same-name copy with its version. A differing or unmeasurable copy is
+    the typed warning harness_binary_shadowed naming the declared path;
+    identical copies are a note; unreadable PATH entries are named,
+    never a crash (the INS-1 shape). PATH is an inventory only - it
+    never chooses what floati runs."""
+
+    from .harness_versions import harness_version_artifact
+
+    artifact = harness_version_artifact(root)
+    declared_rows = artifact["declared"]
+    if not declared_rows:
+        return [_finding(
+            "harness_binary_inventory_absent",
+            "ok",
+            str(root.path),
+            "no harness executable is declared on this root (typed absence, "
+            "not a silent pass)",
+        )]
+    findings: list[Dict[str, object]] = []
+    for row in declared_rows:
+        subject = f"{row['node']}/{row['harness']}"
+        detail = (
+            f"declared {row['executable']} measures "
+            f"{row['version'] if row['version'] is not None else '<unmeasurable>'}"
+        )
+        inventory = row["shadow_inventory"]
+        shadows = inventory["shadows"]
+        unreadable = inventory["unreadable_entries"]
+        if unreadable:
+            detail += (
+                "; PATH entries that could not be read: "
+                + ", ".join(unreadable)
+            )
+        if row["status"] in ("shadowed", "unmeasurable"):
+            if shadows:
+                detail += "; earlier PATH copies: " + ", ".join(
+                    f"{shadow['path']} (version "
+                    f"{shadow['version'] if shadow['version'] is not None else '<unmeasurable>'})"
+                    for shadow in shadows
+                )
+            if row["status"] == "unmeasurable":
+                detail += (
+                    "; a copy whose version cannot be measured cannot be "
+                    "proven identical"
+                )
+            finding = _finding(
+                "harness_binary_shadowed",
+                "warning",
+                subject,
+                detail,
+                # The remedy names the operator's own declaration - never a
+                # reinstall suggestion - so it is safe at any currency.
+                "run the declared harness by its absolute path ("
+                f"{row['executable']}) or repair the PATH order; PATH is an "
+                "inventory only, it never chooses for floati",
+            )
+        else:
+            if row["status"] == "identical":
+                note = "an earlier PATH copy exists with the identical version"
+            else:
+                note = "no earlier PATH copy of the same binary name"
+            finding = _finding(
+                "harness_binary_inventory",
+                "ok",
+                subject,
+                detail + "; " + note,
+            )
+        finding["harness_inventory"] = row
+        findings.append(finding)
+    return findings
 
 
 def _host_finding(
@@ -1364,14 +1453,14 @@ class Doctor:
         self.destination_arg = destination
         self.codex_hooks_defaulted = codex_hooks is None and codex_config is None
         self.codex_hooks_arg = (
-            Path.home() / ".codex" / "hooks.json"
+            _codex_home_path("hooks.json")
             if codex_hooks is None
             else Path(codex_hooks).expanduser()
         )
         self.codex_config_arg = None if codex_config is None else Path(codex_config).expanduser()
         self.codex_gateway_host_defaulted = codex_gateway_host is None
         self.codex_gateway_host_arg = (
-            CODEX_GATEWAY_HOST
+            _codex_home_path("bin/codex-fleet-bus")
             if codex_gateway_host is None
             else Path(codex_gateway_host).expanduser()
         )
@@ -1785,6 +1874,18 @@ class Doctor:
                     row["severity"] == "warning" for row in bridge_findings
                 ) and rc == 0:
                     rc = 35
+                # HARNESS-VER-1 (public issue #18): the harness inventory -
+                # per declared harness, the declared executable's measured
+                # version and every earlier-on-PATH same-name copy. PATH is
+                # an inventory only; it never chooses what floati runs.
+                harness_findings = project_harness_binary_inventory(
+                    root, currency_current=currency_current
+                )
+                findings.extend(harness_findings)
+                if any(
+                    row["severity"] == "warning" for row in harness_findings
+                ) and rc == 0:
+                    rc = 35
                 if report.any_red and rc == 0:
                     rc = 35
             except IntegrityFailure as exc:
@@ -1920,6 +2021,65 @@ class Doctor:
                         rc = 33
                 else:
                     findings.append(_finding("consumption_coordinate_valid", "ok", "work/items.jsonl", "sole consumption coordinate is structurally valid"))
+
+        if root is not None:
+            lanes_declaration = root.tenant_home / "state" / "lanes-root.json"
+            if lanes_declaration.exists() or lanes_declaration.is_symlink():
+                from .lane_workspaces import LaneWorkspaces
+
+                try:
+                    lane_inventory = LaneWorkspaces(root).doctor()
+                except ProtocolRefusal as exc:
+                    findings.append(_finding(
+                        exc.code, "error", str(lanes_declaration), exc.detail,
+                        exc.remedy if isinstance(exc.remedy, str) else None,
+                    ))
+                    if rc not in {33, 36}:
+                        rc = 20
+                except IntegrityFailure as exc:
+                    findings.append(_finding(
+                        exc.code, "error", str(lanes_declaration), exc.detail,
+                        "Inspect the named lane ledger before retrying doctor.",
+                    ))
+                    rc = 33
+                else:
+                    unmanaged_bytes = lane_inventory["unmanaged_bytes"]
+                    warning = unmanaged_bytes is None or unmanaged_bytes > 0
+                    byte_detail = "unavailable" if unmanaged_bytes is None else str(unmanaged_bytes)
+                    finding = _finding(
+                        "lane_workspaces", "warning" if warning else "ok",
+                        str(lanes_declaration),
+                        f"Recorded lane inventory for {len(lane_inventory['nodes'])} nodes; unmanaged bytes: {byte_detail}.",
+                        "Run floati sweep --root with this fleet root to inspect unmanaged paths; removal remains an operator decision."
+                        if warning else None,
+                    )
+                    finding["lane_workspaces"] = lane_inventory
+                    findings.append(finding)
+                    for node in lane_inventory["nodes"]:
+                        age = node["oldest_open_age_seconds"]
+                        age_detail = "absent" if age is None else str(age)
+                        findings.append(_finding(
+                            "lane_workspace_node", "ok", node["node_id"],
+                            f"Open lanes: {node['open_lanes']}; oldest open age seconds: {age_detail}.",
+                        ))
+                    if warning and rc == 0:
+                        rc = 35
+
+        from .reader_currency import governed_install_findings
+        registry_path = (None if self.codex_config_arg is None else
+                         self.codex_config_arg.with_name("fleet-bus-profiles.json"))
+        reader_rows = governed_install_findings(
+            self.source_arg, self.ref, profile_registry=registry_path,
+            hooks=self.codex_hooks_arg,
+            gateway_receipt=self.codex_gateway_host_arg.with_name(
+                self.codex_gateway_host_arg.name + ".install-receipt.v0.json"),
+        )
+        for row in reader_rows:
+            if self.codex_hooks_defaulted and self.codex_gateway_host_defaulted and row["code"] != "installed_reader_behind":
+                row["severity"] = "info"
+            findings.append(row)
+            if row["severity"] == "warning" and rc == 0:
+                rc = 35
 
         installer_shadow = observe_installer_shadow(
             self.destination_arg,

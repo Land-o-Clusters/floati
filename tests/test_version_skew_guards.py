@@ -115,7 +115,7 @@ class VersionSkewGuardTests(unittest.TestCase):
         self.append_raw_event(self.future_record())
 
         with self.assertRaises(IntegrityFailure) as raised:
-            self.log.event_records()
+            self.log.strict_event_records()
 
         self.assertEqual("record_kind_invalid", raised.exception.code)
         self.assertIn("future_receipt", raised.exception.detail)

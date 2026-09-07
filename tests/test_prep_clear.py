@@ -399,7 +399,7 @@ class PrepClearLooseningTests(unittest.TestCase):
         # kinds-before.json is frozen at this car's own base; the rest of the
         # composition added four more kinds after that base, each by its own
         # named car (SB-1 in train AT; HOOKS-PRE and ROLE-1 Am.1 in train AU;
-        # ARCH-1 in train AV).
+        # ARCH-1 in train AV). LANES-1 adds its explicit workspace kind.
         self.assertEqual(
             {
                 "prep_clear_receipt",
@@ -407,6 +407,7 @@ class PrepClearLooseningTests(unittest.TestCase):
                 "hook_burn_record",
                 "role_template_write_receipt",
                 "registry_role_transfer",
+                "lane_workspace_record",
             },
             set(_SPECS) - before,
         )

@@ -3,9 +3,53 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import subprocess
 from pathlib import Path
 
 from .errors import ProtocolRefusal
+
+
+def waiter_source_provenance(root: Path) -> dict[str, object]:
+    """Carry installed testimony or a measured clean source commit, never paths."""
+    from .installed_reader import installed_reader_identity
+    from .git_process import fixed_git_command, fixed_git_environment
+
+    source = Path(root)
+    identity = installed_reader_identity(source)
+    sha = identity.get('source_sha') if identity is not None else None
+    if identity is None:
+        try:
+            def git(*arguments: str):
+                return subprocess.run(
+                    fixed_git_command('/usr/bin/git', source, arguments),
+                    env=fixed_git_environment('/usr/bin/git'),
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+            top = git('rev-parse', '--show-toplevel')
+            if top.returncode == 0 and Path(top.stdout.strip()) == source:
+                head = git('rev-parse', '--verify', 'HEAD^{commit}')
+                paths = [path.relative_to(source).as_posix() for path in waiter_runtime_files(source)]
+                status = git('status', '--porcelain=v1', '--untracked-files=all', '--', *paths)
+                if head.returncode == 0 and status.returncode == 0 and not status.stdout:
+                    import re
+                    candidate = head.stdout.strip()
+                    if re.fullmatch(r'[0-9a-f]{40}', candidate):
+                        sha = candidate
+        except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError):
+            pass
+    return {'schema_version': 0, 'source_sha': sha,
+            'source_state': 'measured' if sha is not None else 'absent'}
+
+
+def write_waiter_provenance(source: Path, staging: Path) -> None:
+    """Publish provenance only inside the still-private waiter staging directory."""
+    from .installed_reader import PROVENANCE_NAME
+
+    (staging / PROVENANCE_NAME).write_text(
+        json.dumps(waiter_source_provenance(source), sort_keys=True) + '\n',
+        encoding='utf-8',
+    )
 
 
 def waiter_runtime_files(root: Path) -> tuple[Path, ...]:

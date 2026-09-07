@@ -379,7 +379,9 @@ def resolve_participant(bus_home: Path, workspace: Path) -> Optional[CodexWaitPa
     try:
         root = FloatiRoot.open_direct_home(bus_home)
         node = Registry(root).resolve_node_id(binding.node_id, field="node")
-    except ProtocolRefusal:
+    except ProtocolRefusal as exc:
+        from .installed_reader import raise_reader_failure
+        raise_reader_failure(exc)
         return None
     return CodexWaitParticipant(
         binding=WorkspaceBinding(binding.workspace, node, binding.map_digest),

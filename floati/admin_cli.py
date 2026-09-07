@@ -435,21 +435,12 @@ def _role_validate(args: argparse.Namespace) -> HandlerResult:
 
 
 def _role_transfer_architect(args: argparse.Namespace) -> HandlerResult:
-    from .errors import ProtocolRefusal
-
     root = _root(args.root)
     templates = _templates(root)
-    fallback = templates.get("builder")
-    if fallback is None:
-        raise ProtocolRefusal(
-            "role_template_unknown",
-            "the shipped default role template is not shipped",
-            remedy="reinstall the governed bundle; roles/shipped must carry the builder template",
-        )
     result = RegistryAdminBackend(root).transfer_architect(
         to=args.to,
         idempotency_key=args.idempotency_key,
-        fallback_template=fallback,
+        declared_templates=templates,
     )
     return "ok", result, OK
 

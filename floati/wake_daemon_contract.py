@@ -248,6 +248,8 @@ class DaemonLifecycleLedger:
         session_digest: Optional[str],
         predecessor_receipt_id: Optional[str],
         idempotency_key: str,
+        exception_type: Optional[str] = None,
+        exception_message: Optional[str] = None,
     ) -> Dict[str, Any]:
         if coordinate.root is not self.root:
             raise ProtocolRefusal("wake_daemon_coordinate_invalid", "lifecycle coordinate belongs to another root")
@@ -271,6 +273,17 @@ class DaemonLifecycleLedger:
             "predecessor_receipt_id": predecessor_receipt_id,
             "idempotency_key": DaemonConsentLedger._key(idempotency_key),
         }
+        if (exception_type is None) != (exception_message is None):
+            raise ProtocolRefusal(
+                "wake_daemon_exception_detail_invalid",
+                "exception type and message are recorded together",
+                "pass both exception_type and exception_message to the "
+                "lifecycle record, or neither - one-sided exception detail "
+                "is not a recordable shape",
+            )
+        if exception_type is not None:
+            row["exception_type"] = exception_type
+            row["exception_message"] = exception_message
         semantic = tuple(key for key in row if key not in {"id", "timestamp"})
 
         def decide(prior: list[Dict[str, Any]]):

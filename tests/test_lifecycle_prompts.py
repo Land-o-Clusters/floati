@@ -157,9 +157,9 @@ class LifecyclePromptTests(unittest.TestCase):
         reserved = reserved_names()
         # Derived from describe's live registry plus the bus families — the
         # hand-written first draft missed 11 of the live commands.
-        # Train AZ union re-pin: 208 -> 210. The mover is WAKE-IDLE-1-F1
-        # Am.1 (67848553), which adds the `waiter` and `waiter arm` verbs.
-        self.assertEqual(len(reserved), 210, sorted(reserved))
+        # LANES-1 on train BA: reserved_names() measures 216 entries.
+        # Keep the landed waiter vocabulary and the added lane/sweep names.
+        self.assertEqual(len(reserved), 216, sorted(reserved))
         for name in ("board", "prompts", "prep-clear", "wait", "pausebus", "resumebus"):
             self.assertIn(name, reserved)
 

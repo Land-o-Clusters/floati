@@ -33,9 +33,12 @@ PINNED_SKIP_REASONS = {
     # FIXTURE-1's fence (train AV) skips by design in a projection, where the
     # export policy is absent and classification is the identity. H1-F1 Am.2's
     # projection-builder leg words the same skip: it cannot build a projection
-    # without a policy either.
+    # without a policy either. PROJ-PIN-1 (train CC) is the third site: its
+    # projection leg for the built-argv SITE pin cannot measure a census whose
+    # classifier is the identity, and it deliberately reuses this wording
+    # rather than minting a fourth way to say the same absence.
     "no export policy in this tree; classification is identity": {
-        "sites": 2,
+        "sites": 3,
         "kind": PRODUCT,
     },
     # NET-FENCE-1-F2's private_only twins (tests/test_no_listener_fence.py,

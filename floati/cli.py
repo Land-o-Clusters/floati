@@ -1444,6 +1444,9 @@ def _deploy(args: argparse.Namespace) -> HandlerResult:
             "arguments_invalid",
             "legacy update requires --source and --destination; fleet updates require an explicit preview or apply subcommand",
         )
+    from .profile_update import prepare_profile_update, finish_profile_update
+    binding = prepare_profile_update(getattr(args, "profile_registry", None),
+                                     getattr(args, "fleet_profile", None), args.destination)
     evidence = DeploymentWriter(
         args.source,
         args.destination,
@@ -1451,10 +1454,26 @@ def _deploy(args: argparse.Namespace) -> HandlerResult:
         ref=args.ref,
         committed_tree=args.committed_tree,
     ).run()
+    if binding is not None:
+        try:
+            evidence["profile_transport"] = finish_profile_update(binding, evidence["source_sha"])
+        except (ProtocolRefusal, IntegrityFailure, DurabilityFailure, OSError, ValueError) as exc:
+            evidence["profile_transport"] = {
+                "status": "degraded", "code": "profile_update_repin_incomplete",
+                "detail": "The install completed, but profile repinning did not: " + str(exc),
+                "remedy": "Rerun this update with the same --profile-registry and --fleet-profile after resolving the named registry failure.",
+            }
+            return "degraded", evidence, 35
     return "ok", evidence, OK
 
 
+def _refuse_profile_update_subcommand(args):
+    if (getattr(args, "profile_registry", None) or getattr(args, "fleet_profile", None)) and getattr(args, "update_command", None):
+        raise ProtocolRefusal("profile_update_binding_invalid", "profile bindings apply only to ordinary source updates", "Use update --source --destination --profile-registry --fleet-profile without a subcommand.")
+
+
 def _update(args: argparse.Namespace) -> HandlerResult:
+    _refuse_profile_update_subcommand(args)
     action = args.update_action
     if action is None:
         missing = [
@@ -1571,6 +1590,7 @@ def _update(args: argparse.Namespace) -> HandlerResult:
 
 
 def _fleet_update_preview(_args: argparse.Namespace) -> HandlerResult:
+    _refuse_profile_update_subcommand(_args)
     raise ProtocolRefusal(
         "fleet_update_target_unavailable",
         "the signed AU-1 target staging boundary is not yet installed",
@@ -1578,6 +1598,7 @@ def _fleet_update_preview(_args: argparse.Namespace) -> HandlerResult:
 
 
 def _fleet_update_apply(_args: argparse.Namespace) -> HandlerResult:
+    _refuse_profile_update_subcommand(_args)
     raise ProtocolRefusal(
         "fleet_update_apply_not_available",
         "the fleet update receipt saga is not yet installed",
@@ -1869,6 +1890,32 @@ def _mcp_serve(args: argparse.Namespace) -> int:
     )
 
 
+def _lane_open(args: argparse.Namespace) -> HandlerResult:
+    from .lane_workspaces import LaneWorkspaces
+
+    evidence = LaneWorkspaces(_root(args.root)).open(
+        actor=args.actor, row=args.row, repo=args.repo, base=args.base,
+    )
+    return "ok", evidence, OK
+
+
+def _lane_close(args: argparse.Namespace) -> HandlerResult:
+    from .lane_workspaces import LaneWorkspaces
+
+    evidence = LaneWorkspaces(_root(args.root)).close(
+        actor=args.actor, row=args.row, force=args.force, why=args.why,
+    )
+    return "ok", evidence, OK
+
+
+def _sweep(args: argparse.Namespace) -> HandlerResult:
+    from .lane_workspaces import LaneWorkspaces
+
+    evidence = LaneWorkspaces(_root(args.root)).sweep(apply=args.apply)
+    status = evidence["status"]
+    return status, evidence, DEGRADED if status == "degraded" else OK
+
+
 def _parser() -> _ArtifactParser:
     parser = _ArtifactParser(prog="floati")
     parser.floati_exit_codes = _EXIT_CODE_CONTRACT
@@ -1888,6 +1935,27 @@ def _parser() -> _ArtifactParser:
     overlap_report.add_argument("--left-ref", required=True, metavar='REF')
     overlap_report.add_argument("--right-ref", required=True, metavar='REF')
     overlap_report.set_defaults(handler=_overlap_report)
+
+    lane = commands.add_parser("lane", floati_mcp_exposure="never")
+    lane_commands = lane.add_subparsers(dest="lane_command", required=True)
+    lane_open = lane_commands.add_parser("open", floati_mcp_exposure="never")
+    lane_open.add_argument("--root", required=True)
+    lane_open.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    lane_open.add_argument("--row", required=True, metavar="ROW")
+    lane_open.add_argument("--repo", required=True, metavar="REPO")
+    lane_open.add_argument("--base", metavar="REF")
+    lane_open.set_defaults(handler=_lane_open)
+    lane_close = lane_commands.add_parser("close", floati_mcp_exposure="never")
+    lane_close.add_argument("--root", required=True)
+    lane_close.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    lane_close.add_argument("--row", required=True, metavar="ROW")
+    lane_close.add_argument("--force", action="store_true")
+    lane_close.add_argument("--why", metavar="TEXT")
+    lane_close.set_defaults(handler=_lane_close)
+    sweep = commands.add_parser("sweep", floati_mcp_exposure="never")
+    sweep.add_argument("--root", required=True)
+    sweep.add_argument("--apply", action="store_true")
+    sweep.set_defaults(handler=_sweep)
 
     init = commands.add_parser("init")
     init.add_argument("--root")
@@ -2448,6 +2516,8 @@ def _parser() -> _ArtifactParser:
     update.add_argument("--ref", default="origin/main")
     update.add_argument("--committed-tree", action="store_true")
     update.add_argument("--json", action="store_true")
+    update.add_argument("--profile-registry", metavar="PATH")
+    update.add_argument("--fleet-profile", metavar="PROFILE")
     update.set_defaults(handler=_update, update_action=None)
     update_commands = update.add_subparsers(dest="update_command")
     for update_action in ("consent", "revoke", "status", "check", "apply", "rollback"):

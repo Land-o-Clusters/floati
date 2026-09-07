@@ -316,6 +316,13 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
             "removed", "retained",
         },
     ),
+    "lane_workspace_record": (
+        "lane-workspace-",
+        _COMMON | {
+            "node_id", "row", "path", "repo", "base_sha", "branch", "state",
+            "opened_at", "closed_at", "closed_by", "opened_record_id", "why",
+        },
+    ),
     "wake_cause": ("wake-", _COMMON | {"node_id", "cause", "context_bytes", "wake_count"}),
     "work_item": ("work-", _COMMON | {"title", "owner", "artifact_bindings"}),
     "intake_snapshot": (
@@ -488,6 +495,8 @@ _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
     "thread_attachment_registered": _SPECS["thread_attachment_registered"][1],
     "thread_observation_recorded": _SPECS["thread_observation_recorded"][1],
     "thread_attachment_detached": _SPECS["thread_attachment_detached"][1],
+    "wake_daemon_lifecycle_receipt": _SPECS["wake_daemon_lifecycle_receipt"][1]
+    | {"exception_type", "exception_message"},
     **{kind: fields for kind, (_, fields) in _EFFECT_SPECS.items()},
 }
 
@@ -650,6 +659,16 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         valid_fields = actual_fields in (
             _SPECS["ack_receipt"][1] | {"acting_session_id"},
             _V1_FIELDS["ack_receipt"],
+        )
+    if kind == "wake_daemon_lifecycle_receipt":
+        # SKEW-2-F1: cycle_exception receipts carry the exception's type and
+        # one bounded message beside the fixed reason_code; every other
+        # lifecycle receipt keeps the exact pre-existing shape. The daemon
+        # record's schema_version tracks the harness (WD-R2), not this
+        # receipt shape, so both shapes are read under either stamp.
+        valid_fields = actual_fields in (
+            _SPECS["wake_daemon_lifecycle_receipt"][1],
+            _V1_FIELDS["wake_daemon_lifecycle_receipt"],
         )
     if kind == "run_created":
         valid_fields = actual_fields in (fields, fields | {"policy_digest"})
@@ -1381,6 +1400,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             record["vacated_role_record_id"], "registry-role-", "vacated_role_record_id", refuse
         )
         _enum(record["state"], {"complete"}, "state", refuse)
+    elif kind == "lane_workspace_record":
+        _validate_lane_workspace_record(record, integrity=integrity)
     elif kind == "lane_spawn_receipt":
         ident("profile")
         ident("node_id")
@@ -1423,7 +1444,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             values = record[field]
             if (
                 not isinstance(values, list)
-                or not 1 <= len(values) <= 32
+                or not (0 if field == "removed" else 1) <= len(values) <= 32
                 or any(not isinstance(value, str) or not 1 <= len(value) <= 4096 for value in values)
             ):
                 refuse("lane_teardown_receipt_invalid", f"{field} testimony is malformed")
@@ -2142,11 +2163,15 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _sha256(record["coordinate_digest"], "coordinate_digest", refuse)
         _bounded_string(record["daemon_instance_id"], 1, 64, "daemon_instance_id", refuse)
         integer("activation_epoch", 1, 2**63 - 1)
-        _enum(record["event"], {"installed", "started", "stopped", "removed", "revoked", "idle", "paused", "pause_unknown", "wake_attempt", "backpressure", "exhausted", "owner_unknown", "adapter_unknown", "wake_evidence_unknown", "relaunch_required", "refused"}, "event", refuse)
+        _enum(record["event"], {"installed", "started", "stopped", "removed", "revoked", "idle", "paused", "pause_unknown", "wake_attempt", "backpressure", "exhausted", "owner_unknown", "adapter_unknown", "wake_evidence_unknown", "relaunch_required", "refused", "cycle_exception"}, "event", refuse)
         _enum(record["state"], {"inactive", "installed", "running", "stopped", "removed", "revoked", "idle", "paused", "pause_unknown", "backpressure", "exhausted", "unknown", "refused", "relaunch_required"}, "state", refuse)
         reason = record["reason_code"]
         if reason is not None:
             _bounded_string(reason, 1, 128, "reason_code", refuse)
+        for exception_field in ("exception_type", "exception_message"):
+            exception_value = record.get(exception_field)
+            if exception_value is not None:
+                _bounded_string(exception_value, 1, 128, exception_field, refuse)
         _sha256(record["adapter_digest"], "adapter_digest", refuse)
         for field in ("plist_digest", "session_digest"):
             if record[field] is not None:
@@ -4364,6 +4389,59 @@ def _harness_segments_v1(value: object, refuse: Any) -> None:
                 refuse("harness_segments_invalid", "transition harness segments require predecessor_segment_id")
             _record_ref(segment["predecessor_segment_id"], "seg-", "predecessor_segment_id", refuse)
 
+
+
+def _validate_lane_workspace_record(record: Dict[str, Any], *, integrity: bool) -> None:
+    def invalid(detail: str) -> None:
+        if integrity:
+            raise IntegrityFailure("lane_workspace_record_invalid", detail)
+        raise ProtocolRefusal(
+            "lane_workspace_record_invalid", detail,
+            "Preserve the lane ledger and repair the named record through governed ledger repair; never infer workspace ownership from an invalid record.",
+        )
+
+    for field in ("node_id", "repo"):
+        if not _identifier(record[field]):
+            invalid(field + " must be a declared identifier")
+    row = record["row"]
+    if not isinstance(row, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", row) is None:
+        invalid("row must be a bounded path-safe identifier")
+    if record["path"] != f'{record["node_id"]}/work/{row}':
+        invalid("path must be the node work row relative to the declared lanes root")
+    if record["branch"] != f'codex/lane/{record["node_id"]}/{row}':
+        invalid("branch must name this node and row")
+    if not isinstance(record["base_sha"], str) or re.fullmatch(r"[0-9a-f]{40}", record["base_sha"]) is None:
+        invalid("base_sha must be the exact local commit observation")
+    opened = record["opened_at"]
+    if not isinstance(opened, str) or _TIMESTAMP.fullmatch(opened) is None:
+        invalid("opened_at must be a UTC RFC3339 timestamp")
+    try:
+        opened_at = datetime.fromisoformat(opened.replace("Z", "+00:00"))
+    except ValueError:
+        invalid("opened_at is not a real timestamp")
+    if record["state"] == "open":
+        if any(record[field] is not None for field in ("closed_at", "closed_by", "opened_record_id", "why")):
+            invalid("open records cannot carry close testimony")
+    elif record["state"] == "closed":
+        predecessor = record["opened_record_id"]
+        if not isinstance(predecessor, str) or re.fullmatch(r"lane-workspace-" + _UUID7, predecessor) is None or predecessor == record["id"]:
+            invalid("closed record must name a distinct opening record")
+        if record["closed_by"] not in ("operation:sweep", "operation:retire") and not _identifier(record["closed_by"]):
+            invalid("closed_by must name the explicit closing actor or automatic operation")
+        closed = record["closed_at"]
+        if not isinstance(closed, str) or _TIMESTAMP.fullmatch(closed) is None:
+            invalid("closed_at must be a UTC RFC3339 timestamp")
+        try:
+            closed_at = datetime.fromisoformat(closed.replace("Z", "+00:00"))
+        except ValueError:
+            invalid("closed_at is not a real timestamp")
+        if closed_at < opened_at:
+            invalid("closed_at cannot precede opening")
+        why = record["why"]
+        if why is not None and (not isinstance(why, str) or not 1 <= len(why.strip()) <= 1024 or _terminal_unsafe(why)):
+            invalid("why must be bounded printable force testimony")
+    else:
+        invalid("state must be open or closed")
 
 def _record_ref(value: object, prefix: str, field: str, refuse: Any) -> None:
     if not isinstance(value, str) or re.fullmatch(re.escape(prefix) + _UUID7, value) is None:

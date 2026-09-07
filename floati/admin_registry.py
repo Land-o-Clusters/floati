@@ -176,7 +176,12 @@ class RegistryAdminBackend:
         result["workspace"] = str(binding.path)
         return result
 
+    @shared_epoch_operation
     def commit_retire(self, plan: NodeRetirePlan) -> Dict[str, Any]:
+        from .lane_retirement import (
+            close_retiring_node_lanes, preflight_retirement_records, retirement_lane_scope,
+        )
+
         def decide(existing: list[Dict[str, Any]], records: Sequence[Dict[str, Any]]) -> None:
             active = self._latest_registry(existing, plan.node_id)
             if active is None or active.get("state") != "active":
@@ -193,8 +198,11 @@ class RegistryAdminBackend:
             if active_lease is not None and active_lease.get("state") == "active":
                 if len(retired) != 1 or retired[0].get("predecessor_lease_id") != active_lease.get("id"):
                     raise ProtocolRefusal("node_lease_invalid", "retirement does not close the active lease")
+            preflight_retirement_records(self.root, existing, records, REGISTRY_KINDS)
+            close_retiring_node_lanes(self.root, plan.node_id, completed_lanes)
 
-        return self._commit(plan.records, decide)
+        with retirement_lane_scope(self.root) as completed_lanes:
+            return self._commit(plan.records, decide)
 
     def active_assignment(self, node_id: str) -> Dict[str, Any]:
         active = self.active_node(node_id)
@@ -275,7 +283,7 @@ class RegistryAdminBackend:
         *,
         to: str,
         idempotency_key: str,
-        fallback_template: "RoleTemplate",
+        declared_templates: Mapping[str, "RoleTemplate"],
     ) -> Dict[str, Any]:
         """Move the architect role in the role-record vocabulary (ARCH-1).
 
@@ -287,7 +295,28 @@ class RegistryAdminBackend:
         result of 0 or >1 architects refuses and writes nothing. The entry
         `role` field is never touched. A replay under the same key returns
         the first receipt as a no-op.
+
+        ARCH-DECL-1-F1: every written record pins the DECLARED template's
+        version and digest, resolved at transfer time — never a copy of
+        the predecessor's pin, which goes stale the moment the declared
+        template is revised and which doctor's delivery health then
+        refuses.
         """
+
+        fallback_template = declared_templates.get("builder")
+        if fallback_template is None:
+            raise ProtocolRefusal(
+                "role_template_unknown",
+                "the shipped default role template is not shipped",
+                remedy="reinstall the governed bundle; roles/shipped must carry the builder template",
+            )
+        architect_template = declared_templates.get("architect")
+        if architect_template is None:
+            raise ProtocolRefusal(
+                "role_template_unknown",
+                "the architect role template is not declared",
+                remedy="reinstall the governed bundle; roles/shipped must carry the architect template",
+            )
 
         for record in self._records():
             if (
@@ -318,7 +347,7 @@ class RegistryAdminBackend:
         target_latest = self._latest("registry_role_record", target_node)
         to_role_before = None if target_latest is None else str(target_latest["template_role"])
         vacated_next = self._role_after_vacating(
-            vacated_role, target_node=target_node, fallback_template=fallback_template
+            vacated_role, target_node=target_node, declared_templates=declared_templates
         )
 
         vacated_record: Dict[str, Any] = {
@@ -342,9 +371,9 @@ class RegistryAdminBackend:
             "timestamp": utc_now(),
             "kind": "registry_role_record",
             "node_id": target_node,
-            "template_role": vacated_role["template_role"],
-            "template_version": vacated_role["template_version"],
-            "template_sha256": vacated_role["template_sha256"],
+            "template_role": architect_template.role,
+            "template_version": architect_template.template_version,
+            "template_sha256": architect_template.digest,
             "answers": dict(vacated_role["answers"]),
             "state": "active",
             "predecessor_role_record_id": (
@@ -454,7 +483,7 @@ class RegistryAdminBackend:
         vacated_role: Dict[str, Any],
         *,
         target_node: str,
-        fallback_template: "RoleTemplate",
+        declared_templates: Mapping[str, "RoleTemplate"],
     ) -> Dict[str, Any]:
         """Resolve the role the vacated node holds after handing over."""
 
@@ -468,10 +497,18 @@ class RegistryAdminBackend:
             ):
                 prior = record
         if prior is not None:
+            declared = declared_templates.get(str(prior["template_role"]))
+            if declared is None:
+                raise ProtocolRefusal(
+                    "role_template_unknown",
+                    "the vacated node's prior role "
+                    f"{str(prior['template_role'])!r} is not declared",
+                    remedy="reassign the role explicitly; its template is no longer declared",
+                )
             return {
-                "template_role": prior["template_role"],
-                "template_version": prior["template_version"],
-                "template_sha256": prior["template_sha256"],
+                "template_role": declared.role,
+                "template_version": declared.template_version,
+                "template_sha256": declared.digest,
                 "answers": dict(prior["answers"]),
             }
         inherited = dict(vacated_role.get("answers") or {})
@@ -489,6 +526,13 @@ class RegistryAdminBackend:
             "never_touch": str(inherited["never_touch"]),
             "reports_to": target_node,
         }
+        fallback_template = declared_templates.get("builder")
+        if fallback_template is None:
+            raise ProtocolRefusal(
+                "role_template_unknown",
+                "the shipped default role template is not shipped",
+                remedy="reinstall the governed bundle; roles/shipped must carry the builder template",
+            )
         return {
             "template_role": fallback_template.role,
             "template_version": fallback_template.template_version,

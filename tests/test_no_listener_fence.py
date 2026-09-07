@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import ast
 import collections
+import hashlib
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
 
-from tests.export_inventory import classify_inventory
+from tests.export_inventory import (
+    classify_inventory,
+    export_policy_is_present,
+    tracked_files,
+)
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -221,10 +232,19 @@ def _is_built_argv_node(node: ast.AST) -> bool:
     )
 
 
-def _built_argv_egress_files(roots: list[Path]) -> set[str]:
-    """Files holding an egress call site whose argv is a BUILT expression."""
+def _built_argv_egress_sites(roots: list[Path]) -> set[tuple[str, str]]:
+    """NET-FENCE-1-F3: every egress call site whose argv is BUILT, per site.
 
-    built: set[str] = set()
+    Identity is (file, site digest); the digest hashes the call's
+    module-qualified callable plus its argv expression's AST. The old
+    census returned FILES, so a second built-argv call landing in an
+    already-pinned file was invisible to every pin that consumed it --
+    two of the five files this census measures carry two sites each.
+    An edited argv changes the digest (the pin reds); a reformatted
+    one does not (ast.dump normalizes layout).
+    """
+
+    sites: set[tuple[str, str]] = set()
     for root in roots:
         for path in sorted(root.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -252,8 +272,27 @@ def _built_argv_egress_files(roots: list[Path]) -> set[str]:
                     for argv in argvs
                     for piece in ast.walk(argv)
                 ):
-                    built.add(path.as_posix())
-    return built
+                    call = f"{node.func.value.id}.{node.func.attr}"
+                    payload = ast.dump(
+                        ast.Module(body=list(argvs), type_ignores=[]),
+                        annotate_fields=False,
+                    )
+                    digest = hashlib.sha256(
+                        f"{call}|{payload}".encode("utf-8")
+                    ).hexdigest()[:16]
+                    sites.add((path.as_posix(), digest))
+    return sites
+
+
+def _built_argv_egress_files(roots: list[Path]) -> set[str]:
+    """Files holding an egress call site whose argv is a BUILT expression.
+
+    A projection of the site census: file granularity is the blind spot
+    NET-FENCE-1-F3 removed, kept only for the census's own
+    documentation.
+    """
+
+    return {path for path, _ in _built_argv_egress_sites(roots)}
 
 
 def _network_subprocess_findings(tree: ast.AST) -> set[tuple[str, str]]:
@@ -454,13 +493,8 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         site fails this pin by name, so every egress-shaped edit crosses
         the consent gate instead of slipping past a stale census.
 
-        Train AW2 re-pin: run 32 -> 33 and mixed 22 -> 23. The mover is
-        NOT a car in this train — it is floati/lifecycle_prompts.py,
-        which gained its subprocess.run in ecf580a0 (LC-GEN-R1 Am.2) on
-        main. That commit is not an ancestor of this car's tip
-        afadb4ce, so the census was measured on a tree that did not yet
-        contain the call site and arrived on the train already stale
-        against base 663293a3, where the live measurement is 33/23.
+        LANES-1 union on 963a11f3: two local Git subprocess.run sites
+        add two mixed argv calls; measured run 40 and mixed 30.
         """
 
         kinds: dict[str, int] = collections.Counter()
@@ -470,17 +504,13 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             path_kinds, path_argv = _subprocess_population(tree)
             kinds.update(path_kinds)
             argv_classes.update(path_argv)
-        # Train AZ union re-pin: run 33 -> 35 and mixed 23 -> 25. The mover
-        # is BRIDGE-1 + Am.1 (33a1e627), whose doctor bridge audit adds two
-        # subprocess.run call sites; measured on the AZ union of base
-        # 2045b2aa, where the live census is 35/25.
         self.assertEqual(
-            {"run": 35, "Popen": 10, "os-family": 3},
+            {"run": 40, "Popen": 10, "os-family": 3},
             dict(kinds),
             "the subprocess-family population moved; re-measure and re-pin",
         )
         self.assertEqual(
-            {"all-literal-list": 2, "mixed": 25, "dynamic": 21},
+            {"all-literal-list": 2, "mixed": 30, "dynamic": 21},
             dict(argv_classes),
             "the argv-shape distribution moved; re-measure and re-pin",
         )
@@ -567,6 +597,144 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
                 {"planted_join_egress.py", "planted_percent_egress.py"},
                 enumerated,
             )
+
+    def test_planted_second_site_in_one_file_is_visible_per_site(self) -> None:
+        """NET-FENCE-1-F3: the census must see SITES, not files.
+
+        The file-granularity pin dedupes co-located egress sites: a second
+        network-capable call landing in an already-pinned file changes
+        nothing the pin compares, so it is invisible to the harbor pin
+        and to the private pin alike. Two planted sites in ONE file: the
+        file census reports one file (the blind spot, asserted as
+        documentation), the site census reports both.
+        """
+
+        import tempfile
+
+        from tests.temp_roots import REAL_TEMP_ROOT
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            planted = Path(temporary) / "planted_two_sites.py"
+            planted.write_text(
+                "import subprocess\n"
+                "def one(url):\n"
+                "    subprocess.run(''.join(['cu', 'rl', ' ', url]), shell=True)\n"
+                "def two(url):\n"
+                "    subprocess.run(f'git fetch {url}', shell=True)\n",
+                encoding="utf-8",
+            )
+            files = {
+                Path(path).relative_to(temporary).as_posix()
+                for path in _built_argv_egress_files([Path(temporary)])
+            }
+            sites = {
+                (Path(path).relative_to(temporary).as_posix(), digest)
+                for path, digest in _built_argv_egress_sites([Path(temporary)])
+            }
+            self.assertEqual({"planted_two_sites.py"}, files)
+            self.assertEqual(2, len(sites), sites)
+            self.assertEqual(
+                {"planted_two_sites.py"}, {path for path, _ in sites}
+            )
+
+    def test_built_argv_egress_sites_are_pinned(self) -> None:
+        """NET-FENCE-1-F3: the pin is per SITE, not per file.
+
+        Measured 2026-09-06 at main 2045b2aa: seven built-argv egress
+        sites across five files, and two of the five files carry two
+        sites each -- exactly the co-location a file-granularity pin
+        cannot see. Identity is (path, site digest): the digest hashes
+        the call's callable and its argv expression's AST, so an edited
+        argv reds this pin while a reformatted one does not, and a new
+        site reds it by name. Projection-aware like Am.2: both sides are
+        classified through the exporter and compared as the included
+        half.
+        """
+
+        measured = _built_argv_egress_sites([Path("floati"), Path("scripts")])
+        pinned = {
+            ("floati/cli.py", "4a4ea4b2f1ec4f5b"),
+            ("scripts/capture-demo-assets.py", "4053d11281a3c0e1"),
+            ("scripts/capture-demo-assets.py", "70cb7fa74220ea0a"),
+            ("scripts/capture-shot1-locf1.py", "b2f1e1598e2214e8"),
+            ("scripts/capture-shot1-locf1.py", "ebeffdefb0d69c7d"),
+            ("scripts/capture-tui-moments.py", "70cb7fa74220ea0a"),
+        }
+        included_paths = frozenset(
+            classify_inventory(
+                sorted({path for path, _ in measured} | {path for path, _ in pinned}),
+                root=REPOSITORY_ROOT,
+            )
+        )
+
+        self.assertEqual(
+            {site for site in pinned if site[0] in included_paths},
+            {site for site in measured if site[0] in included_paths},
+            "a built-argv egress site appeared, vanished, or changed shape; "
+            "name it in this pin",
+        )
+
+    def test_the_site_pin_predicts_a_real_projection(self) -> None:
+        """PROJ-PIN-1: the site pin is the census a projection can actually run.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``: build
+        one real projection of the included set, ``git init`` it, and run
+        the built-argv site census inside it. Classification through the
+        exporter is not projection-aware once the projection deletes the
+        policy — the pin must not name a ``private_only_exact`` path.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        included = classify_inventory(tracked_files(REPOSITORY_ROOT), root=REPOSITORY_ROOT)
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            for relative in included:
+                target = projection / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPOSITORY_ROOT / relative, target)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "unittest",
+                    "tests.test_no_listener_fence.WholeProductNoListenerFenceTests.test_built_argv_egress_sites_are_pinned",
+                ],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the projected site census failed against the pin:\n"
+            + completed.stderr[-4000:],
+        )
 
     def test_bind_and_listen_calls_exist_only_in_the_ruled_af_unix_supervisor(self) -> None:
         calls: list[str] = []

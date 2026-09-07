@@ -520,31 +520,6 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         record = AdapterBindingStore(self.root).read(self.coordinate)
         self.assertEqual("resume_proven", record["resume_state"])
 
-    def test_first_wake_of_an_unproven_binding_flips_it_proven(self) -> None:
-        self.bind(resume_state="resume_unproven")
-        self.send("r5c-f1-woke-proven")
-        self.assertEqual("woke", self.daemon().run_cycle(100.0)["state"])
-        record = AdapterBindingStore(self.root).read(self.coordinate)
-        self.assertEqual("resume_proven", record["resume_state"])
-
-    def test_first_wake_verdict_leaves_proven_and_absent_bindings_alone(self) -> None:
-        self.bind(resume_state="resume_proven")
-        self.send("r5c-f1-proven-untouched")
-        self.adapter.outcome = "unknown"
-        self.adapter.reason_code = "wake_daemon_adapter_timeout"
-        self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
-        record = AdapterBindingStore(self.root).read(self.coordinate)
-        self.assertEqual("resume_proven", record["resume_state"])
-
-        AdapterBindingStore(self.root).remove(self.coordinate)
-        self.bind()
-        self.send("r5c-f1-absent-untouched")
-        self.adapter.outcome = "woke"
-        self.adapter.reason_code = None
-        self.assertEqual("woke", self.daemon().run_cycle(102.0)["state"])
-        record = AdapterBindingStore(self.root).read(self.coordinate)
-        self.assertNotIn("resume_state", record)
-
 
 class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
     """WD-R7: when the breaker opens, the daemon says so ONCE, locally.
@@ -666,10 +641,15 @@ class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
 
     def test_first_wake_verdict_leaves_proven_and_absent_bindings_alone(self) -> None:
         """The verdict resolves only the unproven state - proven (bind-time
-        probe) and legacy-absent (codex waiter) bindings are untouched."""
+        probe) and legacy-absent (codex waiter) bindings are untouched.
+
+        Carries the timeout reason the F1 twin asserted: the adapter dies
+        with `wake_daemon_adapter_timeout` on the proven half, and the
+        absent half resets it, so the woke verdict is proven reason-free."""
         self.bind(resume_state="resume_proven")
         self.send("r5c-proven-message")
         self.adapter.outcome = "unknown"
+        self.adapter.reason_code = "wake_daemon_adapter_timeout"
         self.assertEqual("adapter_unknown", self.daemon().run_cycle(100.0)["state"])
         record = AdapterBindingStore(self.root).read(self.coordinate)
         self.assertEqual("resume_proven", record["resume_state"])
@@ -678,9 +658,97 @@ class WakeDaemonBreakerNoticeTests(_WakeDaemonFixture):
         self.bind()
         self.send("r5c-absent-message")
         self.adapter.outcome = "woke"
+        self.adapter.reason_code = None
         self.assertEqual("woke", self.daemon().run_cycle(102.0)["state"])
         record = AdapterBindingStore(self.root).read(self.coordinate)
         self.assertNotIn("resume_state", record)
+
+
+class ServeRefusalHoldTests(_WakeDaemonFixture):
+    """SERVE-PASS-1: a refusal serve() holds quietly must be recorded once.
+
+    serve() wraps ``maintain_supervisor_logs`` in a bare
+    ``except (OSError, ProtocolRefusal): pass``, so any refusal the log
+    machinery does not itself record durably -- a symlinked active log
+    among them -- raises EVERY cycle and dies silently: a refusal no
+    receipt records. The hold must be typed, once per outage (never per
+    cycle), survive the outage in the daemon's own state plane, and
+    re-arm on heal so a relapse is a second outage with its own record.
+    """
+
+    def _seed_held_cleanup(self) -> None:
+        from floati import wake_daemon as module
+
+        if hasattr(module, "_SERVE_REFUSAL_HELD"):
+            held = module._SERVE_REFUSAL_HELD
+            digest = self.coordinate.digest
+            self.addCleanup(
+                lambda: held.difference_update(
+                    {key for key in held if key[0] == digest}
+                )
+            )
+
+    def _plant_symlinked_log(self, daemon) -> Path:
+        logs_dir = self.root.resolve_relative(Path("state/wake-daemon/logs"))
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        active = logs_dir / f"{daemon.coordinate.digest}.stderr.log"
+        active.symlink_to(self.base / "somewhere-else.log")
+        return active
+
+    def _record_path(self, daemon, code: str) -> Path:
+        return self.root.resolve_relative(
+            Path("state") / "wake-daemon" / "serve-refusal"
+            / f"{daemon.coordinate.digest}.{code}.json"
+        )
+
+    def _serve_cycles(self, daemon, cycles: int) -> None:
+        tick = iter(100.0 + 0.5 * step for step in range(8 * cycles + 8))
+        seen = {"calls": 0}
+
+        def stop_requested() -> bool:
+            seen["calls"] += 1
+            return seen["calls"] > 2 * cycles
+
+        daemon.serve(stop_requested, clock=lambda: next(tick), sleep=lambda _s: None)
+
+    def test_a_serve_swallowed_refusal_is_recorded_once_then_quiet_then_rearmed(self) -> None:
+        from floati import wake_daemon as module
+
+        self._seed_held_cleanup()
+        self.bind()
+        self.consent()
+        daemon = self.daemon()
+        active = self._plant_symlinked_log(daemon)
+
+        self._serve_cycles(daemon, 1)
+        record_path = self._record_path(daemon, "wake_daemon_log_symlink")
+        self.assertTrue(record_path.is_file(), "the swallowed refusal left no record")
+        first = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(0, first["schema_version"])
+        self.assertEqual("wake_daemon_serve_refusal", first["kind"])
+        self.assertEqual("wake_daemon_log_symlink", first["code"])
+        self.assertEqual(daemon.coordinate.digest, first["coordinate_digest"])
+        self.assertTrue(first.get("remedy"))
+
+        # Held quietly: more blocked cycles never touch the record again.
+        self._serve_cycles(daemon, 2)
+        second = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(first, second)
+
+        # Heal: the condition cleared proves every held refusal re-arms,
+        # and the record goes with the condition it named.
+        active.unlink()
+        active.write_text("a real log\n", encoding="utf-8")
+        self._serve_cycles(daemon, 1)
+        self.assertFalse(record_path.exists())
+
+        # Relapse: a second outage is a second record, never a replay.
+        active.unlink()
+        self._plant_symlinked_log(daemon)
+        self._serve_cycles(daemon, 1)
+        third = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual("wake_daemon_log_symlink", third["code"])
+        self.assertNotEqual(first["recorded_at"], third["recorded_at"])
 
 
 if __name__ == "__main__":
