@@ -651,7 +651,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             allowed_kinds={"codex_wait_exhaustion_receipt"},
         )
         self.assertEqual(1, len(rows))
-        self.assertEqual("rearmed", rows[0]["outcome"])
+        self.assertEqual("consent_reopened", rows[0]["outcome"])
         self.assertEqual(2, rows[0]["waited_seconds"])
 
     def test_idle_waiter_reads_each_nonempty_ledger_once_then_uses_its_cursor(self) -> None:
@@ -1006,7 +1006,7 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
         )
         self.assertEqual(before, fact["before"])
         self.assertEqual(after, fact["after"])
-        self.assertEqual("rearmed", fact["outcome"])
+        self.assertEqual("consent_reopened", fact["outcome"])
         self.assertEqual(
             1,
             fact["waited_seconds"],
@@ -1040,6 +1040,47 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
         self.assertEqual(after, fact["after"])
         self.assertEqual("consent_withdrawn", fact["outcome"])
         self.assertEqual(1, fact["waited_seconds"])
+
+    def test_pre_rename_rearmed_wait_outcomes_still_validate(self) -> None:
+        """The pre-rename wait-outcome word remains readable after writers move.
+
+        Derived wait-outcome sites (tide and locks stay on ``rearmed``):
+        ``floati/codex_wait.py`` reopen write; ``CODEX_WAIT_REOPEN_OUTCOMES``
+        and its membership check; exhaustion write in
+        ``floati/codex_wait_contract.py``; ``floati/records.py`` exhaustion
+        enum; ``schemas/v1/codex-wait-exhaustion-receipt.schema.json``;
+        the two live pins in this module; and this fixture.
+        """
+
+        from floati.codex_wait_contract import validate_reopen_fact
+        from floati.records import validate_record
+        from tests.record_factory import fixture_records
+
+        exhaustion = fixture_records()["codex_wait_exhaustion_receipt"]
+        self.assertEqual("rearmed", exhaustion["outcome"])
+        kinds = frozenset({"codex_wait_exhaustion_receipt"})
+        validate_record(dict(exhaustion), exhaustion["tenant_id"], kinds, integrity=False)
+        validate_record(dict(exhaustion), exhaustion["tenant_id"], kinds, integrity=True)
+        schema = Path(__file__).resolve().parents[1] / (
+            "schemas/v1/codex-wait-exhaustion-receipt.schema.json"
+        )
+        validate_json_schema(exhaustion, schema)
+
+        reopen = {
+            "schema_version": 1,
+            "kind": self.REOPEN_KIND,
+            "tenant_id": "demo-fleet",
+            "timestamp": "2026-09-05T16:56:20.484Z",
+            "node_id": "builder-a",
+            "session_digest": "a" * 64,
+            "ledger": "receipts/codex-wait-consent/builder-a.jsonl",
+            "before": {"device": 1, "inode": 2},
+            "after": {"device": 1, "inode": 3},
+            "waited_seconds": 1,
+            "outcome": "rearmed",
+            "invocation_id": "fixture-pre-rename-reopen",
+        }
+        validate_reopen_fact(dict(reopen), "demo-fleet")
 
     def test_an_unreplaced_consent_ledger_records_no_reopen(self) -> None:
         """The watch must not fire on ordinary in-place appends or a quiet wait."""

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 from floati import fixture_ids as public_ids
 
 import ast
@@ -7,6 +10,16 @@ import unittest
 import tempfile
 from pathlib import Path
 import subprocess
+
+from tests.export_inventory import (
+    classify_inventory,
+    export_policy_is_present,
+    materialise_adapted_tree,
+    tracked_files,
+)
+from tests.temp_roots import REAL_TEMP_ROOT
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class CopyLedgerTests(unittest.TestCase):
@@ -67,6 +80,136 @@ class CopyLedgerTests(unittest.TestCase):
         path = Path("docs/COPY-LEDGER.md")
         self.assertTrue(path.is_file(), "visible provisional strings require a tracked copy ledger")
         self.assertEqual(copy_ledger_markdown(), path.read_text(encoding="utf-8"))
+
+    def test_the_ledger_pin_predicts_a_real_projection(self) -> None:
+        """PROJ-LEG-2: the byte pin is a census a projection can run.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``:
+        build one real projection of the included set, ``git init`` it,
+        and run the byte comparison inside it. The ledger artifact ships,
+        but the catalog it is generated from is whoever imports
+        ``register`` at generation time — so one entry whose source module
+        the export excludes is silent here (the module is present, the
+        bytes agree) and RED in the only tree that ships, where the
+        generated ledger and the shipped one can no longer agree.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        included = classify_inventory(tracked_files(REPOSITORY_ROOT), root=REPOSITORY_ROOT)
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            for relative in included:
+                target = projection / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPOSITORY_ROOT / relative, target)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "unittest",
+                    "tests.test_copy_ledger.CopyLedgerTests"
+                    ".test_generated_copy_ledger_matches_all_static_help_surfaces",
+                ],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the projected ledger census failed against the committed bytes:\n"
+            + completed.stderr[-4000:],
+        )
+
+    def test_the_ledger_pin_predicts_an_adapted_projection(self) -> None:
+        """PROJ-LEG-3: the raw-bytes leg beside this one cannot see adaptation.
+
+        The exporter ADAPTS the files it carries (224 of 1335 measured at
+        the a9385f0c tree): redactions applied at exposure, never at
+        source. A leg that copies raw bytes proves the included SET and
+        says nothing about what the adapter did to the bytes a reader
+        actually gets. This leg builds the projection through the
+        exporter's own adaptation — `materialise_adapted_tree`, whose
+        refusals propagate rather than falling back to raw bytes — and
+        runs the same byte comparison inside it. A catalog entry whose
+        committed bytes do not survive adaptation is silent here, green
+        in the raw leg, and RED exactly where it lands.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "unittest",
+                    "tests.test_copy_ledger.CopyLedgerTests"
+                    ".test_generated_copy_ledger_matches_all_static_help_surfaces",
+                ],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the adapted projection regenerates ledger bytes the export "
+            "does not ship:\n" + completed.stderr[-4000:],
+        )
 
     def test_door_copy_is_draft_stamped_and_registered_once(self) -> None:
         """Catches new onboarding-door copy escaping the generated review ledger."""

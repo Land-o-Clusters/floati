@@ -15,6 +15,8 @@ from pathlib import Path
 
 from floati.errors import ProtocolRefusal
 
+from tests import time_bounds
+
 
 OBSERVED_AT = "2026-08-29T12:00:00Z"
 PROVIDERS = (
@@ -267,12 +269,33 @@ class QuotaAdapterTests(unittest.TestCase):
             )
             executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
 
-            receipt = module.collect_codex_app_server(
-                executable,
-                observed_at=OBSERVED_AT,
-                idempotency_key="codex-stdio-1",
-                timeout_seconds=2.0,
+            # TIMEOUT-PUB-1: the budget is DERIVED, not a wall-clock constant.
+            # The fixture must be spawned and schedule three JSONL round trips
+            # inside it, so the budget scales with what this host charges right
+            # now to start one comparable interpreter; the assumption the
+            # derivation makes about the host is stated in
+            # tests.time_bounds.derived_codex_handshake_budget_seconds. The
+            # budget is printed and a failure inside it names the loadavg it
+            # failed under.
+            handshake_budget = time_bounds.derived_codex_handshake_budget_seconds()
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: derived handshake budget "
+                f"{handshake_budget:.3f}s; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
             )
+            try:
+                receipt = module.collect_codex_app_server(
+                    executable,
+                    observed_at=OBSERVED_AT,
+                    idempotency_key="codex-stdio-1",
+                    timeout_seconds=handshake_budget,
+                )
+            except ProtocolRefusal as raised:
+                self.fail(
+                    f"the codex fixture handshake failed inside a derived "
+                    f"{handshake_budget:g}s budget ({raised.code}: {raised.detail}); "
+                    f"host loadavg {[round(value, 2) for value in os.getloadavg()]}"
+                )
 
             self.assertEqual(
                 ["initialize", "initialized", "account/rateLimits/read"],

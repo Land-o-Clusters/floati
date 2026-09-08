@@ -42,6 +42,11 @@ import unittest
 from pathlib import Path
 
 from tests.private_artifacts import require_private_artifact
+from tests.export_inventory import (
+    export_policy_is_present,
+    materialise_adapted_tree,
+)
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +64,7 @@ SHIPPED_DEPENDENCIES = (
     "tests/__init__.py",
     "tests/export_inventory.py",
     "tests/private_artifacts.py",
+    "tests/temp_roots.py",
     "tests/test_public_export_baseline.py",
     "tests/fixtures/baseline-1-f1/public-export-baseline.v0.json",
     "scripts/regen_public_baseline.py",
@@ -454,6 +460,80 @@ class ProjectionShapeTests(unittest.TestCase):
                 + completed.stderr
                 + completed.stdout,
             )
+
+    def test_the_module_is_green_in_a_real_projection(self) -> None:
+        """PROJ-LEG-2: the hand-shaped tree beside this one, without the hand.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``:
+        build one real projection of the classifier's included set,
+        ``git init`` it, and run the WHOLE module inside it. The sibling
+        test copies a literal ``SHIPPED_DEPENDENCIES`` tuple and states
+        what that cannot see: it assumes the export's shape instead of
+        asking the exporter. This leg asks. A dependency this module
+        needs that the classifier excludes — the baseline file's own
+        failure mode, one level down — is silent in the harbor and RED
+        here, naming the path the projection cannot carry.
+
+        The child runs with ``PROJECTION_SHAPE_CHILD_ENV`` set, so the
+        hand-shaped sibling skips inside it rather than building a
+        weaker copy of the tree the child is already in; the leg itself
+        skips under either guard, so neither shape recurses.
+
+        PROJ-LEG-3: the projection is built through the exporter's own
+        adaptation, not raw copies — this module reads committed bytes
+        (the shipped fixture among them), and the bytes a reader has are
+        the adapted ones, so the module must be green against exposure,
+        not only against the harbor.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+        if os.environ.get(PROJECTION_SHAPE_CHILD_ENV):
+            self.skipTest("child of a projection-shape run; not this test's subject")
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [sys.executable, "-m", "unittest", "tests.test_public_export_baseline"],
+                cwd=projection,
+                env={
+                    **os.environ,
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    PROJECTION_SHAPE_CHILD_ENV: "1",
+                },
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the real projection errors on this module:\n"
+            + completed.stderr[-4000:],
+        )
 
 
 class CommittedBaselineTests(unittest.TestCase):

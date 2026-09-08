@@ -17,7 +17,7 @@ except ImportError:
     project_mcp_surface = None
 from floati.events import EventLog
 from floati.ids import uuid7_hex
-from floati.jsonl import append_record
+from floati.jsonl import append_record, read_records
 try:
     from floati.mcp import McpServer, run_cli_artifact
 except ImportError:
@@ -551,7 +551,21 @@ class McpToolSurfaceTests(unittest.TestCase):
             after = self._root_record_bytes()
             if after != before:
                 mutated.append(str(tool["name"]))
-        self.assertEqual([], mutated)
+        # SN-R1 Am.4: mcp serve reaches tools through cli.main, so doctor
+        # writes exactly its one post-bind timing receipt — a receipt about
+        # the invocation, not a fleet write. No other listed tool writes.
+        self.assertEqual(["doctor"], mutated)
+        rows = read_records(
+            self.root,
+            Path("receipts/timings/doctor.jsonl"),
+            allowed_kinds={"timing_receipt"},
+        )
+        self.assertEqual(1, len(rows))
+        self.assertEqual("doctor", rows[-1]["command"])
+        self.assertIn(
+            rows[-1]["outcome"],
+            {"ok", "refused", "degraded", "no_result", "error"},
+        )
 
     def test_inactive_call_tool_refuses_every_tool_absent_from_list_tools(self) -> None:
         """Catches list_tools filtering a name that call_tool still runs."""

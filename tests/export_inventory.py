@@ -285,3 +285,48 @@ def materialise_exposed_tree(
         target.write_bytes(data)
         written.append(relative)
     return tuple(written)
+
+
+def materialise_adapted_tree(
+    destination: Path, root: Path = REPOSITORY_ROOT
+) -> tuple[str, ...]:
+    """Write the include set into `destination` with adaptation REFUSING LOUDLY.
+
+    `materialise_exposed_tree` serves the name fences, where a file whose
+    adaptation refuses is written raw and the scrub reads the raw bytes; a
+    projection leg built that way would go quiet on exactly the drift this
+    helper exists to catch. Here an adaptation refusal PROPAGATES: a leg whose
+    projection cannot be built as the exporter builds it must error, not
+    silently fall back to the raw bytes the leg exists to stop trusting.
+
+    Like the lenient helper this is not the exporter's full projection -- no
+    renames, no structural contract, no public baseline diff -- and in a
+    policy-less tree there is nothing to adapt, so the files copy through
+    unchanged.
+    """
+
+    exporter = (
+        importlib.import_module("scripts.export_public")
+        if export_policy_is_present(root)
+        else None
+    )
+    policy = export_policy(root) if exporter is not None else None
+    baseline = set(published_baseline(root)) if exporter is not None else None
+    written: list[str] = []
+    for relative in export_include_set(root):
+        source = root / relative
+        if not source.is_file() or source.is_symlink():
+            continue
+        data = source.read_bytes()
+        if exporter is not None:
+            data, _notes = exporter._adapt(
+                relative,
+                data,
+                policy=policy,
+                public_paths=baseline,
+            )
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        written.append(relative)
+    return tuple(written)

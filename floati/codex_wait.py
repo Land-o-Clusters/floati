@@ -113,7 +113,7 @@ def _reopen_consent(
             before=before,
             after=after,
             waited_seconds=waited_seconds,
-            outcome="rearmed" if usable else "consent_withdrawn",
+            outcome="consent_reopened" if usable else "consent_withdrawn",
             invocation_id=invocation_id,
         )
     except Exception as exc:

@@ -39,6 +39,10 @@ join, or the first argument of `open`/`Path`/`PurePath`/`PurePosixPath`/
 from __future__ import annotations
 
 import ast
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,8 +50,10 @@ from pathlib import Path
 from tests.export_inventory import (
     classify_inventory,
     export_policy_is_present,
+    materialise_adapted_tree,
     tracked_files,
 )
+from tests.temp_roots import REAL_TEMP_ROOT
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -241,6 +247,67 @@ class FixturePlacementTests(unittest.TestCase):
             "a test under tests/ ships and its fixture does not; move the "
             "fixture to tests/fixtures/<row>/ and let the evidence document "
             "cite it there",
+        )
+
+    def test_the_path_census_predicts_a_real_projection(self) -> None:
+        """PROJ-LEG-2: the census itself is a test that has to survive shipping.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``:
+        build one real projection of the included set, ``git init`` it,
+        and run this module inside it. The fence walks tests that SHIP,
+        so the fence module is under its own rule twice over — it must be
+        green where the export leaves the private artifacts behind, and
+        it must collect there at all. A census module that imports or
+        reads something the export excludes is silent here and broken in
+        the only tree a public reader can run.
+
+        PROJ-LEG-3: the projection is built through the exporter's own
+        adaptation, not raw copies — the fence reads test SOURCES, and
+        the sources a reader has are the adapted ones, so the census
+        must walk what exposure actually wrote, literals and all.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [sys.executable, "-m", "unittest", "tests.test_fixture_placement"],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the projected path census failed inside the projection:\n"
+            + completed.stderr[-4000:],
         )
 
     def test_the_fence_walks_a_real_population(self) -> None:

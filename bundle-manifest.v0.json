@@ -151,7 +151,7 @@
     },
     {
       "path": "floati/admin_cli.py",
-      "sha256": "db55e6d1820f3a69c6187b046e9a7b13f3174e01c6a0632e7eeea84d0ce8bc59"
+      "sha256": "f2fd3d2693aaec61f5ee7d07631e28e61b7b244efc6b7480b62ed931c389c9d0"
     },
     {
       "path": "floati/admin_registry.py",
@@ -203,7 +203,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "995415040daff7b2846fe6e41a168e4b47028f3300211a518fa7f3c8d9c908ad"
+      "sha256": "c19509490aedb7f965bc90a1dfa51a6a23d8b377464e774d7b94e7b9040daf56"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -215,11 +215,11 @@
     },
     {
       "path": "floati/codex_wait.py",
-      "sha256": "e1872bc8ba712e9de65fa47fcb7c1d1d186b80fd16ab4aa1449dbf9cb774d1f6"
+      "sha256": "563517916b79f56a249f047d9be915f8461d2f2495885d5600802753b34f569d"
     },
     {
       "path": "floati/codex_wait_contract.py",
-      "sha256": "08e185d214a3cd55be3eba92c92fbc013a2695ad6f0713c8c4f03e665eb8f45d"
+      "sha256": "9cd86f5cecfe027263d33b94319f0a4999b4ab2b6b77f51c48ec2c8775645438"
     },
     {
       "path": "floati/command_codegen.py",
@@ -359,7 +359,7 @@
     },
     {
       "path": "floati/generated_help.py",
-      "sha256": "12c7cd2d5529e5308b7afcbb6ad885655b07b8097f0d914d509c46db083f35a4"
+      "sha256": "6f1b44497fb6b745c12a5bdcd1eefa9cfee2e76f7f250833837799396d75a6b5"
     },
     {
       "path": "floati/gh_process.py",
@@ -387,7 +387,7 @@
     },
     {
       "path": "floati/help_copy.py",
-      "sha256": "1b3755907561bae11bb866a963692e74ec62d6cb79a0bb88e09f8b16edb1b318"
+      "sha256": "78e346fcaebadb4ae519bae7ee7c15fca7e8900e21c92cb4ceea5a75f9fff2db"
     },
     {
       "path": "floati/helptext.py",
@@ -547,7 +547,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "be6493558ae261e03db3bf660ff5fdaa06522127ff15c7c6f5930a90541bff0e"
+      "sha256": "4b7f15c7ef6ca8683bd42a05274f8a2e4f6d8aa85705600b1d4436c674330133"
     },
     {
       "path": "floati/registry.py",
@@ -706,6 +706,10 @@
       "sha256": "292bd619de87bd035705cd349cd7106fdbb0e7c069f34ea2c320e9e061afa786"
     },
     {
+      "path": "floati/timings.py",
+      "sha256": "fb5063fab3a5b87f96f6b129bdff350c166011ea2332470e2aaeb6edf9014662"
+    },
+    {
       "path": "floati/tui.py",
       "sha256": "4da346c1be90bba1e13f704d598b3b3c71ca27b08e010fac119e7a30d8330730"
     },
@@ -819,7 +823,7 @@
     },
     {
       "path": "floati/wake_daemon_adapters.py",
-      "sha256": "0cfced53b9c1ce79e0ccfa5d599ed664a46bce440aa62d33991d5afd7cd59232"
+      "sha256": "c501bffef951cd3df7ae0c9fee9130562b0281267731e077077e468093344e44"
     },
     {
       "path": "floati/wake_daemon_contract.py",
@@ -847,7 +851,7 @@
     },
     {
       "path": "floati/wake_timeout_forensics.py",
-      "sha256": "52ddaba3e440179a877725b3e41a7602c69a7d68aeb8bdd00d8cf70044720105"
+      "sha256": "412344d0331168353b08c28ce35e14a903a5c82428482a72dc8a6127749a8de5"
     },
     {
       "path": "floati/wiring_journal.py",
@@ -1327,7 +1331,7 @@
     },
     {
       "path": "schemas/v1/codex-wait-exhaustion-receipt.schema.json",
-      "sha256": "35c4cd042a89f402114af456f6f534d5616aaa0e3406ced70dd6630e63ca4f8b"
+      "sha256": "c759e57765065ccb11bced4da042f24821652f2c1cd15f332a4f8a6fda29d145"
     },
     {
       "path": "schemas/v1/codex-wait-session-receipt.schema.json",
@@ -1520,6 +1524,10 @@
     {
       "path": "schemas/v1/tide-receipt-record.schema.json",
       "sha256": "70fa604c0cbebcf2ddcd77391fbe316b3204e98d38c09f73f6e7ae2d47359bb0"
+    },
+    {
+      "path": "schemas/v1/timing-receipt.schema.json",
+      "sha256": "47c80031cc9340abbde901da23bd555e69613b83f0a5c8dfc18103bf4cd5bd7b"
     },
     {
       "path": "schemas/v1/untracked-descendant-record.schema.json",

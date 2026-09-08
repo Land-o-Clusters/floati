@@ -554,6 +554,16 @@ def _chart_remove_root(args: argparse.Namespace) -> HandlerResult:
     return "ok", result, OK
 
 
+def _chart_timings(args: argparse.Namespace) -> HandlerResult:
+    from .timings import derive_chart
+
+    return "ok", derive_chart(
+        _root(args.root),
+        command=args.timing_command,
+        since=args.since,
+    ), OK
+
+
 def _survey(args: argparse.Namespace) -> HandlerResult:
     artifact = ForeignBusSurvey(
         args.declared_roots,
@@ -852,10 +862,14 @@ def _bind_resume_probe(
     )
     observed = round(time.monotonic() - started, 3)
     if result.outcome != "woke":
+        excerpt = result.stderr_excerpt
+        excerpt_clause = (
+            ", stderr={0}".format(excerpt) if isinstance(excerpt, str) and excerpt else ""
+        )
         raise ProtocolRefusal(
             "wake_bind_target_unresumable",
             f"resume probe failed after {observed}s "
-            f"(outcome={result.outcome}, reason={result.reason_code}); "
+            f"(outcome={result.outcome}, reason={result.reason_code}{excerpt_clause}); "
             f"{WAKE_BREAKER_REMEDY}",
         )
     return "resume_proven"
@@ -1213,6 +1227,11 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     remove_root.add_argument("--declared-roots", required=True, metavar='FILE')
     remove_root.add_argument("--bus-id", required=True, metavar='ID')
     remove_root.set_defaults(handler=_chart_remove_root)
+    chart_timings = chart_commands.add_parser("timings")
+    chart_timings.add_argument("--root", required=True, metavar="ROOT")
+    chart_timings.add_argument("--command", dest="timing_command", metavar="C")
+    chart_timings.add_argument("--since", metavar="ISO")
+    chart_timings.set_defaults(handler=_chart_timings)
 
     survey = commands.add_parser("survey")
     survey.add_argument("--declared-roots", required=True, metavar='FILE')

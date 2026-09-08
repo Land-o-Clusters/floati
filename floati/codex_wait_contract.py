@@ -22,7 +22,9 @@ from .root import FloatiRoot, validate_identifier
 WORKSPACE_MAP_RELATIVE = Path("codex-wait/workspaces.v0.json")
 
 CODEX_WAIT_REOPEN_KIND = "codex_wait_reopen_fact"
-CODEX_WAIT_REOPEN_OUTCOMES = frozenset({"rearmed", "consent_withdrawn"})
+CODEX_WAIT_REOPEN_OUTCOMES = frozenset(
+    {"consent_reopened", "consent_withdrawn", "rearmed"}
+)
 CODEX_WAIT_REOPEN_FIELDS = frozenset(
     {
         "schema_version",
@@ -790,7 +792,7 @@ class CodexWaitReceiptLedger:
             "node_id": node,
             "session_digest": session_digest,
             "waited_seconds": waited_seconds,
-            "outcome": "rearmed",
+            "outcome": "consent_reopened",
             "idempotency_key": idempotency_key,
         }
         relative = Path("receipts/codex-wait-exhaustion") / f"{node}.jsonl"

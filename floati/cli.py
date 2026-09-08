@@ -472,6 +472,7 @@ def _require_banked_sha(sha: str) -> None:
 
 def _send(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
+    require_declared_coordinate(Path.cwd(), args.sender, root)
     _require_banked_sha(args.sha)
     claim = None
     if args.claim is not None:
@@ -581,7 +582,9 @@ def _wake_record(args: argparse.Namespace) -> HandlerResult:
 
 
 def _ack(args: argparse.Namespace) -> HandlerResult:
-    receipt = SparseCursor(_root(args.root)).ack(
+    root = _root(args.root)
+    require_declared_coordinate(Path.cwd(), args.recipient, root)
+    receipt = SparseCursor(root).ack(
         args.recipient,
         args.message_ids,
         acting_session_id=args.session,
@@ -896,11 +899,15 @@ def _doctor_command(args: argparse.Namespace) -> int:
     """Keep machine bytes for pipes/--json; dress only an interactive TTY."""
 
     status, artifact, return_code = _doctor(args)
+    from . import timings as timing_receipts
+
     if args.json or not sys.stdout.isatty():
+        timing_receipts.finish(status, artifact)
         _emit("doctor", status, artifact, return_code)
         return return_code
     from .tui_doctor import render_doctor
 
+    timing_receipts.finish(status, artifact)
     print(render_doctor(artifact), end="")
     return return_code
 
@@ -2598,6 +2605,9 @@ def _protocol_refusal_evidence(exc: ProtocolRefusal) -> Dict[str, object]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     command = arguments[0] if arguments else None
+    from . import timings as timing_receipts
+
+    timing_receipts.begin(arguments)
     parser = _parser()
     from .command_contract import schema_version_for_arguments
 
@@ -2610,9 +2620,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return OK
     try:
         parsed = parser.parse_args(arguments)
+        timing_receipts.bind_parsed(parsed)
         if hasattr(parsed, "direct_handler"):
             direct_handler: Callable[[argparse.Namespace], int] = parsed.direct_handler
-            return direct_handler(parsed)
+            return_code = direct_handler(parsed)
+            timing_receipts.finish(exit_code=return_code)
+            return return_code
         handler: Callable[[argparse.Namespace], HandlerResult] = parsed.handler
         status, evidence, exit_code = handler(parsed)
     except ProtocolRefusal as exc:
@@ -2641,6 +2654,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             {"code": exc.code, "detail": exc.detail},
             DEGRADED,
         )
+    timing_receipts.finish(status, evidence)
     _emit(
         command,
         status,
