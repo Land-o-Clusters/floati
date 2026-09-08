@@ -158,8 +158,8 @@ class LifecyclePromptTests(unittest.TestCase):
         # Derived from describe's live registry plus the bus families — the
         # hand-written first draft missed 11 of the live commands.
         # LANES-1 on train BA: reserved_names() measures 216 entries.
-        # Keep the landed waiter vocabulary and the added lane/sweep names.
-        self.assertEqual(len(reserved), 216, sorted(reserved))
+        # SN-R1 Am.4 on this base adds chart timings (218).
+        self.assertEqual(len(reserved), 218, sorted(reserved))
         for name in ("board", "prompts", "prep-clear", "wait", "pausebus", "resumebus"):
             self.assertIn(name, reserved)
 

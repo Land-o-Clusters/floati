@@ -443,6 +443,18 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
                        'examples': 'floati chart remove-root --declared-roots ~/declared.json --bus-id gamma',
                        'option_docs': {'--declared-roots': 'Absolute declarations file.',
                                        '--bus-id': 'Exact declared bus identifier.'}},
+ 'chart timings': {'description': 'derived timing percentiles for instrumented verbs',
+                   'body': 'Read the timing receipt ledgers under the root and print, per command, the '
+                           'measured count, wall-clock percentiles, the slowest receipt, and the refused '
+                           'share. Every number is derived from receipts and stamped so; percentiles over '
+                           'fewer than twenty receipts print as insufficient rather than a number nobody '
+                           'should quote.',
+                   'notes': ('A row exists only for invocations whose root and named nodes resolved '
+                             '(post-bind); pre-bind refusals write nothing anywhere.',),
+                   'examples': 'floati chart timings --root ~/fleet --command inbox',
+                   'option_docs': {'--root': 'Existing absolute non-symlink fleet root.',
+                                   '--command': 'Only this verb path, as one string ("wake resume").',
+                                   '--since': 'Only receipts at or after this UTC RFC3339 timestamp.'}},
  'survey': {'description': 'read-only foreign-bus survey',
             'body': 'Survey one explicit bounded request without writing, draining, acknowledging, '
                     'registering, or locking a foreign bus.',
@@ -1250,9 +1262,9 @@ HELP_COPY.update({
     },
     'lane open': {
         'description': 'create one recorded row worktree',
-        'body': 'Resolve a declared repository alias and exact local base commit, create the row worktree, and record its ownership.',
+        'body': 'Create one row\'s worktree from a declared repository. Floati records the workspace it made.',
         'notes': ('Declare state/lanes-root.json and state/lane-repositories.json before opening a lane. No fetch or implicit root discovery occurs.',
-                  'Existing paths or branches refuse; inherited seat-fence keys are overridden only in the new worktree.'),
+                  'An existing path or branch refuses. Inherited seat-fence keys are overridden only in the new worktree.'),
         'examples': 'floati lane open --root /absolute/fleet --as builder --row row-one --repo product',
         'option_docs': {
             '--root': 'Exact fleet root containing the lane declarations.',
@@ -1264,9 +1276,9 @@ HELP_COPY.update({
     },
     'lane close': {
         'description': 'remove one recorded row worktree',
-        'body': 'Preflight the recorded workspace, remove it through Git, and append its closing receipt while retaining its branch.',
+        'body': 'Remove one recorded row worktree and keep its branch. Floati appends a closing receipt.',
         'notes': ('Dirty files, unpublished commits, and runtime references block ordinary closure.',
-                  'Force overrides only dirty and unpublished work with an explicit reason; unavailable inspection and runtime use still refuse.'),
+                  'Force needs a reason, and covers dirty or unpublished work only. Runtime use, and anything Floati cannot inspect, still refuses.'),
         'examples': 'floati lane close --root /absolute/fleet --as builder --row row-one',
         'option_docs': {
             '--root': 'Exact fleet root containing the opening record.',
@@ -1278,7 +1290,7 @@ HELP_COPY.update({
     },
     'sweep': {
         'description': 'inspect recorded and unmanaged lane workspaces',
-        'body': 'List recorded lanes eligible through landed or struck board rows or retired nodes; separately report unmanaged paths, ages, and bytes.',
+        'body': 'List recorded lanes a landed or struck row, or a retired node, makes eligible. Report unmanaged paths separately, with their age and bytes.',
         'notes': ('Preview is read-only. Apply preflights the eligible set and closes only recorded lanes.',
                   'Unmanaged directories are never adopted or removed; their presence produces a degraded result.'),
         'examples': 'floati sweep --root /absolute/fleet\nfloati sweep --root /absolute/fleet --apply',

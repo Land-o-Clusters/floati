@@ -14,14 +14,56 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests import time_bounds
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-# CI-GREEN-24: a LIVENESS backstop, not a latency budget. It exists so a child
-# that never streams or never honours SIGINT fails instead of hanging the suite;
-# the latencies it bounds are measured and printed rather than asserted, because
-# how fast a loaded host schedules a child process is not this test's subject.
-WATCH_LIVENESS_BOUND_SECONDS = 30.0
 WATCH_REPRO_TRACE_VARIABLE = "FLOATI_WATCH_TRACE"
+
+
+def watch_liveness_bound_seconds() -> float:
+    """TIMEOUT-PUB-1: the child liveness backstop, derived from this host.
+
+    CI-GREEN-24 called this a LIVENESS backstop, not a latency budget, and
+    held it in a module constant; full-suite runs collected that constant
+    six times in six trees in one night (a shipped test passes alone and
+    fails inside the suite run, so the constant was a bet on the suite's
+    own subprocess contention). The bound is DERIVED each process from
+    what the suite process charges, right then, to start the same CLI
+    import graph; the assumption the derivation makes is stated in
+    ``tests.time_bounds.derived_watch_liveness_bound_seconds``, whose
+    floor is the 30 s constant this derivation replaced.  A miss is not a
+    verdict: ``await_with_one_extension`` takes a fresh measurement and
+    extends exactly once before any failure, and says so in what it
+    prints.  Latencies inside the bound are measured and printed, never
+    asserted; only deafness fails, naming the loadavg it failed under.
+    """
+
+    return time_bounds.derived_watch_liveness_bound_seconds()
+
+
+def await_with_one_extension(attempt):
+    """Run one condition-wait against the derived bound; extend once on a miss.
+
+    Am.1 (ruling 2026-09-07-a-derived-bound-that-lands-below-the-constant-
+    it-replaced): prefer measuring over promising.  ``attempt(seconds) -> bool``
+    must wait for the test's actual CONDITION - a streamed delta, a marker,
+    an exit - and return whether it was met inside ``seconds``.  The first
+    wait uses the process's derived bound; on a miss a FRESH measurement is
+    taken (the domain just proved hotter than the first draw saw) and the
+    condition is awaited once more.  Returns
+    ``(bound, extension_seconds, met)``: ``extension_seconds`` is 0.0 when
+    the bound itself sufficed, so a caller can print - and a failure can
+    name - exactly how long was really granted and which wait carried it.
+    """
+
+    bound = watch_liveness_bound_seconds()
+    if attempt(bound):
+        return bound, 0.0, True
+    fresh = time_bounds.fresh_watch_liveness_bound_seconds()
+    if attempt(fresh):
+        return bound, fresh, True
+    return bound, fresh, False
 
 
 class WatchTests(unittest.TestCase):
@@ -174,28 +216,71 @@ class WatchTests(unittest.TestCase):
         def close_child() -> None:
             if child.poll() is None:
                 child.kill()
-            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+            child.wait(timeout=watch_liveness_bound_seconds())
             for stream in (child.stdout, child.stderr):
                 if stream is not None:
                     stream.close()
 
         self.addCleanup(close_child)
-        ready, _, _ = select.select([child.stdout], [], [], WATCH_LIVENESS_BOUND_SECONDS)
-        self.assertTrue(ready, "the watch child streamed no delta")
+        began = time.monotonic()
+
+        def attempt(seconds: float) -> bool:
+            ready, _, _ = select.select([child.stdout], [], [], seconds)
+            return bool(ready)
+
+        bound, extension, met = await_with_one_extension(attempt)
+        waited = time.monotonic() - began
+        if not met:
+            self.fail(
+                "the watch child streamed no delta within derived bound "
+                f"{bound:g}s plus one re-measured extension of {extension:g}s "
+                f"(waited {waited:.3f}s total); host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the child streamed at {waited:.3f}s; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
         self.assertEqual(
             "initial", json.loads(child.stdout.readline())["evidence"]["delta"]["kind"]
         )
         return child
 
     def _wait_for_marker(self, path: Path, needle: str) -> str:
-        deadline = time.monotonic() + WATCH_LIVENESS_BOUND_SECONDS
-        while time.monotonic() < deadline:
-            if path.is_file():
-                recorded = path.read_text(encoding="utf-8")
-                if needle in recorded:
-                    return recorded
-            select.select([], [], [], 0.05)
-        self.fail(f"marker {path.name} never carried {needle!r}")
+        found: list[str] = []
+        began = time.monotonic()
+
+        def attempt(seconds: float) -> bool:
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                if path.is_file():
+                    recorded = path.read_text(encoding="utf-8")
+                    if needle in recorded:
+                        found.append(recorded)
+                        return True
+                select.select([], [], [], 0.05)
+            return False
+
+        bound, extension, met = await_with_one_extension(attempt)
+        waited = time.monotonic() - began
+        if not met:
+            self.fail(
+                f"marker {path.name} never carried {needle!r} within derived "
+                f"bound {bound:g}s plus one re-measured extension of "
+                f"{extension:g}s (waited {waited:.3f}s total); host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the marker landed at {waited:.3f}s; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
+        return found[-1]
 
     def test_watch_trace_records_where_the_child_was_when_sigint_arrived(self) -> None:
         """WATCH-1: the trace must NAME the frame, not merely exist.
@@ -214,7 +299,28 @@ class WatchTests(unittest.TestCase):
         child = self._streaming_child(trace, iter_ready=iter_ready)
         self._wait_for_marker(iter_ready, "WATCH_ITER_DELTAS_READY")
         child.send_signal(signal.SIGINT)
-        child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+
+        def attempt(seconds: float) -> bool:
+            try:
+                child.wait(timeout=seconds)
+                return True
+            except subprocess.TimeoutExpired:
+                return False
+
+        bound, extension, met = await_with_one_extension(attempt)
+        if not met:
+            self.fail(
+                "the watch child did not honour SIGINT within derived bound "
+                f"{bound:g}s plus one re-measured extension of {extension:g}s; "
+                f"host loadavg {[round(value, 2) for value in os.getloadavg()]}"
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the child then honoured SIGINT; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
 
         self.assertEqual(0, child.returncode)
         recorded = trace.read_text(encoding="utf-8")
@@ -237,7 +343,28 @@ class WatchTests(unittest.TestCase):
         child = self._streaming_child(trace, hold_flush=hold_flush)
         self._wait_for_marker(hold_flush, "WATCH_FLUSH_HOLD")
         child.send_signal(signal.SIGINT)
-        child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+
+        def attempt(seconds: float) -> bool:
+            try:
+                child.wait(timeout=seconds)
+                return True
+            except subprocess.TimeoutExpired:
+                return False
+
+        bound, extension, met = await_with_one_extension(attempt)
+        if not met:
+            self.fail(
+                "the watch child did not honour SIGINT within derived bound "
+                f"{bound:g}s plus one re-measured extension of {extension:g}s; "
+                f"host loadavg {[round(value, 2) for value in os.getloadavg()]}"
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the child then honoured SIGINT; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
 
         self.assertEqual(0, child.returncode)
         recorded = trace.read_text(encoding="utf-8")
@@ -297,18 +424,33 @@ class WatchTests(unittest.TestCase):
         trace = self._watch_reproduction_trace()
         child = self._streaming_child(trace)
         child.send_signal(signal.SIGINT)
-        try:
-            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
-        except subprocess.TimeoutExpired:
+
+        def attempt(seconds: float) -> bool:
+            try:
+                child.wait(timeout=seconds)
+                return True
+            except subprocess.TimeoutExpired:
+                return False
+
+        bound, extension, met = await_with_one_extension(attempt)
+        if not met:
             diagnostic = (
                 self._watch_trace(child, trace)
                 if trace is not None
                 else "WATCH-1 reproduction trace was not armed"
             )
             self.fail(
-                "the watch child did not honour SIGINT within "
-                f"{WATCH_LIVENESS_BOUND_SECONDS:g}s; host loadavg {os.getloadavg()}\n"
+                "the watch child did not honour SIGINT within derived bound "
+                f"{bound:g}s plus one re-measured extension of {extension:g}s; "
+                f"host loadavg {os.getloadavg()}\n"
                 + diagnostic
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the child then honoured SIGINT; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
             )
 
         self.assertEqual(0, child.returncode)
@@ -403,7 +545,7 @@ class WatchTests(unittest.TestCase):
         def close_child() -> None:
             if child.poll() is None:
                 child.kill()
-            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
+            child.wait(timeout=watch_liveness_bound_seconds())
             if child.stdout is not None:
                 child.stdout.close()
             if child.stderr is not None:
@@ -424,31 +566,58 @@ class WatchTests(unittest.TestCase):
         # bounds are now a liveness backstop and the latencies are MEASURED and
         # printed, so a genuinely deaf SIGINT still reds, naming its number.
         began = time.monotonic()
-        ready, _, _ = select.select([child.stdout], [], [], WATCH_LIVENESS_BOUND_SECONDS)
+
+        def attempt(seconds: float) -> bool:
+            ready, _, _ = select.select([child.stdout], [], [], seconds)
+            return bool(ready)
+
+        bound, extension, met = await_with_one_extension(attempt)
         first_line_seconds = time.monotonic() - began
-        self.assertTrue(
-            ready,
-            f"the watch child streamed no delta within {WATCH_LIVENESS_BOUND_SECONDS:g}s",
-        )
+        if not met:
+            self.fail(
+                "the watch child streamed no delta within derived bound "
+                f"{bound:g}s plus one re-measured extension of {extension:g}s "
+                f"(waited {first_line_seconds:.3f}s total); host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
+        if extension:
+            print(
+                f"[TIMEOUT-PUB-1] {self.id()}: missed the derived bound "
+                f"{bound:g}s, re-measured {extension:g}s and extended once; "
+                f"the child streamed at {first_line_seconds:.3f}s; host loadavg "
+                f"{[round(value, 2) for value in os.getloadavg()]}"
+            )
         self.assertEqual("initial", json.loads(child.stdout.readline())["evidence"]["delta"]["kind"])
 
         signalled = time.monotonic()
         child.send_signal(signal.SIGINT)
-        try:
-            child.wait(timeout=WATCH_LIVENESS_BOUND_SECONDS)
-        except subprocess.TimeoutExpired:
+
+        def exit_attempt(seconds: float) -> bool:
+            try:
+                child.wait(timeout=seconds)
+                return True
+            except subprocess.TimeoutExpired:
+                return False
+
+        exit_bound, exit_extension, exit_met = await_with_one_extension(exit_attempt)
+        exit_seconds = time.monotonic() - signalled
+        if not exit_met:
             self.fail(
-                f"the watch child did not honour SIGINT within "
-                f"{WATCH_LIVENESS_BOUND_SECONDS:g}s; first line took "
+                "the watch child did not honour SIGINT within derived bound "
+                f"{exit_bound:g}s plus one re-measured extension of "
+                f"{exit_extension:g}s; first line took "
                 f"{first_line_seconds:.3f}s, host loadavg {os.getloadavg()}\n"
                 + self._watch_trace(child, trace)
             )
-        exit_seconds = time.monotonic() - signalled
         print(
             f"[CI-GREEN-24] {self.id()}: first delta {first_line_seconds:.3f}s, "
-            f"SIGINT to exit {exit_seconds:.3f}s, backstop "
-            f"{WATCH_LIVENESS_BOUND_SECONDS:g}s; host loadavg "
-            f"{[round(value, 2) for value in os.getloadavg()]}"
+            f"SIGINT to exit {exit_seconds:.3f}s, backstop {exit_bound:g}s"
+            + (
+                f" extended once by {exit_extension:g}s"
+                if exit_extension
+                else ""
+            )
+            + f"; host loadavg {[round(value, 2) for value in os.getloadavg()]}"
         )
         self.assertEqual(0, child.returncode)
         self.assertEqual("", child.stderr.read())

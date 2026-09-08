@@ -37,8 +37,14 @@ PINNED_SKIP_REASONS = {
     # projection leg for the built-argv SITE pin cannot measure a census whose
     # classifier is the identity, and it deliberately reuses this wording
     # rather than minting a fourth way to say the same absence.
+    # PROJ-LEG-2 (train CG) adds five more: one typed skip per new per-pin
+    # projection leg, each refusing to measure a census whose classifier is
+    # the identity. All five reuse this wording rather than minting new ways
+    # to say the same absence, which is why only the count moves.
+    # PROJ-LEG-3 adds a sixth: the adapted-projection ledger leg, which
+    # skips under the same guard for the same reason.
     "no export policy in this tree; classification is identity": {
-        "sites": 3,
+        "sites": 9,
         "kind": PRODUCT,
     },
     # NET-FENCE-1-F2's private_only twins (tests/test_no_listener_fence.py,
@@ -51,8 +57,11 @@ PINNED_SKIP_REASONS = {
     # BASELINE-1-F1 Am.1 (7e1aa486) runs one test as a child of a
     # projection-shape run and skips it there by design; pinned on the AZ
     # union where the car first met this census.
+    # PROJ-LEG-2's baseline leg is the second site: its child sets the same
+    # guard so the hand-shaped sibling skips inside the projection and
+    # neither shape recurses.
     "child of a projection-shape run; not this test's subject": {
-        "sites": 1,
+        "sites": 2,
         "kind": PRODUCT,
     },
     "Pillow is not installed": {"sites": 7, "kind": HOST_CAPABILITY},

@@ -59,6 +59,9 @@ PROBE_REASON = (
     "[floati] bind-time resume probe: reply briefly to prove this session can wake"
 )
 PROBE_DEADLINE_SECONDS = 300
+# WAKE-BIND-1: each of head and tail. #17 dumped 7,336,599 bytes; the whole
+# stream must never land in a result or a receipt.
+ADAPTER_STDERR_EXCERPT_BYTES = 256
 ZCODE_NO_MAIL_REASON = (
     "[floati] no new mail; resume and report that the inbox was empty"
 )
@@ -202,11 +205,37 @@ class WakeAdapterResult:
     reason_code: Optional[str]
     exit_code: Optional[int]
     output_digest: Optional[str]
+    stderr_excerpt: Optional[str] = None
 
 
 Runner = Callable[
     [tuple[str, ...], Path, int], subprocess.CompletedProcess[str]
 ]
+
+
+def bounded_stderr_excerpt(raw: object) -> str:
+    """First and last ADAPTER_STDERR_EXCERPT_BYTES, elided count named, scrubbed."""
+
+    from .records import _terminal_unsafe_hit
+
+    text = raw if isinstance(raw, str) else ""
+    data = text.encode("utf-8", "surrogateescape")
+    limit = ADAPTER_STDERR_EXCERPT_BYTES
+
+    def _scrub(value: str) -> str:
+        return "".join(
+            character
+            if character in "\n\t" or _terminal_unsafe_hit(character) is None
+            else "\ufffd"
+            for character in value
+        )
+
+    if len(data) <= limit * 2:
+        return _scrub(text)
+    head = data[:limit].decode("utf-8", "replace")
+    tail = data[-limit:].decode("utf-8", "replace")
+    elided = len(data) - (limit * 2)
+    return "{0}\n... {1} bytes elided ...\n{2}".format(_scrub(head), elided, _scrub(tail))
 
 
 def adapter_contract_digest(harness: str) -> str:
@@ -407,7 +436,11 @@ class _BoundWakeAdapter:
         digest = hashlib.sha256(output.encode("utf-8")).hexdigest()
         if result.returncode != 0:
             return WakeAdapterResult(
-                "refused", "wake_daemon_adapter_nonzero", result.returncode, digest
+                "refused",
+                "wake_daemon_adapter_nonzero",
+                result.returncode,
+                digest,
+                bounded_stderr_excerpt(result.stderr),
             )
         return self._successful_result(result.returncode, output, digest, session_id)
 

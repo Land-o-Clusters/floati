@@ -16,6 +16,7 @@ from typing import Optional
 from tests.export_inventory import (
     classify_inventory,
     export_policy_is_present,
+    materialise_adapted_tree,
     tracked_files,
 )
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -424,6 +425,68 @@ def _subprocess_population(tree: ast.AST) -> tuple[dict[str, int], dict[str, int
     return dict(kinds), dict(argv_classes)
 
 
+_FORBIDDEN_NETWORK_MODULES = {
+    "aiohttp", "ftplib", "http.client", "http.server", "requests",
+    "smtplib", "telnetlib", "urllib.request", "urllib3", "websockets",
+}
+
+
+def measure_network_surface(
+    floati_root: Path,
+) -> tuple[set[str], dict[str, set[str]], set[tuple[str, str, str]]]:
+    """The census test_network_capable_imports_and_subprocesses_are_fully_counted walks.
+
+    One walker. TRUTH-PIN-1 classifies this population; it does not walk again.
+    Paths are repo-relative from floati_root's parent.
+    """
+
+    base = floati_root.resolve().parent
+    seen_socket_imports: set[str] = set()
+    seen_network_imports: dict[str, set[str]] = {}
+    seen_network_subprocesses: set[tuple[str, str, str]] = set()
+    for path in sorted(floati_root.rglob("*.py")):
+        relative = path.resolve().relative_to(base).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+        file_findings = _network_subprocess_findings(tree)
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for name in names:
+                if name == "socket":
+                    seen_socket_imports.add(relative)
+                if name in _FORBIDDEN_NETWORK_MODULES:
+                    seen_network_imports.setdefault(relative, set()).add(name)
+        for function, signature in file_findings:
+            seen_network_subprocesses.add((relative, function, signature))
+    return seen_socket_imports, seen_network_imports, seen_network_subprocesses
+
+
+def counted_outbound_paths(
+    surface: tuple[set[str], dict[str, set[str]], set[tuple[str, str, str]]],
+) -> tuple[tuple[str, str], ...]:
+    """Classify the fence census into the counted outbound paths the pages claim.
+
+    Loopback clients: adapter socket imports that are not a host.
+    HTTPS: each forbidden-module import the census already named.
+    Typed subprocess: each network-shaped subprocess the census already named.
+    """
+
+    sockets, net_imports, net_subs = surface
+    paths: list[tuple[str, str]] = []
+    for relative in sorted(sockets):
+        if relative.startswith("floati/adapters/") and not relative.endswith("_host.py"):
+            paths.append((relative, "target_bound_arm"))
+    for relative, modules in sorted(net_imports.items()):
+        for module in sorted(modules):
+            paths.append((f"{relative}:{module}", "channel_bound_consent"))
+    for relative, function, signature in sorted(net_subs):
+        paths.append((f"{relative}:{function}:{signature}", "typed_no_receipt"))
+    return tuple(paths)
+
+
 class WholeProductNoListenerFenceTests(unittest.TestCase):
     """Pin the audited local-only surface named by docs/TRUTH-GUARANTEES.md."""
 
@@ -440,46 +503,27 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             "floati/worker_exec.py",
             "floati/workers.py",
         }
-        forbidden_modules = {
-            "aiohttp", "ftplib", "http.client", "http.server", "requests",
-            "smtplib", "telnetlib", "urllib.request", "urllib3", "websockets",
-        }
         allowed_network_imports = {
             "floati/update_transport.py": {"http.client"},
         }
         allowed_network_subprocesses = {
             ("floati/gh_process.py", "read_github_issue", "gh issue view"),
         }
-        seen_socket_imports = set()
-        seen_network_imports: dict[str, set[str]] = {}
-        seen_network_subprocesses: set[tuple[str, str, str]] = set()
+        seen_socket_imports, seen_network_imports, seen_network_subprocesses = (
+            measure_network_surface(Path("floati"))
+        )
         violations: list[str] = []
-        for path in sorted(Path("floati").rglob("*.py")):
-            relative = path.as_posix()
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
-            file_findings = _network_subprocess_findings(tree)
-            for node in ast.walk(tree):
-                names: list[str] = []
-                if isinstance(node, ast.Import):
-                    names = [alias.name for alias in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    names = [node.module]
-                for name in names:
-                    if name == "socket":
-                        seen_socket_imports.add(relative)
-                        if relative not in allowed_socket_imports:
-                            violations.append(f"{relative}:socket")
-                    if (
-                        name in forbidden_modules
-                    ):
-                        seen_network_imports.setdefault(relative, set()).add(name)
-                        if name not in allowed_network_imports.get(relative, set()):
-                            violations.append(f"{relative}:{name}")
-            for function, signature in file_findings:
-                observation = (relative, function, signature)
-                seen_network_subprocesses.add(observation)
-                if observation not in allowed_network_subprocesses:
-                    violations.append(":".join(observation))
+        for relative in sorted(seen_socket_imports):
+            if relative not in allowed_socket_imports:
+                violations.append(f"{relative}:socket")
+        for relative, modules in sorted(seen_network_imports.items()):
+            allowed = allowed_network_imports.get(relative, set())
+            for name in sorted(modules):
+                if name not in allowed:
+                    violations.append(f"{relative}:{name}")
+        for observation in sorted(seen_network_subprocesses):
+            if observation not in allowed_network_subprocesses:
+                violations.append(":".join(observation))
         self.assertEqual(allowed_socket_imports, seen_socket_imports)
         self.assertEqual(allowed_network_imports, seen_network_imports)
         self.assertEqual(allowed_network_subprocesses, seen_network_subprocesses)
@@ -554,6 +598,67 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             {path for path in measured if path in included},
             "a built-argv egress site appeared or vanished on the shipped "
             "surface; name it in this pin",
+        )
+
+    def test_the_file_pin_predicts_a_real_projection(self) -> None:
+        """PROJ-LEG-2: the per-file pin is a census a projection can run.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection`` and
+        the site pin's leg beside this one: build one real projection of
+        the included set, ``git init`` it, and run this module's census
+        inside it. The per-file pin predates the per-site one and names
+        whole files, so one entry naming a ``private_only_exact`` path is
+        the same blindness the site pin carried — silent in the harbor,
+        where the classifier filters the entry from both sides, and RED
+        in the only tree that actually ships.
+
+        PROJ-LEG-3: the projection is built through the exporter's own
+        adaptation, not raw copies — this pin names whole files, which
+        adaptation does not move, but the census inside must run on the
+        bytes a reader actually gets.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [sys.executable, "-m", "unittest", "tests.test_no_listener_fence"],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the projected file census failed against the pin:\n"
+            + completed.stderr[-4000:],
         )
 
     def test_planted_join_and_percent_sites_are_enumerated(self) -> None:

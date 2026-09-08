@@ -464,9 +464,11 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "thread_attachment_registered": ("thread-attachment-", _COMMON | {"provider", "provider_thread_id", "subject_kind", "work_item_id", "registered_by", "registered_at_testimony"}),
     "thread_observation_recorded": ("thread-observation-", _COMMON | {"attachment_id", "provider", "provider_thread_id", "provider_status", "active_flags", "provider_updated_at", "attention", "observation_outcome", "observation_reason", "observation_digest", "observed_at_testimony"}),
     "thread_attachment_detached": ("thread-attachment-detached-", _COMMON | {"attachment_id", "provider", "provider_thread_id", "detached_by", "detached_at_testimony"}),
+    "timing_receipt": ("timing-", _COMMON | {"command", "argv_digest", "node_id", "started_at", "wall_seconds", "cpu_seconds", "outcome", "refusal_code"}),
     **_EFFECT_SPECS,
 }
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
+    "timing_receipt": _SPECS["timing_receipt"][1],
     "run_manifest_fact": _SPECS["run_manifest_fact"][1],
     "hook_burn_record": _SPECS["hook_burn_record"][1],
     "mcp_integration_pin": _SPECS["mcp_integration_pin"][1],
@@ -780,7 +782,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             epoch=normalized_epoch,
         )
     is_v1_record = (
-        kind in ({"seat_board_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        kind in ({"seat_board_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "timing_receipt", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
         and isinstance(record["schema_version"], int)
         and not isinstance(record["schema_version"], bool)
         and record["schema_version"] == 1
@@ -830,6 +832,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         refuse("schema_version_invalid", "bus epoch roll receipts require schema version 1")
     if kind == "prep_clear_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "prep-clear receipts require schema version 1")
+    if kind == "timing_receipt" and normalized_version != 1:
+        refuse("schema_version_invalid", "timing receipts require schema version 1")
     if not is_v1_record and kind not in {"segment_opened", "segment_sealed"} and (
         record["schema_version"] != 0 or isinstance(record["schema_version"], bool)
     ):
@@ -2077,7 +2081,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         ident("node_id")
         _sha256(record["session_digest"], "session_digest", refuse)
         integer("waited_seconds", 0, 86399)
-        _enum(record["outcome"], {"rearmed"}, "outcome", refuse)
+        _enum(record["outcome"], {"consent_reopened", "rearmed"}, "outcome", refuse)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
         if _terminal_unsafe(record["idempotency_key"]):
             refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
@@ -2180,6 +2184,41 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         if predecessor is not None:
             _record_ref(predecessor, "wake-daemon-lifecycle-", "predecessor_receipt_id", refuse)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+    elif kind == "timing_receipt":
+        _bounded_string(record["command"], 1, 64, "command", refuse)
+        if "/" in record["command"] or "\\" in record["command"]:
+            refuse("command_invalid", "timing command must be a verb path, not a filesystem path")
+        _sha256(record["argv_digest"], "argv_digest", refuse)
+        if record["node_id"] is not None:
+            ident("node_id")
+        _timestamp_value(record["started_at"], "started_at", refuse)
+        for field in ("wall_seconds", "cpu_seconds"):
+            value = record[field]
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                refuse(
+                    f"{field}_invalid",
+                    f"{field} must be a non-negative finite number of seconds",
+                )
+        _enum(
+            record["outcome"],
+            {"ok", "refused", "degraded", "no_result", "error"},
+            "outcome",
+            refuse,
+        )
+        code = record["refusal_code"]
+        if record["outcome"] in {"ok", "no_result"}:
+            if code is not None:
+                refuse(
+                    "refusal_code_invalid",
+                    "ok and no_result timings carry a null refusal_code",
+                )
+        else:
+            _bounded_string(code, 1, 128, "refusal_code", refuse)
     elif kind == "liveness_presence":
         ident("node_id")
         observed = _timestamp_value(record["observed_at"], "observed_at", refuse)

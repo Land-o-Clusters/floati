@@ -141,8 +141,10 @@ def run_with_timeout_forensics(
     stdout_sink.close()
     stderr_sink.close()
     try:
-        stdout = stdout_path.read_text(encoding="utf-8")
-        stderr = stderr_path.read_text(encoding="utf-8")
+        # Adapters may emit non-UTF-8 bytes; decode at the read site so
+        # bounded_stderr_excerpt can still photograph the stream (#17).
+        stdout = stdout_path.read_bytes().decode("utf-8", errors="replace")
+        stderr = stderr_path.read_bytes().decode("utf-8", errors="replace")
     finally:
         shutil.rmtree(attempt_directory, ignore_errors=True)
     return subprocess.CompletedProcess(list(argv), returncode, stdout, stderr)

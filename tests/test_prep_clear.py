@@ -408,6 +408,7 @@ class PrepClearLooseningTests(unittest.TestCase):
                 "role_template_write_receipt",
                 "registry_role_transfer",
                 "lane_workspace_record",
+                "timing_receipt",
             },
             set(_SPECS) - before,
         )

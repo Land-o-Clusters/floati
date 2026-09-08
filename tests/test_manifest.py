@@ -4,12 +4,23 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from floati.identity_fence import RETIRED_PRODUCT_SHORT_NAME
+
+from tests.export_inventory import (
+    classify_inventory,
+    export_policy_is_present,
+    tracked_files,
+)
+from tests.temp_roots import REAL_TEMP_ROOT
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 _FROZEN_PROTOCOL_ASSET_ROOTS = (
@@ -30,14 +41,15 @@ _GOVERNED_PROTOCOL_ASSET_ROOTS = (
     "schemas/v0",
     "schemas/v1",
 )
-_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 161
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 162
 _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # Versioned schemas may evolve in place, but their reviewed membership is
     # fixed. Content bytes deliberately do not participate in this pin. The
     # pin moves because the SET grew, by governed-schema additions only
     # (the closed schema-v1 hook burn record and the role template write
-    # receipt); the frozen published bundle count above is untouched.
-    "3a66505b1a2139f2b3faf9e2d2278af54d45987a826a354c6dbba6e61375539a"
+    # receipt; SN-R1 Am.4 adds timing-receipt.schema.json); the frozen
+    # published bundle count above is untouched.
+    "bc477e864d8fbf0e707999ba1a6461c04d35899b38fe715dd791558521f99cc1"
 )
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (
@@ -261,6 +273,86 @@ class ManifestTests(unittest.TestCase):
 
     def test_repository_manifest_matches_current_deployable_tree(self) -> None:
         self.assertEqual([], verify_manifest(Path.cwd()))
+
+    def test_the_manifest_pin_predicts_a_real_projection(self) -> None:
+        """PROJ-LEG-2: the deployable inventory is a census a projection can run.
+
+        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``:
+        build one real projection of the included set, ``git init`` it,
+        and run the manifest/deployable comparison inside it. The
+        manifest ships (it is in the published baseline), so it travels
+        into the only tree a public reader has — and if the deployable
+        set ever names a path the export excludes, the harbor cannot see
+        the divergence: the file is present here and absent there, which
+        is exactly ``tracked_set_mismatch`` in the projection and silence
+        here.
+
+        PROJ-LEG-3: this leg deliberately does NOT build its projection
+        through the exporter's adaptation, and the difference is the
+        point: the manifest records digests of the harbor's bytes, and
+        the exporter RECONCILES the manifest inside the real projection
+        (``_regenerate_bundle_manifest``, adapter row
+        ``bundle_manifest_regenerated``) — an adapted copy without that
+        reconciliation is a tree the export never ships, reding on five
+        deployables that legitimately adapt. The raw projection is the
+        only tree where the shipped manifest's own digests are checkable,
+        and when the inventories diverge the exporter refuses outright;
+        the path-set defect this pin guards (a deployable the export
+        excludes) is visible here and reds below.
+        """
+
+        if not export_policy_is_present():
+            self.skipTest("no export policy in this tree; classification is identity")
+
+        included = classify_inventory(tracked_files(REPOSITORY_ROOT), root=REPOSITORY_ROOT)
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            projection = Path(temporary) / "projection"
+            projection.mkdir()
+            for relative in included:
+                target = projection / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPOSITORY_ROOT / relative, target)
+
+            def git(*arguments: str) -> None:
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith("GIT_")
+                }
+                subprocess.run(
+                    ["/usr/bin/git", *arguments],
+                    cwd=projection,
+                    env=environment,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q", "--initial-branch=main")
+            git("config", "user.name", "fixture")
+            git("config", "user.email", "fixture@example.invalid")
+            git("add", ".")
+            git("commit", "-q", "-m", "projection fixture")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "unittest",
+                    "tests.test_manifest.ManifestTests"
+                    ".test_repository_manifest_matches_current_deployable_tree",
+                ],
+                cwd=projection,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            0,
+            completed.returncode,
+            "the projected deployable inventory failed against the manifest:\n"
+            + completed.stderr[-4000:],
+        )
 
     def test_repository_manifest_includes_authority_grant_surface(self) -> None:
         """Catches an installed grant command missing its exact authority substrate."""

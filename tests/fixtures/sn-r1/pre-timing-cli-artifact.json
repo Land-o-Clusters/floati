@@ -1,0 +1,10 @@
+{
+  "artifact_version": 0,
+  "command": "inbox",
+  "status": "no_result",
+  "evidence": {
+    "detail": "no pending mail for this node",
+    "root": "/var/tmp/example-fleet",
+    "tenant_id": "example-fleet"
+  }
+}

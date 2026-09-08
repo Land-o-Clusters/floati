@@ -211,9 +211,10 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `quota` | `floati quota {collect&#124;show}` | inspect or collect cited local quota testimony |
 | `quota collect` | `floati quota collect --root ROOT --provider {anthropic_claude_code,openai_codex,google_gemini,cursor_individual,xai_grok,github_copilot} --observed-at TIMESTAMP --idempotency-key KEY [--executable EXE]` | collect one local quota receipt |
 | `quota show` | `floati quota show --root ROOT --provider {anthropic_claude_code,openai_codex,google_gemini,cursor_individual,xai_grok,github_copilot}` | inspect one provider quota receipt |
-| `chart` | `floati chart [--declared-roots FILE] [--live] [--json] [{add-root&#124;remove-root}]` | multi-bus Harbor Chart |
+| `chart` | `floati chart [--declared-roots FILE] [--live] [--json] [{add-root&#124;remove-root&#124;timings}]` | multi-bus Harbor Chart |
 | `chart add-root` | `floati chart [--declared-roots FILE] [--live] [--json] add-root --declared-roots FILE --bus-id ID --root PATH --architect-node NODE [--downstream ID]` | add one declared root |
 | `chart remove-root` | `floati chart [--declared-roots FILE] [--live] [--json] remove-root --declared-roots FILE --bus-id ID` | remove one declared root |
+| `chart timings` | `floati chart [--declared-roots FILE] [--live] [--json] timings --root ROOT [--command C] [--since ISO]` | derived timing percentiles for instrumented verbs |
 | `survey` | `floati survey --declared-roots FILE [--search-path PATH] [--hooks PATH] [--targets PATH] [--json]` | read-only foreign-bus survey |
 | `seat` | `floati seat {board}` | board one declared workspace explicitly |
 | `seat board` | `floati seat board --root ROOT --as NODE --workspace PATH --session SESSION --idempotency-key KEY [--take-over]` | arm, resume, and drain one declared session |
