@@ -83,11 +83,7 @@ python3 -m floati install --source /absolute/floati --destination /absolute/inst
 ```
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/install-moment-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/install-moment-light.png">
-    <img src="docs/demo/tui/install-moment-light.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt - status installed, the source SHA it deployed, the wiring journal it opened" width="1400">
-  </picture>
+  <img src="docs/demo/tui/install-moment-dark.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt - status installed, the source SHA it deployed, the wiring journal it opened" width="1400">
 </p>
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
@@ -126,11 +122,7 @@ python3 -m floati.selftest
 ```
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/selftest-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/selftest-light.png">
-    <img src="docs/demo/tui/selftest-light.png" alt="python3 -m floati.selftest ends in a single receipt line - bundle_verified, naming the canonical ref it checked" width="1400">
-  </picture>
+  <img src="docs/demo/tui/selftest-dark.png" alt="python3 -m floati.selftest ends in a single receipt line - bundle_verified, naming the canonical ref it checked" width="1400">
 </p>
 
 ## What you can do with it
@@ -229,22 +221,14 @@ show` prints the last report, its TTL and its expiry. Expiry means
 ### The board, in its own colours
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-idle-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-idle-light.png">
-    <img src="docs/demo/tui/board-idle-light.png" alt="The Harbor Board on a fresh fixture fleet: three nodes declared and nothing else yet - no worker, no work, no receipts" width="1400">
-  </picture>
+  <img src="docs/demo/tui/board-idle-dark.png" alt="The Harbor Board on a fresh fixture fleet: three nodes declared and nothing else yet - no worker, no work, no receipts" width="1400">
 </p>
 
 Before anything has happened the board says so: three nodes,
 no worker, no work, no receipts. Then mail, claims and receipts land:
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-live-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-live-light.gif">
-    <img src="docs/demo/tui/board-live-light.gif" alt="The Harbor Board redrawing as real mail, claims and receipts land on a fixture fleet: three nodes, liveness in green, nothing in flight" width="1400">
-  </picture>
+  <img src="docs/demo/tui/board-live-dark.gif" alt="The Harbor Board redrawing as real mail, claims and receipts land on a fixture fleet: three nodes, liveness in green, nothing in flight" width="1400">
 </p>
 
 The board is a terminal program. Green is live, amber is a lease
@@ -254,11 +238,7 @@ demo fixture, re-rendered after real ledger writes; nothing is drawn
 by the demo. When something is wrong, the board says which thing:
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/board-degraded-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/board-degraded-light.png">
-    <img src="docs/demo/tui/board-degraded-light.png" alt="The Harbor Board degraded: STALE AUTHORITY named with its holder, one presence lapsed, one claim stalled without a witness" width="1400">
-  </picture>
+  <img src="docs/demo/tui/board-degraded-dark.png" alt="The Harbor Board degraded: STALE AUTHORITY named with its holder, one presence lapsed, one claim stalled without a witness" width="1400">
 </p>
 
 One presence lapsed, one lease ran out, one claim stalled without a
@@ -266,11 +246,7 @@ witness. Each is named, with its holder, on the line where it lives.
 `floati graph` draws the same fleet as a dependency picture:
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/graph-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/graph-light.png">
-    <img src="docs/demo/tui/graph-light.png" alt="floati graph on a fixture tenant: nodes, edges and the work item between them, drawn in the terminal" width="1400">
-  </picture>
+  <img src="docs/demo/tui/graph-dark.png" alt="floati graph on a fixture tenant: nodes, edges and the work item between them, drawn in the terminal" width="1400">
 </p>
 
 Every capture in this section is from `docs/demo/tui/`, produced by
@@ -341,11 +317,7 @@ way: claims, worker turns, degradations, denials, completions.
 Playback speed changes the waiting, never the order.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/replay-in-flight-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/replay-in-flight-light.gif">
-    <img src="docs/demo/tui/replay-in-flight-light.gif" alt="The flight recorder replaying a seven-event run at four times speed: a work claim, a worker spawned, driven and bound to its artifact, two completions, then REPLAY COMPLETE" width="1400">
-  </picture>
+  <img src="docs/demo/tui/replay-in-flight-dark.gif" alt="The flight recorder replaying a seven-event run at four times speed: a work claim, a worker spawned, driven and bound to its artifact, two completions, then REPLAY COMPLETE" width="1400">
 </p>
 
 Seven events, replayed at four times speed from the ledger, in the
@@ -354,11 +326,7 @@ order they were written.
 ### Bring your agent, or be the human
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-help-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-help-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-help-light-source.png" alt="floati --help: every verb of the CLI, each self-describing, each with typed refusals" width="1320">
-  </picture>
+  <img src="docs/demo/site-v3-readme/floati-help-dark-source.png" alt="floati --help: every verb of the CLI, each self-describing, each with typed refusals" width="1320">
 </p>
 
 Humans and agents are both first-class operators here. Point your
@@ -593,11 +561,7 @@ back that seam.
 ## Verify
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/tui/selftest-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/tui/selftest-light.png">
-    <img src="docs/demo/tui/selftest-light.png" alt="python3 -m floati.selftest under a real terminal: the bundle verified, exit 0" width="1400">
-  </picture>
+  <img src="docs/demo/tui/selftest-dark.png" alt="python3 -m floati.selftest under a real terminal: the bundle verified, exit 0" width="1400">
 </p>
 
 Install the verification tools listed in [Contributing](CONTRIBUTING.md#the-ground-rules)
