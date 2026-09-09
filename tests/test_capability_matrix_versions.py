@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
@@ -24,6 +26,27 @@ class CapabilityMatrixVersionTests(unittest.TestCase):
             capture_output=True,
             text=True,
         ).stdout
+
+    def test_output_file_links_resolve_to_the_same_receipts_as_stdout(self) -> None:
+        for mode in ("compact", "full"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "nested" / "matrix.md"
+                output.parent.mkdir()
+                subprocess.run(
+                    ["/usr/bin/python3", str(RENDERER), "--mode", mode,
+                     "--output", str(output)],
+                    cwd=REPOSITORY_ROOT, check=True, capture_output=True, text=True,
+                )
+                original = re.findall(r"\]\(([^)]+)\)", self.render(mode))
+                written = re.findall(r"\]\(([^)]+)\)", output.read_text())
+                self.assertEqual(len(original), len(written))
+                self.assertGreater(len(original), 0)
+                for source, rendered in zip(original, written):
+                    self.assertEqual(
+                        (REPOSITORY_ROOT / source).resolve(),
+                        (output.parent / rendered).resolve(),
+                        "output links must remain bound to the same repository receipt",
+                    )
 
     def test_declared_current_claude_version_is_cited_by_its_measured_receipt(self) -> None:
         current = self.dataset["declared_current_versions"]["claude/cli"]

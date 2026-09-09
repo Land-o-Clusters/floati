@@ -22,8 +22,9 @@ the constraint; when there is more of it, this page changes and says so.
 ## The ground rules
 
 - Tests run with `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover` —
-  system Python 3, no pytest, no virtualenv, no dependencies. That is a design
-  decision, not an accident.
+  Python 3.9 or newer and unittest, without pytest. The runtime has zero
+  third-party dependencies; the full verification suite requires Minisign on
+  `PATH`, plus Pillow and jsonschema in the Python environment running tests.
 - `python3 -m floati.selftest` must pass, including manifest verification.
 - Every invited commit needs a DCO sign-off (the Developer Certificate of
   Origin): `git commit -s` adds the `Signed-off-by:` line, and the certificate
@@ -31,6 +32,12 @@ the constraint; when there is more of it, this page changes and says so.
 - New user-visible strings ship with tests that pin their properties, never
   their exact wording. If changing a string changes what a reader understands,
   it is copy; if it changes what the code means, it is an identifier.
+
+Install verification tools before running the suite. On macOS, install Minisign
+with `brew install minisign`; on Debian/Ubuntu, use `sudo apt-get install minisign`.
+Install the Python verification packages with `python3 -m pip install pillow jsonschema`
+in your chosen development environment. These tools support signature, image and
+schema checks; they are not required for the basic install and solo work-log flow.
 
 ## Why the docs folder looks like that
 

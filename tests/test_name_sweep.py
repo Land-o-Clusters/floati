@@ -531,10 +531,13 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
         """The full-grid page must equal the renderer's full mode, same law as the README block."""
         import subprocess
         page = (REPOSITORY_ROOT / "docs" / "capability-matrix.md").read_text(encoding="utf-8")
-        rendered = subprocess.run(
-            ["python3", "scripts/capability-matrix-render.py", "--mode", "full"],
-            cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
-        ).stdout.strip()
+        with tempfile.NamedTemporaryFile(dir=REPOSITORY_ROOT / "docs", suffix=".md") as output:
+            subprocess.run(
+                ["python3", "scripts/capability-matrix-render.py", "--mode", "full",
+                 "--output", output.name],
+                cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
+            )
+            rendered = Path(output.name).read_text(encoding="utf-8").strip()
         self.assertIn(rendered, page)
 
     def test_readme_local_references_resolve(self) -> None:

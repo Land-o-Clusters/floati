@@ -15,12 +15,13 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import time
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Sequence, Tuple
 
-from .errors import ProtocolRefusal
+from .errors import DurabilityFailure, ProtocolRefusal
 from .storage_identity import INSTALL_METADATA_DIRECTORY
 from .update_ownership import validate_install_ownership
 
@@ -394,13 +395,63 @@ class UninstallWriter:
 RECEIPT_PREFIX = "floati-uninstalled-"
 
 
-def _write_receipt(receipt_dir_arg: str, evidence: Dict[str, Any]) -> Path:
-    """Write the durable removal receipt into the DECLARED directory.
+def _write_receipt(
+    receipt_dir: Path, directory_fd: int, evidence: Dict[str, Any]
+) -> Path:
+    """Create only a new receipt in the directory held since preflight."""
 
-    Absolute is required (a receipt never lands relative to an ambient
-    working directory), a symlinked directory is refused, and the
-    filename keeps the tombstone's shape so the fossils and their
-    successors are greppable by one prefix.
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    counter = 0
+    try:
+        while True:
+            suffix = f"-{counter}" if counter else ""
+            name = f"{RECEIPT_PREFIX}{stamp}{suffix}.json"
+            try:
+                descriptor = os.open(
+                    name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600, dir_fd=directory_fd,
+                )
+                break
+            except FileExistsError:
+                counter += 1
+        try:
+            receipt_identity = os.fstat(descriptor)
+            payload = {"schema_version": 1, "command": "uninstall", **evidence}
+            remaining = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            while remaining:
+                written = os.write(descriptor, remaining)
+                if written <= 0:
+                    raise OSError("receipt write made no progress")
+                remaining = remaining[written:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.fsync(directory_fd)
+        # The descriptor prevents redirection; do not claim the old pathname
+        # still identifies the receipt when its directory has moved.
+        expected = os.fstat(directory_fd)
+        current = receipt_dir.lstat()
+        if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+            raise OSError("declared receipt directory changed after preflight")
+        current_receipt = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if (current_receipt.st_dev, current_receipt.st_ino) != (
+            receipt_identity.st_dev, receipt_identity.st_ino
+        ):
+            raise OSError("receipt identity changed during publication")
+    except OSError as exc:
+        raise DurabilityFailure(
+            "uninstall_receipt_write_failed",
+            "tool removal completed, but receipt durability or its declared "
+            f"location is unproved: {receipt_dir}; {exc}",
+        ) from exc
+    return receipt_dir / name
+
+
+def _validate_receipt_dir(receipt_dir_arg: str) -> Tuple[Path, int]:
+    """Validate writability before removal and retain the directory identity.
+
+    Only a freshly created probe is eligible for cleanup. Existing files,
+    including links, are never opened for writing or removed.
     """
 
     receipt_dir = Path(receipt_dir_arg).expanduser()
@@ -418,46 +469,27 @@ def _write_receipt(receipt_dir_arg: str, evidence: Dict[str, Any]) -> Path:
             "--receipt-dir must not be a symlink",
             remedy="pass the real directory itself, never a symlink to it",
         )
-    receipt_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    path = receipt_dir / f"{RECEIPT_PREFIX}{stamp}.json"
-    counter = 1
-    while path.exists():
-        path = receipt_dir / f"{RECEIPT_PREFIX}{stamp}-{counter}.json"
-        counter += 1
-    payload = {"schema_version": 1, "command": "uninstall", **evidence}
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return path
-
-
-def _validate_receipt_dir(receipt_dir_arg: str) -> None:
-    """HOME-1 Am.3: validate the declared receipt directory BEFORE any
-    destructive step. A refusal must never arrive after the removal it
-    names - ProtocolRefusal means refused before any mutation."""
-
-    receipt_dir = Path(receipt_dir_arg).expanduser()
-    if not receipt_dir.is_absolute():
-        raise ProtocolRefusal(
-            "uninstall_receipt_dir_absolute_required",
-            "--receipt-dir must be an absolute path; a receipt is never "
-            "written relative to an ambient working directory",
-            remedy="pass one absolute directory, e.g. "
-            "--receipt-dir /absolute/path/to/receipts",
-        )
-    if receipt_dir.is_symlink():
-        raise ProtocolRefusal(
-            "uninstall_receipt_dir_symlinked",
-            "--receipt-dir must not be a symlink",
-            remedy="pass the real directory itself, never a symlink to it",
-        )
+    directory_fd = None
     try:
         receipt_dir.mkdir(parents=True, exist_ok=True)
-        probe = receipt_dir / f".floati-receipt-probe-{os.getpid()}"
-        probe.write_bytes(b"")
-        probe.unlink()
+        directory_fd = os.open(receipt_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        probe = f".floati-receipt-probe-{os.getpid()}-{secrets.token_hex(16)}"
+        descriptor = os.open(
+            probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600, dir_fd=directory_fd,
+        )
+        try:
+            expected = os.fstat(descriptor)
+            current = os.stat(probe, dir_fd=directory_fd, follow_symlinks=False)
+            if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+                raise OSError("receipt probe identity changed")
+            os.unlink(probe, dir_fd=directory_fd)
+        finally:
+            os.close(descriptor)
+        return receipt_dir, directory_fd
     except OSError as exc:
+        if directory_fd is not None:
+            os.close(directory_fd)
         raise ProtocolRefusal(
             "uninstall_receipt_dir_unwritable",
             "--receipt-dir must be writable; a receipt that cannot be "
@@ -476,13 +508,17 @@ def _handle(args: argparse.Namespace) -> Tuple[str, Dict[str, Any], int]:
                 remedy="drop --receipt-dir to keep planning, or drop "
                 "--dry-run to perform the real removal with its receipt",
             )
-        _validate_receipt_dir(args.receipt_dir)
-    evidence = UninstallWriter(args.destination, dry_run=args.dry_run).run()
-    if args.receipt_dir is not None:
-        evidence = {
-            **evidence,
-            "receipt_written": str(_write_receipt(args.receipt_dir, evidence)),
-        }
+        receipt_dir, directory_fd = _validate_receipt_dir(args.receipt_dir)
+        try:
+            evidence = UninstallWriter(args.destination, dry_run=args.dry_run).run()
+            evidence = {
+                **evidence,
+                "receipt_written": str(_write_receipt(receipt_dir, directory_fd, evidence)),
+            }
+        finally:
+            os.close(directory_fd)
+    else:
+        evidence = UninstallWriter(args.destination, dry_run=args.dry_run).run()
     return "ok", evidence, 0
 
 

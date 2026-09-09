@@ -1138,7 +1138,11 @@ class EventLog:
                     "snapshot_tail_history_required",
                     "reply tail needs omitted causal history",
                 )
-            if record.get("recipient") != recipient or record["id"] in acknowledged:
+            if (
+                record.get("recipient") != recipient
+                or record.get("worker_session_id") is not None
+                or record["id"] in acknowledged
+            ):
                 continue
             if len(messages) < limit:
                 messages.append(dict(record))

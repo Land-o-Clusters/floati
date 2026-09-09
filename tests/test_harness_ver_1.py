@@ -170,28 +170,36 @@ class HarnessVersionInventoryTests(HarnessInventoryFixture):
 
 
 class DoctorHarnessShadowFindingTests(HarnessInventoryFixture):
+    def doctor_with_path(self, *directories: Path):
+        from floati.doctor import Doctor
+        import unittest.mock
+
+        path = os.pathsep.join(str(directory) for directory in directories)
+        patched = os.environ.copy()
+        patched["PATH"] = path
+        with unittest.mock.patch.dict(os.environ, patched, clear=True):
+            return Doctor(Path.cwd(), str(self.root.path), ref="HEAD").artifact()
+
+    def write_claude(self, directory: Path, version: str) -> Path:
+        """Fake claude binary that prints the measured Claude Code line."""
+
+        directory.mkdir(parents=True, exist_ok=True)
+        binary = directory / "claude"
+        binary.write_text(
+            "#!/bin/sh\necho '" + version + "'\n", encoding="utf-8"
+        )
+        binary.chmod(0o755)
+        return binary
+
     def test_doctor_warns_harness_binary_shadowed(self) -> None:
         """The doctor finding: typed warning, remedy names the declared
         path; identical copies are a note, not a warning."""
 
-        from floati.doctor import Doctor
-
         earlier = self.write_harness(self.base / "path-a" / "bin", "1.0")
         declared = self.write_harness(self.base / "local" / "bin", "2.0")
         self.bind(declared)
-        self.addCleanup(os.environ.pop, "HARNESS_VER_1_TEST_PATH", None)
-        os.environ["HARNESS_VER_1_TEST_PATH"] = os.pathsep.join([
-            str(earlier.parent), str(declared.parent),
-        ])
 
-        patched_path = os.environ.copy()
-        patched_path["PATH"] = os.environ["HARNESS_VER_1_TEST_PATH"]
-        import unittest.mock
-
-        with unittest.mock.patch.dict(os.environ, patched_path, clear=True):
-            artifact, _rc = Doctor(
-                Path.cwd(), str(self.root.path), ref="HEAD"
-            ).artifact()
+        artifact, _rc = self.doctor_with_path(earlier.parent, declared.parent)
 
         shadowed = [
             row for row in artifact["findings"]
@@ -202,6 +210,93 @@ class DoctorHarnessShadowFindingTests(HarnessInventoryFixture):
         self.assertIn(str(declared), shadowed[0]["remediation"])
         self.assertIn("zcode 1.0", shadowed[0]["detail"])
         self.assertIn("zcode 2.0", shadowed[0]["detail"])
+
+    def test_fq4_claude_dual_version_names_bound_path_rule_and_shadow(
+        self,
+    ) -> None:
+        """FQ-4 / #18: reproduce 2.1.231 vs 2.1.238 on a scratch PATH.
+
+        Doctor USER-FACING copy must name: which absolute path floati
+        bound, by what rule, its measured version, and the earlier PATH
+        copy at the other version.
+        """
+
+        path_copy = self.write_claude(
+            self.base / "homebrew" / "bin", "2.1.231 (Claude Code)"
+        )
+        bound = self.write_claude(
+            self.base / "user-local" / "bin", "2.1.238 (Claude Code)"
+        )
+        self.bind(bound)
+
+        artifact, _rc = self.doctor_with_path(path_copy.parent, bound.parent)
+
+        shadowed = [
+            row for row in artifact["findings"]
+            if row["code"] == "harness_binary_shadowed"
+        ]
+        self.assertEqual(1, len(shadowed), artifact["findings"])
+        detail = shadowed[0]["detail"]
+        self.assertTrue(
+            detail.startswith(
+                "floati runs {0} — the wake-daemon adapter binds it by "
+                "absolute path".format(bound)
+            ),
+            detail,
+        )
+        self.assertIn("and it measures 2.1.238 (Claude Code)", detail)
+        self.assertIn(
+            "an earlier copy on your PATH is a different version: {0} "
+            "(2.1.231 (Claude Code))".format(path_copy),
+            detail,
+        )
+        self.assertLess(
+            detail.index("an earlier copy on your PATH"),
+            detail.index("and it measures"),
+            "the shadow answer leads; the bound version follows",
+        )
+        self.assertIn("wake-daemon adapter binds it by absolute path", detail)
+        remediation = shadowed[0]["remediation"]
+        self.assertIn("nothing here is broken for floati", remediation)
+        self.assertIn(str(bound), remediation)
+        self.assertIn("PATH is an inventory to floati", remediation)
+
+    def test_shadow_detail_leads_with_copies_and_summarizes_unreadable(
+        self,
+    ) -> None:
+        """SHADOW-DETAIL-1: the answer first; unreadable PATH as a count."""
+
+        earlier = self.write_harness(self.base / "path-a" / "bin", "1.0")
+        declared = self.write_harness(self.base / "local" / "bin", "2.0")
+        self.bind(declared)
+        unreadable = [
+            str(self.base / "unreadable-{0}".format(index))
+            for index in range(20)
+        ]
+        path_dirs = [Path(entry) for entry in unreadable] + [
+            earlier.parent, declared.parent,
+        ]
+
+        artifact, _rc = self.doctor_with_path(*path_dirs)
+
+        shadowed = [
+            row for row in artifact["findings"]
+            if row["code"] == "harness_binary_shadowed"
+        ]
+        self.assertEqual(1, len(shadowed), artifact["findings"])
+        detail = shadowed[0]["detail"]
+        self.assertIn("an earlier copy on your PATH", detail)
+        self.assertIn("floati could not read 20 PATH entries", detail)
+        self.assertNotIn(unreadable[0], detail)
+        self.assertNotIn(unreadable[-1], detail)
+        self.assertLess(
+            detail.index("an earlier copy on your PATH"),
+            detail.index("floati could not read"),
+            detail,
+        )
+        self.assertEqual(
+            unreadable, shadowed[0].get("path_entries_unreadable"),
+        )
 
 
 if __name__ == "__main__":

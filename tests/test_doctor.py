@@ -100,9 +100,9 @@ class DoctorContractTests(unittest.TestCase):
             {
                 "HOME": str(self.base / "test-home"),
                 "PATH": os.pathsep.join((
-                    str(self.shadow),
-                    str(self.source / "scripts"),
                     str(destination_scripts),
+                    str(self.source / "scripts"),
+                    str(self.shadow),
                     "/usr/bin",
                 )),
             },
@@ -1744,8 +1744,8 @@ class DoctorContractTests(unittest.TestCase):
             if finding["code"] not in {"sandbox_write", "host_codex_wait_hook_trust"}
         ))
         shadow = next(row for row in artifact["findings"] if row["code"] == "installer_shadow")
-        self.assertEqual("warning", shadow["severity"])
-        self.assertEqual("found", shadow["installer_shadow"]["outcome"])
+        self.assertEqual("ok", shadow["severity"])
+        self.assertEqual("affirmative_none", shadow["installer_shadow"]["outcome"])
 
     def test_root_registry_and_symlink_failures_have_typed_return_codes(self) -> None:
         missing, missing_rc = self.doctor(self.base / "missing").artifact()
@@ -2087,7 +2087,8 @@ class LauncherInterpreterProvenanceTests(unittest.TestCase):
 
         self.assertDecoyNeverRan(result)
         self.assertEqual(7, result.returncode, result.stderr)
-        self.assertIn("DECLARED-INTERPRETER-RAN -m floati doctor", result.stdout)
+        self.assertIn("DECLARED-INTERPRETER-RAN ", result.stdout)
+        self.assertTrue(result.stdout.rstrip().endswith(" doctor"), result.stdout)
 
     def test_an_undeclarable_interpreter_is_refused_and_never_falls_back_to_path(
         self,

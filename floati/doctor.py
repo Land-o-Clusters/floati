@@ -288,13 +288,16 @@ def _finding(
 def project_harness_binary_inventory(
     root: FloatiRoot, *, currency_current: bool
 ) -> list[Dict[str, object]]:
-    """HARNESS-VER-1 (public issue #18): per declared harness, the
-    declared executable's measured version and every earlier-on-PATH
-    same-name copy with its version. A differing or unmeasurable copy is
-    the typed warning harness_binary_shadowed naming the declared path;
-    identical copies are a note; unreadable PATH entries are named,
-    never a crash (the INS-1 shape). PATH is an inventory only - it
-    never chooses what floati runs."""
+    """HARNESS-VER-1 / FQ-4 (public issue #18): per declared harness,
+    name which absolute path floati runs and by what rule, its measured
+    version, and every earlier-on-PATH same-name copy with its version.
+    A differing or unmeasurable copy is the typed warning
+    harness_binary_shadowed. Identical copies are a note. Unreadable
+    PATH entries are summarised by count in the detail (SHADOW-DETAIL-1)
+    and kept in full on the finding - never dropped, never a crash
+    (INS-1). PATH is an inventory only - it never chooses what floati
+    runs. Doctor lines are the Cold-Read voice in
+    docs/copy/2026-09-08-fq-4-doctor-lines-cold-read.md."""
 
     from .harness_versions import harness_version_artifact
 
@@ -311,53 +314,86 @@ def project_harness_binary_inventory(
     findings: list[Dict[str, object]] = []
     for row in declared_rows:
         subject = f"{row['node']}/{row['harness']}"
-        detail = (
-            f"declared {row['executable']} measures "
-            f"{row['version'] if row['version'] is not None else '<unmeasurable>'}"
+        version_text = (
+            row["version"] if row["version"] is not None else "<unmeasurable>"
         )
         inventory = row["shadow_inventory"]
         shadows = inventory["shadows"]
         unreadable = inventory["unreadable_entries"]
-        if unreadable:
-            detail += (
-                "; PATH entries that could not be read: "
-                + ", ".join(unreadable)
-            )
+        bound = row["executable"]
+
+        def _shadow_item(shadow: Dict[str, object]) -> str:
+            measured = shadow["version"]
+            text = measured if measured is not None else "<unmeasurable>"
+            return f"{shadow['path']} ({text})"
+
+        def _shadow_clause() -> str:
+            items = ", ".join(_shadow_item(shadow) for shadow in shadows)
+            if row["status"] == "shadowed":
+                if len(shadows) == 1:
+                    return (
+                        "an earlier copy on your PATH is a different "
+                        f"version: {items}"
+                    )
+                return (
+                    "earlier copies on your PATH are different versions: "
+                    + items
+                )
+            if len(shadows) == 1:
+                return f"an earlier copy on your PATH: {items}"
+            return f"earlier copies on your PATH: {items}"
+
+        # Cold-Read voice (verbatim): runs/path/rule, shadow answer,
+        # "and it measures", then "floati could not read N".
+        parts = [
+            f"floati runs {bound} — the wake-daemon adapter binds it by "
+            "absolute path",
+        ]
         if row["status"] in ("shadowed", "unmeasurable"):
             if shadows:
-                detail += "; earlier PATH copies: " + ", ".join(
-                    f"{shadow['path']} (version "
-                    f"{shadow['version'] if shadow['version'] is not None else '<unmeasurable>'})"
-                    for shadow in shadows
-                )
+                parts.append(_shadow_clause())
+            parts.append(f"and it measures {version_text}")
             if row["status"] == "unmeasurable":
-                detail += (
-                    "; a copy whose version cannot be measured cannot be "
+                parts.append(
+                    "a copy whose version cannot be measured cannot be "
                     "proven identical"
+                )
+            if unreadable:
+                parts.append(
+                    f"floati could not read {len(unreadable)} PATH entries"
                 )
             finding = _finding(
                 "harness_binary_shadowed",
                 "warning",
                 subject,
-                detail,
-                # The remedy names the operator's own declaration - never a
-                # reinstall suggestion - so it is safe at any currency.
-                "run the declared harness by its absolute path ("
-                f"{row['executable']}) or repair the PATH order; PATH is an "
-                "inventory only, it never chooses for floati",
+                "; ".join(parts),
+                # Cold-Read remedy: lead with "nothing broken for floati".
+                "floati is already using the version you declared, so "
+                "nothing here is broken for floati. If you want your own "
+                f"shell to match, put {bound} earlier on your PATH. PATH is "
+                "an inventory to floati; it never chooses.",
             )
         else:
+            parts.append(f"and it measures {version_text}")
             if row["status"] == "identical":
-                note = "an earlier PATH copy exists with the identical version"
+                parts.append(
+                    "an earlier PATH copy exists with the identical version"
+                )
             else:
-                note = "no earlier PATH copy of the same binary name"
+                parts.append("no earlier PATH copy of the same binary name")
+            if unreadable:
+                parts.append(
+                    f"floati could not read {len(unreadable)} PATH entries"
+                )
             finding = _finding(
                 "harness_binary_inventory",
                 "ok",
                 subject,
-                detail + "; " + note,
+                "; ".join(parts),
             )
         finding["harness_inventory"] = row
+        if unreadable:
+            finding["path_entries_unreadable"] = list(unreadable)
         findings.append(finding)
     return findings
 
@@ -538,7 +574,7 @@ def _fold_shadow_exit(current: int, shadow: int) -> int:
         return current
     if current in {20, 33, 35}:
         return current
-    return shadow
+    return 35
 
 
 def project_launcher_interpreter() -> Dict[str, object]:

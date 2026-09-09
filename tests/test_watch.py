@@ -622,6 +622,37 @@ class WatchTests(unittest.TestCase):
         self.assertEqual(0, child.returncode)
         self.assertEqual("", child.stderr.read())
 
+    def test_watch_honours_sigint_when_parent_ignored_it(self) -> None:
+        """FQ-3: construct an ignored SIGINT parent; the child must still exit.
+
+        Existing interrupt tests spawn from a SIG_DFL parent, so they cannot
+        see the defect: POSIX copies SIG_IGN across exec, and CPython's
+        restore_signals never restores SIGINT. This test is that parent.
+        """
+
+        previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        self.addCleanup(signal.signal, signal.SIGINT, previous)
+        child = self._streaming_child(None)
+        child.send_signal(signal.SIGINT)
+        try:
+            child.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            self.fail(
+                "watch child did not honour SIGINT within 5s under inherited "
+                f"SIG_IGN; host loadavg {os.getloadavg()}"
+            )
+        self.assertEqual(0, child.returncode)
+        self.assertEqual("", child.stderr.read())
+
+    def test_restore_operator_sigint_replaces_inherited_ignore(self) -> None:
+        from floati.operator_interrupt import restore_operator_sigint
+
+        previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        self.addCleanup(signal.signal, signal.SIGINT, previous)
+        restore_operator_sigint()
+        self.assertIs(signal.getsignal(signal.SIGINT), signal.default_int_handler)
+
 
 if __name__ == "__main__":
     unittest.main()

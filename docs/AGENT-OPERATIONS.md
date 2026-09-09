@@ -5,6 +5,11 @@ Moved verbatim from `AGENTS.md` on 2026-09-04 (agent-instruction-files overhaul)
 verb reference, the incident history, measured examples, and remedies unchanged.
 Every governance entry below was paid for by a real multi-agent incident.
 
+Completed `status` and `watch` queries return exit 0; their installer observations
+remain nested evidence and do not become the command's exit status. `doctor`
+reports incomplete installer observation as degraded (35). Rendering failures
+still use cannot_speak (22).
+
 ## Install — harness wake hooks (from AGENTS.md)
 
 **Relaunch quirk (measured):** a harness session that was already running
@@ -287,7 +292,7 @@ breaker, pause marker, or a real exhaustion — check `doctor` before assuming q
 
 - **Your turn ends instantly instead of waiting for mail** — your seat's wake claim is
   probably still armed to a PREVIOUS session (turnover without re-arm). Safe: run
-  `floati wake arm --root ROOT --as NODE --session YOUR_SESSION --workspace PATH` —
+  `floati wake arm --root ROOT --as NODE --session YOUR_SESSION --workspace PATH --idempotency-key KEY` —
   a live predecessor requires `--take-over`; a paused claim is adoptable without it.
   Do it at every session turnover. Breaking: assuming the hook is broken and disabling it.
 

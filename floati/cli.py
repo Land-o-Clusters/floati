@@ -31,7 +31,7 @@ from .command_scope import CommandScope, resolve_command_scope
 from .deploy import DeploymentWriter
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .events import EventLog
-from .installer_shadow import observe_installer_shadow, observation_exit_code
+from .installer_shadow import observe_installer_shadow
 from .projection import (
     EffectStatusProjection,
     FleetProjection,
@@ -54,6 +54,7 @@ from .adapters.codex_live import CodexAppServerAdapter
 from .adapters.claude import ClaudeHeadlessAdapter
 from .adapters.pi import PiRpcAdapter
 from .admin_cli import register_admin_commands, register_legacy_workspace_options
+from .operator_interrupt import restore_operator_sigint
 
 
 OK = 0
@@ -677,7 +678,7 @@ def _status(args: argparse.Namespace) -> HandlerResult:
     snapshot["installer_shadow"] = shadow
     if args.json:
         snapshot["status_schema_version"] = 1
-    return "ok", snapshot, observation_exit_code(shadow)
+    return "ok", snapshot, OK
 
 
 def _snapshot_bundle(args: argparse.Namespace) -> HandlerResult:
@@ -913,6 +914,7 @@ def _doctor_command(args: argparse.Namespace) -> int:
 
 
 def _supervise(args: argparse.Namespace) -> HandlerResult:
+    restore_operator_sigint()
     snapshot = Supervisor(_root(args.root)).snapshot(_current_time())
     return "ok", snapshot, OK
 
@@ -1050,9 +1052,10 @@ def _watch_signal_trace() -> Iterator[None]:
 
 
 def _watch(args: argparse.Namespace) -> int:
+    restore_operator_sigint()
     root = _root(args.root)
     installer_shadow = observe_installer_shadow(getattr(args, "destination", None))
-    exit_code = observation_exit_code(installer_shadow)
+    exit_code = OK
     with _watch_signal_trace():
         return _watch_loop(args, root, installer_shadow, exit_code)
 

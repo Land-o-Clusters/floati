@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from .manifest import EXPECTED_CANONICAL_REF, verify_manifest
+from .operator_interrupt import restore_operator_sigint
 
 
 TEST_FAILURE = 10
@@ -39,6 +40,7 @@ def emit_verified(stream) -> None:
 
 
 def main() -> int:
+    restore_operator_sigint()
     suite = unittest.defaultTestLoader.discover("tests", pattern="test_*.py")
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     if not result.wasSuccessful():
