@@ -32,7 +32,8 @@ does not contain one.
 pytest and no `.venv` by design; a harness's managed pytest gateway demanding
 one is the wrong instrument, and its refusal is not a gate on this work.
 `pyproject.toml` is the package-metadata authority: Python 3.9 or newer,
-with zero dependencies.
+with zero third-party runtime dependencies. Full verification additionally needs
+Minisign, Pillow and jsonschema; see `CONTRIBUTING.md` for setup.
 
 ```
 git clone <this repository> /absolute/path/floati-src
@@ -88,6 +89,11 @@ contract (`docs/CONFLUENCE-v0.md`).
 | 33 | `malformed_evidence`: durable evidence is malformed or inconsistent | stop; do not retry; report the named ledger for investigation |
 | 34 | `orchestration_deadline`: the orchestrated run exceeded its deadline | re-run with a larger `--deadline` |
 | 35 | `degraded`: the run completed but at least one check could not speak | read the artifact's findings; each names the check that degraded |
+
+`status` and `watch` return exit 0 for a completed query even when nested
+installer observations are incomplete; inspect that evidence for warnings.
+`doctor` maps incomplete installer observation to `degraded`, exit 35.
+A renderer that cannot speak still uses exit 22.
 
 ## Verbs (contracts: `COMMAND --help`; the full reference is in `docs/AGENT-OPERATIONS.md`)
 
@@ -316,7 +322,7 @@ floati grant revoke --root /var/tmp/fleet --as architect-a --holder builder-a --
   policy refusal at all. A wrapper's contract can be stricter than the bare CLI; the wrapper
   is the contract for that seat.
 - Boarding order is fixed: attach, take over the wake claim, then drain. Re-run
-  `floati wake arm --root ROOT --as NODE --session SESSION --workspace PATH` at every
+  `floati wake arm --root ROOT --as NODE --session SESSION --workspace PATH --idempotency-key KEY` at every
   session turnover; a live predecessor requires `--take-over`, a paused claim does not.
 - Most seats run with no human watching. Never wait for operator approval that will never
   come: route decisions to the fleet's DECLARED coordinator as an envelope and keep working;

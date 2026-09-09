@@ -60,12 +60,12 @@ board redraws only when the ledger changes. The fleet in this
 recording is the repository's demo fixture; every lamp on it is read
 from that fixture's ledger, not drawn by the demo.
 
-<sub>Every image in this README was produced by the repository's own capture scripts from a real ledger or a declared fixture. Each capture directory (<code>docs/demo/</code>, <code>docs/demo/site-v3-readme/</code>, <code>docs/evidence/captures/</code>) carries a per-file SHA-256 manifest that says which.</sub>
+<sub>Every terminal image here is a capture — produced by this repository's own capture scripts from a real ledger or a declared fixture, and listed with its SHA-256 in the manifest beside it. The wordmark, the icon and the diagrams are drawn by hand: they illustrate, they do not measure. Each capture directory (<code>docs/demo/</code>, <code>docs/demo/site-v3-readme/</code>, <code>docs/evidence/captures/</code>) carries a per-file SHA-256 manifest that says which.</sub>
 
 ## Get it
 
-Floati is one Python package with no dependencies. Clone it and let
-it install itself: the installer deploys exactly the files the
+Floati is one Python package with no third-party runtime dependencies.
+Clone it and let it install itself: the installer deploys exactly the files the
 manifest names, into a directory you choose, and nothing else.
 
 ```bash
@@ -92,27 +92,31 @@ python3 -m floati install --source /absolute/floati --destination /absolute/inst
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
 directory to your `PATH` or call it by path.
-`pyproject.toml` is the package-metadata authority: Python 3.9 or newer, zero dependencies.
-CI exercises 3.9; macOS today.
+`pyproject.toml` is the package-metadata authority: Python 3.9 or newer,
+zero third-party runtime dependencies.
+Public CI runs on Linux with Python 3.9; local validation also covers macOS.
+Full verification additionally needs Minisign,
+Pillow and jsonschema; see [Contributing](CONTRIBUTING.md#the-ground-rules).
 
 The installer refuses a checkout whose `HEAD` differs from the named ref.
 It also refuses a detected earlier `floati` on `PATH`. An unreadable PATH
 entry or an installed launcher directory missing from PATH produces a warning
 with the exact coordinate and remedy; install and update still proceed.
 The receipt preserves the observation in `installer_shadow` and `warnings`,
-and doctor reports the same warning.
+and doctor reports the same warning. `status` and `watch` return exit 0 when
+their query completes; installer observations stay in the returned evidence.
+`doctor` reports incomplete installer observation as degraded, exit 35.
 
-Afterwards the doctor tells you whether what is on disk still matches
-the manifest, file by file:
+After creating a fleet with [Start alone](#start-alone), the doctor tells
+you whether what is on disk still matches the manifest, file by file:
 
 ```bash
 floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install
 ```
 
-Expect it to be strict on a fresh install: it names every wake bridge
-you have not armed yet and every path it could not read, and reports
-the whole as degraded until you have. Some of those findings do not
-yet carry a remedy ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
+Doctor distinguishes optional unconfigured integrations from warnings and
+errors. Read each named finding and its remediation; an unconfigured wake
+bridge does not prevent a manual work log.
 
 CI runs this suite on every push to `main`. It runs on your machine
 too, with one command, and ends in one line:
@@ -138,13 +142,7 @@ floati send --root /absolute/fleet --from architect --to builder-a \
   --repo myapp --sha <40-hex> --doc docs/briefs/row-1.md --note "Row 1 is yours."
 ```
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-handoff-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-handoff-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-handoff-light-source.png" alt="A handoff, three receipts: delivered, acknowledged, and a denial recorded separately with its typed code" width="1320">
-  </picture>
-</p>
+A handoff, three receipts: delivered, acknowledged, and a denial recorded separately with its typed code.
 
 Every message is a typed envelope with provenance: sender, recipient,
 tenant, repo, SHA. It is validated on the way in and refused when
@@ -181,7 +179,8 @@ underneath it is any mix.
 
 Every side effect a worker takes is its own record: `floati effects`
 lists them, `effect reconcile` checks them against what the harness
-reports, and `effect compensate` records the undo. `floati threads`
+reports. `effect compensate` currently refuses with
+`effect_compensation_plan_unavailable`; it does not perform an undo. `floati threads`
 and `thread attach` put an observer on a harness's own thread, so the
 ledger sees what the harness saw.
 
@@ -199,17 +198,11 @@ filesystem that floati did *not* install, including whether a foreign
 waiter is bound to one of your workspaces. Read-only, on your
 request — including from the node-add wizard when an undeclared bus
 sits beside the live root. `floati watch` streams the board's deltas as text, and
-`floati supervise` holds a run open and reports as it goes.
+`floati supervise` returns one fleet-health snapshot.
 
 ### Know which node went deaf, and which step died
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-dead-receiver-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-dead-receiver-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-dead-receiver-light-source.png" alt="Doctor report with the loopback probe: two nodes OK, one RED with a 16-minute-old undelivered envelope and a DEAF probe result; state DEGRADED" width="1320">
-  </picture>
-</p>
+Doctor report with the loopback probe: two nodes OK, one RED with a 16-minute-old undelivered envelope and a DEAF probe result; state DEGRADED.
 
 "The node went quiet" is not a diagnosis. The doctor states per-node
 undelivered counts, oldest-message age and last drain even when
@@ -226,13 +219,7 @@ it against. The shipped templates say 45 minutes, and that number is
 the measured p90 of 601 acknowledgments on a live fleet ledger,
 rounded up to the quarter hour, not a guess.
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-lease-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-lease-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-lease-light-source.png" alt="Presence before and after a lease expires: a recent report with its TTL, then no report since the named time; authority expired, work still recorded" width="1320">
-  </picture>
-</p>
+Presence before and after a lease expires: a recent report with its TTL, then no report since the named time; authority expired, work still recorded.
 
 Liveness is a separate question from mail. A node reports about
 itself, and only itself, with `floati presence report`; `presence
@@ -330,9 +317,11 @@ request: `floati quota collect`, then `quota show`.
 
 ### Take work in from GitHub
 
-`floati intake scan` reads a repository's issues into candidate work,
-`intake show` and `intake adopt` turn one into a work item with the
-issue as its provenance, and `intake dispatch` hands it to a node.
+`floati intake scan` inspects local Markdown files. `intake adopt` stores
+one source as an immutable snapshot, and `intake show` reads those snapshots.
+`intake preview` and `intake dispatch` prepare and bind a GitHub mutation
+(such as a comment or label change) to an existing run and effect intent.
+Creating and assigning work uses the separate `work` commands.
 `intake adopt --source github` reads one issue through the explicit
 `gh` executable you name. That is a network call which may receive
 only ambient `GH_TOKEN` or `GITHUB_TOKEN`; see the network section
@@ -392,8 +381,13 @@ Point it somewhere; that directory is the entire blast radius.
 ```bash
 floati init --root /absolute/my-sessions --solo me --harness Codex
 floati work add --root /absolute/my-sessions --title "Record this session"
+floati work show --root /absolute/my-sessions
 floati board --root /absolute/my-sessions
 ```
+
+Replace `/absolute/my-sessions` with a writable absolute path of your choice.
+`work show` should list “Record this session”; that is your first durable
+record. No harness process or wake hook is needed for this manual workflow.
 
 ## Grow the fleet
 
@@ -499,35 +493,23 @@ the recorded ways to move the ledger; `repair quarantine` and `purge`
 are the recorded ways to remove from it, and nothing is deleted in
 place.
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-failure-injection-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-failure-injection-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-failure-injection-light-source.png" alt="Failure injection: a worker process killed and an authority change injected mid-run; the typed replay evidence preserved, in order" width="1320">
-  </picture>
-</p>
+Failure injection: a worker process killed and an authority change injected mid-run; the typed replay evidence preserved, in order.
 
 Kill a worker, kill the sequencer, reboot the machine: nothing is
 lost and nothing lies. The ledger survives every fault, the whole run
 replays on demand, and floati refuses to continue past what it cannot
 prove, telling you why in a typed exit code.
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/demo/site-v3-readme/floati-identity-dark-source.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo/site-v3-readme/floati-identity-light-source.png">
-    <img src="docs/demo/site-v3-readme/floati-identity-light-source.png" alt="Identity and authority: a grant from the architect to a builder for one subject and one epoch, with its expiry; detached signatures verify exact artifact bytes" width="1320">
-  </picture>
-</p>
+Identity and authority: a grant from the architect to a builder for one subject and one epoch, with its expiry; detached signatures verify exact artifact bytes.
 
 Ambiguous identity, expired authority, malformed envelopes: same
 answer, refusal with a reason, never a guess. Authority is a grant
 with a holder, a subject, an epoch and an expiry, and a detached
 signature verifies exact artifact bytes. Today a refusal names its
-code and its detail; the `remedy` field exists and is mostly empty,
-and filling it is open work ([#8](https://github.com/Land-o-Clusters/floati/issues/8)).
-One convention to know: a refused or degraded run prints its artifact
-on stderr, not stdout ([#22](https://github.com/Land-o-Clusters/floati/issues/22)).
+code and its detail. Its `remedy` field contains an action or an explicit
+`{"kind":"none","why":"..."}` explanation when no action is named.
+Command artifacts, including refusals and degraded results, print on stdout.
+Read the artifact status and process exit code to determine the outcome.
 
 No telemetry, ever. Floati's own sockets are local pipes between its
 own processes, and nothing in the product can listen; a test refuses
@@ -617,6 +599,9 @@ back that seam.
     <img src="docs/demo/tui/selftest-light.png" alt="python3 -m floati.selftest under a real terminal: the bundle verified, exit 0" width="1400">
   </picture>
 </p>
+
+Install the verification tools listed in [Contributing](CONTRIBUTING.md#the-ground-rules)
+before running the full checks:
 
 ```bash
 python3 -m unittest discover

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import os
 import unittest
 from pathlib import Path
 
@@ -76,6 +77,23 @@ class DirectHomeRootTests(unittest.TestCase):
         (direct_home / "tenants").symlink_to(self.base / "missing-tenants")
         with self.assertRaisesRegex(ProtocolRefusal, "namespace_root_layout_present"):
             FloatiRoot.open_direct_home(direct_home)
+
+    def test_parent_symlink_loop_refuses_without_mutation(self) -> None:
+        loop = self.base / "loop"
+        loop.symlink_to("loop", target_is_directory=True)
+        for create in (False, True):
+            with self.subTest(create=create):
+                try:
+                    FloatiRoot.open_direct_home(loop / "demo-fleet", create=create)
+                except ProtocolRefusal as exc:
+                    self.assertEqual("root_unavailable", exc.code)
+                except Exception as exc:
+                    self.fail(f"expected typed refusal, got {type(exc).__name__}: {exc}")
+                else:
+                    self.fail("symlink loop was accepted")
+                self.assertEqual([loop], list(self.base.iterdir()))
+                self.assertTrue(loop.is_symlink())
+                self.assertEqual("loop", os.readlink(loop))
 
 
 if __name__ == "__main__":

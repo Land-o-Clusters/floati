@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -17,14 +18,20 @@ CAPTURE_SUBPROCESS_ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}
 
 
 class UninstallLinuxForeignFilesTests(unittest.TestCase):
-    def test_launcher_exports_no_bytecode_before_exec(self) -> None:
+    def test_launcher_does_not_write_bytecode_into_its_installed_tree(self) -> None:
         """The installed entrypoint must not compile into the tree it owns."""
-
-        script = LAUNCHER.read_text(encoding="utf-8")
-        self.assertIn("export PYTHONDONTWRITEBYTECODE=1", script)
-        export_at = script.index("export PYTHONDONTWRITEBYTECODE=1")
-        exec_at = script.index('exec "$FLOATI_LAUNCHER_INTERPRETER" -m floati "$@"')
-        self.assertLess(export_at, exec_at)
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as raw:
+            installed = Path(raw) / "installed"
+            shutil.copytree(REPOSITORY_ROOT / "floati", installed / "floati",
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            (installed / "scripts").mkdir()
+            shutil.copy2(LAUNCHER, installed / "scripts" / "floati")
+            result = subprocess.run(
+                [str(installed / "scripts" / "floati"), "--help"],
+                cwd=raw, env=CAPTURE_SUBPROCESS_ENV, capture_output=True, text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual([], list(installed.rglob("*.pyc")))
 
     def test_committed_tree_install_dry_run_preserves_only_the_planted_foreign_file(
         self,

@@ -4,6 +4,30 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
+## [0.1.1] — 2026-09-09
+
+### Fixed
+
+- Keep worker-session mail out of ordinary inbox delivery receipts, including
+  when the snapshot reader appends a cached tail.
+- Preserve the caller's working directory in the installed launcher so banked
+  SHA and workspace identity checks inspect the invoking repository. Isolate
+  Python startup and remove PATH-selected launcher helper execution.
+- Create uninstall probes and receipts exclusively through the validated
+  directory handle, preserving occupied paths and reporting post-removal
+  durability failures as degraded.
+- Return typed root refusals for symlink loops. Successful status and watch
+  queries retain installer observations without contradictory failure exits;
+  doctor reports incomplete or shadowed observations as degraded.
+- Correct command claims, validation prerequisites, wake examples, and generated
+  capability-matrix links.
+- **watch, selftest, and supervise honour SIGINT when a parent ignored it.**
+  POSIX copies an ignored SIGINT across exec, and CPython's
+  `subprocess.restore_signals` restores SIGPIPE/SIGXFZ/SIGXFSZ only, so a
+  child launched from a SIGINT-ignoring parent swallowed Ctrl-C. Those three
+  verbs now restore the operator interrupt handler at process entry.
+  Receipt: `docs/evidence/fq-3-2026-09-08.md`.
+
 ## [0.1.0] — 2026-08-31
 
 The first public release. Everything here exists because a fleet of coding

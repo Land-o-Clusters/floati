@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -305,6 +307,21 @@ def render_compact(dataset: dict) -> str:
     return "\n".join(lines)
 
 
+def _links_relative_to_output(markdown: str, output: Path) -> str:
+    """Dataset links name repository paths; published links name document paths."""
+    repository = Path(__file__).resolve().parents[1]
+
+    def rewrite(match: re.Match) -> str:
+        target = match.group(1)
+        if target.startswith(("#", "/")) or re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", target):
+            return match.group(0)
+        path, separator, fragment = target.partition("#")
+        relative = Path(os.path.relpath(repository / path, output.resolve().parent)).as_posix()
+        return "](" + relative + separator + fragment + ")"
+
+    return re.sub(r"\]\(([^)]+)\)", rewrite, markdown)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Render the capability matrix markdown grid.")
     parser.add_argument(
@@ -330,7 +347,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.output == "-":
         sys.stdout.write(markdown)
     else:
-        Path(args.output).write_text(markdown, encoding="utf-8")
+        output = Path(args.output)
+        output.write_text(_links_relative_to_output(markdown, output), encoding="utf-8")
     return 0
 
 

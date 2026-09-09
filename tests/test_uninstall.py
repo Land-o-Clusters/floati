@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import errno
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path, PurePosixPath
 
 from floati.errors import ProtocolRefusal
@@ -299,6 +302,150 @@ class UninstallReceiptHomeFenceTests(unittest.TestCase):
         self.assertEqual(str(self.destination.resolve()), payload["destination"])
         self.assertGreater(payload["removed_count"], 0)
         self.assertEqual(str(written[0]), artifact["evidence"]["receipt_written"])
+
+    def _remove_with_receipt(self, receipts):
+        from floati.mcp import run_cli_artifact
+        return run_cli_artifact([
+            "uninstall", "--destination", str(self.destination),
+            "--receipt-dir", str(receipts),
+        ])
+
+    def test_probe_collision_never_changes_foreign_link_or_target(self):
+        receipts = self.base / "receipts"
+        receipts.mkdir()
+        victim = self.base / "victim"
+        victim.write_bytes(b"foreign bytes")
+        probe = receipts / f".floati-receipt-probe-{os.getpid()}"
+        probe.symlink_to(victim)
+        (self.destination / "scripts/floati").write_bytes(b"changed")
+        code, artifact = self._remove_with_receipt(receipts)
+        self.assertEqual(20, code, artifact)
+        self.assertEqual(b"foreign bytes", victim.read_bytes())
+        self.assertTrue(probe.is_symlink())
+        self.assertEqual([probe], list(receipts.iterdir()))
+
+    def test_receipt_collisions_preserve_files_and_dangling_links(self):
+        receipts = self.base / "receipts"
+        receipts.mkdir()
+        victim = self.base / "victim"
+        victim.write_bytes(b"foreign bytes")
+        first = receipts / "floati-uninstalled-FIXED.json"
+        first.write_bytes(b"older receipt")
+        second = receipts / "floati-uninstalled-FIXED-1.json"
+        os.link(victim, second)
+        third = receipts / "floati-uninstalled-FIXED-2.json"
+        third.symlink_to(victim)
+        dangling_target = self.base / "absent"
+        fourth = receipts / "floati-uninstalled-FIXED-3.json"
+        fourth.symlink_to(dangling_target)
+        with patch("floati.uninstall.time.strftime", return_value="FIXED"):
+            code, artifact = self._remove_with_receipt(receipts)
+        self.assertEqual(0, code, artifact)
+        self.assertEqual(b"older receipt", first.read_bytes())
+        self.assertEqual(b"foreign bytes", victim.read_bytes())
+        self.assertEqual(victim.stat().st_ino, second.stat().st_ino)
+        self.assertTrue(third.is_symlink())
+        self.assertTrue(fourth.is_symlink())
+        self.assertFalse(dangling_target.exists())
+        written = Path(artifact["evidence"]["receipt_written"])
+        self.assertEqual("floati-uninstalled-FIXED-4.json", written.name)
+        self.assertEqual(2, json.loads(written.read_text())["removed_count"])
+
+    def test_directory_swap_cannot_redirect_receipt_after_preflight(self):
+        receipts = self.base / "receipts"
+        receipts.mkdir()
+        moved = self.base / "original-receipts"
+        foreign = self.base / "foreign"
+        foreign.mkdir()
+        real_run = UninstallWriter.run
+
+        def swap_then_remove(writer):
+            receipts.rename(moved)
+            receipts.symlink_to(foreign, target_is_directory=True)
+            return real_run(writer)
+
+        with patch.object(UninstallWriter, "run", swap_then_remove):
+            code, artifact = self._remove_with_receipt(receipts)
+        self.assertIn(code, (0, 35), artifact)
+        self.assertEqual([], list(foreign.iterdir()))
+        self.assertEqual(1, len(list(moved.glob("floati-uninstalled-*.json"))))
+
+    def test_receipt_replaced_during_fsync_is_preserved_and_degraded(self):
+        receipts = self.base / "receipts"
+        replaced = receipts / "floati-uninstalled-FIXED.json"
+        original = self.base / "original-receipt"
+        real_fsync = os.fsync
+
+        def replace_receipt_then_sync(fd):
+            if replaced.exists() and not original.exists():
+                replaced.rename(original)
+                replaced.write_bytes(b"foreign replacement")
+            return real_fsync(fd)
+
+        with patch("floati.uninstall.time.strftime", return_value="FIXED"), patch(
+            "floati.uninstall.os.fsync", side_effect=replace_receipt_then_sync
+        ):
+            code, artifact = self._remove_with_receipt(receipts)
+        self.assertEqual(35, code, artifact)
+        self.assertEqual("degraded", artifact["status"])
+        self.assertEqual(b"foreign replacement", replaced.read_bytes())
+        self.assertEqual(2, json.loads(original.read_text())["removed_count"])
+        self.assertFalse((self.destination / "scripts/floati").exists())
+
+    def test_receipt_fsync_failure_after_removal_is_degraded(self):
+        receipts = self.base / "receipts"
+        real_fsync = os.fsync
+
+        def fail_after_removal(fd):
+            if not (self.destination / "scripts/floati").exists():
+                raise OSError(errno.EIO, "injected receipt durability failure")
+            return real_fsync(fd)
+
+        with patch("floati.uninstall.os.fsync", side_effect=fail_after_removal):
+            code, artifact = self._remove_with_receipt(receipts)
+        self.assertEqual(35, code, artifact)
+        self.assertEqual("degraded", artifact["status"])
+        self.assertFalse((self.destination / "scripts/floati").exists())
+
+    def test_exclusive_probe_collisions_preserve_every_existing_entry(self):
+        for kind in ("regular", "symlink", "hardlink", "dangling"):
+            with self.subTest(kind=kind):
+                receipts = self.base / kind
+                receipts.mkdir()
+                victim = self.base / f"victim-{kind}"
+                victim.write_bytes(b"foreign bytes")
+                probe = receipts / f".floati-receipt-probe-{os.getpid()}-fixed"
+                if kind == "regular":
+                    probe.write_bytes(b"foreign bytes")
+                elif kind == "symlink":
+                    probe.symlink_to(victim)
+                elif kind == "hardlink":
+                    os.link(victim, probe)
+                else:
+                    probe.symlink_to(self.base / "absent")
+                before = probe.lstat()
+                with patch("floati.uninstall.secrets.token_hex", return_value="fixed"):
+                    code, artifact = self._remove_with_receipt(receipts)
+                self.assertEqual(20, code, artifact)
+                self.assertEqual(before, probe.lstat())
+                self.assertEqual(b"foreign bytes", victim.read_bytes())
+                self.assertTrue((self.destination / "scripts/floati").exists())
+
+    def test_receipt_write_failure_after_removal_is_degraded(self):
+        receipts = self.base / "receipts"
+        with patch("floati.uninstall.os.write", side_effect=OSError(errno.ENOSPC, "full")):
+            code, artifact = self._remove_with_receipt(receipts)
+        self.assertEqual(35, code, artifact)
+        self.assertEqual("degraded", artifact["status"])
+        self.assertFalse((self.destination / "scripts/floati").exists())
+
+    def test_receipt_directory_expands_user_and_creates_parents(self):
+        with patch.dict(os.environ, {"HOME": str(self.base)}):
+            code, artifact = self._remove_with_receipt("~/receipts/nested")
+        self.assertEqual(0, code, artifact)
+        written = Path(artifact["evidence"]["receipt_written"])
+        self.assertEqual(self.base / "receipts/nested", written.parent)
+        self.assertEqual(2, json.loads(written.read_text())["removed_count"])
 
     def test_receipt_dir_must_be_absolute(self) -> None:
         """A receipt never lands relative to an ambient working directory."""

@@ -75,14 +75,14 @@ class PackagedSmokeBattery(unittest.TestCase):
         if expect_ok:
             # THE load-bearing assertion: a real use of the verb produces
             # a parsed artifact with ok status. A lazy-import crash emits
-            # no artifact at all. A nonzero rc beside a parsed ok artifact
-            # is the CLI's observation-exit convention (e.g. status's
-            # installer-shadow advisory), not a packaging defect.
+            # no artifact at all. A completed command must agree with its
+            # successful artifact, including status with an advisory finding.
             self.assertIsNotNone(
                 artifact,
                 f"rc={completed.returncode} no artifact; "
                 f"stderr={completed.stderr[-400:]}")
             self.assertEqual("ok", artifact["status"], artifact)
+            self.assertEqual(0, completed.returncode, artifact)
         return artifact
 
     def test_real_commands_per_verb_family(self) -> None:

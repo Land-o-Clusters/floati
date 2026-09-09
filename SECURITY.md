@@ -18,8 +18,10 @@ Anything that falsifies a receipt, and anything that moves data it should not:
 
 - A way to make a ledger record claim something that did not happen, or to
   alter one after it was appended.
-- A way to make Floati touch the network. The no-listener fence is enforced by
-  `tests/test_no_listener_fence.py`; a hole in that fence is a critical report.
+- An undeclared network path, a listener, or a bypass of the authorization
+  required by an existing outbound path. The four explicit client paths and
+  their consent boundaries are documented in [the README](README.md#why-it-doesnt-fall-over).
+  `tests/test_no_listener_fence.py` enforces the structural network fence.
 - A way to make `purge` delete instead of move, or reach a path the caller did
   not name. The purge writer has no delete primitive; proving otherwise is a
   critical report.

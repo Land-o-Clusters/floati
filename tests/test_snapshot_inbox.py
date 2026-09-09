@@ -82,6 +82,34 @@ class InboxSnapshotTests(unittest.TestCase):
             [second_message["id"]], [row["id"] for row in next_messages]
         )
 
+    def test_cached_ordinary_inbox_keeps_worker_session_mail_separate(self) -> None:
+        self.events.present("bob")
+        private_message = self.events.send(
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+            "README.md", "worker session only",
+            worker_session_id="private-worker-session",
+            idempotency_key="private-worker-message",
+        )
+        ordinary_message = self.send(0)
+
+        shown, delivery = self.events.present("bob")
+        self.assertEqual([ordinary_message["id"]], [row["id"] for row in shown])
+        self.assertEqual([ordinary_message["id"]], delivery["item_ids"])
+        drained, _, acknowledgment = self.events.drain(
+            "bob", acting_session_id="ordinary-session"
+        )
+        self.assertEqual([ordinary_message["id"]], [row["id"] for row in drained])
+        self.assertEqual([ordinary_message["id"]], acknowledgment["item_ids"])
+        self.assertEqual([], self.events.present("bob")[0])
+
+        private, delivery, acknowledgment = self.events.drain(
+            "bob", acting_session_id="private-worker-session",
+            worker_session_id="private-worker-session",
+        )
+        self.assertEqual([private_message["id"]], [row["id"] for row in private])
+        self.assertEqual([private_message["id"]], delivery["item_ids"])
+        self.assertEqual([private_message["id"]], acknowledgment["item_ids"])
+
 
 if __name__ == "__main__":
     unittest.main()

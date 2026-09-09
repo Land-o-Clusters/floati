@@ -148,7 +148,13 @@ class FloatiRoot:
                 "direct_home_symlinked_entry",
                 "the invoked direct home must not be a symlink",
             )
-        home = candidate.resolve()
+        try:
+            home = candidate.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ProtocolRefusal(
+                "root_unavailable",
+                "the direct home path could not be resolved",
+            ) from exc
         tenant = validate_identifier(home.name, "direct_home_tenant")
         if create and home.exists() and not home.is_dir():
             raise ProtocolRefusal(

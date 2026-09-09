@@ -567,7 +567,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 },
                 capture_output=True, check=False, timeout=5,
             )
-            self.assertEqual(20, explicit_result.returncode, explicit_result.stderr)
+            self.assertEqual(0, explicit_result.returncode, explicit_result.stderr)
             explicit_artifact = json.loads(explicit_result.stdout)
             self.assertEqual("ok", explicit_artifact["status"])
             self.assertEqual(1, explicit_artifact["evidence"]["status_schema_version"])
@@ -593,7 +593,7 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 },
                 capture_output=True, check=False, timeout=5,
             )
-            self.assertEqual(20, environment_result.returncode, environment_result.stderr)
+            self.assertEqual(0, environment_result.returncode, environment_result.stderr)
             environment_artifact = json.loads(environment_result.stdout)
             self.assertEqual("ok", environment_artifact["status"])
             self.assertEqual(1, environment_artifact["evidence"]["status_schema_version"])
