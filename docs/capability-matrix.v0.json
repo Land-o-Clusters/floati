@@ -785,13 +785,13 @@
       "harness": "cursor",
       "surface": "desktop",
       "capability": "wake",
-      "value": "daemon",
-      "receipt_path": "docs/evidence/gauntlet/H-wake-posture-surfaces.md",
-      "measured_at": "2026-08-28",
+      "value": "stop hook",
+      "receipt_path": "docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md",
+      "measured_at": "2026-09-11",
       "versions": {
         "desktop": "Cursor.app 3.17.21"
       },
-      "grade": "measured"
+      "grade": "classified"
     },
     {
       "harness": "cursor",
@@ -1854,7 +1854,7 @@
     "codex/desktop": "ChatGPT.app",
     "claude/desktop-chat": "chat app, not a seat - Claude seats run in the CLI or IDE extension",
     "claude/ide-extension": "extension \u2260 CLI; own row by design",
-    "cursor/desktop": "the measuring seat itself",
+    "cursor/desktop": "`floati hook install --harness cursor` writes a project-scoped `stop` hook; the daemon wakes a headless twin, not the window (measured, `docs/evidence/cur-2-2026-09-11.md`); re-rooting the chat leaves the hook behind \u2014 work other directories by absolute path",
     "antigravity/desktop": "not inherited from its CLI",
     "zcode/cli": "wake measured on arrival; the Stop-hook path is superseded by the daemon"
   }

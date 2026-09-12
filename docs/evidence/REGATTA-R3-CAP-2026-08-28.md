@@ -1,6 +1,6 @@
 # REGATTA R3-CAP — receipted terminal capability layer — 2026-08-28
 
-Status: candidate row on `lane/sol-r3`, started from main
+Status: candidate row on `build lane`, started from main
 `6950f6af103ce4d2079e7b5c69c7f618fb8082c1` and refreshed with landed main
 `3fe03ac` before the final gate.
 

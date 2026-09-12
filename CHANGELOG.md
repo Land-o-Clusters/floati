@@ -4,6 +4,68 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
+## [0.1.2] — 2026-09-12
+
+### Added
+
+- **A Cursor wake path.** `floati wake wait --harness cursor` is the Codex
+  waiter's twin for Cursor's stop hook: it blocks on the seat's inbox and
+  answers with a drain follow-up when mail arrives, or a re-arm at its own
+  deadline. `floati hook install --harness cursor` writes the seat project's
+  `.cursor/hooks.json` with an explicit root and node; the hook is scoped to
+  that workspace, and re-rooting the chat leaves it behind. Receipt from a
+  clean public clone:
+  `docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md`.
+- **`floati doctor` names a dormant seat that is holding undelivered mail**,
+  read from the wake daemon's own holder testimony. A live seat, or an empty
+  inbox, adds no line.
+- **Three recorded demonstrations under `docs/demo/`**, each with the recipe
+  that regenerates it: a handoff with its delivery record, a killed worker as
+  the board and the doctor see it, and a session ending mid-slice replayed to
+  `REPLAY COMPLETE`. Every frame is a capture, listed with its SHA-256.
+- **The README, rewritten around the reader's decisions**: install, first
+  record, the board, growing a fleet. Every terminal image on it is a capture
+  with a manifest; the drawings illustrate, the captures measure.
+
+### Changed
+
+- **Wake daemon lifecycle receipts live in their own file.**
+  `receipts/wake-daemon/<node>.jsonl` keeps the lifecycle rows and rolls under
+  the operator's ledger policy, archived whole. A heal after a crash carries
+  consent forward, and a migration that carries nothing still records that it
+  happened.
+- **A paused wake daemon backs off like an idle one** instead of polling at
+  the floor. Each cycle's CPU is measured; an over-budget cycle backs off to
+  the poll ceiling, and the doctor says so.
+- **A participation claim whose holder is dead is released within one
+  evaluation.** Liveness is measured by pid and process start time, never by
+  name. This is the mechanism behind public issue #15.
+- **`send` refuses an empty `--note` where the note is authored.** The
+  durable record validator is unchanged, so every record ever written still
+  reads.
+
+### Fixed
+
+- **A Cursor seat no longer stays dormant after a tool-call death.** Cursor
+  delivers that death to the stop hook as an abort. The waiter re-arms once,
+  with a line a person can answer; only a second consecutive abort in the
+  same conversation ends the loop.
+- **The wake attempt slot is scoped by the acting session**, so a seat that
+  rebinds no longer trips the replay check on legitimate work.
+- **`uninstall` removes exactly what it installed and never walks the
+  operator's home** from a bare library call. The daemon's terminal refusals
+  exit 0 and final, and a stop proves itself before it reports.
+- **The test suite pins `HOME` to a scratch directory** before any test runs,
+  so `python3 -m floati.selftest` on your machine cannot reach your own
+  LaunchAgents or user units.
+- Test fixtures that spawned a git child and raced their own temporary
+  directory under load now wait for the child, and the suite's pinned scratch
+  `HOME` carries a gitconfig that keeps every fixture's git maintenance
+  synchronous, so no test can leave a detached git child behind its cleanup.
+- `scripts/lease-check.sh` no longer drops every process whose pid is
+  narrower than the widest on the box.
+- Terminal captures are black in every browser theme.
+
 ## [0.1.1] — 2026-09-09
 
 ### Fixed
@@ -26,7 +88,9 @@ All notable changes to Floati are recorded here, by hand. The format follows
   `subprocess.restore_signals` restores SIGPIPE/SIGXFZ/SIGXFSZ only, so a
   child launched from a SIGINT-ignoring parent swallowed Ctrl-C. Those three
   verbs now restore the operator interrupt handler at process entry.
-  Receipt: `docs/evidence/fq-3-2026-09-08.md`.
+  The fix is `floati/operator_interrupt.py`; public issue #38 carries the
+  reproduction. (This entry first cited a receipt that the public repository
+  does not carry; corrected in 0.1.2.)
 
 ## [0.1.0] — 2026-08-31
 

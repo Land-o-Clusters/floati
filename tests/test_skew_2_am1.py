@@ -180,9 +180,15 @@ class Skew2Am1WakeSurvivalTests(unittest.TestCase):
         self.assertEqual(2, calls["count"])
         self.assertEqual(1, len(sleeps))
         self.assertEqual(2.0, sleeps[0])
+        # FQ-9 split the node ledger: lifecycle rows live in lifecycle_relative(node);
+        # DaemonConsentLedger._relative now names the consent plane, which holds
+        # no lifecycle row (the fourth fixture reader the split invalidated - the
+        # first three were repaired inside FQ-9; this module was outside its fence).
+        from floati.wake_daemon_roll import lifecycle_relative
+
         lifecycle = read_records(
             self.root,
-            DaemonConsentLedger._relative(self.coordinate.node_id),
+            lifecycle_relative(self.coordinate.node_id),
             allowed_kinds={
                 "wake_daemon_lifecycle_receipt",
                 "wake_daemon_consent_receipt",

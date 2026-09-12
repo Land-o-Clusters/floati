@@ -1,0 +1,51 @@
+ROOT=<scratch>/fleet
+
+$ floati send --root $ROOT --from claude-sender --to codex-receiver --repo floati \
+      --sha 0000000000000000000000000000000000000000 --doc docs/demo/recipes/mk-d1.md --note "row one: the han
+doff slice"
+
+{"artifact_version":0,"command":"send","evidence":{"message":{"attempt_binding":"absent_legacy","doc":"docs/de
+mo/recipes/mk-d1.md","id":"msg-01a0917d29307f11806182ed34de6171","idempotency_key":"idempotency-01a0917d293078
+b9a527539a8777a520","kind":"message_envelope","note":"row one: the handoff slice","recipient":"codex-receiver"
+,"repo":"floati","schema_version":0,"sender":"claude-sender","sha":"0000000000000000000000000000000000000000",
+"tenant_id":"fleet","timestamp":"2026-09-11T17:21:34.000Z"},"recipient_readiness":{"observed_at":"2026-09-11T1
+7:21:34.000Z","reason":"no_active_lease","state":"recipient_not_listening"}},"status":"ok"}
+
+ROOT=<scratch>/fleet
+
+$ floati inbox --root $ROOT --as codex-receiver --session receiver-session
+
+{"artifact_version":0,"command":"inbox","evidence":{"acknowledgment":{"acting_session_id":"receiver-session","
+id":"ack-01a0917d293073ea99e17df67dba7f99","item_ids":["msg-01a0917d29307f11806182ed34de6171"],"kind":"ack_rec
+eipt","node_lease_expires_at":null,"node_lease_id":null,"node_lease_state_at_ack":"not_leased","recipient":"co
+dex-receiver","schema_version":1,"tenant_id":"fleet","timestamp":"2026-09-11T17:21:34.000Z"},"messages":[{"att
+empt_binding":"absent_legacy","doc":"docs/demo/recipes/mk-d1.md","id":"msg-01a0917d29307f11806182ed34de6171","
+idempotency_key":"idempotency-01a0917d293078b9a527539a8777a520","kind":"message_envelope","note":"row one: the
+ handoff slice","recipient":"codex-receiver","repo":"floati","schema_version":0,"sender":"claude-sender","sha"
+:"0000000000000000000000000000000000000000","tenant_id":"fleet","timestamp":"2026-09-11T17:21:34.000Z"}],"rece
+ipt":{"id":"delivery-01a0917d293074d99a69be48b230f843","item_ids":["msg-01a0917d29307f11806182ed34de6171"],"ki
+nd":"delivery_receipt","presentation_count":1,"recipient":"codex-receiver","schema_version":0,"tenant_id":"fle
+et","timestamp":"2026-09-11T17:21:34.000Z"},"scope":{"root":"<scratch>/fleet","root_source":"explicit","tenant
+":"fleet"},"used_node":"codex-receiver","used_root":"<scratch>/fleet","workspace_identity":"absent"},"status":
+"ok"}
+
+ROOT=<scratch>/fleet
+
+$ floati receipts codex-receiver --root $ROOT
+
+{"artifact_version":0,"command":"receipts","evidence":{"acks":[{"acting_session_id":"receiver-session","id":"a
+ck-01a0917d293073ea99e17df67dba7f99","item_ids":["msg-01a0917d29307f11806182ed34de6171"],"kind":"ack_receipt",
+"node_lease_expires_at":null,"node_lease_id":null,"node_lease_state_at_ack":"not_leased","recipient":"codex-re
+ceiver","schema_version":1,"tenant_id":"fleet","timestamp":"2026-09-11T17:21:34.000Z"}],"deliveries":[{"id":"d
+elivery-01a0917d293074d99a69be48b230f843","item_ids":["msg-01a0917d29307f11806182ed34de6171"],"kind":"delivery
+_receipt","presentation_count":1,"recipient":"codex-receiver","schema_version":0,"tenant_id":"fleet","timestam
+p":"2026-09-11T17:21:34.000Z"}],"denials":[],"node_id":"codex-receiver"},"status":"ok"}
+
+ROOT=<scratch>/fleet
+
+$ floati send --root $ROOT --from claude-sender --to codex-receiver --repo floati \
+      --sha 00000 --doc docs/demo/recipes/mk-d1.md --note "row one: the handoff slice"
+
+{"artifact_version":0,"command":"send","evidence":{"code":"sha_invalid","detail":"sha must be a 40- or 64-char
+acter lowercase Git object id","remedy":{"kind":"none","why":"no action was named for this refusal"}},"status"
+:"refused"}

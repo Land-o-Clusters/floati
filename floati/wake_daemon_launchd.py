@@ -51,6 +51,28 @@ def _default_runner(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _default_pid_alive(pid: int) -> bool:
+    """True while the process exists; ESRCH is the only proven absence."""
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists; this user merely cannot signal it.
+        return True
+    return True
+
+
+def _launchctl_print_pid(stdout: str) -> Optional[int]:
+    """The one process fact `launchctl print` states: `PID = <n>`."""
+
+    import re
+
+    found = re.search(r"^\s*PID = (\d+)\s*$", stdout, re.MULTILINE)
+    return None if found is None else int(found.group(1))
+
+
 class LaunchAgentManager:
     """Install and control one exact user-domain plist without implicit activation."""
 
@@ -62,6 +84,7 @@ class LaunchAgentManager:
         launch_agents_directory: Optional[Path] = None,
         uid: Optional[int] = None,
         runner: Optional[LaunchctlRunner] = None,
+        pid_alive: Optional[Callable[[int], bool]] = None,
     ) -> None:
         if not isinstance(coordinate, DaemonCoordinate):
             raise ProtocolRefusal(
@@ -98,6 +121,7 @@ class LaunchAgentManager:
         self.label = "com.landoclusters.floati.wake." + coordinate.digest
         self.plist_path = directory / f"{self.label}.plist"
         self._runner = _default_runner if runner is None else runner
+        self._pid_alive = _default_pid_alive if pid_alive is None else pid_alive
         self.consent = DaemonConsentLedger(self.root)
         self.lifecycle = DaemonLifecycleLedger(self.root)
         self.daemon_instance_id = "launchd-" + coordinate.digest[:32]
@@ -249,24 +273,67 @@ class LaunchAgentManager:
         )
 
     def stop(self) -> Dict[str, object]:
+        # WD-2 (d): a stop verb proves its work. The 2026-09-10 dispatch
+        # measured this verb reporting `unknown` under `ok` for four daemons,
+        # two of which it had just stopped and two of which were still
+        # running - return-code conventions cannot tell those apart, an
+        # observed pid can. The contract: `stopped` with the observed pid
+        # gone, `stop_unproven` naming exactly what it saw, never `unknown`
+        # under a clean exit; and a stop of a daemon that is not running
+        # says so by name.
         preview = self.preview()
         self._validate_installed(preview)
-        self._launchctl(
-            ("/bin/launchctl", "bootout", f"{self.domain}/{self.label}")
-        )
         observed = self._launchctl(
             ("/bin/launchctl", "print", f"{self.domain}/{self.label}")
         )
-        proven = observed.returncode == 113
-        state = "stopped" if proven else "unknown"
-        reason = None if proven else "wake_daemon_process_unknown"
-        receipt = self._record(
-            preview,
-            event="stopped" if proven else "owner_unknown",
-            state=state,
-            reason_code=reason,
+        if observed.returncode != 0:
+            receipt = self._record(
+                preview,
+                event="stopped",
+                state="stopped",
+                reason_code="wake_daemon_process_absent",
+            )
+            return self._artifact(
+                preview,
+                "stopped",
+                "wake_daemon_process_absent",
+                receipt,
+                observation={"print_returncode": observed.returncode},
+            )
+        observed_pid = _launchctl_print_pid(str(observed.stdout))
+        self._launchctl(
+            ("/bin/launchctl", "bootout", f"{self.domain}/{self.label}")
         )
-        return self._artifact(preview, state, reason, receipt)
+        after = self._launchctl(
+            ("/bin/launchctl", "print", f"{self.domain}/{self.label}")
+        )
+        after_pid = (
+            _launchctl_print_pid(str(after.stdout))
+            if after.returncode == 0
+            else None
+        )
+        post_alive = (
+            after_pid is not None and bool(self._pid_alive(int(after_pid)))
+        )
+        observation = {
+            "observed_pid": observed_pid,
+            "post_print_returncode": after.returncode,
+            "post_observed_pid": after_pid,
+            "pid_alive": None if after_pid is None else bool(post_alive),
+        }
+        if post_alive:
+            state = "stop_unproven"
+            reason: Optional[str] = "wake_daemon_stop_unproven"
+            receipt = self._record(
+                preview, event="owner_unknown", state="unknown", reason_code=reason
+            )
+        else:
+            state = "stopped"
+            reason = None if observed_pid is not None else "wake_daemon_process_absent"
+            receipt = self._record(
+                preview, event="stopped", state="stopped", reason_code=reason
+            )
+        return self._artifact(preview, state, reason, receipt, observation=observation)
 
     def remove(self, *, expected_plist_digest: Optional[str] = None) -> Dict[str, object]:
         preview = self.preview()
@@ -501,8 +568,9 @@ class LaunchAgentManager:
         state: str,
         reason_code: Optional[str],
         receipt: Optional[Mapping[str, object]],
+        observation: Optional[Mapping[str, object]] = None,
     ) -> Dict[str, object]:
-        return {
+        artifact = {
             "schema_version": 0,
             "state": state,
             "reason_code": reason_code,
@@ -511,6 +579,9 @@ class LaunchAgentManager:
             "plist_digest": preview["plist_digest"],
             "receipt": None if receipt is None else dict(receipt),
         }
+        if observation is not None:
+            artifact["observation"] = dict(observation)
+        return artifact
 
     @staticmethod
     def _launcher(value: Path) -> Path:

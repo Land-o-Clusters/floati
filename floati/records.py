@@ -90,6 +90,7 @@ WAKE_ATTEMPT_REFUSED_REASONS = frozenset(
         "wake_daemon_adapter_unavailable",
         "wake_daemon_adapter_nonzero",
         "wake_daemon_adapter_unknown",
+        "wake_target_thread_dead",
         "wake_daemon_cursor_output_empty",
         "wake_daemon_cursor_output_invalid",
         "wake_daemon_cursor_result_invalid",

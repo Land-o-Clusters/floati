@@ -713,6 +713,97 @@ def _state_flush(args: argparse.Namespace) -> HandlerResult:
     return "ok", receipt, OK
 
 
+def _require_cursor_harness(harness: str) -> None:
+    from .errors import ProtocolRefusal
+
+    if harness != "cursor":
+        raise ProtocolRefusal(
+            "cursor_wait_harness_unsupported",
+            "only the cursor harness is admitted on this verb",
+            remedy="pass --harness cursor",
+        )
+
+
+def _echo_cursor_wait_refusal(exc: "ProtocolRefusal") -> "ProtocolRefusal":
+    """Say one line on stderr about a configuration-time hook refusal.
+
+    CUR-2 Am.1, channel policy: stdout on this verb is the Cursor hook body,
+    so a typed floati artifact printed there is read by Cursor as an empty
+    body and is invisible to the person who mistyped the install. The
+    artifact stays on stdout because it is the program's typed answer and
+    because a stop hook that printed prose there would be worse; the same
+    refusal is echoed on stderr, which Cursor shows in the hook output pane
+    and which a shell install prints straight to the terminal.
+    """
+
+    try:
+        sys.stderr.write(
+            "[floati] cursor stop hook refused: "
+            f"{exc.code}: {exc.detail}\n"
+        )
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        pass
+    return exc
+
+
+def _wake_wait(args: argparse.Namespace) -> int:
+    from .cursor_wait import CURSOR_LOOP_LIMIT, run_cursor_stop_wait
+    from .errors import ProtocolRefusal
+    from .root import validate_identifier
+
+    _require_cursor_harness(args.harness)
+    validate_identifier(args.actor, field="node")
+    if sys.stdin.isatty():
+        raise _echo_cursor_wait_refusal(
+            ProtocolRefusal(
+                "wait_payload_absent",
+                "no harness stop payload was supplied on standard input",
+                "pipe the Cursor stop payload as JSON on standard input",
+            )
+        )
+    try:
+        decoded = json.loads(sys.stdin.read() or "{}")
+    except json.JSONDecodeError:
+        decoded = None
+    if not isinstance(decoded, dict):
+        raise _echo_cursor_wait_refusal(
+            ProtocolRefusal(
+                "wait_payload_invalid",
+                "the harness stop payload on standard input is not a JSON object",
+                "pipe one JSON object naming status",
+            )
+        )
+    limit = args.loop_limit
+    try:
+        return run_cursor_stop_wait(
+            root=Path(args.root),
+            node=args.actor,
+            runtime=Path(args.runtime),
+            deadline_seconds=float(args.deadline_seconds),
+            poll_seconds=float(args.poll_seconds),
+            hook_timeout_seconds=float(args.hook_timeout_seconds),
+            payload=dict(decoded),
+            stdout=sys.stdout,
+            loop_limit=CURSOR_LOOP_LIMIT if limit is None else int(limit),
+        )
+    except ProtocolRefusal as exc:
+        raise _echo_cursor_wait_refusal(exc)
+
+
+def _hook_install(args: argparse.Namespace) -> HandlerResult:
+    from .cursor_wait import install_cursor_hook
+
+    _require_cursor_harness(args.harness)
+    evidence = install_cursor_hook(
+        workspace=Path(args.workspace),
+        root=Path(args.root),
+        node=args.actor,
+        runtime=Path(args.runtime),
+    )
+    return "ok", evidence, OK
+
+
 def _wake_pause(args: argparse.Namespace) -> HandlerResult:
     from .wake_control import WakeController
 
@@ -993,17 +1084,63 @@ def _wake_daemon_revoke(args: argparse.Namespace) -> HandlerResult:
 
 
 def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
-    from .errors import ProtocolRefusal
+    from .jsonl import read_records_snapshot
     from .wake_daemon import WakeDaemon
     from .wake_daemon_adapters import wake_adapter_for
-    from .wake_daemon_contract import DaemonConsentLedger
+    from .wake_daemon_contract import (
+        DAEMON_KINDS,
+        DaemonConsentLedger,
+        DaemonLifecycleLedger,
+    )
 
     coordinate = _wake_daemon_coordinate(args)
     consent = DaemonConsentLedger(coordinate.root).require_active(coordinate)
     if consent["activation_epoch"] != args.activation_epoch:
-        raise ProtocolRefusal(
-            "wake_daemon_activation_epoch_mismatch",
-            "LaunchAgent activation epoch does not match active consent",
+        # WD-2 (P4): a supervisor whose activation epoch moved is retired,
+        # not refused. Raising here is the measured crash loop - the plist's
+        # KeepAlive relaunches a non-zero exit every ThrottleInterval
+        # seconds forever (36,722 refusals in one seat's stderr). One typed
+        # lifecycle receipt, then a clean exit ends it.
+        lifecycle_rows = [
+            row
+            for row in read_records_snapshot(
+                coordinate.root,
+                Path("receipts/wake-daemon") / f"{coordinate.node_id}.jsonl",
+                allowed_kinds=DAEMON_KINDS,
+            )
+            if row.get("kind") == "wake_daemon_lifecycle_receipt"
+            and row.get("coordinate_digest") == coordinate.digest
+        ]
+        prior = lifecycle_rows[-1] if lifecycle_rows else None
+        DaemonLifecycleLedger(coordinate.root).record(
+            coordinate,
+            daemon_instance_id="daemon-serve-startup",
+            activation_epoch=int(args.activation_epoch),
+            event="stopped",
+            state="stopped",
+            reason_code="wake_daemon_epoch_moved",
+            adapter_digest=str(consent["adapter_digest"]),
+            plist_digest=None,
+            session_digest=None,
+            predecessor_receipt_id=None if prior is None else str(prior["id"]),
+            idempotency_key=(
+                f"serve-startup-retired-{coordinate.digest[:16]}"
+                f"-{args.activation_epoch}-{int(consent['activation_epoch'])}"
+            ),
+        )
+        return (
+            "ok",
+            {
+                "schema_version": 0,
+                "state": "stopped",
+                "reason_code": "wake_daemon_epoch_moved",
+                "node_id": coordinate.node_id,
+                "harness": coordinate.harness,
+                "coordinate_digest": coordinate.digest,
+                "activation_epoch": int(args.activation_epoch),
+                "active_activation_epoch": int(consent["activation_epoch"]),
+            },
+            OK,
         )
     stop = threading.Event()
     previous = signal.getsignal(signal.SIGTERM)
@@ -1252,6 +1389,16 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     board.add_argument("--take-over", action="store_true")
     board.set_defaults(handler=_seat_board, artifact_schema_version=1)
 
+    hook = commands.add_parser("hook")
+    hook_commands = hook.add_subparsers(dest="hook_command", required=True)
+    hook_install = hook_commands.add_parser("install")
+    hook_install.add_argument("--harness", choices=("cursor",), required=True)
+    hook_install.add_argument("--root", required=True)
+    hook_install.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    hook_install.add_argument("--workspace", required=True)
+    hook_install.add_argument("--runtime", required=True)
+    hook_install.set_defaults(handler=_hook_install)
+
     wake = commands.add_parser("wake")
     wake_commands = wake.add_subparsers(dest="wake_command", required=True)
     wake_pause = wake_commands.add_parser(
@@ -1279,6 +1426,21 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     wake_arm.add_argument("--idempotency-key", required=True, metavar='KEY')
     wake_arm.add_argument("--take-over", action="store_true")
     wake_arm.set_defaults(handler=_wake_arm)
+
+    wake_wait = wake_commands.add_parser("wait")
+    wake_wait.add_argument("--harness", choices=("cursor",), required=True)
+    wake_wait.add_argument("--root", required=True)
+    wake_wait.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    wake_wait.add_argument("--runtime", required=True)
+    wake_wait.add_argument(
+        "--deadline-seconds", type=float, default=1500.0, metavar="N"
+    )
+    wake_wait.add_argument(
+        "--hook-timeout-seconds", type=float, default=1800.0, metavar="N"
+    )
+    wake_wait.add_argument("--poll-seconds", type=float, default=3.0, metavar="N")
+    wake_wait.add_argument("--loop-limit", type=int, default=None, metavar="N")
+    wake_wait.set_defaults(direct_handler=_wake_wait)
 
     wake_daemon = wake_commands.add_parser("daemon")
     daemon_commands = wake_daemon.add_subparsers(

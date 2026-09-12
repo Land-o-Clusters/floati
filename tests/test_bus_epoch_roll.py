@@ -45,7 +45,12 @@ from floati.tui import model_from_root
 from floati.wake_control import WakeController
 from floati.wake_daemon import WakeDaemon
 from floati.wake_daemon_adapters import AdapterBinding, WakeAdapterResult, adapter_contract_digest
-from floati.wake_daemon_contract import AdapterBindingStore, DaemonConsentLedger, DaemonCoordinate
+from floati.wake_daemon_contract import (
+    AdapterBindingStore,
+    DaemonConsentLedger,
+    DaemonCoordinate,
+    DaemonLifecycleLedger,
+)
 from floati.wake_hold import WakeAttemptLedger, WakeHoldController
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -791,6 +796,21 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             max_backoff_seconds=120,
             activation_epoch=1,
             idempotency_key="control-daemon-consent",
+        )
+        # FQ-9: consent lives in the node's consent plane, so the watched
+        # lifecycle receipts file is seeded by one lifecycle record.
+        DaemonLifecycleLedger(selected).record(
+            coordinate,
+            daemon_instance_id="epoch-roll-control",
+            activation_epoch=1,
+            event="installed",
+            state="installed",
+            reason_code=None,
+            adapter_digest="a" * 64,
+            plist_digest=None,
+            session_digest=None,
+            predecessor_receipt_id=None,
+            idempotency_key="control-daemon-lifecycle",
         )
         breaker = self._write(
             selected, "state/codex-wait/actor-a/breaker.json", b'{"hits":[1000.0]}\n'

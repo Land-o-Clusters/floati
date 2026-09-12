@@ -69,7 +69,7 @@ and the doctrine explicitly sizes the capability layer as its own row.
 
 ### C. R3-CAP prerequisite, then R3-GFX consumer — recommended
 
-Both stay on `lane/sol-r3`, but each begins with its own committed RED bank,
+Both stay on `build lane`, but each begins with its own committed RED bank,
 lands behind its own evidence gate, and has an independently reviewable SHA.
 R3-CAP changes no rendering. R3-GFX consumes only the frozen artifact and
 cannot infer capabilities itself. This is the smallest shape that satisfies

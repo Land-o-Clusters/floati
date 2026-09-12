@@ -93,6 +93,13 @@ PINNED_SKIP_REASONS = {
         "sites": 1,
         "kind": HOST_CAPABILITY,
     },
+    # WD-2's WD-3 gate file (tests/test_gate_z2_of_wd_3.py) rides on the
+    # gating lane's branch, whose tree does not carry the WD-3 modules it
+    # gates; the five guarded questions skip with this one shared reason
+    # there and run live wherever the WD-3 code exists.
+    "WD-3 code absent on this branch; the gate runs at the gated tip d8bdfae3": {
+        "sites": 5, "kind": PRODUCT,
+    },
     "floati.mcp_pin is not implemented": {"sites": 1, "kind": PRODUCT},
     "harbor-only history contract": {"sites": 1, "kind": PRODUCT},
     "not in this tree (private to the harbor repository by export policy): {dyn}": {

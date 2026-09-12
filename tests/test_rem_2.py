@@ -26,11 +26,11 @@ ROLE_VERB_FILES = frozenset(
     }
 )
 
-PINNED_PROTOCOL_COUNT = 1143
+PINNED_PROTOCOL_COUNT = 1160
 
 PINNED_KIND_NONE_COUNT = 1026
 
-PINNED_BOUND_COUNT = 117
+PINNED_BOUND_COUNT = 134
 
 PINNED_MIXED_COUNT = 6
 
@@ -38,9 +38,9 @@ PINNED_UNBOUND_COUNT = 1020
 
 PINNED_UNRESOLVED_PROTOCOL = 108
 
-PINNED_INTEGRITY_COUNT = 110
+PINNED_INTEGRITY_COUNT = 112
 
-PINNED_DURABILITY_COUNT = 20
+PINNED_DURABILITY_COUNT = 23
 
 PINNED_ROOT_SHARED = frozenset(
     {
@@ -102,21 +102,26 @@ PINNED_ROLE_INVALID_OUTSIDE = frozenset(
 
 PINNED_OTHER_COUNT = 983
 
-PINNED_PROTOCOL_DIGEST = "757bc16538d28453e7a66ef8403f8e8bfd4b1742c7d439ff56d98607e1c3380f"
+PINNED_PROTOCOL_DIGEST = "361ff2ede9b2804d4b5a55e5e0e4250746ca1846d7a4f23c3666c5938a7784f2"
 
 PINNED_KIND_NONE_DIGEST = "72908f2114d78fad60fcb2114b18190d60c40aa08286eb861c1010ed6db9d719"
 
 PINNED_OTHER_DIGEST = "8496cf4d498e49fe096e8733bf195da91be0b20eae8ca06ce7dbf0ed76e20153"
 
-PINNED_INTEGRITY_DIGEST = "f4c7e9af32aad2a134dd305976725c4eacc565f2f0a5df62b6ec935753002a12"
+PINNED_INTEGRITY_DIGEST = "4d8efcbbdd15ced8f4da28bd41589ac4babee6724a871b97aaae91d2609c811c"
 
-PINNED_DURABILITY_DIGEST = "c811408ea42d8a349ed6cae716d536dfd843f77b35bb37756cc18051a71b8db2"
+PINNED_DURABILITY_DIGEST = "ce86f974efb4b865a98fe2d7f48fbc0190cfff4a23147da1fa90f4710daca38b"
 
 PINNED_BOUND = frozenset(
     {
         "ack_item_unknown",
         "arguments_invalid",
         "authority_holder_mismatch",
+        "codex_wait_holder_testimony_short",
+        "codex_wait_start_time_unmeasurable",
+        "cursor_wait_deadline_invalid",
+        "cursor_wait_harness_unsupported",
+        "cursor_wait_poll_invalid",
         "deployment_currency_unavailable",
         "doctor_home_invalid",
         "door_cancelled",
@@ -127,6 +132,10 @@ PINNED_BOUND = frozenset(
         "hook_confinement_leaked",
         "hook_confinement_release_stale",
         "hook_confinement_result_invalid",
+        "hook_install_hooks_invalid",
+        "hook_install_root_invalid",
+        "hook_install_runtime_invalid",
+        "hook_install_workspace_invalid",
         "hook_precondition_release_unreadable",
         "hook_trust_config_writable",
         "installed_reader_identity_invalid",
@@ -158,6 +167,7 @@ PINNED_BOUND = frozenset(
         "node_add_plan_invalid",
         "node_add_plan_path_invalid",
         "node_add_plan_path_not_absolute",
+        "note_empty",
         "prep_clear_actor_mismatch",
         "prep_clear_architect_unresolved",
         "prep_clear_claim_not_held",
@@ -168,6 +178,7 @@ PINNED_BOUND = frozenset(
         "prep_clear_stop_incomplete",
         "prep_clear_workspace_invalid",
         "prep_clear_workspace_unreadable",
+        "process_pid_invalid",
         "profile_operations_unsupported",
         "profile_update_binding_invalid",
         "reader_older_than_ledger",
@@ -196,6 +207,9 @@ PINNED_BOUND = frozenset(
         "uninstall_receipt_dir_dry_run_conflict",
         "uninstall_receipt_dir_symlinked",
         "uninstall_receipt_dir_unwritable",
+        "uninstall_wake_supervisor_remove_failed",
+        "uninstall_wake_supervisor_unidentified",
+        "uninstall_wake_sweep_directory_required",
         "update_check_missing",
         "update_consent_changed",
         "update_consent_epoch_stale",
@@ -226,6 +240,9 @@ PINNED_BOUND = frozenset(
         "wake_daemon_log_receipt_unwritable",
         "wake_daemon_log_rotation_exists",
         "wake_daemon_log_symlink",
+        "wake_daemon_receipts_not_regular",
+        "wake_daemon_receipts_symlink",
+        "wake_daemon_stop_unproven",
         "wake_daemon_supervisor_digest_mismatch",
         "wake_daemon_zcode_entry_absent",
         "wake_daemon_zcode_node_absent",

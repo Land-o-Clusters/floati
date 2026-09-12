@@ -33,7 +33,7 @@ APPROVED_README_TOP = """<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-icon.svg#gh-dark-mode-only">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-icon.svg#gh-light-mode-only">
-    <img src="docs/assets/floati-icon.svg" alt="THE BUOY" width="180">
+    <img src="docs/assets/floati-icon.svg" alt="THE BUOY" width="120">
   </picture>
 </p>
 
@@ -41,11 +41,11 @@ APPROVED_README_TOP = """<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/floati-wordmark.svg">
-    <img src="docs/assets/floati-wordmark.svg" alt="floati" width="320">
+    <img src="docs/assets/floati-wordmark.svg" alt="floati" width="260">
   </picture>
 </h1>
-<p align="center"><strong>The fleet operating system for local coding agents.</strong></p>
-<p align="center">Any harness, any mix. One bus, one board, one set of receipts.</p>
+<p align="center"><strong>Keep your coding tools. Coordinate the work between them.</strong></p>
+<p align="center">One bus, one board, one set of receipts, for the coding agents you already run.</p>
 <p align="center"><strong>Point your coding agent at this repository. <a href="AGENTS.md"><code>AGENTS.md</code></a> walks it from install to a verified fleet.</strong></p>
 
 <p align="center">
@@ -55,17 +55,11 @@ APPROVED_README_TOP = """<p align="center">
 </p>
 
 <p align="center">
-  <a href="#get-it">Get it</a> ·
-  <a href="#what-you-can-do-with-it">What you can do</a> ·
-  <a href="#start-alone">Start alone</a> ·
-  <a href="#grow-the-fleet">Grow the fleet</a> ·
+  <a href="#start-here">Start here</a> ·
+  <a href="#what-you-get">What you get</a> ·
   <a href="#what-it-runs-with">What it runs with</a> ·
-  <a href="#why-it-doesnt-fall-over">Why it doesn't fall over</a> ·
-  <a href="#what-it-costs-to-run">What it costs</a> ·
-  <a href="#leave-cleanly">Leave cleanly</a> ·
-  <a href="#compose-with-it">Compose</a> ·
-  <a href="#verify">Verify</a> ·
-  <a href="#what-we-know-is-wrong">What we know is wrong</a> ·
+  <a href="#how-it-holds-up">How it holds up</a> ·
+  <a href="#what-is-still-wrong">What is still wrong</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 

@@ -471,7 +471,24 @@ def _require_banked_sha(sha: str) -> None:
     )
 
 
+def _require_authored_note(note: object) -> None:
+    """FQ-10 / BL-6: refuse an empty note at the CLI authoring boundary.
+
+    Do not put this predicate in ``_bounded_note``. That helper validates
+    every durable record a command reads; a fleet ledger may already carry
+    a legacy empty note, and tightening the reader bricks the bus.
+    """
+
+    if not isinstance(note, str) or not note.strip():
+        raise ProtocolRefusal(
+            "note_empty",
+            "note is empty",
+            "pass --note as one UTF-8 string of 1 to 1024 characters",
+        )
+
+
 def _send(args: argparse.Namespace) -> HandlerResult:
+    _require_authored_note(args.note)
     root = _root(args.root)
     require_declared_coordinate(Path.cwd(), args.sender, root)
     _require_banked_sha(args.sha)

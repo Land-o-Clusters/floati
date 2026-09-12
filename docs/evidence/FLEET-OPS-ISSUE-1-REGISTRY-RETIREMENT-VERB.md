@@ -153,7 +153,7 @@ prove it is unchanged:
 - SHA-256:
   `411f4c31f1b73c2afc1d819465f9ebd9765510d9226b2de8b98007d9cb8a3774`
 - 6 rows, every one `state: "active"`: `build lane`, `the architect`, `build lane`,
-  `the architect`, `build lane`, `build lane-relief`
+  `the architect`, `build lane`, `build lane`
 - count of `"state":"retired"` rows: 0
 
 The dormant rows named in issue #1 — `the architect` and the older lane rows — are

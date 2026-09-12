@@ -95,13 +95,13 @@ class WakeDaemonCliTests(unittest.TestCase):
             "verb_index": 1,
             "status_verb": "print",
             "stopped_returncode": 113,
-            "sequence": ["bootstrap", "kickstart", "print", "bootout", "print"],
+            "sequence": ["bootstrap", "kickstart", "print", "print"],  # WD-2 (d): stop PROVES - the stub answers absent to every print, so no bootout
         },
         "SystemdUserUnitManager": {
             "verb_index": 2,
             "status_verb": "is-active",
             "stopped_returncode": 3,
-            "sequence": ["daemon-reload", "start", "is-active", "stop", "is-active"],
+            "sequence": ["daemon-reload", "start", "is-active", "is-active"],  # WD-2 (d): stop of an inactive unit says so by name, no stop verb
         },
     }
 

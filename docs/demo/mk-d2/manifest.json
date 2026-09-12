@@ -1,0 +1,35 @@
+{
+  "captured_at": "2026-09-10T22:36:14.332Z",
+  "captures": [
+    {
+      "animated": true,
+      "caption": "fixture fleet, real run - a worker dies mid-run with a claimed row and undelivered mail; The doctor reports what is missing and how old it is. It does not say why the seat died.",
+      "files": [
+        {
+          "bytes": 6455,
+          "path": "mk-d2-standard.txt",
+          "sha256": "e5f984009ae8781f0a464d20904c1dfffaf3d41b159d38599cd1463d27ce1517"
+        },
+        {
+          "bytes": 482683,
+          "path": "mk-d2-dark.gif",
+          "sha256": "51ef9384582d9942bacde03715fdf43c62e7d4cc77e018b64f93b2e6c6fa4e3f"
+        },
+        {
+          "bytes": 485641,
+          "path": "mk-d2-light.gif",
+          "sha256": "85564e6bf206b1c2ae2fe142d559b4b3520895bf03f90a4b3a27e913f7dff199"
+        }
+      ],
+      "frame_count": 8,
+      "limit_line": "The doctor reports what is missing and how old it is. It does not say why the seat died.",
+      "name": "mk-d2",
+      "real_ledger": true
+    }
+  ],
+  "generator": "scripts/capture-mk-d2.py",
+  "schema_version": 0,
+  "scratch": "<scratch>",
+  "source_sha": "c596cd404b5ec0af233e41be98beecd055927a77",
+  "synthetic": false
+}

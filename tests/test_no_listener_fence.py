@@ -549,12 +549,16 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             kinds.update(path_kinds)
             argv_classes.update(path_argv)
         self.assertEqual(
-            {"run": 40, "Popen": 10, "os-family": 3},
+            # WD-2 Am.2 (landing F2, 2026-09-11): floati/uninstall.py gained one
+            # subprocess.run site — the proven-stopped supervisor removal talks to
+            # launchctl before it unlinks; measured 41 at the composition.
+            {"run": 41, "Popen": 10, "os-family": 3},
             dict(kinds),
             "the subprocess-family population moved; re-measure and re-pin",
         )
         self.assertEqual(
-            {"all-literal-list": 2, "mixed": 30, "dynamic": 21},
+            # WD-2 Am.2 (landing F2): floati/uninstall.py, one dynamic argv site
+            {"all-literal-list": 2, "mixed": 30, "dynamic": 22},
             dict(argv_classes),
             "the argv-shape distribution moved; re-measure and re-pin",
         )
@@ -632,8 +636,19 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
                     for key, value in os.environ.items()
                     if not key.startswith("GIT_")
                 }
+                # FL-1: nothing this test spawns may outlive the with-block.
+                # commit/add can detach a background `gc --auto` that keeps
+                # writing .git after subprocess.run returns, and under load it
+                # races TemporaryDirectory cleanup ("Directory not empty").
+                # gc.auto=0 means gc --auto never fires; autoDetach=false is
+                # the same property enforced one layer deeper.
                 subprocess.run(
-                    ["/usr/bin/git", *arguments],
+                    [
+                        "/usr/bin/git",
+                        "-c", "gc.auto=0",
+                        "-c", "gc.autoDetach=false",
+                        *arguments,
+                    ],
                     cwd=projection,
                     env=environment,
                     check=True,
@@ -807,8 +822,19 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
                     for key, value in os.environ.items()
                     if not key.startswith("GIT_")
                 }
+                # FL-1: nothing this test spawns may outlive the with-block.
+                # commit/add can detach a background `gc --auto` that keeps
+                # writing .git after subprocess.run returns, and under load it
+                # races TemporaryDirectory cleanup ("Directory not empty").
+                # gc.auto=0 means gc --auto never fires; autoDetach=false is
+                # the same property enforced one layer deeper.
                 subprocess.run(
-                    ["/usr/bin/git", *arguments],
+                    [
+                        "/usr/bin/git",
+                        "-c", "gc.auto=0",
+                        "-c", "gc.autoDetach=false",
+                        *arguments,
+                    ],
                     cwd=projection,
                     env=environment,
                     check=True,

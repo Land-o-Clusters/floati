@@ -1,0 +1,51 @@
+ROOT=<scratch>/mk-d2
+$ floati doctor --root $ROOT --source <repository>
+
+x delivery_health // builder-claude // builder-claude: 1 undelivered, oldest 31m, no drain on record, RED threshold 15m RULED // doctor <scratch>/mk-d2#delivery_health // check the node's wake path, then drain its inbox (floati inbox --root <root> --as builder-claude --session <session-id>)
+x wake_health // builder-claude // wake path projects stale_claim_with_unread_mail // doctor <scratch>/mk-d2#wake_health // declare one exact workspace and acting session for this node, then run floati seat board with --session for that coordinate
+x installer_shadow // FLOATI_INSTALL_DESTINATION // No installer destination named; the shadow check could not run. // doctor <scratch>/mk-d2#installer_shadow // no remedy recorded: installer_shadow
+! node_workspace_missing // <scratch>/mk-d2/nodes/architect-codex // architect-codex: node workspace missing
+! node_workspace_missing // <scratch>/mk-d2/nodes/builder-claude // builder-claude: node workspace missing
+! node_workspace_missing // <scratch>/mk-d2/nodes/reviewer-opencode // reviewer-opencode: node workspace missing
+! sandbox_write // bus_cursors // unknown path=<scratch>/mk-d2/cursors reason=path_absent
+! sandbox_write // bus_receipts // unknown path=<scratch>/mk-d2/receipts/deliveries reason=path_absent
+! sandbox_write // git_common_dir // unknown path=(underivable) reason=coordinate_underivable
+! sandbox_write // git_worktree_admin_dir // unknown path=(underivable) reason=coordinate_underivable
+! sandbox_write // bus_cursors // unknown path=<scratch>/mk-d2/cursors reason=path_absent
+! sandbox_write // bus_receipts // unknown path=<scratch>/mk-d2/receipts/deliveries reason=path_absent
+! sandbox_write // git_common_dir // unknown path=(underivable) reason=coordinate_underivable
+! sandbox_write // git_worktree_admin_dir // unknown path=(underivable) reason=coordinate_underivable
+! sandbox_write // bus_cursors // unknown path=<scratch>/mk-d2/cursors reason=path_absent
+! sandbox_write // bus_receipts // unknown path=<scratch>/mk-d2/receipts/deliveries reason=path_absent
+! sandbox_write // git_common_dir // unknown path=(underivable) reason=coordinate_underivable
+! sandbox_write // git_worktree_admin_dir // unknown path=(underivable) reason=coordinate_underivable
+! git_shallow_state_unavailable // <scratch>/floati-source // fatal: not a git repository (or any of the parent directories): .git
+· host_wake_bridge_drift // host:~/.local/share/floati/hooks/stop-hook-bridge.py // installed wake bridge from ff044a1e1ef7 (sidecar ff044a1e1ef7), repository at 82965865ada5
+· host_bus_watch_current // host:~/.config/opencode/plugins/floati-bus-watch.ts // installed watcher matches the repository (from 011cc738a4be)
+· host_codex_gateway_vendored_source_drift // host:~/.codex/bin/codex-fleet-bus // gateway drifted from vendored source: host 406e4c9b5e3dd43f0f31b55834a1f0701d44c3d0bb8ce762e01a76e15b5aea71; source bf3ebbf151a3c8db0b8b9dafd90a541f5086266e5f85c6060f5f3d4a7c500f98
+· installed_reader_source_unavailable // ~/.codex/floati-wake/65a3593b3d345d2c8fcfe974874cf375a993a29ea66c758426c4a0a77b5f9435 // coordinate is not an absolute ordinary file
+· host_codex_wait_hook_trust // host:~/.codex/hooks.json:stop:3:0 // Hook trust matches and the hook is enabled.
+✓ root_valid // <scratch>/mk-d2 // direct-home root is valid
+✓ root_layout_managed // <scratch>/mk-d2 // every top-level root entry belongs to a managed family
+✓ ledger_roll_policy // <scratch>/mk-d2 // live ledger is 426 bytes (policy 8388608, shipped default); oldest entry 0.0 days old (policy 30 days)
+✓ launcher_interpreter // /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9 // absent: this process was not started by scripts/floati, so no launcher interpreter choice belongs to it. It is running /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9.
+✓ effect_reconciliation_interpreter_trust // /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9 // Reconciliation can run here. Floati trusts this Python and every directory above it.
+✓ registry_live_dirs_match // <scratch>/mk-d2 // active registry and liveness directory identities match
+✓ wake_namespace_registry_subset // <scratch>/mk-d2/receipts/wake-coordination // wake identities are a subset of registry lineage (3/3)
+✓ wake_daemon_health // <scratch>/mk-d2 // no wake daemon is bound for any node/harness (typed absence, not a silent pass)
+✓ delivery_health // architect-codex // architect-codex: 0 undelivered, no drain on record, RED threshold 15m RULED
+✓ acknowledgment_health // architect-codex // architect-codex: 0 delivered-unacknowledged, 0 acknowledged, role cadence unavailable, no acknowledgment SLA declared
+✓ acknowledgment_health // builder-claude // builder-claude: 0 delivered-unacknowledged, 0 acknowledged, role cadence unavailable, no acknowledgment SLA declared
+✓ delivery_health // reviewer-opencode // reviewer-opencode: 0 undelivered, no drain on record, RED threshold 15m RULED
+✓ acknowledgment_health // reviewer-opencode // reviewer-opencode: 0 delivered-unacknowledged, 0 acknowledged, role cadence unavailable, no acknowledgment SLA declared
+✓ wake_health // architect-codex // wake path projects healthy
+✓ wake_health // reviewer-opencode // wake path projects healthy
+✓ bridge_registrations_absent // <scratch>/mk-d2 // no zcode seat is bound on this root; no bridge registration to name (typed absence, not a silent pass)
+✓ harness_binary_inventory_absent // <scratch>/mk-d2 // no harness executable is declared on this root (typed absence, not a silent pass)
+✓ sandbox_write // bus_ledger // writable path=<scratch>/mk-d2 reason=probe_succeeded
+✓ sandbox_write // bus_ledger // writable path=<scratch>/mk-d2 reason=probe_succeeded
+✓ sandbox_write // bus_ledger // writable path=<scratch>/mk-d2 reason=probe_succeeded
+✓ manifest_exact_set // <scratch>/floati-source // manifest paths and digests are an exact deployable set
+✓ symlink_identity_valid // <scratch>/mk-d2 // governed identities are lexical non-symlink paths
+✓ consumption_coordinate_valid // work/items.jsonl // sole consumption coordinate is structurally valid
+✓ herdr_protocol_pins // herdr // observation pin 19; host pin 20 (measured)

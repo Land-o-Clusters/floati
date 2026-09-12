@@ -5,12 +5,14 @@ import json
 import os
 import errno
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 from pathlib import Path, PurePosixPath
 
 from floati.errors import ProtocolRefusal
 from floati.uninstall import UninstallWriter, _owned_tool_path
+from floati.root import FloatiRoot
 
 
 class UninstallWriterTests(unittest.TestCase):
@@ -236,6 +238,9 @@ class UninstallWriterTests(unittest.TestCase):
         self.assertIn(".floati-install/wiring-journal.v1.jsonl", readme)
 
 
+_REAL_HOME = Path.home()
+
+
 class UninstallReceiptHomeFenceTests(unittest.TestCase):
     """HOME-1: the uninstall receipt is durable and never lands in $HOME.
 
@@ -252,6 +257,12 @@ class UninstallReceiptHomeFenceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
+        # WD-2 Am.3: every CLI drive in this module runs with HOME pinned to
+        # the scratch root, so the uninstall sweep can never enumerate or
+        # touch the operator's real LaunchAgents from a test.
+        home_patcher = patch.dict(os.environ, {"HOME": str(self.base)})
+        home_patcher.start()
+        self.addCleanup(home_patcher.stop)
         self.destination = self.base / "install"
         self.destination.mkdir()
         (self.destination / "scripts").mkdir()
@@ -278,6 +289,128 @@ class UninstallReceiptHomeFenceTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+
+    def test_control_a_real_shaped_home_plist_survives_the_cli(self) -> None:
+        """WD-2 Am.3 control: the uninstall CLI, run from a test with HOME
+        pinned to a scratch root, must never touch the operator's real
+        LaunchAgents. A real-shaped label is planted at the REAL home and
+        asserted to EXIST afterwards - survival is asserted, absence never
+        is."""
+
+        import os as os_module
+        import plistlib
+        import uuid as uuid_module
+
+        digest = uuid_module.uuid4().hex + uuid_module.uuid4().hex
+        digest = (digest[:64])
+        label = f"com.landoclusters.floati.wake.{digest}"
+        real_dir = _REAL_HOME / "Library" / "LaunchAgents"
+        real_dir.mkdir(parents=True, exist_ok=True)
+        planted = real_dir / f"{label}.plist"
+        planted.write_bytes(
+            plistlib.dumps(
+                {
+                    "Label": label,
+                    "ProgramArguments": [
+                        "/usr/bin/true", "wake", "daemon", "serve",
+                        "--root", "/absolute/fleet",
+                        "--as", "worker-a", "--harness", "cursor",
+                        "--activation-epoch", "1",
+                    ],
+                }
+            )
+        )
+        try:
+            from floati.mcp import run_cli_artifact
+
+            exit_code, artifact = run_cli_artifact(
+                [
+                    "uninstall",
+                    "--destination", str(self.destination),
+                    "--receipt-dir", str(self.base / "receipts"),
+                ]
+            )
+            self.assertEqual(0, exit_code, artifact)
+        finally:
+            self.assertTrue(
+                planted.exists(),
+                "the CLI sweep touched the operator's real LaunchAgents: "
+                f"{planted} was removed by a test run",
+            )
+            planted.unlink()
+
+
+    def test_am4_the_sweep_proves_the_platform_supervisor_on_every_leg(self) -> None:
+        """WD-2 Am.4 (replaces the Am.3 darwin-only companion): pinning HOME
+        does not blind the sweep, and the stop proof is the platform's own
+        road on EVERY leg - launchd on darwin (the real launchctl print,
+        label never loaded) and a systemd user unit on Linux with a stub
+        systemctl answering inactive (the test_wd_2 shape). No skip."""
+
+        import plistlib
+        import uuid as uuid_module
+
+        scratch_home = self.base
+        fleet = self.base / "fleet"
+        FloatiRoot.open_direct_home(fleet, create=True)
+        digest = uuid_module.uuid4().hex + uuid_module.uuid4().hex
+        program = [
+            "/usr/bin/true", "wake", "daemon", "serve",
+            "--root", str(fleet),
+            "--as", "worker-a", "--harness", "cursor",
+            "--activation-epoch", "1",
+        ]
+        locator_patch = None
+        if sys.platform == "darwin":
+            label = f"com.landoclusters.floati.wake.{digest}"
+            launch_agents = scratch_home / "Library" / "LaunchAgents"
+            launch_agents.mkdir(parents=True, exist_ok=True)
+            planted = launch_agents / f"{label}.plist"
+            planted.write_bytes(
+                plistlib.dumps({"Label": label, "ProgramArguments": program})
+            )
+        else:
+            unit_name = f"floati-wake-{digest}.service"
+            user_units = scratch_home / ".config" / "systemd" / "user"
+            user_units.mkdir(parents=True, exist_ok=True)
+            planted = user_units / unit_name
+            quoted = " ".join(f'"{token}"' for token in program)
+            planted.write_text(
+                "[Unit]\nDescription=floati wake daemon\n\n"
+                f"[Service]\nExecStart={quoted}\n",
+                encoding="utf-8",
+            )
+            # The Linux CI leg has no user systemd bus to ask; the proof
+            # road must still be constructible, so the stub systemctl
+            # answers is-active with inactive (exit 3) - the same seam
+            # test_wd_2 drives.
+            stub = self.base / "host-bin" / "systemctl"
+            stub.parent.mkdir(parents=True, exist_ok=True)
+            stub.write_bytes(b"#!/bin/sh\nexit 3\n")
+            stub.chmod(0o700)
+            locator_patch = patch(
+                "floati.uninstall._default_systemctl_locator",
+                lambda: str(stub),
+            )
+
+        from floati.mcp import run_cli_artifact
+
+        argv = [
+            "uninstall",
+            "--destination", str(self.destination),
+            "--receipt-dir", str(self.base / "receipts"),
+        ]
+        if locator_patch is None:
+            exit_code, artifact = run_cli_artifact(argv)
+        else:
+            with locator_patch:
+                exit_code, artifact = run_cli_artifact(argv)
+        self.assertEqual(0, exit_code, artifact)
+        self.assertFalse(planted.exists())
+        removed = artifact["evidence"]["wake_daemons_removed"]
+        self.assertEqual(1, len(removed), removed)
+        receipt = Path(removed[0]["receipt"])
+        self.assertTrue(receipt.exists(), receipt)
 
     def test_receipt_dir_writes_the_durable_receipt(self) -> None:
         """RED: --receipt-dir is unrecognized — no durable receipt exists."""

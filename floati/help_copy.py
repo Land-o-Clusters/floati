@@ -512,9 +512,30 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
                        'examples': 'floati confluence bundle --root ~/fleet --consumer puddle --out '
                                    '~/bundle.json',
                        'option_docs': {}},
+ 'hook': {'description': 'install one harness stop hook',
+          'body': 'Write one explicit harness stop hook. Node, root, workspace, and runtime are never '
+                  'guessed.',
+          'notes': ('Use a subcommand --help for its exact contract.',),
+          'examples': 'floati hook install --help',
+          'option_docs': {}},
+ 'hook install': {'description': 'write one Cursor project stop hook',
+                  'body': 'Write the seat project .cursor/hooks.json with timeout 1800 and an explicit '
+                          'numeric loop_limit. The command embeds explicit --root, --as, and --runtime.',
+                  'notes': ('Does not edit a live Codex hooks.json or LaunchAgent.',
+                            'After writing, evidence.scope_notice is: this hook is scoped to '
+                            '<workspace>; re-rooting the chat leaves it behind — work other '
+                            'directories by absolute path.',),
+                  'examples': 'floati hook install --harness cursor --root /absolute/fleet --as builder-a '
+                              '--workspace /absolute/seat --runtime /absolute/floati',
+                  'option_docs': {'--harness': 'Must be cursor.',
+                                  '--root': 'Absolute fleet root embedded in the hook command.',
+                                  '--as': 'Exact node embedded in the hook command.',
+                                  '--workspace': 'Absolute project directory that owns .cursor/hooks.json.',
+                                  '--runtime': 'Absolute floati checkout or install whose scripts/floati the '
+                                               'hook execs.'}},
  'wake': {'description': 'control exact wake coordinates',
-          'body': 'Arm one exact acting session, control one exact session marker, or manage one consented '
-                  'local wake daemon coordinate.',
+          'body': 'Arm one exact acting session, hold one Cursor stop until mail or a deadline, control one '
+                  'exact session marker, or manage one consented local wake daemon coordinate.',
           'notes': ('Global and wildcard selectors do not exist. Use a subcommand --help for its exact '
                     'contract.',
                     'The installed Codex Stop hook runs scripts/floati-codex-wait --root ROOT; node, '
@@ -533,6 +554,30 @@ HELP_COPY = {'': {'description': 'inspect and operate an explicit fleet root',
               'option_docs': {
                   '--take-over': 'Explicitly replace a different live recorded claimant.',
               }},
+ 'wake wait': {'description': 'hold a Cursor stop until mail or a deadline',
+               'body': 'Read one Cursor stop payload on stdin and print one raw hook JSON body. Root and '
+                       'node are explicit; there is no session flag. The deadline must be strictly under '
+                       'the hook timeout. Empty inbox is typed silence and is not an exit.',
+               'notes': ('Stdout is Cursor hook JSON, not a floati artifact. The one exception is a '
+                         'configuration-time refusal (bad stdin payload, bad deadline): it prints a '
+                         'typed floati artifact on stdout, which Cursor reads as an empty body, and '
+                         'the same refusal as one line on stderr so the person installing sees it.',
+                         'status=error always re-arms with a drain followup. status=aborted gets one '
+                         're-arm whose text carries: if a person stopped this turn, reply exactly: stop. '
+                         'A second consecutive abort in the same conversation_id, or abort at the '
+                         'loop_limit, prints an empty body. An inbox that cannot be read gets a '
+                         'followup naming the node, the root and the typed reason.',),
+               'examples': 'floati wake wait --harness cursor --root /absolute/fleet --as builder-a '
+                           '--runtime /absolute/floati',
+               'option_docs': {'--harness': 'Must be cursor.',
+                               '--root': 'Absolute fleet root.',
+                               '--as': 'Exact node; never inferred from the workspace.',
+                               '--runtime': 'Absolute floati checkout or install used in the drain followup.',
+                               '--deadline-seconds': 'Wait bound, strictly under the hook timeout.',
+                               '--hook-timeout-seconds': 'Cursor hook timeout.',
+                               '--poll-seconds': 'Inbox poll interval.',
+                               '--loop-limit': 'The loop_limit the hook was installed with; an abort at '
+                                               'or above it is reported on stderr as a dormant seat.'}},
  'wake pause': {'description': 'pause one exact session',
                 'body': 'Record a pause receipt and commit one exact session marker.',
                 'notes': ('Paused is a recorded state, not absence or deafness.',),

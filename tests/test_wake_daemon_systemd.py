@@ -29,11 +29,13 @@ class _Systemctl:
     def __init__(self) -> None:
         self.calls: list[tuple[str, ...]] = []
         self.is_active_returncode = 3
+        self.show_stdout = ""
 
     def __call__(self, argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
         self.calls.append(argv)
         returncode = self.is_active_returncode if argv[2] == "is-active" else 0
-        return subprocess.CompletedProcess(argv, returncode, "", "")
+        stdout = self.show_stdout if argv[2] == "show" else ""
+        return subprocess.CompletedProcess(argv, returncode, stdout, "")
 
 
 class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
@@ -296,17 +298,32 @@ class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
         self.assertEqual("unknown", unknown["state"])
         self.assertEqual("wake_daemon_process_unknown", unknown["reason_code"])
 
-    def test_stop_proves_absence_or_reports_unknown(self) -> None:
+    def test_stop_proves_absence_or_names_what_it_saw(self) -> None:
+        """WD-2 (d), ruling msg-01a08d3b03cc7509853f5e07a3219b28.
+
+        The OLD pin here asserted state ``unknown`` under ``ok`` - the exact
+        defect the 2026-09-10 dispatch measured. The old assertion was
+        pinning the defect; this amendment pins the contract instead, and
+        on the pre-fix tree this test fails (the old verb could only answer
+        unknown once is-active did not return exactly 3).
+        """
+
         manager = self.manager()
         manager.install()
         stopped = manager.stop()
         self.assertEqual("stopped", stopped["state"])
-        self.assertEqual("stop", self.runner.calls[-2][2])
-        self.assertEqual("is-active", self.runner.calls[-1][2])
+        self.assertEqual("wake_daemon_process_absent", stopped["reason_code"])
+        self.assertEqual(3, stopped["observation"]["is_active_returncode"])
+        self.assertNotIn("stop", [call[2] for call in self.runner.calls])
 
         self.runner.is_active_returncode = 0
-        unknown = manager.stop()
-        self.assertEqual("unknown", unknown["state"])
+        self.runner.show_stdout = "4242\n"
+        unproven = self.manager(pid_alive=lambda pid: True).stop()
+        self.assertEqual("stop_unproven", unproven["state"])
+        self.assertEqual("wake_daemon_stop_unproven", unproven["reason_code"])
+        self.assertEqual(4242, unproven["observation"]["observed_pid"])
+        self.assertIs(True, unproven["observation"]["pid_alive"])
+        self.assertNotEqual("unknown", unproven["state"])
 
     def test_remove_refuses_digest_drift_without_deleting_then_removes_exact_unit(self) -> None:
         manager = self.manager()
@@ -395,12 +412,23 @@ class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
             DaemonConsentLedger(self.root).require_active(self.coordinate)["state"],
         )
 
-    def test_revoke_deletes_the_exact_unit_and_does_not_overclaim_process_absence(self) -> None:
+    def test_revoke_deletes_the_exact_unit_and_reports_revoked_when_no_pid_is_observable(
+        self,
+    ) -> None:
+        """WD-2 (d) ruling: pidless revoke -> revoked.
+
+        The OLD pin asserted revoked state ``unknown`` when is-active
+        answered 0 - the same prove-nothing defect as the stop verb. With
+        no MainPID observable there is no live process to prove, the unit
+        is removed, and the receipt says revoked. Fails on the pre-fix
+        tree, which answered unknown here.
+        """
+
         manager = self.manager()
         manager.install()
         self.runner.is_active_returncode = 0
         revoked = manager.revoke(idempotency_key="systemd-revoke")
-        self.assertEqual("unknown", revoked["state"])
+        self.assertEqual("revoked", revoked["state"])
         self.assertFalse(manager.unit_path.exists())
         with self.assertRaisesRegex(ProtocolRefusal, "consent_absent"):
             DaemonConsentLedger(self.root).require_active(self.coordinate)

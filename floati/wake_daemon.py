@@ -12,6 +12,7 @@ import inspect
 import json
 import math
 import os
+import resource
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,11 +29,13 @@ from .snapshot import _owned_epoch_archives
 from .wake_control import WakeController, is_session_paused
 from .wake_daemon_adapters import AdapterBinding, WakeAdapterResult
 from .wake_daemon_contract import (
+    DAEMON_KINDS,
     AdapterBindingStore,
     DaemonConsentLedger,
     DaemonCoordinate,
     DaemonLifecycleLedger,
 )
+from .wake_daemon_roll import consent_relative, lifecycle_relative
 from .wake_hold import WakeAttemptLedger, WakeHoldController
 
 
@@ -58,6 +61,10 @@ _RUNTIME_FIELDS = frozenset({
     "bus_epoch_archive",
     "breaker_transitions",
     "awaiting_work",
+    "cpu_seconds_last_cycle",
+    "cpu_seconds_total",
+    "cpu_seconds_window",
+    "cpu_wall_window",
 })
 # Fields a runtime written by an older build may not carry. The shape check
 # stays CLOSED - no unknown key is ever accepted - and these are read through
@@ -67,6 +74,10 @@ _OPTIONAL_RUNTIME_FIELDS = frozenset({
     "bus_epoch_archive",
     "breaker_transitions",
     "awaiting_work",
+    "cpu_seconds_last_cycle",
+    "cpu_seconds_total",
+    "cpu_seconds_window",
+    "cpu_wall_window",
 })
 _REQUIRED_RUNTIME_FIELDS = _RUNTIME_FIELDS - _OPTIONAL_RUNTIME_FIELDS
 _BREAKER_THRESHOLD = 3
@@ -77,6 +88,13 @@ WAKE_BREAKER_REMEDY = (
     "rebind the wake daemon to a dedicated headless session - an interactive "
     "session with a large rollout may be unresumable - then rerun doctor"
 )
+_CPU_WINDOW = 32
+_DEFAULT_CPU_BUDGET_SECONDS = 0.25
+
+
+def _cpu_seconds() -> float:
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return usage.ru_utime + usage.ru_stime
 
 
 def _bounded_exception_message(detail: object, fallback: str) -> str:
@@ -265,6 +283,34 @@ class DaemonOwner:
         self.release()
 
 
+# WD-2 (P4): refusals no cycle can clear are terminal, not transient.
+# Polling on is the relaunch bait - under KeepAlive.SuccessfulExit=false a
+# non-zero exit is relaunched every ThrottleInterval seconds (measured:
+# 36,722 activation_epoch_mismatch refusals in one seat's stderr over four
+# days, 2026-09-10 dispatch §2.1). Each code writes ONE typed lifecycle
+# receipt and serve() returns cleanly.
+_TERMINAL_SERVE_REFUSALS = frozenset(
+    {
+        "wake_daemon_consent_absent",
+        "wake_daemon_activation_epoch_mismatch",
+        "unknown_node",
+        "wake_daemon_binding_absent",
+    }
+)
+# Receipt events stay inside the lifecycle vocabulary records.py already
+# ships (floati/records.py:2158-2160: event/state are closed enums, ruled
+# REUSED, never widened - bus msg-01a08d33c626728e988647ea4a2ee6c5).
+# reason_code on this record kind is bounded-free, not closed
+# (floati/records.py:2164-2166: any 1..128 string), so the ruled reason
+# names below are valid without touching records.py.
+_SERVE_TERMINAL_EVENT_CONSENT = ("revoked", "revoked")
+_SERVE_TERMINAL_EVENT_DEFAULT = ("stopped", "stopped")
+
+
+class _ServeTerminal(Exception):
+    """Internal serve-loop signal: a terminal retirement is on disk."""
+
+
 class WakeDaemon:
     """Evaluate and wake exactly one consented coordinate per bounded cycle."""
 
@@ -304,6 +350,9 @@ class WakeDaemon:
         )
         self.owner = DaemonOwner(coordinate)
         self._breaker_close_reason: Optional[str] = None
+        self._hold_controller = WakeHoldController(self.root)
+        self._cycle_cpu_origin: Optional[float] = None
+        self._cycle_now: Optional[float] = None
 
     def wake_health(self, now: datetime) -> Dict[str, object]:
         """Project the same node-bound wake fact exposed by status and Doctor."""
@@ -332,6 +381,9 @@ class WakeDaemon:
             artifact["reason_code"] = "wake_daemon_poll_not_due"
             return artifact
 
+        self._cycle_now = current_time
+        self._cycle_cpu_origin = _cpu_seconds()
+
         if is_session_paused(
             self.root, self.coordinate.node_id, binding.session_id
         ):
@@ -354,10 +406,13 @@ class WakeDaemon:
                     lifecycle_state="pause_unknown",
                     reason_code="wake_marker_invalid",
                 )
-            # Am.1: pause may clear an open circuit, but it never claims a probe.
-            self._schedule_success(
-                runtime, consent, current_time, close_reason="operator_pause"
-            )
+            # Pause may still clear an open circuit (never a probe), but the
+            # poll interval backs off like idle: a paused seat is cheap.
+            if runtime["circuit_state"] == "open":
+                self._breaker_close_reason = "operator_pause"
+            runtime["consecutive_refusals"] = 0
+            runtime["circuit_state"] = "closed"
+            self._schedule_idle(runtime, consent, current_time)
             return self._transition(
                 runtime,
                 consent,
@@ -416,7 +471,7 @@ class WakeDaemon:
         if runtime["current_wake_key"] is None:
             runtime["current_wake_key"] = self._wake_key(runtime)
             self._write_runtime(runtime)
-        controller = WakeHoldController(self.root)
+        controller = self._hold_controller
         decision = controller.evaluate(
             self.coordinate.node_id,
             worker_session_id=binding.session_id,
@@ -689,13 +744,35 @@ class WakeDaemon:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        self.consent.require_active(self.coordinate)
+        consent = self.consent.require_active(self.coordinate)
+        serve_activation_epoch = int(consent["activation_epoch"])
         with self.owner:
             while not stop_requested():
                 try:
-                    result = self.run_cycle(clock())
-                except Exception as exc:
-                    result = self._recover_cycle_exception(exc, clock)
+                    try:
+                        result = self.run_cycle(clock())
+                        observed_epoch = result.get("activation_epoch")
+                        if (
+                            observed_epoch is not None
+                            and int(observed_epoch) != serve_activation_epoch
+                        ):
+                            # WD-2 (c): a consent written under a NEW epoch
+                            # belongs to another daemon activation. Adopting
+                            # it silently would keep this process running
+                            # for a coordinate it was never launched for.
+                            raise ProtocolRefusal(
+                                "wake_daemon_activation_epoch_mismatch",
+                                "activation epoch moved under this daemon instance",
+                            )
+                    except Exception as exc:
+                        result = self._recover_cycle_exception(
+                            exc, clock, serve_activation_epoch
+                        )
+                except _ServeTerminal:
+                    # WD-2 (P4): the retirement receipt is written; exiting
+                    # cleanly is the point - under KeepAlive
+                    # .SuccessfulExit=false a clean exit is final.
+                    return
                 try:
                     maintain_supervisor_logs(self.root, self.coordinate.digest)
                 except (OSError, ProtocolRefusal) as exc:
@@ -708,14 +785,179 @@ class WakeDaemon:
                 sleep(delay)
 
     def _recover_cycle_exception(
-        self, exc: BaseException, clock: Callable[[], float]
+        self,
+        exc: BaseException,
+        clock: Callable[[], float],
+        serve_activation_epoch: Optional[int] = None,
     ) -> Dict[str, object]:
         """Record one typed lifecycle receipt and schedule the next poll.
 
         SKEW-2: a cycle fault is testimony, never silence. The daemon
         records one typed receipt naming the fault and keeps polling; the
         serve loop itself must survive whatever a cycle raises.
+
+        WD-2 (P4): a refusal no cycle can clear is not a cycle fault. It
+        writes one typed retirement receipt and ends serve() cleanly, so
+        non-zero stays reserved for transient faults and the supervisor's
+        KeepAlive never turns a permanent refusal into a crash loop.
         """
+
+        if isinstance(exc, ProtocolRefusal) and exc.code in _TERMINAL_SERVE_REFUSALS:
+            # FQ-9 Am.1: the split layout keeps the consent chain in its
+            # own plane, so on a root that has rolled, the lifecycle path
+            # alone is silent about consent - read both planes, the
+            # consent plane first and the lifecycle file after it.
+            #
+            # Am.2 corrects what this comment used to claim. The rows are
+            # concatenated in PLANE ORDER and each kind's last row is
+            # taken from that concatenation - it is not a merge by
+            # timestamp, so "newest wins" was never what the code did. It
+            # decides nothing today because the two files hold disjoint
+            # kinds once a root has migrated: the carry copies consent
+            # rows into the plane and the mixed file goes whole into the
+            # archive, so the fresh lifecycle file has no consent row to
+            # contend with. A future edit that lets both files hold one
+            # kind has to pick an order deliberately, and this is not it.
+            ledger_rows: list = []
+            node_planes = [lifecycle_relative(self.coordinate.node_id)]
+            consent_plane = consent_relative(self.coordinate.node_id)
+            if (self.root.path / consent_plane).is_file():
+                node_planes.insert(0, consent_plane)
+            for plane in node_planes:
+                try:
+                    ledger_rows.extend(
+                        read_records_snapshot(
+                            self.root,
+                            plane,
+                            allowed_kinds=DAEMON_KINDS,
+                        )
+                    )
+                except (IntegrityFailure, ProtocolRefusal, OSError):
+                    continue
+            consent_rows = [
+                row
+                for row in ledger_rows
+                if row.get("kind") == "wake_daemon_consent_receipt"
+                and row.get("coordinate_digest") == self.coordinate.digest
+            ]
+            lifecycle_rows = [
+                row
+                for row in ledger_rows
+                if row.get("kind") == "wake_daemon_lifecycle_receipt"
+                and row.get("coordinate_digest") == self.coordinate.digest
+            ]
+            last_consent = consent_rows[-1] if consent_rows else None
+            last_lifecycle = lifecycle_rows[-1] if lifecycle_rows else None
+            reason_code = exc.code
+            event, state = _SERVE_TERMINAL_EVENT_DEFAULT
+            if exc.code == "wake_daemon_consent_absent":
+                # Revocation is the one absent shape with its own name: the
+                # last consent row for this coordinate tells revoked from
+                # a ledger that never held one.
+                if last_consent is not None and last_consent.get("state") == "revoked":
+                    reason_code = "wake_daemon_consent_revoked"
+                    event, state = _SERVE_TERMINAL_EVENT_CONSENT
+            elif exc.code == "unknown_node":
+                reason_code = "wake_daemon_registry_inactive"
+            elif exc.code == "wake_daemon_binding_absent":
+                reason_code = "wake_daemon_binding_gone"
+            elif exc.code == "wake_daemon_activation_epoch_mismatch":
+                reason_code = "wake_daemon_epoch_moved"
+            try:
+                active_consent: Optional[Mapping[str, object]] = (
+                    self.consent.require_active(self.coordinate)
+                )
+            except (ProtocolRefusal, IntegrityFailure):
+                active_consent = None
+            try:
+                runtime = self.read_runtime()
+            except (ProtocolRefusal, IntegrityFailure):
+                runtime = None
+            activation_epoch = next(
+                (
+                    int(value)
+                    for value in (
+                        serve_activation_epoch,
+                        None if runtime is None else runtime.get("activation_epoch"),
+                        None
+                        if active_consent is None
+                        else active_consent.get("activation_epoch"),
+                        None if last_consent is None else last_consent.get("activation_epoch"),
+                    )
+                    if value is not None
+                ),
+                None,
+            )
+            adapter_digest = next(
+                (
+                    str(value)
+                    for value in (
+                        None
+                        if active_consent is None
+                        else active_consent.get("adapter_digest"),
+                        None if last_consent is None else last_consent.get("adapter_digest"),
+                        None
+                        if last_lifecycle is None
+                        else last_lifecycle.get("adapter_digest"),
+                    )
+                    if value
+                ),
+                None,
+            )
+            predecessor = next(
+                (
+                    str(value)
+                    for value in (
+                        None
+                        if runtime is None
+                        else runtime.get("last_lifecycle_receipt_id"),
+                        None if last_lifecycle is None else last_lifecycle.get("id"),
+                    )
+                    if value
+                ),
+                None,
+            )
+            receipt = None
+            if activation_epoch is not None and adapter_digest is not None:
+                instance = (
+                    str(runtime["daemon_instance_id"])
+                    if runtime is not None and runtime.get("daemon_instance_id")
+                    else self.daemon_instance_id
+                )
+                try:
+                    receipt = self.lifecycle.record(
+                        self.coordinate,
+                        daemon_instance_id=instance,
+                        activation_epoch=activation_epoch,
+                        event=event,
+                        state=state,
+                        reason_code=reason_code,
+                        adapter_digest=adapter_digest,
+                        plist_digest=None,
+                        session_digest=(
+                            None if runtime is None else runtime.get("session_digest")
+                        ),
+                        predecessor_receipt_id=predecessor,
+                        idempotency_key=f"{instance}-serve-terminal-{reason_code}"[
+                            :128
+                        ],
+                    )
+                except (ProtocolRefusal, IntegrityFailure) as receipt_failure:
+                    # The retirement must stay clean even when its receipt
+                    # cannot be written; the held serve-refusal record is
+                    # the typed trace of why.
+                    self._hold_serve_refusal(receipt_failure)
+            else:
+                self._hold_serve_refusal(exc)
+            if runtime is not None and receipt is not None:
+                try:
+                    runtime["last_lifecycle_receipt_id"] = receipt["id"]
+                    runtime["last_state"] = state
+                    runtime["last_reason_code"] = reason_code
+                    self._write_runtime(runtime)
+                except (ProtocolRefusal, IntegrityFailure, OSError, ValueError, KeyError):
+                    pass
+            raise _ServeTerminal(exc)
 
         current_time = self._time(clock())
         consent = self.consent.require_active(self.coordinate)
@@ -871,6 +1113,10 @@ class WakeDaemon:
             "last_reason_code": None,
             "last_lifecycle_receipt_id": None,
             "bus_epoch_archive": current_epoch,
+            "cpu_seconds_last_cycle": 0.0,
+            "cpu_seconds_total": 0.0,
+            "cpu_seconds_window": [],
+            "cpu_wall_window": [],
         }
 
     def _validate_runtime(self, value: object) -> Dict[str, object]:
@@ -884,6 +1130,10 @@ class WakeDaemon:
         value.setdefault("bus_epoch_archive", None)
         value.setdefault("breaker_transitions", 0)
         value.setdefault("awaiting_work", False)
+        value.setdefault("cpu_seconds_last_cycle", 0.0)
+        value.setdefault("cpu_seconds_total", 0.0)
+        value.setdefault("cpu_seconds_window", [])
+        value.setdefault("cpu_wall_window", [])
         if (
             value.get("schema_version") != 0
             or value.get("tenant_id") != self.root.tenant_id
@@ -921,6 +1171,41 @@ class WakeDaemon:
         for item in value["wake_timestamps"]:
             self._time(item)
         self._time(value.get("next_poll_at"))
+        for field in ("cpu_seconds_last_cycle", "cpu_seconds_total"):
+            item = value.get(field)
+            if isinstance(item, bool) or not isinstance(item, (int, float)) or item < 0:
+                raise IntegrityFailure(
+                    "wake_daemon_runtime_invalid", f"daemon runtime {field} is invalid"
+                )
+            value[field] = float(item)
+        cpu_window = value.get("cpu_seconds_window")
+        wall_window = value.get("cpu_wall_window")
+        if not isinstance(cpu_window, list) or not isinstance(wall_window, list):
+            raise IntegrityFailure(
+                "wake_daemon_runtime_invalid", "daemon runtime cpu windows are invalid"
+            )
+        if len(cpu_window) != len(wall_window):
+            raise IntegrityFailure(
+                "wake_daemon_runtime_invalid", "daemon runtime cpu windows disagree"
+            )
+        cleaned_cpu: list[float] = []
+        cleaned_wall: list[float] = []
+        for cpu_item, wall_item in zip(cpu_window, wall_window):
+            if (
+                isinstance(cpu_item, bool)
+                or isinstance(wall_item, bool)
+                or not isinstance(cpu_item, (int, float))
+                or not isinstance(wall_item, (int, float))
+                or cpu_item < 0
+                or wall_item < 0
+            ):
+                raise IntegrityFailure(
+                    "wake_daemon_runtime_invalid", "daemon runtime cpu sample is invalid"
+                )
+            cleaned_cpu.append(float(cpu_item))
+            cleaned_wall.append(float(wall_item))
+        value["cpu_seconds_window"] = cleaned_cpu
+        value["cpu_wall_window"] = cleaned_wall
         return value
 
     def _epoch_archive_token(self) -> Optional[str]:
@@ -973,6 +1258,7 @@ class WakeDaemon:
         exception_type: Optional[str] = None,
         exception_message: Optional[str] = None,
     ) -> Dict[str, object]:
+        reason_code = self._apply_cycle_cpu(runtime, consent, reason_code)
         runtime["cycle_index"] = int(runtime["cycle_index"]) + 1
         runtime["last_state"] = result_state
         runtime["last_reason_code"] = reason_code
@@ -997,6 +1283,40 @@ class WakeDaemon:
         self._write_runtime(runtime)
         self._maintain_breaker_notice(runtime, binding)
         return self._artifact(runtime)
+
+    def _apply_cycle_cpu(
+        self,
+        runtime: Dict[str, object],
+        consent: Mapping[str, object],
+        reason_code: Optional[str],
+    ) -> Optional[str]:
+        origin = self._cycle_cpu_origin
+        self._cycle_cpu_origin = None
+        if origin is None:
+            return reason_code
+        delta = max(0.0, _cpu_seconds() - origin)
+        runtime["cpu_seconds_last_cycle"] = delta
+        runtime["cpu_seconds_total"] = float(runtime.get("cpu_seconds_total") or 0.0) + delta
+        budget = consent.get("max_cpu_seconds_per_cycle", _DEFAULT_CPU_BUDGET_SECONDS)
+        try:
+            budget_value = float(budget)
+        except (TypeError, ValueError):
+            budget_value = _DEFAULT_CPU_BUDGET_SECONDS
+        if budget_value <= 0:
+            budget_value = _DEFAULT_CPU_BUDGET_SECONDS
+        if delta > budget_value:
+            maximum = int(consent["max_poll_seconds"])
+            now = float(self._cycle_now if self._cycle_now is not None else 0.0)
+            runtime["current_backoff"] = maximum
+            runtime["next_poll_at"] = now + maximum
+            reason_code = "wake_daemon_cycle_over_budget"
+        cpu_window = list(runtime.get("cpu_seconds_window") or [])
+        wall_window = list(runtime.get("cpu_wall_window") or [])
+        cpu_window.append(delta)
+        wall_window.append(float(runtime["current_backoff"]))
+        runtime["cpu_seconds_window"] = cpu_window[-_CPU_WINDOW:]
+        runtime["cpu_wall_window"] = wall_window[-_CPU_WINDOW:]
+        return reason_code
 
     def _first_wake_verdict(self, binding: AdapterBinding, result: WakeAdapterResult) -> None:
         """WD-R5c-F1: flip unproven→suspect only on typed bound exhaustion
@@ -1344,9 +1664,16 @@ class WakeDaemon:
 
     @staticmethod
     def _attempt_key(runtime: Mapping[str, object]) -> str:
+        # FQ-8: the attempt slot is scoped by the acting session digest. A seat
+        # rebind reinitializes the runtime while the consent's activation epoch
+        # persists, so an unscoped key recomputes the previous session's attempt
+        # slot and the replay check throws at legitimate work. The comparison in
+        # _existing_attempt is unchanged: acting_session_id still moves it, and
+        # only a same-session replay may return a durable row.
         return (
             f"{runtime['current_wake_key']}-attempt-"
-            f"{int(runtime['cycle_index']) + 1}"
+            f"{int(runtime['cycle_index']) + 1}-"
+            f"{str(runtime['session_digest'])[:12]}"
         )
 
     def _schedule_success(

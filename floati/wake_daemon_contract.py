@@ -18,6 +18,11 @@ from .records import validate_record
 from .registry import Registry, utc_now
 from .root import FloatiRoot
 from .wake_control import validate_session_id
+from .wake_daemon_roll import (
+    consent_relative,
+    ensure_rolled,
+    lifecycle_relative,
+)
 
 
 DAEMON_KINDS = frozenset({
@@ -100,13 +105,28 @@ class DaemonConsentLedger:
 
     @staticmethod
     def _relative(node: str) -> Path:
-        return Path("receipts/wake-daemon") / f"{node}.jsonl"
+        # FQ-9 / P5: consent lives in its own plane, so require_active
+        # reads the consent record and never a lifecycle row. The
+        # lifecycle file keeps its historical path and rolls.
+        return consent_relative(node)
+
+    @staticmethod
+    def _legacy_relative(node: str) -> Path:
+        # The pre-split mixed file, still the consent source on a root
+        # whose layout has not migrated yet.
+        return lifecycle_relative(node)
 
     def _rows(self, coordinate: DaemonCoordinate) -> list[Dict[str, Any]]:
+        plane_exists = (self.root.path / self._relative(coordinate.node_id)).is_file()
+        source = (
+            self._relative(coordinate.node_id)
+            if plane_exists
+            else self._legacy_relative(coordinate.node_id)
+        )
         return [
             row
             for row in read_records_snapshot(
-                self.root, self._relative(coordinate.node_id), allowed_kinds=DAEMON_KINDS
+                self.root, source, allowed_kinds=DAEMON_KINDS
             )
             if row.get("kind") == "wake_daemon_consent_receipt"
             and row.get("coordinate_digest") == coordinate.digest
@@ -183,6 +203,10 @@ class DaemonConsentLedger:
         return rows[-1]
 
     def _append(self, coordinate: DaemonCoordinate, row: Dict[str, Any]) -> Dict[str, Any]:
+        # The consent write is the write that must see every prior consent
+        # row, so it migrates a legacy mixed file first; the idempotency
+        # and activation-epoch scans below then read a complete prior.
+        ensure_rolled(self.root, coordinate.node_id)
         semantic = tuple(
             key for key in row if key not in {"id", "timestamp"}
         )
@@ -253,6 +277,10 @@ class DaemonLifecycleLedger:
     ) -> Dict[str, Any]:
         if coordinate.root is not self.root:
             raise ProtocolRefusal("wake_daemon_coordinate_invalid", "lifecycle coordinate belongs to another root")
+        # The lifecycle append is the one per-cycle write: it owns the
+        # roll check, so a root that cycles pays two lstat calls and a
+        # root whose receipts crossed the policy threshold rolls here.
+        ensure_rolled(self.root, coordinate.node_id)
         row = {
             "schema_version": _schema_version(coordinate.harness),
             "id": "wake-daemon-lifecycle-" + uuid7_hex(),
@@ -301,7 +329,7 @@ class DaemonLifecycleLedger:
 
         return transact(
             self.root,
-            DaemonConsentLedger._relative(coordinate.node_id),
+            lifecycle_relative(coordinate.node_id),
             decide,
             allowed_kinds=DAEMON_KINDS,
         )

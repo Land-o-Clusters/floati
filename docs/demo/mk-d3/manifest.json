@@ -1,0 +1,35 @@
+{
+  "captured_at": "2026-09-11T14:25:02.907Z",
+  "captures": [
+    {
+      "animated": true,
+      "caption": "fixture fleet, real run - a seat's session ends mid-slice and the flight recorder plays every recorded event back in order, finishing nothing; Replay reconstructs what was recorded, in order. It does not finish work that was interrupted.",
+      "files": [
+        {
+          "bytes": 596,
+          "path": "mk-d3-standard.txt",
+          "sha256": "297e11a3b24af46532cff5261eb746ccdbe90455741b219328980d8236f49bca"
+        },
+        {
+          "bytes": 198989,
+          "path": "mk-d3-dark.gif",
+          "sha256": "a2e2cddb22f079e9f38a141d1efa3700e29cad5a74189742ed37fbd3f4969dcd"
+        },
+        {
+          "bytes": 199178,
+          "path": "mk-d3-light.gif",
+          "sha256": "fa6ab98d1261342e788a8467164333273c6e6c08dfb99767d696e13147f65343"
+        }
+      ],
+      "frame_count": 7,
+      "limit_line": "Replay reconstructs what was recorded, in order. It does not finish work that was interrupted.",
+      "name": "mk-d3",
+      "real_ledger": true
+    }
+  ],
+  "generator": "scripts/capture-mk-d3.py",
+  "schema_version": 0,
+  "scratch": "<scratch>",
+  "source_sha": "1cf3310c947f680d6e5bb52575307aa0f28c69e3",
+  "synthetic": false
+}

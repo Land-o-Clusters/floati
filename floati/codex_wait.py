@@ -264,6 +264,16 @@ def run_stop_waiter(
     if session_authority is None:
         return 0
     try:
+        from .codex_wait_liveness import write_holder_testimony
+
+        write_holder_testimony(participant.root, participant.binding.node_id, session_id)
+    except Exception as exc:
+        raise_reader_failure(exc)
+        _report_evidence_failure(stderr, "holder_testimony", exc)
+        # Testimony is evidence, not a participation gate: a failed write
+        # reads as unproven later, which holds conservatively, and the hold
+        # itself must survive.
+    try:
         from .wake_daemon_adapters import record_codex_daemon_binding
 
         record_codex_daemon_binding(participant, session_id)

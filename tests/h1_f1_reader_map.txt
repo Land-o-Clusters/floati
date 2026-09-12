@@ -1,7 +1,7 @@
 export-baseline	.github/labeler.yml:30
-manifest	bundle-manifest.v0.json:1589
+manifest	bundle-manifest.v0.json:1601
 docs	docs/AGENT-OPERATIONS.md:114
-docs	docs/COPY-LEDGER.md:153
+docs	docs/COPY-LEDGER.md:155
 docs	docs/demo/tui/install-moment-standard.txt:13
 docs	docs/evidence/WEEKEND-P0-CODEX-WAKE-WAITER.md:129
 docs	docs/evidence/WEEKEND-SD1-UNINSTALL-ROUNDTRIP.md:16
@@ -27,11 +27,11 @@ update-readback	floati/fleet_update.py:1487
 update-readback	floati/fleet_update.py:1504
 update-readback	floati/fleet_update.py:1507
 update-readback	floati/fleet_update.py:1508
-docs	floati/generated_help.py:3932
-docs	floati/help_copy.py:520
+docs	floati/generated_help.py:3998
+docs	floati/help_copy.py:541
 manifest	floati/manifest.py:80
 update-readback	floati/reader_currency.py:116
-manifest	floati/uninstall.py:67
+manifest	floati/uninstall.py:208
 install	floati/waiter_bundle.py:61
 export-baseline	tests/fixtures/baseline-1-f1/public-export-baseline.v0.json:946
 install	tests/test_au1_s0.py:89

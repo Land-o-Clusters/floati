@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Optional
 
 from .codex_wait_contract import CodexWaitParticipant
+from .codex_wait_liveness import classify_holder, read_holder_testimony
 from .errors import IntegrityFailure, ProtocolRefusal
 from .fleet_update import _explicit_executable
 from .root import FloatiRoot
@@ -487,6 +488,20 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
         envelopes: object = None,
     ) -> WakeAdapterResult:
         current = self._require_current(binding)
+        testimony = read_holder_testimony(self.coordinate.root, self.coordinate.node_id)
+        if (
+            testimony is not None
+            and testimony.session_id == current.session_id
+            and classify_holder(testimony) == "released"
+        ):
+            # WD-3: this thread's recorded holder is proven gone (pid and
+            # process start). `codex queue` exits 0 into a dead thread and
+            # wakes nobody, so a queued receipt would be a lie; refuse typed
+            # without spawning. Testimony about any other session, or no
+            # testimony at all, proves nothing and queues exactly as before.
+            return WakeAdapterResult(
+                "refused", "wake_target_thread_dead", None, None,
+            )
         try:
             executable = CODEX_EXECUTABLE.resolve(strict=True)
         except OSError as exc:

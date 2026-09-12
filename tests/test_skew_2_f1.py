@@ -24,6 +24,7 @@ from floati.wake_daemon_contract import (
     DaemonConsentLedger,
     DaemonCoordinate,
 )
+from floati.wake_daemon_roll import lifecycle_relative
 from tests.temp_roots import REAL_TEMP_ROOT
 
 EXCEPTION_MESSAGE_BOUND = 128
@@ -68,7 +69,7 @@ class CycleExceptionFixture:
     def cycle_exception_rows(self) -> list[dict]:
         lifecycle = read_records(
             self.root,
-            DaemonConsentLedger._relative(self.coordinate.node_id),
+            lifecycle_relative(self.coordinate.node_id),
             allowed_kinds={
                 "wake_daemon_lifecycle_receipt",
                 "wake_daemon_consent_receipt",
@@ -295,7 +296,7 @@ class CycleExceptionReceiptTests(unittest.TestCase):
 
         lifecycle = read_records(
             self.fixture.root,
-            DaemonConsentLedger._relative(self.fixture.coordinate.node_id),
+            lifecycle_relative(self.fixture.coordinate.node_id),
             allowed_kinds={
                 "wake_daemon_lifecycle_receipt",
                 "wake_daemon_consent_receipt",
