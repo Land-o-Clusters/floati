@@ -55,7 +55,7 @@
     },
     {
       "path": "floati/__init__.py",
-      "sha256": "c991a69331b21506b1f9899b23bf58e322cff2181cd327eedbef370249fb8051"
+      "sha256": "f54b46e1b2391eeed2cba2105bcddd6b9c7886b0e2cf1a8c0d71c4f4eba439b8"
     },
     {
       "path": "floati/__main__.py",
@@ -151,7 +151,7 @@
     },
     {
       "path": "floati/admin_cli.py",
-      "sha256": "f2fd3d2693aaec61f5ee7d07631e28e61b7b244efc6b7480b62ed931c389c9d0"
+      "sha256": "1a1988ece5a3b63ccb31d1d25c8c689a9e76c621ed64cfd2921114103286b196"
     },
     {
       "path": "floati/admin_registry.py",
@@ -203,7 +203,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "0dc2923af231f62f8fb16769620d6568fd2743887d0aef11df60a8ac0761a77a"
+      "sha256": "213db1cbee77012226e86ba0a14bde576489daf1cfc7f8dd7790a58cce74b3cc"
     },
     {
       "path": "floati/codex_hook_install.py",
@@ -215,11 +215,15 @@
     },
     {
       "path": "floati/codex_wait.py",
-      "sha256": "563517916b79f56a249f047d9be915f8461d2f2495885d5600802753b34f569d"
+      "sha256": "c744efbab8d4724d434490bc2a7971bc56bd89e700f9f97c8568703536f91370"
     },
     {
       "path": "floati/codex_wait_contract.py",
       "sha256": "9cd86f5cecfe027263d33b94319f0a4999b4ab2b6b77f51c48ec2c8775645438"
+    },
+    {
+      "path": "floati/codex_wait_liveness.py",
+      "sha256": "5e226b5db74d3681a3f41a994f5d9f4df4d95e7a04e0d3e470a0d427b6406034"
     },
     {
       "path": "floati/command_codegen.py",
@@ -274,6 +278,10 @@
       "sha256": "445e043afc0852b1c562412e0b0f919ac7f23bdba2516dba4893289459db935f"
     },
     {
+      "path": "floati/cursor_wait.py",
+      "sha256": "b432bcbc0f4ebb94e166608ec5dca4cd2b2f99e263c27b9f5028d58a6cd5fc20"
+    },
+    {
       "path": "floati/decisions.py",
       "sha256": "d040fb549c8c3feb01640ecd732b06ffa84fcb18c491260bb8512b36d1ac9daa"
     },
@@ -291,7 +299,7 @@
     },
     {
       "path": "floati/doctor.py",
-      "sha256": "d811b74e07278ec1fd55c06fe38ab6b43f26c7e4e4c4ddfa5f06f236626b9950"
+      "sha256": "0f9cc27ea10f4efe89329e013f321ad74b98bf63667ee50282102fdc7ce118d6"
     },
     {
       "path": "floati/doctor_probe.py",
@@ -359,7 +367,7 @@
     },
     {
       "path": "floati/generated_help.py",
-      "sha256": "6f1b44497fb6b745c12a5bdcd1eefa9cfee2e76f7f250833837799396d75a6b5"
+      "sha256": "0a6ae5254cb15b4029bd9e123d73e99cb668d0173141749c96261af0445cf4c7"
     },
     {
       "path": "floati/gh_process.py",
@@ -387,7 +395,7 @@
     },
     {
       "path": "floati/help_copy.py",
-      "sha256": "78e346fcaebadb4ae519bae7ee7c15fca7e8900e21c92cb4ceea5a75f9fff2db"
+      "sha256": "7569c1966cfab743ceab325692fb76b634ea4d8bd66f6f7f52778eafc7aaf4c2"
     },
     {
       "path": "floati/helptext.py",
@@ -551,7 +559,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "4b7f15c7ef6ca8683bd42a05274f8a2e4f6d8aa85705600b1d4436c674330133"
+      "sha256": "a4cf52a8b794cfd239b7496aa436cc47f5968017974d6526b91ebdd0f52dd4cc"
     },
     {
       "path": "floati/registry.py",
@@ -771,7 +779,7 @@
     },
     {
       "path": "floati/uninstall.py",
-      "sha256": "5271185519f712b1e19072b3b2baf605968166d213904c7521285300ac72a38d"
+      "sha256": "431527459b9eb27a3baa481aa70551032da4b059e895d735c7696e994086c946"
     },
     {
       "path": "floati/update_apply.py",
@@ -823,23 +831,27 @@
     },
     {
       "path": "floati/wake_daemon.py",
-      "sha256": "9625b03af2aedfe3dec851fa40859f39b1509803d2e0f33ef6c628ca65a96448"
+      "sha256": "41d02ca5f8fbdf06c744f0416f6829b0a1956ed1ba426d8618aa2de646fcb669"
     },
     {
       "path": "floati/wake_daemon_adapters.py",
-      "sha256": "c501bffef951cd3df7ae0c9fee9130562b0281267731e077077e468093344e44"
+      "sha256": "8c8610052ee2e8d926a05963e8c793bed5de0c861f969309a35cee78e6a2eecd"
     },
     {
       "path": "floati/wake_daemon_contract.py",
-      "sha256": "2a0eac1bd03fb191a53baffd3423afaef6d394e2fe55a5198f9776801941317b"
+      "sha256": "bd398196701414968fd75b854dfb9e9fbf0ebcce14e5acdf2d726cd3cf0199f5"
     },
     {
       "path": "floati/wake_daemon_launchd.py",
-      "sha256": "67cad1276422585ec5a26e3dc68b9f10f17f5a65d360905fa8258a000377d074"
+      "sha256": "980435167f171e4e98128fc6430c9d57cbe58059a6105c529d79fc59cbf6d4c7"
+    },
+    {
+      "path": "floati/wake_daemon_roll.py",
+      "sha256": "6d130a883401013d58f043fb51a695f444bde784f260361fe231e60eb9d95437"
     },
     {
       "path": "floati/wake_daemon_systemd.py",
-      "sha256": "1f27338fc835a63d9424877f9520f0bfb6c80cbea8bd84da3cbd721b93924dae"
+      "sha256": "ac6fb5f828d460ef74237f4bec4b9a5f514ac4f6636b4849e2c766577a80b8fd"
     },
     {
       "path": "floati/wake_exit.py",
@@ -851,7 +863,7 @@
     },
     {
       "path": "floati/wake_hold.py",
-      "sha256": "e2ec17fe598d665b9e803ad4f1ec6d0d104e397632e226a60967f9dd8f44df1a"
+      "sha256": "868945d4b90eb6d4a6ba024e0caf2a7dceeda04bb0fb0853a47ab15387c62a95"
     },
     {
       "path": "floati/wake_timeout_forensics.py",
@@ -1539,7 +1551,7 @@
     },
     {
       "path": "schemas/v1/wake-attempt-record.schema.json",
-      "sha256": "75b7ede88b11b7b87e4217be8ac28f3ad7d8c3de036a1a45a82b2a0758963a65"
+      "sha256": "b2a78c36269103ea3cfdf78aba1f18980320d36fd0fd35a2de2c6fb77d545dbf"
     },
     {
       "path": "schemas/v1/wake-daemon-adapter-record.schema.json",

@@ -1,0 +1,1 @@
+{"schema_version":0,"id":"msg-01a06f268d5e7751a516f8e16eb986cc","tenant_id":"alpha","timestamp":"2026-09-05T01:19:52.000Z","kind":"message_envelope","sender":"worker-alpha","recipient":"bob","repo":"owner/floati","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","doc":"docs/evidence/checkpoint.md","note":"","idempotency_key":"noop","attempt_binding":"absent_legacy"}

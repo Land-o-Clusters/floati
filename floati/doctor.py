@@ -996,6 +996,39 @@ def project_zcode_bridge_registrations(
     return findings
 
 
+def _format_cpu_seconds(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def _format_cpu_hour(value: float) -> str:
+    rounded = round(value)
+    if abs(value - rounded) < 1e-9:
+        return str(int(rounded))
+    return f"{value:.2f}"
+
+
+def _wake_daemon_undelivered_count(root: FloatiRoot, node_id: str) -> int:
+    """Count undelivered envelopes for one node (WD-5 doctor line).
+
+    Same receipt cut as DeliveryHealthAnalyzer: message_envelope without a
+    delivery receipt for that recipient. Measured, never guessed.
+    """
+
+    from .delivery_health import _receipt_item_times
+    from .events import EventLog
+
+    delivered = set(_receipt_item_times(root, "deliveries", node_id))
+    count = 0
+    for record in EventLog(root).event_records():
+        if record.get("kind") != "message_envelope":
+            continue
+        if record.get("recipient") != node_id:
+            continue
+        if record.get("id") not in delivered:
+            count += 1
+    return count
+
+
 def project_wake_daemon_health(
     root: FloatiRoot, *, currency_current: bool
 ) -> list[Dict[str, object]]:
@@ -1101,6 +1134,58 @@ def project_wake_daemon_health(
             f" resume_state={resume_state if resume_state else 'unrecorded'}"
             + (f" session_id={bound_session}" if resume_state else "")
         )
+        node_label = str(runtime.get("node_id") or node_name)
+        cpu_window = runtime.get("cpu_seconds_window")
+        wall_window = runtime.get("cpu_wall_window")
+        extra_lines: list[str] = []
+        if (
+            isinstance(cpu_window, list)
+            and isinstance(wall_window, list)
+            and len(cpu_window) == len(wall_window)
+            and len(cpu_window) >= 10
+            and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in cpu_window)
+            and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in wall_window)
+        ):
+            count = len(cpu_window)
+            cpu_total = sum(float(item) for item in cpu_window)
+            wall_total = sum(float(item) for item in wall_window)
+            per_cycle = cpu_total / count
+            per_hour = (cpu_total / wall_total * 3600.0) if wall_total else 0.0
+            extra_lines.append(
+                f"wake daemon {node_label}: {_format_cpu_seconds(per_cycle)} s CPU per cycle, "
+                f"{_format_cpu_hour(per_hour)} s per hour, measured over the last {count} cycles."
+            )
+        elif isinstance(cpu_window, list) and 0 < len(cpu_window) < 10:
+            extra_lines.append("not enough cycles to measure")
+        if last_reason == "wake_daemon_cycle_over_budget":
+            extra_lines.append(
+                f"wake daemon {node_label} is over its CPU budget and has backed off to {backoff} s between polls."
+            )
+        if last_state == "paused":
+            extra_lines.append(
+                f"wake daemon {node_label} is paused and polls every {backoff} s."
+            )
+        # WD-5: dormant seat holding undelivered mail, from WD-3 holder
+        # testimony. Live holder or no undelivered mail: nothing new.
+        undelivered = _wake_daemon_undelivered_count(root, node_name)
+        if undelivered > 0:
+            from .codex_wait_liveness import classify_holder, read_holder_testimony
+
+            testimony = read_holder_testimony(root, node_name)
+            holder_class = classify_holder(testimony)
+            if holder_class == "released" and testimony is not None:
+                extra_lines.append(
+                    f"wake daemon {node_label}: {undelivered} undelivered; "
+                    f"no live seat since {testimony.timestamp}. "
+                    "Restart the seat to drain them."
+                )
+            elif holder_class == "unproven":
+                extra_lines.append(
+                    f"Floati cannot tell whether {node_label} has a live seat; "
+                    f"{undelivered} messages are undelivered."
+                )
+        if extra_lines:
+            detail = detail + "".join("\n" + line for line in extra_lines)
         if resume_state == "resume_suspect" or circuit_state == "open" or refusals >= _BREAKER_THRESHOLD:
             findings.append(_finding(
                 "wake_daemon_health",
@@ -1157,6 +1242,75 @@ def project_wake_daemon_health(
                 f"zcode hook observed firing (last dispatch {last.get('timestamp')}, "
                 f"injected={last.get('injected')})",
             ))
+    return findings
+
+
+def project_cursor_hook_workspace_findings(
+    root: FloatiRoot,
+) -> list[Dict[str, object]]:
+    """Name a Cursor seat whose hook workspace differs from last-seen root.
+
+    Typed silence when the journal or the install receipt cannot tell.
+    """
+
+    wait_root = root.path / "state" / "cursor-wait"
+    if not wait_root.is_dir() or wait_root.is_symlink():
+        return []
+    findings: list[Dict[str, object]] = []
+    for node_dir in sorted(wait_root.iterdir()):
+        if node_dir.is_symlink() or not node_dir.is_dir():
+            continue
+        installed_path = node_dir / "installed-hook.json"
+        journal_path = node_dir / "journal.jsonl"
+        hook_workspace = None
+        if installed_path.is_file() and not installed_path.is_symlink():
+            try:
+                installed = json.loads(installed_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, ValueError):
+                installed = {}
+            if isinstance(installed, dict):
+                value = installed.get("workspace")
+                if isinstance(value, str) and value:
+                    hook_workspace = value
+        last_seen = None
+        if journal_path.is_file() and not journal_path.is_symlink():
+            try:
+                lines = journal_path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                lines = []
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                value = record.get("last_seen_root")
+                if isinstance(value, str) and value:
+                    last_seen = value
+                    break
+        if not hook_workspace or not last_seen:
+            continue
+        try:
+            same = Path(hook_workspace).resolve() == Path(last_seen).resolve()
+        except (OSError, RuntimeError):
+            same = Path(hook_workspace) == Path(last_seen)
+        if same:
+            continue
+        node_name = node_dir.name
+        findings.append(_finding(
+            "cursor_hook_workspace_diverged",
+            "warning",
+            node_name,
+            (
+                f"Cursor seat {node_name} hook workspace {hook_workspace} "
+                f"differs from its journal's last-seen root {last_seen}"
+            ),
+            "this hook is scoped to the workspace that owns .cursor/hooks.json; "
+            "re-rooting the chat leaves it behind — work other directories by absolute path",
+        ))
     return findings
 
 
@@ -1789,6 +1943,10 @@ class Doctor:
             # "nothing bound" a typed absence rather than a silent pass.
             wake_findings = project_wake_daemon_health(root, currency_current=currency_current)
             findings.extend(wake_findings)
+            cursor_hook_findings = project_cursor_hook_workspace_findings(root)
+            findings.extend(cursor_hook_findings)
+            if any(row["severity"] == "warning" for row in cursor_hook_findings) and rc == 0:
+                rc = 35
             bridge_finding = project_installed_bridge_currency(
                 self.source_arg, currency_current=currency_current
             )

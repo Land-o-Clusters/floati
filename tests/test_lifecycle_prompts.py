@@ -159,7 +159,9 @@ class LifecyclePromptTests(unittest.TestCase):
         # hand-written first draft missed 11 of the live commands.
         # LANES-1 on train BA: reserved_names() measures 216 entries.
         # SN-R1 Am.4 on this base adds chart timings (218).
-        self.assertEqual(len(reserved), 218, sorted(reserved))
+        # CUR-2 on landing I adds hook, hook-install and wake-wait (221) —
+        # re-derived at the composition with reserved_names() itself.
+        self.assertEqual(len(reserved), 221, sorted(reserved))
         for name in ("board", "prompts", "prep-clear", "wait", "pausebus", "resumebus"):
             self.assertIn(name, reserved)
 

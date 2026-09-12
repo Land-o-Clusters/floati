@@ -24,11 +24,13 @@ class _Launchctl:
     def __init__(self) -> None:
         self.calls: list[tuple[str, ...]] = []
         self.print_returncode = 113
+        self.print_stdout = ""
 
     def __call__(self, argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
         self.calls.append(argv)
         returncode = self.print_returncode if argv[1] == "print" else 0
-        return subprocess.CompletedProcess(argv, returncode, "", "")
+        stdout = self.print_stdout if argv[1] == "print" else ""
+        return subprocess.CompletedProcess(argv, returncode, stdout, "")
 
 
 class WakeDaemonLaunchAgentTests(unittest.TestCase):
@@ -70,16 +72,18 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
         self.launch_agents = self.base / "Library" / "LaunchAgents"
         self.runner = _Launchctl()
 
-    def manager(self):
+    def manager(self, *, pid_alive=None):
         from floati.wake_daemon_launchd import LaunchAgentManager
 
-        return LaunchAgentManager(
-            self.coordinate,
-            installed_launcher=self.launcher,
-            launch_agents_directory=self.launch_agents,
-            uid=501,
-            runner=self.runner,
-        )
+        kwargs = {
+            "installed_launcher": self.launcher,
+            "launch_agents_directory": self.launch_agents,
+            "uid": 501,
+            "runner": self.runner,
+        }
+        if pid_alive is not None:
+            kwargs["pid_alive"] = pid_alive
+        return LaunchAgentManager(self.coordinate, **kwargs)
 
     def test_preview_is_deterministic_closed_and_contains_no_listener(self) -> None:
         preview = self.manager().preview()
@@ -220,17 +224,33 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
             self.runner.calls,
         )
 
-    def test_stop_proves_absence_or_reports_unknown(self) -> None:
+    def test_stop_proves_absence_or_names_what_it_saw(self) -> None:
+        """WD-2 (d), ruling msg-01a08d3b03cc7509853f5e07a3219b28.
+
+        The OLD pin here asserted state ``unknown`` under ``ok`` - the exact
+        defect the 2026-09-10 dispatch measured: a stop verb that cannot say
+        whether it stopped anything. The old assertion was pinning the
+        defect; this amendment pins the contract instead, and on the
+        pre-fix tree this test fails (the old verb booted out before
+        observing and could only answer unknown).
+        """
+
         manager = self.manager()
         manager.install()
         stopped = manager.stop()
         self.assertEqual("stopped", stopped["state"])
-        self.assertEqual("bootout", self.runner.calls[-2][1])
-        self.assertEqual("print", self.runner.calls[-1][1])
+        self.assertEqual("wake_daemon_process_absent", stopped["reason_code"])
+        self.assertEqual(113, stopped["observation"]["print_returncode"])
+        self.assertNotIn("bootout", [call[1] for call in self.runner.calls])
 
         self.runner.print_returncode = 0
-        unknown = manager.stop()
-        self.assertEqual("unknown", unknown["state"])
+        self.runner.print_stdout = "PID = 4242\n"
+        unproven = self.manager(pid_alive=lambda pid: True).stop()
+        self.assertEqual("stop_unproven", unproven["state"])
+        self.assertEqual("wake_daemon_stop_unproven", unproven["reason_code"])
+        self.assertEqual(4242, unproven["observation"]["observed_pid"])
+        self.assertIs(True, unproven["observation"]["pid_alive"])
+        self.assertNotEqual("unknown", unproven["state"])
 
     def test_remove_refuses_digest_drift_without_deleting_then_removes_exact_plist(self) -> None:
         manager = self.manager()
@@ -325,12 +345,23 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
             self.assertNotEqual("", str(failure.remedy).strip())
             self.assertIn(str(manager.plist_path), str(failure.remedy))
 
-    def test_revoke_deletes_the_exact_plist_and_does_not_overclaim_process_absence(self) -> None:
+    def test_revoke_deletes_the_exact_plist_and_reports_revoked_when_no_pid_is_observable(
+        self,
+    ) -> None:
+        """WD-2 (d) ruling: pidless revoke -> revoked.
+
+        The OLD pin asserted revoked state ``unknown`` when launchctl print
+        answered 0 - that overclaimed nothing but also proved nothing, the
+        same defect as the stop verb. With no pid observable there is no
+        live process to prove, the plist is removed, and the receipt says
+        revoked. Fails on the pre-fix tree, which answered unknown here.
+        """
+
         manager = self.manager()
         manager.install()
         self.runner.print_returncode = 0
         revoked = manager.revoke(idempotency_key="launchd-revoke")
-        self.assertEqual("unknown", revoked["state"])
+        self.assertEqual("revoked", revoked["state"])
         self.assertFalse(manager.plist_path.exists())
         with self.assertRaisesRegex(ProtocolRefusal, "consent_absent"):
             DaemonConsentLedger(self.root).require_active(self.coordinate)

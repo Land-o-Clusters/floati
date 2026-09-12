@@ -30,6 +30,10 @@ class CaptureTuiMomentsTests(unittest.TestCase):
             "PYTHONDONTWRITEBYTECODE": "1",
             "HOME": os.environ.get("HOME", "/var/empty"),
             "FLOATI_CAPTURE_FONT": str(FIXTURE_FONT),
+            # FENCE-H1: the home pin moves the operator's per-user packages
+            # out of the child's site resolution, so the import root they
+            # were carried on travels with the child explicitly.
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
         }
 
     def _capture(self, *moments: str) -> subprocess.CompletedProcess[str]:

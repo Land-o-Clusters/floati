@@ -2,7 +2,7 @@
 
 **Program:** `docs/design/NIGHT_HARBOR.md`, Part II study row and cline addendum.
 
-**Branch:** `lane/sol-regatta`.
+**Branch:** `build lane`.
 
 **Fence:** mechanisms studied; layout, copy, symbols, palette, and interaction
 expression remain Floati's. No source was copied into the repository.

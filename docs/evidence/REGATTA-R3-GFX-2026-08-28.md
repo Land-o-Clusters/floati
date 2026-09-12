@@ -1,6 +1,6 @@
 # REGATTA R3-GFX — honest activity twins and measured pixel overlays — 2026-08-28
 
-Status: candidate row on `lane/sol-r3-gfx`, based on landed R3-CAP main
+Status: candidate row on `build lane`, based on landed R3-CAP main
 `1695638825b386546bbf6f038640d9ca6881c7b2`.
 
 Named governing references:
@@ -13,7 +13,7 @@ Named governing references:
 ## Serialization and scope
 
 the architect gated and landed R3-CAP before issuing GFX GO. This row began from that
-landed main on the fresh branch `lane/sol-r3-gfx`; no GFX test or production
+landed main on the fresh branch `build lane`; no GFX test or production
 edit existed on the CAP candidate.
 
 Production edits are limited to `floati/tui*`, `floati/replay_render.py`, and

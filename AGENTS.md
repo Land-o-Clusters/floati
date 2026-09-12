@@ -35,6 +35,13 @@ one is the wrong instrument, and its refusal is not a gate on this work.
 with zero third-party runtime dependencies. Full verification additionally needs
 Minisign, Pillow and jsonschema; see `CONTRIBUTING.md` for setup.
 
+**On Linux, run the suite under `umask 022`, on a box where no other user holds
+`<temp>/floati-work`.** The worker-isolation check refuses a group-writable package
+tree, and Ubuntu's default umask (002) makes a fresh clone one. The work root is the
+fixed path `<temp>/floati-work` (`floati/host_paths.py`), created `0700` by whichever
+user runs first; if another user — a CI runner included — already holds it, this
+user's runs are refused with `PermissionError`. Measured on Ubuntu 24.04, 2026-09-11.
+
 ```
 git clone <this repository> /absolute/path/floati-src
 cd /absolute/path/floati-src
@@ -224,11 +231,14 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `survey` | `floati survey --declared-roots FILE [--search-path PATH] [--hooks PATH] [--targets PATH] [--json]` | read-only foreign-bus survey |
 | `seat` | `floati seat {board}` | board one declared workspace explicitly |
 | `seat board` | `floati seat board --root ROOT --as NODE --workspace PATH --session SESSION --idempotency-key KEY [--take-over]` | arm, resume, and drain one declared session |
-| `wake` | `floati wake {pause&#124;resume&#124;status&#124;arm&#124;daemon}` | control exact wake coordinates |
+| `hook` | `floati hook {install}` | install one harness stop hook |
+| `hook install` | `floati hook install --harness {cursor} --root ROOT --as NODE --workspace WORKSPACE --runtime RUNTIME` | write one Cursor project stop hook |
+| `wake` | `floati wake {pause&#124;resume&#124;status&#124;arm&#124;wait&#124;daemon}` | control exact wake coordinates |
 | `wake pause` | `floati wake pause --root ROOT --as NODE --session SESSION [--idempotency-key KEY]` | pause one exact session |
 | `wake resume` | `floati wake resume --root ROOT --as NODE --session SESSION [--idempotency-key KEY]` | resume one exact session |
 | `wake status` | `floati wake status --root ROOT --as NODE --session SESSION` | inspect one exact session |
 | `wake arm` | `floati wake arm --root ROOT --as NODE --session SESSION --workspace WORKSPACE --idempotency-key KEY [--take-over]` | arm one exact acting session |
+| `wake wait` | `floati wake wait --harness {cursor} --root ROOT --as NODE --runtime RUNTIME [--deadline-seconds N] [--hook-timeout-seconds N] [--poll-seconds N] [--loop-limit N]` | hold a Cursor stop until mail or a deadline |
 | `wake daemon` | `floati wake daemon {consent&#124;bind&#124;install&#124;start&#124;status&#124;stop&#124;remove&#124;revoke}` | manage one local wake daemon |
 | `wake daemon consent` | `floati wake daemon consent --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode} --min-poll-seconds N --max-poll-seconds N --max-backoff-seconds N --activation-epoch N` | record exact activation consent |
 | `wake daemon bind` | `floati wake daemon bind --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode} --session SESSION --workspace WORKSPACE --executable EXE --binding-epoch N [--yes] [--zcode-node-executable EXE] [--zcode-entry-executable EXE]` | bind one exact session |

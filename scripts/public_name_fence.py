@@ -52,9 +52,24 @@ FLEET_REGISTRY_NODE_ROLE_LABELS = {
     bytes.fromhex("6c616e652d617070").decode("ascii"): "build lane",
     bytes.fromhex("6c616e652d666c6f617469").decode("ascii"): "build lane",
     bytes.fromhex("6c616e652d707564646c65").decode("ascii"): "build lane",
+    bytes.fromhex(
+        "6c616e652d707564646c652d63726f7373636f6e6e656374696f6e"
+    ).decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d707564646c652d66726f6e74696572").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d707564646c652d6d656e75626172").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d707564646c652d72656c696566").decode("ascii"): "build lane",
     bytes.fromhex("6c616e652d736c6970776179").decode("ascii"): "build lane",
     bytes.fromhex("6c616e652d736f6c").decode("ascii"): "build lane",
     bytes.fromhex("6c616e652d7a636f6465").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d7a636f64652d32").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d7a636f64652d33").decode("ascii"): "build lane",
+    bytes.fromhex("6c616e652d7a636f64652d34").decode("ascii"): "build lane",
+    bytes.fromhex("666c6f6174692d6f62736572766572").decode("ascii"): "observer seat",
+    bytes.fromhex("666c6f6174692d7769746e657373").decode("ascii"): "witness seat",
+    bytes.fromhex("6671362d636f646578").decode("ascii"): "fixture seat",
+    bytes.fromhex("6671372d6f70656e636f6465").decode("ascii"): "fixture seat",
+    bytes.fromhex("6671372d73656174").decode("ascii"): "fixture seat",
+    bytes.fromhex("6671372d7365617432").decode("ascii"): "fixture seat",
 }
 REVIEWED_FLEET_IDENTITY_ROLE_LABELS = {
     bytes.fromhex("707564646c652d666c656574").decode("ascii"): "the fleet",
@@ -68,6 +83,65 @@ _EXACT_SEAT_IDS = "|".join(
     re.escape(token)
     for token in sorted(SEAT_ROLE_LABELS, key=lambda value: (-len(value), value))
 )
+# FL-4: the seat vocabulary PROJECTS. A registry id is one spelling of a
+# seat, not the only one. Two projections derive from the vocabulary
+# itself, so the fence and the redactor cannot disagree about them:
+#   - the harness-ordinal form of a numbered lane seat (an id of the
+#     shape lane-<harness>-<digits> is also written <harness>-<digits>);
+#   - the lane-segment tail (a lane- prefixed id is written after the
+#     path segment "lane/" without its prefix).
+# The position rule these projections serve: A SEAT ID IS FORBIDDEN
+# WHEREVER IT BEGINS AT A WORD OR PATH-SEGMENT BOUNDARY, in any of the
+# separator shapes the fleet actually writes — hyphen-joined after the
+# lane prefix, slash-joined after the lane segment, with a numeric or
+# row suffix hanging off it, or in the possessive. The boundary guards
+# on both ends are the rule; nothing here matches a seat's bare harness
+# word, which stays a public product name.
+_LANE_PREFIX = "lane-"
+_HARNESS_ORDINAL_FORMS = sorted(
+    {
+        seat_id[len(_LANE_PREFIX) :]
+        for seat_id in SEAT_ROLE_LABELS
+        if seat_id.startswith(_LANE_PREFIX)
+        and seat_id[len(_LANE_PREFIX) :].rpartition("-")[2].isdigit()
+        and seat_id[len(_LANE_PREFIX) :].rpartition("-")[0]
+    },
+    key=lambda value: (-len(value), value),
+)
+_LANE_SEGMENT_TAILS = sorted(
+    {
+        seat_id[len(_LANE_PREFIX) :]
+        for seat_id in SEAT_ROLE_LABELS
+        if seat_id.startswith(_LANE_PREFIX)
+    },
+    key=lambda value: (-len(value), value),
+)
+_EXACT_HARNESS_ORDINAL_IDS = "|".join(
+    re.escape(token) for token in _HARNESS_ORDINAL_FORMS
+)
+_EXACT_LANE_SEGMENT_TAILS = "|".join(
+    re.escape(token) for token in _LANE_SEGMENT_TAILS
+)
+_EXACT_LANE_SEGMENT_COMBINED = "|".join(
+    re.escape(token)
+    for token in sorted(
+        set(SEAT_ROLE_LABELS)
+        | set(_HARNESS_ORDINAL_FORMS)
+        | set(_LANE_SEGMENT_TAILS),
+        key=lambda value: (-len(value), value),
+    )
+)
+# The lane-segment branch consumes the whole joined token (every
+# trailing -<alnum> continuation), not just the seat head: its leftmost
+# head match would otherwise splice a role label against a residue that
+# still spells seat vocabulary — a lane-segment token whose tail is a
+# compound seat must redact whole, or the post-write fence refuses the
+# projection the redactor just cleaned. The exact-id branches stay
+# head-replacing: the reviewed Am.2 semantics keep English suffixes (a
+# seat id joined to an English word redacts as head plus surviving
+# suffix), and their residues cannot spell seat vocabulary because the
+# head consumed the seat bytes.
+_SEAT_CONTINUATION = r"(?:-[A-Za-z0-9]+)*"
 SEAT_NAME_PATTERN = re.compile(
     # NAME-FENCE-2 Am.2: hyphen and underscore are JOINERS, not word
     # characters — a seat id is caught as any joined component of a longer
@@ -77,10 +151,27 @@ SEAT_NAME_PATTERN = re.compile(
     # alternation; only its explicit seat id is, and the joiners let that
     # id match inside compounds. This comment names no seat: the fence
     # must not carry the bytes it forbids.
+    #
+    # FL-4 adds the two derived projections as their own alternation
+    # branches under the same boundary guards. The verification seat
+    # keeps its own prefixed branch instead of joining the exact
+    # alternation: its bare token is protected product prose, so only
+    # the lane-prefixed coordinate spellings may match it — bare or
+    # numbered; a word-suffixed continuation (a harness lane branch or
+    # product compound spelled off the bare word) stays public under the
+    # reviewed product-prose ruling.
     rf"(?<![A-Za-z0-9])(?:"
     rf"{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|"
     rf"{_EXACT_SEAT_IDS}"
-    rf")(?:-\d+)?(?![A-Za-z0-9])",
+    rf")(?:-\d+)?(?![A-Za-z0-9])"
+    rf"|(?<![A-Za-z0-9])(?:{_EXACT_HARNESS_ORDINAL_IDS})(?:-\d+)?(?![A-Za-z0-9])"
+    rf"|(?<![A-Za-z0-9])lane/(?:{_EXACT_LANE_SEGMENT_COMBINED})"
+    rf"{_SEAT_CONTINUATION}(?![A-Za-z0-9])"
+    rf"|(?<![A-Za-z0-9])"
+    rf"{_LANE_PREFIX}{re.escape(_VERIFICATION_SEAT)}"
+    rf"(?:-\d+)?(?![A-Za-z0-9])(?!-[A-Za-z])"
+    rf"|(?<![A-Za-z0-9])lane/{re.escape(_VERIFICATION_SEAT)}"
+    rf"(?:-\d+)?(?![A-Za-z0-9])(?!-[A-Za-z])",
     re.IGNORECASE,
 )
 # NAME-FENCE-2-F1: the pattern and its redaction labels are ONE object.
@@ -96,18 +187,52 @@ _SEAT_NUMBER_SUFFIX = re.compile(r"-\d+$")
 def seat_role_label(match: "re.Match[str]") -> str:
     """The reviewed role label for one SEAT_NAME_PATTERN match.
 
-    The numbered form matches with its suffix in the span; the lookup
-    strips it so the numbered seat redacts to the role label plus the
-    number.
+    A matched span is a seat head in some projection — numbered, a
+    harness ordinal, a lane-segment token, possibly with joined row
+    suffixes — so the lookup reduces the span one step at a time
+    (dropping a trailing joined group, then dropping the lane segment
+    prefix, normalizing the slash separator, rejoining the lane prefix)
+    until the residue lands on the reviewed vocabulary. A span that
+    resolves to nothing is a fence bug, not a redactable token.
     """
 
-    token = _SEAT_NUMBER_SUFFIX.sub("", match.group(0)).casefold()
-    return REDACTION_LABELS[token]
+    token = match.group(0).casefold()
+    seen: set[str] = set()
+    while token not in seen:
+        seen.add(token)
+        unslashed = token.replace("/", "-")
+        if unslashed == _LANE_PREFIX + _VERIFICATION_SEAT:
+            return "build lane"
+        for candidate in (
+            token,
+            unslashed,
+            token[len(_LANE_PREFIX) :] if token.startswith("lane/") else token,
+            unslashed[len(_LANE_PREFIX) :]
+            if unslashed.startswith(_LANE_PREFIX)
+            else unslashed,
+            _LANE_PREFIX + token,
+            _LANE_PREFIX + unslashed,
+        ):
+            if candidate in REDACTION_LABELS:
+                return REDACTION_LABELS[candidate]
+        reduced = _CONTINUATION_GROUP.sub("", token, count=1)
+        if reduced == token:
+            reduced = token[len("lane/") :] if token.startswith("lane/") else token
+        if reduced == token:
+            break
+        token = reduced
+    raise KeyError(match.group(0))
 
+
+_CONTINUATION_GROUP = re.compile(r"-[a-z0-9]+$", re.IGNORECASE)
 
 _SEAT_PATH_PATTERN = re.compile(
     rf"(?<![A-Za-z0-9_])(?:{re.escape(_VERIFICATION_SEAT_EXPLICIT)}|{_EXACT_SEAT_IDS})"
-    rf"(?![A-Za-z0-9_])",
+    rf"{_SEAT_CONTINUATION}(?![A-Za-z0-9_])"
+    rf"|(?<![A-Za-z0-9_])(?:{_EXACT_HARNESS_ORDINAL_IDS})"
+    rf"{_SEAT_CONTINUATION}(?![A-Za-z0-9_])"
+    rf"|(?<![A-Za-z0-9_])lane/(?:{_EXACT_LANE_SEGMENT_COMBINED})"
+    rf"{_SEAT_CONTINUATION}(?![A-Za-z0-9_])",
     re.IGNORECASE,
 )
 SEAT_NAME_SITE_ALLOWLIST = (

@@ -1,0 +1,10 @@
+ROOT=<scratch>/mk-d3
+$ floati log --root $ROOT --replay --plain
+
+PLAIN REPLAY // v0
+◆ +0000.000s  CLAIM    WORK    builder-claude work-01a090db8dbb7592ab96a1065d3e34ff claim
+│ +0001.000s  CLAIM    WORKER  builder-claude work-01a090db8dbb7592ab96a1065d3e34ff claim
+│ +0005.000s  TURN     WORKER  builder-claude work-01a090db8dbb7592ab96a1065d3e34ff spawn
+│ +0020.000s  TURN     WORKER  builder-claude work-01a090db8dbb7592ab96a1065d3e34ff drive
+│ +0032.000s  DEGRADED WORKER  builder-claude work-01a090db8dbb7592ab96a1065d3e34ff process_cancelled
+REPLAY COMPLETE // 5 EVENTS // 32000 MS

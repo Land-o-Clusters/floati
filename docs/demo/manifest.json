@@ -33,14 +33,34 @@
   "generator": "scripts/capture-shot1-locf1.py",
   "nested_manifests": [
     {
+      "bytes": 1339,
+      "path": "mk-d1/manifest.json",
+      "sha256": "70121f71c18c768be69538d33f4060f992a94f2be1cafb874ec627562157551c"
+    },
+    {
+      "bytes": 1203,
+      "path": "mk-d2/manifest.json",
+      "sha256": "360fe3f8a792f50c8c5a10710cac824c919a641d62530205e8a76f66faf73a43"
+    },
+    {
+      "bytes": 1268,
+      "path": "mk-d3/manifest.json",
+      "sha256": "854393f233301b633a9238a5f3931d84bac6de0b1ca41415d50a046e51834ff2"
+    },
+    {
       "bytes": 10127,
       "path": "site-v3/manifest.json",
       "sha256": "14c3d973ef3e7c13e50adebce3b3a4d739d9a1471eb4aba1cfe45a9f4b4060c6"
     },
     {
-      "bytes": 11677,
+      "bytes": 2067,
       "path": "site-v3-readme/manifest.json",
-      "sha256": "3f4fbeac15b472b5f5f54bba663051180022d55a6b444c7f35a701c10043051c"
+      "sha256": "88bd4b3f1302f352a0398d08ca3cd85612334ceaeebf65ce9a6a0e79458ca223"
+    },
+    {
+      "bytes": 5684,
+      "path": "tui/manifest.json",
+      "sha256": "091e0d269f92ddb0aa62243f66c136299802286f79aac959d8a4a117e876da84"
     }
   ],
   "root": "docs/demo",

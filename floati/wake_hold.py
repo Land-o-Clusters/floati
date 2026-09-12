@@ -255,6 +255,19 @@ def _unavailable(detail: str) -> IntegrityFailure:
     return IntegrityFailure("consumption_state_unavailable", detail)
 
 
+def _claim_holder_released(root: FloatiRoot, node: str) -> bool:
+    """True only when the seat's recorded claim holder is proven gone.
+
+    The witness is the waiter's own holder testimony (pid and measured
+    process start); absent or malformed testimony proves nothing and keeps
+    the conservative held classification.
+    """
+
+    from .codex_wait_liveness import classify_holder, read_holder_testimony
+
+    return classify_holder(read_holder_testimony(root, node)) == "released"
+
+
 #: The event ledger has ONE permitted vocabulary and it belongs to the writer.
 #: This is deliberately the writer's own set, imported, rather than a second
 #: hand-written copy: on 2026-08-29 the copy here omitted ``delivery_claim`` —
@@ -782,6 +795,16 @@ class WakeHoldController:
                     delivery_digest=delivery_prefixes[-1], acknowledgment_digest=acknowledgment_prefixes[-1],
                 )
             chosen = fresh[:limit]
+            if not chosen and held and _claim_holder_released(self.root, node):
+                # WD-3: the participation claim holding this work recorded a
+                # holder that is proven gone (pid and process start). A claim
+                # with no observed path back to released deferred the wake
+                # for minutes past its holder's death (fq-6-2026-09-08); the
+                # first evaluation after proven death re-presents the work.
+                # Every unprovable road stays on the held side.
+                fresh = fresh + held
+                held = []
+                chosen = fresh[:limit]
             if not chosen:
                 return self._artifact(
                     tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id, limit=limit, fresh=[], held=held,

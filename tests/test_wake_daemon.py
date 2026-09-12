@@ -19,6 +19,7 @@ from floati.wake_daemon_adapters import (
     WakeAdapterResult,
     adapter_contract_digest,
 )
+from floati.wake_daemon_roll import lifecycle_relative
 from floati.wake_daemon_contract import (
     AdapterBindingStore,
     DaemonConsentLedger,
@@ -171,7 +172,7 @@ class WakeDaemonRedTests(_WakeDaemonFixture):
         self.assertEqual([102.0], runtime["wake_timestamps"])
         rows = read_records(self.root, public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))), allowed_kinds={"wake_attempt_receipt"})
         self.assertEqual(["queued"], [row["outcome"] for row in rows])
-        lifecycle = read_records(self.root, DaemonConsentLedger._relative(self.coordinate.node_id), allowed_kinds={"wake_daemon_lifecycle_receipt", "wake_daemon_consent_receipt"})
+        lifecycle = read_records(self.root, lifecycle_relative(self.coordinate.node_id), allowed_kinds={"wake_daemon_lifecycle_receipt"})
         self.assertEqual("unknown", lifecycle[-1]["state"])
 
     def test_no_consent_means_no_runtime_or_owner_files(self) -> None:

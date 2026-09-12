@@ -45,6 +45,29 @@ def _default_runner(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _default_pid_alive(pid: int) -> bool:
+    """True while the process exists; ESRCH is the only proven absence."""
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists; this user merely cannot signal it.
+        return True
+    return True
+
+
+def _main_pid_value(stdout: str) -> Optional[int]:
+    """`systemctl show -p MainPID --value` prints one bare pid, 0 when none."""
+
+    try:
+        value = int(stdout.strip())
+    except ValueError:
+        return None
+    return None if value == 0 else value
+
+
 def _default_systemctl_locator() -> Optional[str]:
     for candidate in SYSTEMCTL_CANDIDATES:
         path = Path(candidate)
@@ -74,6 +97,7 @@ class SystemdUserUnitManager:
         user_units_directory: Optional[Path] = None,
         runner: Optional[SystemctlRunner] = None,
         systemctl_locator: Optional[SystemctlLocator] = None,
+        pid_alive: Optional[Callable[[int], bool]] = None,
     ) -> None:
         if not isinstance(coordinate, DaemonCoordinate):
             raise ProtocolRefusal(
@@ -104,6 +128,7 @@ class SystemdUserUnitManager:
         self.plist_path = self.unit_path
         self._injected_runner = runner is not None
         self._runner = _default_runner if runner is None else runner
+        self._pid_alive = _default_pid_alive if pid_alive is None else pid_alive
         self._systemctl_locator = (
             _default_systemctl_locator
             if systemctl_locator is None
@@ -273,23 +298,80 @@ class SystemdUserUnitManager:
         )
 
     def stop(self) -> Dict[str, object]:
+        # WD-2 (d): the launchd twin's contract - the stop verb proves its
+        # work or names exactly what it saw (`stop_unproven`), never
+        # `unknown` under a clean exit; a stop of a daemon that is not
+        # running says so by name.
         preview = self.preview()
         self._validate_installed(preview)
         executable = self._resolve_systemctl_executable()
-        self._systemctl((executable, "--user", "stop", self.unit_name))
         observed = self._systemctl(
             (executable, "--user", "is-active", self.unit_name)
         )
-        proven = observed.returncode == 3
-        state = "stopped" if proven else "unknown"
-        reason = None if proven else "wake_daemon_process_unknown"
-        receipt = self._record(
-            preview,
-            event="stopped" if proven else "owner_unknown",
-            state=state,
-            reason_code=reason,
+        if observed.returncode != 0:
+            receipt = self._record(
+                preview,
+                event="stopped",
+                state="stopped",
+                reason_code="wake_daemon_process_absent",
+            )
+            return self._artifact(
+                preview,
+                "stopped",
+                "wake_daemon_process_absent",
+                receipt,
+                observation={"is_active_returncode": observed.returncode},
+            )
+        shown = self._systemctl(
+            (
+                executable,
+                "--user",
+                "show",
+                "-p",
+                "MainPID",
+                "--value",
+                self.unit_name,
+            )
         )
-        return self._artifact(preview, state, reason, receipt)
+        observed_pid = _main_pid_value(str(shown.stdout))
+        self._systemctl((executable, "--user", "stop", self.unit_name))
+        after = self._systemctl(
+            (executable, "--user", "is-active", self.unit_name)
+        )
+        after_pid: Optional[int] = None
+        if after.returncode == 0:
+            shown_after = self._systemctl(
+                (
+                    executable,
+                    "--user",
+                    "show",
+                    "-p",
+                    "MainPID",
+                    "--value",
+                    self.unit_name,
+                )
+            )
+            after_pid = _main_pid_value(str(shown_after.stdout))
+        post_alive = after_pid is not None and bool(self._pid_alive(int(after_pid)))
+        observation = {
+            "observed_pid": observed_pid,
+            "is_active_returncode": after.returncode,
+            "post_observed_pid": after_pid,
+            "pid_alive": None if after_pid is None else bool(post_alive),
+        }
+        if post_alive:
+            state = "stop_unproven"
+            reason: Optional[str] = "wake_daemon_stop_unproven"
+            receipt = self._record(
+                preview, event="owner_unknown", state="unknown", reason_code=reason
+            )
+        else:
+            state = "stopped"
+            reason = None if observed_pid is not None else "wake_daemon_process_absent"
+            receipt = self._record(
+                preview, event="stopped", state="stopped", reason_code=reason
+            )
+        return self._artifact(preview, state, reason, receipt, observation=observation)
 
     def remove(self, *, expected_plist_digest: Optional[str] = None) -> Dict[str, object]:
         preview = self.preview()
@@ -458,6 +540,8 @@ class SystemdUserUnitManager:
             or argv == (executable, "--user", "start", unit)
             or argv == (executable, "--user", "stop", unit)
             or argv == (executable, "--user", "is-active", unit)
+            or argv
+            == (executable, "--user", "show", "-p", "MainPID", "--value", unit)
         )
         if not valid:
             raise ProtocolRefusal(
@@ -563,8 +647,9 @@ class SystemdUserUnitManager:
         state: str,
         reason_code: Optional[str],
         receipt: Optional[Mapping[str, object]],
+        observation: Optional[Mapping[str, object]] = None,
     ) -> Dict[str, object]:
-        return {
+        artifact = {
             "schema_version": 0,
             "state": state,
             "reason_code": reason_code,
@@ -573,6 +658,9 @@ class SystemdUserUnitManager:
             "plist_digest": preview["plist_digest"],
             "receipt": None if receipt is None else dict(receipt),
         }
+        if observation is not None:
+            artifact["observation"] = dict(observation)
+        return artifact
 
     @staticmethod
     def _launcher(value: Path) -> Path:
