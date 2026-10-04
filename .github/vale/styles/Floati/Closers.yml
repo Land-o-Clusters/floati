@@ -1,0 +1,10 @@
+extends: existence
+message: "'%s' is a one-line closer that names what the reader just saw."
+level: error
+ignorecase: true
+tokens:
+  - this shows
+  - the message (?:is|was) clear
+  - that is the real
+  - "that's the real"
+  - and that is the

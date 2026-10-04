@@ -1,0 +1,9 @@
+extends: existence
+message: "'%s' stacks hedges."
+level: warning
+ignorecase: true
+tokens:
+  - could potentially
+  - might arguably
+  - it's also possible
+  - in some cases it may

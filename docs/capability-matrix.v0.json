@@ -3,9 +3,9 @@
   "spec_path": "docs/design/capability-matrix-spec-2026-08-28.md",
   "seeded_by": "verification lane",
   "seeded_at": "2026-08-28",
-  "universal": "Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals \u2014 those do not vary by surface.",
-  "orchestrator_note": "Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.",
-  "surface_scope_note": "Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.",
+  "universal": "Every harness on this bus gets the same append-only ledger, replay, doctor, receipts and typed refusals, whatever its surface.",
+  "orchestrator_note": "Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface: when agents run there, its sessions and panes are the record. The harnesses underneath keep their own rows and receipts, because supporting a harness and supporting the orchestrator that hosts it are separate promises.",
+  "surface_scope_note": "Surface rows list the installs MEASURED on the reference machine (C0-DELTA photograph). They are not a product catalog. Two rows are missing on purpose. Claude.app is a desktop chat app and cannot host a Claude Code seat, so it is classified out; the same cut separates ChatGPT Classic from Codex. No Codex IDE extension was installed when the photograph was taken, and that row arrives when the MX-1 campaign photographs one.",
   "declared_current_versions": {
     "claude/cli": {
       "version": "2.1.251 (Claude Code)",
@@ -1852,9 +1852,9 @@
     "devin/cli": "CLI-compat tier",
     "antigravity/cli": "CLI-compat tier",
     "codex/desktop": "ChatGPT.app",
-    "claude/desktop-chat": "chat app, not a seat - Claude seats run in the CLI or IDE extension",
+    "claude/desktop-chat": "chat app; Claude seats run in the CLI or IDE extension",
     "claude/ide-extension": "extension \u2260 CLI; own row by design",
-    "cursor/desktop": "`floati hook install --harness cursor` writes a project-scoped `stop` hook; the daemon wakes a headless twin, not the window (measured, `docs/evidence/cur-2-2026-09-11.md`); re-rooting the chat leaves the hook behind \u2014 work other directories by absolute path",
+    "cursor/desktop": "`floati hook install --harness cursor` writes a project-scoped `stop` hook. The daemon wakes a headless twin, and the window stays asleep (measured, `docs/evidence/cur-2-2026-09-11.md`). Re-rooting the chat leaves the hook behind, so work in other directories by absolute path",
     "antigravity/desktop": "not inherited from its CLI",
     "zcode/cli": "wake measured on arrival; the Stop-hook path is superseded by the daemon"
   }

@@ -1,0 +1,9 @@
+extends: existence
+message: "Dash as a connector ('%s'). Use a period, comma, colon or parentheses."
+level: error
+nonword: true
+tokens:
+  - '—'
+  - '–'
+  - '\s--\s'
+  - '\w\s-\s\w'

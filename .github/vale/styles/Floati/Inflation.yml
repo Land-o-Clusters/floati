@@ -1,0 +1,21 @@
+extends: existence
+message: "'%s' inflates an ordinary fact. Keep the fact, drop the weight."
+level: error
+ignorecase: true
+tokens:
+  - stands as
+  - serves as
+  - plays a (?:key|crucial|pivotal|vital) role
+  - marking a
+  - a (?:pivotal|crucial) moment
+  - game[- ]chang(?:er|ing)
+  - first-class
+  - best-in-class
+  - world-class
+  - cutting-edge
+  - state-of-the-art
+  - powerful
+  - effortless(?:ly)?
+  - supercharge
+  - unleash
+  - out of the box
