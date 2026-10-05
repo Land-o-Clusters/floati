@@ -309,13 +309,13 @@ typed code, a detail and a `remedy`.
 
 No telemetry, ever. Floati's own sockets are local pipes between its
 own processes, and a test refuses any `bind` or `listen` outside one.
-Floati has exactly four outbound paths: two client-only loopback dials
-for the herdr and t3 adapters, one HTTPS fetch for updates, and
-`intake adopt --source github`, which runs the `gh` executable you
-name to read one issue. The first three run only behind an explicit
-consent receipt. The fourth runs only when you type it, and it has no
-consent receipt of its own yet. The child harnesses you install keep
-their own provider traffic and credentials.
+The outbound paths are counted, and there are exactly four: two
+client-only loopback dials for the herdr and t3 adapters, one HTTPS
+fetch for updates, and `intake adopt --source github`, which runs the
+`gh` executable you name to read one issue. The first three run only
+behind an explicit consent receipt. The fourth runs only when you type
+it, and it has no consent receipt of its own yet. The child harnesses
+you install keep their own provider traffic and credentials.
 
 ### What it costs
 
