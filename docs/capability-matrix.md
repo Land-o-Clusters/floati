@@ -1,10 +1,10 @@
 # The capability matrix — full grid
 <!-- GENERATED from docs/capability-matrix.v0.json by scripts/capability-matrix-render.py --mode full; edit the dataset, rerun the script. -->
-Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.
+Every harness on this bus gets the same append-only ledger, replay, doctor, receipts and typed refusals, whatever its surface.
 
-Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.
+Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface: when agents run there, its sessions and panes are the record. The harnesses underneath keep their own rows and receipts, because supporting a harness and supporting the orchestrator that hosts it are separate promises.
 
-Surface rows are the reference machine's MEASURED installs (C0-DELTA photograph), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.
+Surface rows list the installs MEASURED on the reference machine (C0-DELTA photograph). They are not a product catalog. Two rows are missing on purpose. Claude.app is a desktop chat app and cannot host a Claude Code seat, so it is classified out; the same cut separates ChatGPT Classic from Codex. No Codex IDE extension was installed when the photograph was taken, and that row arrives when the MX-1 campaign photographs one.
 
 Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-03](evidence/conformance/C2-claude-cli-version-2026-09-03.md); cells marked `version_stale: true` were measured at 2.1.231 (Claude Code) at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps.
 

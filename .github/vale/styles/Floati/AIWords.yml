@@ -1,0 +1,36 @@
+extends: existence
+message: "'%s' is a stock AI word. Say the plain thing."
+level: error
+ignorecase: true
+tokens:
+  - delve
+  - delves
+  - crucial
+  - pivotal
+  - seamless
+  - seamlessly
+  - leverage
+  - leverages
+  - showcase
+  - showcases
+  - showcasing
+  - testament
+  - tapestry
+  - underscores
+  - underscoring
+  - vibrant
+  - meticulous
+  - meticulously
+  - intricate
+  - intricacies
+  - garner
+  - bolstered
+  - interplay
+  - enduring
+  - additionally
+  - quietly
+  - landscape
+  - empower
+  - empowers
+  - unlock
+  - unlocks

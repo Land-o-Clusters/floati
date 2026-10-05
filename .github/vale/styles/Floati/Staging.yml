@@ -1,0 +1,20 @@
+extends: existence
+message: "'%s' announces a point instead of making it."
+level: error
+ignorecase: true
+tokens:
+  - "let's dive"
+  - "let's explore"
+  - "here's the thing"
+  - "here's what you need to know"
+  - at its core
+  - the real question
+  - what really matters
+  - to be clear
+  - "don't get me wrong"
+  - make no mistake
+  - "that's the point"
+  - that is the point
+  - that distinction matters
+  - let that sink in
+  - read that again

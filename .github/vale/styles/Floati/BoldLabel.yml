@@ -1,0 +1,7 @@
+extends: existence
+message: "Bold run-in label '%s'. Let the sentence carry it, or make it a heading."
+level: error
+scope: raw
+nonword: true
+tokens:
+  - '(?m)^\*\*[^*\n]{2,80}[.:]\*\*'

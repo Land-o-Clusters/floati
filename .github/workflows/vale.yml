@@ -1,0 +1,44 @@
+# THIS FILE IS AUTHORED ON THE HARBOR AND EXPORTED VERBATIM TO THE PUBLIC
+# REPOSITORY. A pull request against it on the public repository will be
+# OVERWRITTEN by the next export - change it on the harbor instead.
+#
+# It must NEVER name a self-hosted or macOS runner: the public repository
+# accepts fork pull requests, so a runner named here is a runner a stranger
+# can aim code at.
+#
+# Prose lint for the README. The Floati style under .github/vale/styles holds
+# the "signs of AI writing" rules at error level; proselint and write-good are
+# fetched by `vale sync` and report at warning level. Vale exits non-zero on
+# errors only.
+name: vale
+
+on:
+  push:
+    branches: [main]
+    paths: ["README.md", ".github/vale/**", ".github/workflows/vale.yml"]
+  pull_request:
+    paths: ["README.md", ".github/vale/**", ".github/workflows/vale.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  readme-prose:
+    if: github.repository == 'Land-o-Clusters/floati'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vale 3.24.0 (checksum verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          v=3.24.0
+          base="https://github.com/errata-ai/vale/releases/download/v${v}"
+          curl -fsSLO "${base}/vale_${v}_Linux_64-bit.tar.gz"
+          curl -fsSLO "${base}/vale_${v}_checksums.txt"
+          grep " vale_${v}_Linux_64-bit.tar.gz\$" "vale_${v}_checksums.txt" | sha256sum -c -
+          tar -xzf "vale_${v}_Linux_64-bit.tar.gz" vale
+      - name: Fetch the proselint and write-good packages
+        run: ./vale --config .github/vale/.vale.ini sync
+      - name: Lint README.md
+        run: ./vale --config .github/vale/.vale.ini README.md

@@ -1,0 +1,13 @@
+extends: existence
+message: "'%s' stages a contrast. State the point directly."
+level: error
+ignorecase: true
+tokens:
+  - 'not (?:just|only|merely)\b'
+  - "(?:is|are)n't [^.;:]{1,60}[;,] (?:it|they)(?:'s| is| are)"
+  - 'is not [^.;:]{1,60}[;,] it is'
+  - 'not [^.;:,]{1,40}, but'
+  - 'rather than'
+  - ', not (?:a|an|the|yet)\b'
+  - '\bnever (?:a|an|the)\b'
+  - 'is a claim about [^.;]{1,40}, not'
