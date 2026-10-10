@@ -55,7 +55,7 @@
     },
     {
       "path": "floati/__init__.py",
-      "sha256": "f54b46e1b2391eeed2cba2105bcddd6b9c7886b0e2cf1a8c0d71c4f4eba439b8"
+      "sha256": "13102516c1f3eb1248d2a47e6f04c589dabded3fb39207e1658ef6eec5126634"
     },
     {
       "path": "floati/__main__.py",
@@ -215,7 +215,7 @@
     },
     {
       "path": "floati/codex_wait.py",
-      "sha256": "c744efbab8d4724d434490bc2a7971bc56bd89e700f9f97c8568703536f91370"
+      "sha256": "e8c6760e0868b9b2950584f5d93ba52ceb43144ece02b50e003c3f0261fe56fb"
     },
     {
       "path": "floati/codex_wait_contract.py",
@@ -723,7 +723,7 @@
     },
     {
       "path": "floati/tui.py",
-      "sha256": "4da346c1be90bba1e13f704d598b3b3c71ca27b08e010fac119e7a30d8330730"
+      "sha256": "3ac631e951973d9ed10789aedafe430226abc519253960c8c08b55c69b05d1e9"
     },
     {
       "path": "floati/tui_activity.py",

@@ -8,9 +8,12 @@ import os
 import select
 import signal
 import shutil
+import stat
+import struct
 import sys
 import termios
 import tty
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -136,9 +139,69 @@ def _board_watch_paths(root: Path) -> tuple[Path, ...]:
     return tuple(paths)
 
 
+def _selected_board_watch_paths(root, paths, *, directories_only=False):
+    """Observe only the caller's bounded lexical dependency/parent closure."""
+    if not isinstance(paths, tuple) or not 1 <= len(paths) <= 4096:
+        raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+    selected = set()
+    for value in paths:
+        path = Path(value)
+        if not path.is_absolute() or ".." in path.parts or not path.is_relative_to(root):
+            raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+        # Never resolve a dependency through a symlink, including an ancestor.
+        closure = [path]
+        while closure[-1] != root:
+            closure.append(closure[-1].parent)
+        for coordinate in reversed(closure):
+            try:
+                metadata = coordinate.lstat()
+            except FileNotFoundError:
+                break
+            if not (stat.S_ISDIR(metadata.st_mode) or stat.S_ISREG(metadata.st_mode)):
+                raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+            if coordinate != path and not stat.S_ISDIR(metadata.st_mode):
+                raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+        else:
+            if not directories_only or stat.S_ISDIR(metadata.st_mode):
+                selected.add(path)
+    if root not in selected:
+        raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+    return selected
+
+
+@contextmanager
+def _selected_directory_handle(root, path):
+    """Retain no-follow ancestors while binding one selected directory inode."""
+    handles = []
+    try:
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        coordinate = Path(root.anchor)
+        descriptor = os.open(coordinate, flags)
+        handles.append((coordinate, descriptor))
+        for part in path.parts[1:]:
+            descriptor = os.open(part, flags, dir_fd=descriptor)
+            coordinate = coordinate / part
+            handles.append((coordinate, descriptor))
+
+        def verify():
+            for name, retained in handles:
+                observed, opened = name.lstat(), os.fstat(retained)
+                if (not stat.S_ISDIR(observed.st_mode)
+                        or (observed.st_dev, observed.st_ino) != (opened.st_dev, opened.st_ino)):
+                    raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+
+        verify()
+        yield descriptor
+        verify()
+    finally:
+        for _name, descriptor in reversed(handles):
+            os.close(descriptor)
+
+
 class _KqueueBoardFilesystemWakeup:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, _paths=None) -> None:
         self._root = root
+        self._selected_paths = _paths
         self._queue = select.kqueue()
         self._descriptors: dict[Path, int] = {}
         self._closed = False
@@ -151,16 +214,28 @@ class _KqueueBoardFilesystemWakeup:
     def fileno(self) -> int:
         return self._queue.fileno()
 
-    def _refresh(self) -> None:
-        current = set(_board_watch_paths(self._root))
+    def registered_paths(self):
+        return tuple(sorted(self._descriptors))
+
+    def _refresh(self) -> bool:
+        changed = False
+        current = (set(_board_watch_paths(self._root)) if self._selected_paths is None else
+                   _selected_board_watch_paths(self._root, self._selected_paths))
         if self._root not in current:
             raise ProtocolRefusal(
                 "board_event_watch_unavailable",
                 BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
             )
         for path in tuple(self._descriptors):
+            if self._selected_paths is not None and path in current:
+                observed, retained = path.lstat(), os.fstat(self._descriptors[path])
+                if (observed.st_dev, observed.st_ino) != (retained.st_dev, retained.st_ino):
+                    os.close(self._descriptors.pop(path))
+                    changed = True
+                    continue
             if path not in current:
                 os.close(self._descriptors.pop(path))
+                changed = True
         flags = (
             select.KQ_NOTE_WRITE
             | select.KQ_NOTE_EXTEND
@@ -171,38 +246,62 @@ class _KqueueBoardFilesystemWakeup:
             | select.KQ_NOTE_REVOKE
         )
         for path in sorted(current - self._descriptors.keys()):
+            descriptor = None
             try:
-                descriptor = os.open(
-                    path,
-                    getattr(os, "O_EVTONLY", os.O_RDONLY) | os.O_NONBLOCK,
-                )
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise ProtocolRefusal(
-                    "board_event_watch_unavailable",
-                    BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
-                ) from exc
-            event = select.kevent(
-                descriptor,
-                filter=select.KQ_FILTER_VNODE,
-                flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-                fflags=flags,
-            )
-            try:
-                self._queue.control([event], 0, 0)
-            except OSError as exc:
-                os.close(descriptor)
+                selected = self._selected_paths is not None
+                parent = path.parent if path != self._root else self._root
+                scope = _selected_directory_handle(self._root, parent) if selected else nullcontext(None)
+                with scope as directory:
+                    try:
+                        flags_open = getattr(os, "O_EVTONLY", os.O_RDONLY) | os.O_NONBLOCK
+                        if not selected:
+                            descriptor = os.open(path, flags_open)
+                        elif path == self._root:
+                            descriptor = os.dup(directory)
+                        else:
+                            descriptor = os.open(path.name, flags_open | os.O_NOFOLLOW | os.O_CLOEXEC,
+                                                 dir_fd=directory)
+                    except FileNotFoundError:
+                        if not selected:
+                            continue
+                        raise
+                    if selected:
+                        observed, retained = path.lstat(), os.fstat(descriptor)
+                        if (observed.st_dev, observed.st_ino) != (retained.st_dev, retained.st_ino):
+                            raise OSError("selected watch identity changed")
+                    event = select.kevent(
+                        descriptor,
+                        filter=select.KQ_FILTER_VNODE,
+                        flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+                        fflags=flags,
+                    )
+                    self._queue.control([event], 0, 0)
+                    if selected:
+                        observed = path.lstat()
+                        if (observed.st_dev, observed.st_ino) != (retained.st_dev, retained.st_ino):
+                            raise OSError("selected watch identity changed during registration")
+            except BaseException as exc:
+                if descriptor is not None:
+                    os.close(descriptor)
+                if not isinstance(exc, OSError):
+                    raise
                 raise ProtocolRefusal(
                     "board_event_watch_unavailable",
                     BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
                 ) from exc
             self._descriptors[path] = descriptor
+            changed = True
+        return changed
 
-    def drain(self) -> None:
+    def drain(self) -> Optional[bool]:
         events = self._queue.control(
             [], max(1, len(self._descriptors)), 0
         )
+        if self._selected_paths is not None and any(
+            event.flags & select.KQ_EV_ERROR or event.ident not in self._descriptors.values()
+            or event.filter != select.KQ_FILTER_VNODE for event in events
+        ):
+            raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
         invalid = {
             event.ident
             for event in events
@@ -213,7 +312,9 @@ class _KqueueBoardFilesystemWakeup:
             if descriptor in invalid:
                 os.close(descriptor)
                 del self._descriptors[path]
-        self._refresh()
+        rebound = self._refresh()
+        if self._selected_paths is not None:
+            return bool(events) or rebound
 
     def close(self) -> None:
         if self._closed:
@@ -226,6 +327,8 @@ class _KqueueBoardFilesystemWakeup:
 
 
 class _InotifyBoardFilesystemWakeup:
+    _SELECTED_READ_LIMIT = 16
+    _EVENT = struct.Struct("iIII")
     _MASK = (
         0x00000002
         | 0x00000004
@@ -238,29 +341,39 @@ class _InotifyBoardFilesystemWakeup:
         | 0x00000800
     )
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, _paths=None) -> None:
         self._root = root
+        self._selected_paths = _paths
         self._libc = ctypes.CDLL(None, use_errno=True)
         self._libc.inotify_init1.argtypes = [ctypes.c_int]
         self._libc.inotify_init1.restype = ctypes.c_int
         self._libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
         self._libc.inotify_add_watch.restype = ctypes.c_int
+        if _paths is not None:
+            self._libc.inotify_rm_watch.argtypes = [ctypes.c_int, ctypes.c_int]
+            self._libc.inotify_rm_watch.restype = ctypes.c_int
         self._descriptor = self._libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
         if self._descriptor < 0:
             raise OSError(ctypes.get_errno(), "inotify_init1 failed")
         self._watches: dict[Path, int] = {}
+        self._watch_identities = {}
         self._closed = False
         try:
             self._refresh()
         except BaseException:
-            os.close(self._descriptor)
+            self.close()
             raise
 
     def fileno(self) -> int:
         return self._descriptor
 
-    def _refresh(self) -> None:
-        current = set(_board_watch_directories(self._root))
+    def registered_paths(self):
+        return tuple(sorted(self._watches))
+
+    def _refresh(self) -> bool:
+        before = dict(self._watches), dict(self._watch_identities)
+        current = (set(_board_watch_directories(self._root)) if self._selected_paths is None else
+                   _selected_board_watch_paths(self._root, self._selected_paths, directories_only=True))
         if self._root not in current:
             raise ProtocolRefusal(
                 "board_event_watch_unavailable",
@@ -268,27 +381,71 @@ class _InotifyBoardFilesystemWakeup:
             )
         watched = set(self._watches)
         for path in watched - current:
-            del self._watches[path]
+            watch = self._watches.pop(path)
+            self._watch_identities.pop(path, None)
+            if self._selected_paths is not None:
+                self._libc.inotify_rm_watch(self._descriptor, watch)
         # Reapply every watch: inotify binds to an inode, so a directory that
         # is deleted and recreated at the same path invalidates the old watch
         # even though the path remains present in our mapping.
         for path in sorted(current):
-            watch = self._libc.inotify_add_watch(
-                self._descriptor,
-                os.fsencode(path),
-                self._MASK,
-            )
+            if self._selected_paths is None:
+                watch = self._libc.inotify_add_watch(self._descriptor, os.fsencode(path), self._MASK)
+            else:
+                with _selected_directory_handle(self._root, path) as directory:
+                    metadata = os.fstat(directory)
+                    identity = metadata.st_dev, metadata.st_ino
+                    # This kernel-owned fd link follows the retained directory,
+                    # never a caller-controlled pathname that can undergo ABA.
+                    watch = self._libc.inotify_add_watch(
+                        self._descriptor, os.fsencode("/proc/self/fd/" + str(directory)),
+                        self._MASK | 0x01000000,
+                    )
             if watch < 0:
                 error = ctypes.get_errno()
-                if error == errno.ENOENT:
+                if error == errno.ENOENT and self._selected_paths is None:
                     continue
                 raise ProtocolRefusal(
                     "board_event_watch_unavailable",
                     BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
                 ) from OSError(error, "inotify_add_watch failed")
+            previous = self._watches.get(path)
+            if self._selected_paths is not None:
+                if previous is not None and previous != watch:
+                    self._libc.inotify_rm_watch(self._descriptor, previous)
+                self._watch_identities[path] = identity
             self._watches[path] = watch
+        return before != (self._watches, self._watch_identities)
 
-    def drain(self) -> None:
+    def _drain_selected(self):
+        dirty = False
+        for _ in range(self._SELECTED_READ_LIMIT):
+            try:
+                data = os.read(self._descriptor, 65536)
+            except BlockingIOError:
+                return self._refresh() or dirty
+            except OSError as exc:
+                raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL) from exc
+            if not data:
+                raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+            dirty = True
+            offset = 0
+            while offset < len(data):
+                if len(data) - offset < self._EVENT.size:
+                    raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+                watch, mask, _cookie, length = self._EVENT.unpack_from(data, offset)
+                offset += self._EVENT.size
+                end = offset + length
+                if (end > len(data) or length % 4 or not mask or (length and b"\0" not in data[offset:end])
+                        or mask & (0x00004000 | 0x00008000 | 0x00002000 | 0x00000400 | 0x00000800)
+                        or watch not in self._watches.values()):
+                    raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+                offset = end
+        raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL)
+
+    def drain(self) -> Optional[bool]:
+        if self._selected_paths is not None:
+            return self._drain_selected()
         while True:
             try:
                 if not os.read(self._descriptor, 65536):
@@ -303,12 +460,14 @@ class _InotifyBoardFilesystemWakeup:
         self._closed = True
         os.close(self._descriptor)
         self._watches.clear()
+        self._watch_identities.clear()
 
 
 class BoardFilesystemWakeup:
     """Selectable, timer-free durable-root change source for the live Board."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, _paths=None) -> None:
+        self._selected_paths = _paths
         candidate = Path(root)
         try:
             resolved = candidate.resolve(strict=True)
@@ -327,10 +486,14 @@ class BoardFilesystemWakeup:
                 BOARD_EVENT_ROOT_UNAVAILABLE_DETAIL,
             )
         try:
+            if _paths is not None:
+                _selected_board_watch_paths(resolved, _paths)
             if hasattr(select, "kqueue"):
-                self._backend = _KqueueBoardFilesystemWakeup(resolved)
+                self._backend = (_KqueueBoardFilesystemWakeup(resolved) if _paths is None else
+                                 _KqueueBoardFilesystemWakeup(resolved, _paths=_paths))
             elif sys.platform.startswith("linux"):
-                self._backend = _InotifyBoardFilesystemWakeup(resolved)
+                self._backend = (_InotifyBoardFilesystemWakeup(resolved) if _paths is None else
+                                 _InotifyBoardFilesystemWakeup(resolved, _paths=_paths))
             else:
                 raise ProtocolRefusal(
                     "board_event_source_unsupported",
@@ -347,8 +510,16 @@ class BoardFilesystemWakeup:
     def fileno(self) -> int:
         return self._backend.fileno()
 
-    def drain(self) -> None:
-        self._backend.drain()
+    def drain(self) -> Optional[bool]:
+        try:
+            return self._backend.drain()
+        except OSError as exc:
+            if self._selected_paths is None:
+                raise
+            raise ProtocolRefusal("board_event_watch_unavailable", BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL) from exc
+
+    def registered_paths(self):
+        return self._backend.registered_paths()
 
     def close(self) -> None:
         self._backend.close()

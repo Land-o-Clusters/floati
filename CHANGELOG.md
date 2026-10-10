@@ -4,6 +4,17 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
+## [0.1.3] — 2026-10-09
+
+### Fixed
+
+- **An idle Codex waiter no longer re-reads the whole ledger on every poll.**
+  `floati wake wait --harness codex` now replays the ledger only when the
+  ledger or one of the seat's own records changes. On one
+  8 MB ledger an idle waiter fell from 37.9 % of a core to 0.55 %, and found
+  the ledger lock busy 0 times in 601 probes instead of 21. A ledger that has
+  rolled into archives keeps 0.1.2's polling. Measured on macOS, one waiter.
+
 ## [0.1.2] — 2026-09-12
 
 ### Added
