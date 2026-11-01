@@ -14,7 +14,7 @@
       "strategy": {
         "fail-fast": false,
         "matrix": {
-          "os": ["ubuntu-latest"]
+          "os": ["ubuntu-24.04"]
         }
       },
       "runs-on": "${{ matrix.os }}",
@@ -45,7 +45,7 @@
     "public-fences": {
       "if": "github.repository == 'Land-o-Clusters/floati'",
       "needs": "full-selftest",
-      "runs-on": "ubuntu-latest",
+      "runs-on": "ubuntu-24.04",
       "env": {
         "PYTHONDONTWRITEBYTECODE": "1"
       },
