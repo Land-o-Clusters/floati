@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -14,10 +15,37 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from tests.banked_sha_fixture import banked_send_repository
+from tests.temp_roots import REAL_TEMP_ROOT
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = REPOSITORY_ROOT / "scripts" / "floati"
 SHA = "a" * 40
+
+
+def _scratch_sequencer_ready(ready_descriptor: int, home: str) -> int:
+    """Observe the real CLI service boundary in an owned scratch child."""
+    from floati.cli import main
+    from floati.sequencer import SequencerService
+
+    native_serve = SequencerService.serve_forever
+    pending_descriptor = [ready_descriptor]
+
+    def observed_serve(service, stop_event):
+        # CLI construction has entered the native writer lease, opened its
+        # socket, and installed its actual SIGTERM handler before this call.
+        os.write(ready_descriptor, b"1")
+        os.close(ready_descriptor)
+        pending_descriptor.clear()
+        return native_serve(service, stop_event)
+
+    try:
+        with mock.patch.object(SequencerService, "serve_forever", observed_serve):
+            return main(["sequencer", "serve", "--root", home, "--as", "sequencer-a"])
+    finally:
+        if pending_descriptor:
+            os.close(pending_descriptor.pop())
 
 
 def root_entries(root: Path) -> dict[Path, tuple[str, bytes]]:
@@ -32,7 +60,7 @@ def root_entries(root: Path) -> dict[Path, tuple[str, bytes]]:
 
 class SlipCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name) / "demo-fleet"
 
@@ -72,15 +100,18 @@ class SlipCliTests(unittest.TestCase):
         return self.artifact(result)
 
     def send(self) -> dict[str, object]:
+        # SEND-SHA-RESOLVES-1: sent from a repository that holds the sha.
+        self.send_repo, self.send_sha = banked_send_repository(Path(self.temp.name))
         result = self.run_cli(
             "send",
             "--root", str(self.home),
             "--from", "sender",
             "--to", "recipient",
             "--repo", "floati",
-            "--sha", SHA,
+            "--sha", self.send_sha,
             "--doc", "docs/evidence/checkpoint.md",
             "--note", "HM-0.5 delivered",
+            cwd=self.send_repo,
         )
         self.assertEqual(0, result.returncode, result.stderr)
         return self.artifact(result)
@@ -181,12 +212,18 @@ class SlipCliTests(unittest.TestCase):
         message = receipt["message"]
         self.assertEqual("send", sent["command"])
         self.assertEqual("floati", message["repo"])
-        self.assertEqual(SHA, message["sha"])
+        self.assertEqual(self.send_sha, message["sha"])
         self.assertEqual("docs/evidence/checkpoint.md", message["doc"])
         self.assertEqual("HM-0.5 delivered", message["note"])
         self.assertNotIn("body", message)
         self.assertNotIn("wake_cause", message)
-        self.assertEqual("recipient_not_listening", receipt["recipient_readiness"]["state"])
+        # Registration alone supplies no recipient-bound hook provenance.
+        readiness = receipt["recipient_readiness"]
+        self.assertEqual("unknown", readiness["state"])
+        self.assertEqual("mechanism_evidence_incomplete", readiness["reason"])
+        hook = next(fact for fact in readiness["mechanism_evidence"]
+                    if fact["mechanism"] == "stop_hook")
+        self.assertEqual("unknown", hook["state"])
 
         inbox_result = self.run_cli(
             "inbox", "--root", str(self.home), "--as", "recipient", "--peek"
@@ -194,7 +231,8 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual(0, inbox_result.returncode, inbox_result.stderr)
         inbox = self.artifact(inbox_result)
         self.assertEqual("inbox", inbox["command"])
-        self.assertEqual([message], inbox["evidence"]["messages"])
+        shown = inbox["evidence"]["messages"]
+        self.assertEqual([message], [{key: row[key] for key in message} for row in shown])
         self.assertEqual([message["id"]], inbox["evidence"]["receipt"]["item_ids"])
 
         ack_result = self.run_cli(
@@ -214,32 +252,6 @@ class SlipCliTests(unittest.TestCase):
         log = self.artifact(log_result)
         self.assertEqual("log", log["command"])
         self.assertEqual([message], log["evidence"]["messages"])
-
-    def test_log_help_documents_receipt_replay_modes(self) -> None:
-        result = self.run_cli("log", "--help")
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--replay", result.stdout)
-        self.assertIn("--speed", result.stdout)
-        self.assertIn("--plain", result.stdout)
-        self.assertIn("ledger", result.stdout.lower())
-
-    def test_solo_help_documents_argument_light_workflow(self) -> None:
-        init = self.run_cli("init", "--help")
-        add = self.run_cli("work", "add", "--help")
-        claim = self.run_cli("work", "claim", "--help")
-
-        self.assertIn("--solo", init.stdout)
-        self.assertIn("--harness", init.stdout)
-        self.assertIn("solo", add.stdout.lower())
-        self.assertIn("solo", claim.stdout.lower())
-
-    def test_status_help_names_the_stable_json_contract(self) -> None:
-        result = self.run_cli("status", "--help")
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--json", result.stdout)
-        self.assertIn("version-zero", result.stdout)
 
     def test_sequencer_help_exposes_only_status_serve_and_direct_management(self) -> None:
         """Catches a public raw append verb or an undocumented managed-mode lifecycle."""
@@ -267,33 +279,26 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("direct", evidence["mode"])
         self.assertFalse(evidence["managed_epoch_open"])
 
-    def test_plan_help_names_the_explicit_read_only_admission_contract(self) -> None:
-        result = self.run_cli("plan", "--help")
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--plan", result.stdout)
-        self.assertIn("--policy", result.stdout)
-        self.assertIn("--explain", result.stdout)
-        self.assertIn("read-only", result.stdout)
-        self.assertIn("needs_operator", result.stdout)
-
     def test_send_reply_to_and_idempotency_key_are_echoed(self) -> None:
         self.initialize()
         self.register("sender")
         self.register("recipient")
         first = self.send()["evidence"]["message"]
 
+        # SEND-SHA-RESOLVES-1: the reply is sent from the same repository
+        # that holds the sha the first envelope carried.
         result = self.run_cli(
             "send",
             "--root", str(self.home),
             "--from", "recipient",
             "--to", "sender",
             "--repo", "floati",
-            "--sha", SHA,
+            "--sha", self.send_sha,
             "--doc", "docs/evidence/reply.md",
             "--note", "reply",
             "--reply-to", first["id"],
             "--idempotency-key", "reply-1",
+            cwd=self.send_repo,
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
@@ -392,10 +397,14 @@ class SlipCliTests(unittest.TestCase):
         self.assertFalse(registry_lock.exists())
         before = root_entries(self.home)
 
+        # SEND-SHA-RESOLVES-1: sent from a repository that holds the sha,
+        # so the recipient refusal — not the absent-sha fence — answers.
+        repository, sha = banked_send_repository(Path(self.temp.name))
         result = self.run_cli(
             "send", "--root", str(self.home), "--from", "sender", "--to", "unknown",
-            "--repo", "floati", "--sha", SHA, "--doc", "docs/evidence/checkpoint.md",
+            "--repo", "floati", "--sha", sha, "--doc", "docs/evidence/checkpoint.md",
             "--note", "notice",
+            cwd=repository,
         )
 
         self.assertEqual(20, result.returncode)
@@ -453,6 +462,8 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("", stderr.getvalue())
 
     def test_every_command_has_static_man_page_quality_help(self) -> None:
+        from floati.cli import main
+
         commands = (
             (), ("init",), ("register",), ("retire",), ("send",), ("verify",),
             ("journal",), ("journal", "checkpoint"), ("journal", "verify"),
@@ -460,8 +471,6 @@ class SlipCliTests(unittest.TestCase):
             ("inbox",), ("ack",),
             ("log",), ("status",), ("watch",), ("receipts",), ("supervise",),
             ("board",), ("orchestrate",), ("plan",), ("snapshot",),
-            ("effects",), ("effect",), ("effect", "show"),
-            ("effect", "reconcile"), ("effect", "compensate"),
             ("grant",), ("grant", "revoke"),
             ("node",), ("node", "spawn"), ("node", "retire"),
             ("mcp",), ("mcp", "serve"),
@@ -471,7 +480,12 @@ class SlipCliTests(unittest.TestCase):
         )
         for command in commands:
             with self.subTest(command=command):
-                result = self.run_cli(*command, "--help")
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = main([*command, "--help"])
+                result = subprocess.CompletedProcess(
+                    [*command, "--help"], code, stdout.getvalue(), stderr.getvalue(),
+                )
                 self.assertEqual(0, result.returncode, result.stderr)
                 self.assertEqual("", result.stderr)
                 self.assertIn("NAME\n", result.stdout)
@@ -479,33 +493,47 @@ class SlipCliTests(unittest.TestCase):
                 self.assertIn("DESCRIPTION\n", result.stdout)
                 self.assertIn("EXIT STATUS\n", result.stdout)
                 self.assertIn("EXAMPLES\n", result.stdout)
+                # R-4: grant revoke previously rendered its parent's valid
+                # page. Generic sections alone cannot establish exact routing.
+                if command in (
+                    ("grant", "revoke"),
+                    ("journal", "checkpoint"), ("journal", "verify"),
+                    ("signature", "sign"), ("signature", "verify"),
+                    ("work", "add"), ("work", "claim"),
+                    ("work", "complete"), ("work", "show"),
+                ):
+                    self.assertIn("floati " + " ".join(command) + " - ", result.stdout)
+                if command == ("init",):
+                    self.assertIn("--solo", result.stdout)
+                    self.assertIn("--harness", result.stdout)
+                if command in (("work", "add"), ("work", "claim")):
+                    self.assertIn("solo", result.stdout.lower())
+                if command in (("install",), ("update",)):
+                    self.assertIn("--committed-tree", result.stdout)
+                    self.assertIn("origin/main", result.stdout)
+                    self.assertIn("never-prune-foreign", result.stdout)
+                if command == ("log",):
+                    self.assertIn("--replay", result.stdout)
+                    self.assertIn("--speed", result.stdout)
+                    self.assertIn("--plain", result.stdout)
+                    self.assertIn("ledger", result.stdout.lower())
+                if command == ("status",):
+                    self.assertIn("--json", result.stdout)
+                    self.assertIn("version-zero", result.stdout)
+                if command == ("plan",):
+                    self.assertIn("--plan", result.stdout)
+                    self.assertIn("--policy", result.stdout)
+                    self.assertIn("--explain", result.stdout)
+                    self.assertIn("read-only", result.stdout)
+                    self.assertIn("needs_operator", result.stdout)
 
-    def test_multiword_help_renders_its_own_contract_not_its_parents(self) -> None:
-        """Catches a multi-word topic falling through to its parent page (R-4:
-        `grant revoke --help` rendered the generic grant contract). The page
-        for `floati X Y` must open with its own name, never X's."""
-        commands = (
-            ("effect", "show"), ("effect", "reconcile"), ("effect", "compensate"),
-            ("grant", "revoke"),
-            ("journal", "checkpoint"), ("journal", "verify"),
-            ("signature", "sign"), ("signature", "verify"),
-            ("work", "add"), ("work", "claim"),
-            ("work", "complete"), ("work", "show"),
-        )
-        for command in commands:
-            with self.subTest(command=command):
-                result = self.run_cli(*command, "--help")
-                self.assertEqual(0, result.returncode, result.stderr)
-                self.assertIn("floati " + " ".join(command) + " - ", result.stdout)
-
-    def test_deployment_help_names_currency_and_foreign_file_contract(self) -> None:
-        for command in ("install", "update"):
-            with self.subTest(command=command):
-                result = self.run_cli(command, "--help")
-                self.assertEqual(0, result.returncode, result.stderr)
-                self.assertIn("--committed-tree", result.stdout)
-                self.assertIn("origin/main", result.stdout)
-                self.assertIn("never-prune-foreign", result.stdout)
+                # Retain real launcher coverage at both routing depths; the
+                # exhaustive table above uses a fresh main invocation per row.
+                if command in ((), ("grant", "revoke")):
+                    native = self.run_cli(*command, "--help")
+                    self.assertEqual(0, native.returncode, native.stderr)
+                    self.assertEqual("", native.stderr)
+                    self.assertEqual(result.stdout, native.stdout)
 
     def test_direct_main_emits_help_on_stdout_without_artifact_wrapper(self) -> None:
         from floati.cli import main
@@ -594,10 +622,147 @@ class SlipCliTests(unittest.TestCase):
         self.assertEqual("register", refusal_artifact["command"])
         self.assertEqual("arguments_invalid", refusal_artifact["evidence"]["code"])
 
+    def _probe_main(self, mode: str, arguments: list[str]) -> dict[str, object]:
+        script = """
+import io, json, sys
+from contextlib import redirect_stdout
+from floati import cli
+
+mode = sys.argv[1]
+arguments = sys.argv[2:]
+if mode == "help":
+    from floati.helptext import help_for
+    expected = help_for(arguments)
+    parsers = []
+    original = cli._parser
+    def counting():
+        value = original()
+        parsers.append(value)
+        return value
+    cli._parser = counting
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = cli.main(arguments)
+    json.dump({
+        "code": code,
+        "parser_count": len(parsers),
+        "distinct_parsers": len(set(map(id, parsers))),
+        "stdout": buffer.getvalue(),
+        "expected": expected,
+    }, sys.stdout)
+elif mode == "plain":
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = cli.main(arguments)
+    json.dump({
+        "code": code,
+        "stdout": buffer.getvalue(),
+        "helptext": "floati.helptext" in sys.modules,
+        "generated_help": "floati.generated_help" in sys.modules,
+    }, sys.stdout)
+else:
+    raise SystemExit("unknown probe mode")
+"""
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key != "FLOATI_BUS_ROOT"
+        }
+        environment["HOME"] = self.temp.name
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        completed = subprocess.run(
+            [sys.executable, "-c", script, mode, *arguments],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("", completed.stderr)
+        return json.loads(completed.stdout)
+
+    def test_command_help_prints_help_for_text_and_builds_the_parser_once(self) -> None:
+        """floati <cmd> --help is help_for's text, exit 0, one parser build."""
+        arguments = ["status", "--help"]
+        probed = self._probe_main("help", arguments)
+        self.assertEqual(probed["expected"], probed["stdout"])
+        self.assertEqual(0, probed["code"])
+        self.assertLessEqual(probed["parser_count"], 1)
+        self.assertEqual(probed["parser_count"], probed["distinct_parsers"])
+        self.assertGreaterEqual(probed["parser_count"], 1)
+
+    def test_non_help_invocation_does_not_import_helptext(self) -> None:
+        """A command without --help leaves the static help modules unloaded."""
+        probed = self._probe_main("plain", ["effects", "--record", "hostile"])
+        self.assertNotEqual(0, probed["code"])
+        self.assertFalse(probed["helptext"])
+        self.assertFalse(probed["generated_help"])
+        artifact = json.loads(probed["stdout"])
+        self.assertEqual("effects", artifact["command"])
+        self.assertNotIn("NAME\n", probed["stdout"])
+
+    def test_help_token_passed_as_a_value_is_not_a_help_request(self) -> None:
+        """--help as an option value or after -- is the value, not a help request."""
+        from floati.cli import main
+        from types import SimpleNamespace
+
+        def invoke(*arguments):
+            output, errors = io.StringIO(), io.StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                code = main(list(arguments))
+            return SimpleNamespace(returncode=code, stdout=output.getvalue(),
+                                   stderr=errors.getvalue())
+
+        initialized = invoke("init", "--root", str(self.home))
+        self.assertEqual(0, initialized.returncode, initialized.stderr)
+        ordinary = invoke(
+            "send", "--root", str(self.home),
+            "--from", "sender", "--to", "recipient",
+            "--repo", "floati", "--sha", "b" * 40,
+            "--doc", "docs/evidence/checkpoint.md",
+            "--note=ordinary-note",
+        )
+        literal = invoke(
+            "send", "--root", str(self.home),
+            "--from", "sender", "--to", "recipient",
+            "--repo", "floati", "--sha", "b" * 40,
+            "--doc", "docs/evidence/checkpoint.md",
+            "--note=--help",
+        )
+        self.assertNotEqual(0, literal.returncode)
+        self.assertFalse(literal.stdout.startswith("NAME\n"))
+        self.assertEqual(ordinary.returncode, literal.returncode)
+        self.assertEqual(
+            self.artifact(ordinary)["evidence"]["code"],
+            self.artifact(literal)["evidence"]["code"],
+        )
+        rejected = invoke(
+            "register", "--root", str(self.home), "--harness", "Codex",
+            "--", "--not-a-node",
+        )
+        dashed = invoke(
+            "register", "--root", str(self.home), "--harness", "Codex",
+            "--", "--help",
+        )
+        accepted = invoke(
+            "register", "--root", str(self.home), "--harness", "Codex",
+            "--", "node-a",
+        )
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+        self.assertEqual("node-a", self.artifact(accepted)["evidence"]["node_id"])
+        self.assertNotEqual(0, dashed.returncode)
+        self.assertFalse(dashed.stdout.startswith("NAME\n"))
+        self.assertEqual(rejected.returncode, dashed.returncode)
+        self.assertEqual(
+            self.artifact(rejected)["evidence"]["code"],
+            self.artifact(dashed)["evidence"]["code"],
+        )
+
 
 class SequencerCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name) / "demo-fleet"
 
@@ -616,60 +781,62 @@ class SequencerCliTests(unittest.TestCase):
         result = self.run_cli("init", "--root", str(self.home))
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_management_help_has_no_public_raw_append_verb(self) -> None:
-        """Catches exposing record-authority bypass as a management command."""
-        result = self.run_cli("sequencer", "--help")
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("status", result.stdout)
-        self.assertIn("serve", result.stdout)
-        self.assertIn("direct", result.stdout)
-        self.assertNotIn("append", result.stdout)
-
-    def test_status_is_read_only_and_direct_leaves_no_open_epoch(self) -> None:
-        """Catches observation mutation or a daemonless transition that strands managed evidence."""
-        self.initialize()
-        before = sorted(path.relative_to(self.home) for path in self.home.rglob("*"))
-        status = self.run_cli("sequencer", "status", "--root", str(self.home))
-        self.assertEqual(0, status.returncode, status.stderr)
-        self.assertEqual("direct", self.artifact(status)["evidence"]["mode"])
-        self.assertEqual(before, sorted(path.relative_to(self.home) for path in self.home.rglob("*")))
-        direct = self.run_cli(
-            "sequencer", "direct", "--root", str(self.home), "--as", "operator-a"
-        )
-        self.assertEqual(0, direct.returncode, direct.stderr)
-        evidence = self.artifact(direct)["evidence"]
-        self.assertEqual("direct", evidence["mode"])
-        self.assertFalse(evidence["managed_epoch_open"])
-
     def test_serve_holds_live_local_lock_and_sigterm_gracefully_releases_epoch(self) -> None:
         """Catches CLI exit abandoning an entered epoch or claiming service without the owner lock."""
         self.initialize()
-        process = subprocess.Popen(
-            [
-                str(LAUNCHER), "sequencer", "serve",
-                "--root", str(self.home), "--as", "sequencer-a",
-            ],
-            cwd=REPOSITORY_ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        deadline = time.monotonic() + 5
-        observed = None
-        while time.monotonic() < deadline:
-            status = self.run_cli("sequencer", "status", "--root", str(self.home))
-            if status.returncode == 0:
-                candidate = self.artifact(status)["evidence"]
-                if candidate["local_service_live"]:
-                    observed = candidate
-                    break
-            time.sleep(0.02)
-        self.assertIsNotNone(observed, "serve must establish live lock-and-socket testimony")
-        process.send_signal(signal.SIGTERM)
-        stdout, stderr = process.communicate(timeout=5)
-        self.assertEqual(0, process.returncode, stderr)
-        self.assertEqual("", stderr)
-        self.assertEqual("ok", json.loads(stdout)["status"])
+        ready_descriptor, child_ready_descriptor = os.pipe()
+        try:
+            process = subprocess.Popen(
+                [
+                    "/usr/bin/python3", "-B", "-m", "tests.test_cli",
+                    "--scratch-sequencer-ready", str(child_ready_descriptor), str(self.home),
+                ],
+                cwd=REPOSITORY_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                pass_fds=(child_ready_descriptor,),
+            )
+        except BaseException:
+            os.close(ready_descriptor)
+            raise
+        finally:
+            os.close(child_ready_descriptor)
+
+        def collect_owned_service():
+            saved = getattr(process, "_floati_test_collection", None)
+            if saved is not None:
+                return saved
+            before = process.poll()
+            if before is None:
+                process.send_signal(signal.SIGTERM)
+            child_stdout, child_stderr = process.communicate()
+            saved = {"pid": process.pid, "exit_before_cleanup": before,
+                     "returncode": process.returncode, "stdout": child_stdout,
+                     "stderr": child_stderr, "collected": True}
+            process._floati_test_collection = saved
+            return saved
+
+        # LIFO cleanup collects the exact owned child before setUp's directory
+        # removal, including an assertion before native service testimony.
+        self.addCleanup(collect_owned_service)
+        try:
+            ready = os.read(ready_descriptor, 1)
+        finally:
+            os.close(ready_descriptor)
+        evidence = collect_owned_service() if ready != b"1" else {}
+        self.assertEqual(b"1", ready,
+                         "serve exited before native readiness: " + json.dumps(evidence, sort_keys=True))
+        status = self.run_cli("sequencer", "status", "--root", str(self.home))
+        self.assertEqual(0, status.returncode, status.stderr)
+        observed = self.artifact(status)["evidence"]
+        self.assertTrue(observed["local_service_live"], observed)
+        self.assertTrue(observed["managed_epoch_open"], observed)
+        self.assertIsNone(process.poll(), "ready service exited before SIGTERM")
+        collected = collect_owned_service()
+        self.assertEqual(0, collected["returncode"], collected)
+        self.assertEqual("", collected["stderr"])
+        self.assertEqual("ok", json.loads(collected["stdout"])["status"])
         status = self.run_cli("sequencer", "status", "--root", str(self.home))
         final = self.artifact(status)["evidence"]
         self.assertFalse(final["managed_epoch_open"])
@@ -678,14 +845,32 @@ class SequencerCliTests(unittest.TestCase):
 class WakeEvaluateCliTests(unittest.TestCase):
     """The internal wake gate stays explicit, closed, and absent from public copy."""
 
+    class _InProcessSetupResult:
+        """Actual main return and captured streams, without a child-process claim."""
+
+        def __init__(self, returncode: int, stdout: str, stderr: str) -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def _run_setup_main(self, *args: str) -> _InProcessSetupResult:
+        if not args or args[0] not in ("init", "register"):
+            raise ValueError("in-process setup supports only init and register")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            from floati.cli import main
+
+            returncode = main(list(args))
+        return self._InProcessSetupResult(returncode, stdout.getvalue(), stderr.getvalue())
+
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name) / "demo-fleet"
 
-    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(self, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(LAUNCHER), *args], cwd=REPOSITORY_ROOT,
+            [str(LAUNCHER), *args], cwd=REPOSITORY_ROOT if cwd is None else cwd,
             text=True, capture_output=True, check=False,
         )
 
@@ -700,12 +885,14 @@ class WakeEvaluateCliTests(unittest.TestCase):
         )
         return artifact
 
-    def initialize(self) -> None:
-        result = self.run_cli("init", "--root", str(self.home))
+    def initialize(self, *, native_setup: bool = False) -> None:
+        run = self.run_cli if native_setup else self._run_setup_main
+        result = run("init", "--root", str(self.home))
         self.assertEqual(0, result.returncode, result.stderr)
 
-    def register(self, node: str) -> None:
-        result = self.run_cli(
+    def register(self, node: str, *, native_setup: bool = False) -> None:
+        run = self.run_cli if native_setup else self._run_setup_main
+        result = run(
             "register", "--root", str(self.home), node, "--harness", "Codex",
         )
         self.assertEqual(0, result.returncode, result.stderr)
@@ -723,22 +910,26 @@ class WakeEvaluateCliTests(unittest.TestCase):
         self.assertEqual("wake-evaluate", artifact["command"])
         return artifact
 
-    def _seed(self, count: int = 1) -> None:
-        self.initialize()
-        self.register(public_ids.worker('alpha'))
-        self.register("bob")
+    def _seed(self, count: int = 1, *, native_setup: bool = False) -> None:
+        self.initialize(native_setup=native_setup)
+        self.register(public_ids.worker('alpha'), native_setup=native_setup)
+        self.register("bob", native_setup=native_setup)
+        # SEND-SHA-RESOLVES-1: seeded mail is sent from a repository that
+        # holds the sha it names.
+        self.send_repo, self.send_sha = banked_send_repository(Path(self.temp.name))
         for index in range(count):
             result = self.run_cli(
                 "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
-                "--repo", "floati", "--sha", SHA,
+                "--repo", "floati", "--sha", self.send_sha,
                 "--doc", f"docs/evidence/wake-{index}.md", "--note", f"wake {index}",
                 "--idempotency-key", f"message-{index}",
+                cwd=self.send_repo,
             )
             self.assertEqual(0, result.returncode, result.stderr)
 
     def test_hidden_command_emits_closed_fresh_held_and_caught_up_envelopes(self) -> None:
         """Catches a wake artifact lacking its v1 envelope or misclassifying silent work."""
-        self._seed()
+        self._seed(native_setup=True)
         fresh = self._wake()
         self.assertEqual(0, fresh.returncode, fresh.stderr)
         fresh_artifact = self._outer(fresh)
@@ -806,8 +997,9 @@ class WakeEvaluateCliTests(unittest.TestCase):
         self.assertEqual(0, first.returncode, first.stderr)
         sent = self.run_cli(
             "send", "--root", str(self.home), "--from", public_ids.worker('alpha'), "--to", "bob",
-            "--repo", "floati", "--sha", SHA, "--doc", "docs/evidence/mixed.md",
+            "--repo", "floati", "--sha", self.send_sha, "--doc", "docs/evidence/mixed.md",
             "--note", "mixed", "--idempotency-key", "mixed-message",
+            cwd=self.send_repo,
         )
         self.assertEqual(0, sent.returncode, sent.stderr)
 
@@ -935,8 +1127,16 @@ class WakeEvaluateCliTests(unittest.TestCase):
             dict(evidence, receipt=receipt),
             dict(evidence, fresh_messages=[], fresh_total=0, fresh_truncated=False),
         )
-        for candidate in hostile:
-            with self.subTest(candidate=candidate):
+        for case_index, candidate in enumerate(hostile):
+            with self.subTest(case=(
+                "extra-field",
+                "missing-limit",
+                "session-bidi-U202E",
+                "message-count-1001",
+                "fresh-total-100001-truncated",
+                "receipt-with-empty-item-ids",
+                "empty-fresh-inconsistent-with-receipt",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal):
                     validate_wake_decision_artifact(candidate, tenant_id="demo-fleet")
                 with self.assertRaises(SchemaValidationError):
@@ -944,4 +1144,6 @@ class WakeEvaluateCliTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "--scratch-sequencer-ready":
+        raise SystemExit(_scratch_sequencer_ready(int(sys.argv[2]), sys.argv[3]))
     unittest.main()

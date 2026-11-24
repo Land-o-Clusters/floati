@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_event, wait_join
 import copy
 import hashlib
 import json
@@ -852,7 +853,7 @@ class ThreadObserverControllerTests(unittest.TestCase):
 
         def paused_read(provider_thread_id: str, *, deadline_seconds: float = 5.0):
             entered.set()
-            if not release.wait(2):
+            if not wait_event(release, "test_thread_observations release"):
                 raise AssertionError("observation pause was not released")
             return actual_read(
                 provider_thread_id, deadline_seconds=deadline_seconds
@@ -869,12 +870,12 @@ class ThreadObserverControllerTests(unittest.TestCase):
         with mock.patch.object(source, "read", side_effect=paused_read):
             worker = threading.Thread(target=observe)
             worker.start()
-            self.assertTrue(entered.wait(1))
+            self.assertTrue(wait_event(entered, "test_thread_observations entered"))
             observer.detach(
                 str(attachment["id"]), "observer-node", now=NOW_DATETIME
             )
             release.set()
-            worker.join(3)
+            wait_join(worker, "test_thread_observations worker")
         self.assertFalse(worker.is_alive())
         self.assertEqual(1, len(outcomes))
         self.assertIsInstance(outcomes[0], ProtocolRefusal)

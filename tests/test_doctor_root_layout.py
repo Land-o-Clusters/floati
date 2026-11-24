@@ -120,6 +120,14 @@ class RootLayoutDerivedFamiliesTests(unittest.TestCase):
     the product writes into the live root today (1.99 MB), so doctor
     flagged a product directory on day one."""
 
+    PREFIX_BANKS = (
+        ".cursor-prefix-" + "a" * 64,
+        ".cut-prefix-" + "b" * 64,
+        ".inbox-prefix",
+        ".registry-prefix",
+        ".send-prefix",
+    )
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
@@ -146,3 +154,61 @@ class RootLayoutDerivedFamiliesTests(unittest.TestCase):
             findings,
         )
         self.assertEqual("root_layout_managed", findings[0]["code"])
+
+    def test_prefix_reader_banks_are_managed_directories(self) -> None:
+        """A reader's disposable bank must not look like foreign root data."""
+
+        for name in self.PREFIX_BANKS:
+            bank = self.root_path / name
+            bank.mkdir()
+            (bank / "checkpoint.json").write_text("{}\n", encoding="utf-8")
+
+        findings = project_root_layout_findings(self.root)
+
+        self.assertEqual(
+            [], [row for row in findings if row["code"] == "root_unmanaged_bytes"],
+            findings,
+        )
+        self.assertEqual("root_layout_managed", findings[0]["code"])
+
+    def test_prefix_bank_lookalikes_and_wrong_types_stay_unmanaged(self) -> None:
+        """Recognizing cache families must not hide foreign files or links."""
+
+        lookalikes = (
+            ".cursor-prefix-",
+            ".cursor-prefix-" + "a" * 63,
+            ".cursor-prefix-" + "a" * 65,
+            ".cursor-prefix-" + "A" * 64,
+            ".cursor-prefix-" + "g" * 64,
+            ".cut-prefix-evil",
+            ".cut-prefix-" + "A" * 64,
+            ".inbox-prefix-evil",
+            ".registry-prefix-evil",
+            ".send-prefix-evil",
+        )
+        outside = Path(self.temporary.name) / "outside"
+        outside.mkdir()
+        (outside / "big.bin").write_bytes(b"z" * 10_000)
+        cases = [(name, "directory") for name in lookalikes]
+        cases += [(name, kind) for name in self.PREFIX_BANKS for kind in ("file", "symlink")]
+        for name, kind in cases:
+            with self.subTest(name=name, kind=kind):
+                entry = self.root_path / name
+                if kind == "directory":
+                    entry.mkdir()
+                elif kind == "file":
+                    entry.write_bytes(b"foreign")
+                else:
+                    entry.symlink_to(outside, target_is_directory=True)
+                try:
+                    findings = project_root_layout_findings(self.root)
+                    rows = [row for row in findings if row["code"] == "root_unmanaged_bytes"]
+                    self.assertEqual([name], [row["subject"] for row in rows], findings)
+                    self.assertTrue(entry.is_symlink() if kind == "symlink" else entry.exists())
+                    if kind == "symlink":
+                        self.assertNotIn("10000", rows[0]["detail"])
+                finally:
+                    if kind == "directory":
+                        entry.rmdir()
+                    else:
+                        entry.unlink()

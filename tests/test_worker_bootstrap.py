@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.readiness import READY_SECONDS, Readiness, wait_until
+
 import ctypes
 import errno
 import fcntl
@@ -318,18 +320,17 @@ class WorkerBootstrapTests(unittest.TestCase):
         return os.waitstatus_to_exitcode(status)
 
     def _receive_until_eof(
-        self, channel: BootstrapChannel, *, timeout: float = 3.0,
+        self, channel: BootstrapChannel, *, timeout: float = READY_SECONDS,
     ) -> list[tuple[str, object]]:
         frames = []
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if not channel.poll(0.05):
+        readiness = Readiness("bootstrap frames through EOF", max(timeout, READY_SECONDS))
+        while True:
+            if not channel.poll(min(0.05, readiness.remaining())):
                 continue
             try:
                 frames.append(channel.recv())
             except Exception:
-                break
-        return frames
+                return frames
 
     def _instrumented_package(
         self,
@@ -373,6 +374,10 @@ class WorkerBootstrapTests(unittest.TestCase):
             "    workspace_identity: Optional[tuple]\n"
             "    scratch_identity: tuple\n"
             "    probe_identity: tuple\n"
+            "    workspace_mode: str = 'fresh'\n"
+            "    provider_state: Optional[Path] = None\n"
+            "    provider_state_identity: Optional[tuple] = None\n"
+            "    gitfile_identity: Optional[tuple] = None\n"
             "def apply_worker_isolation(policy):\n"
             + "\n".join("    " + line for line in body.splitlines())
             + "\n"
@@ -937,8 +942,10 @@ class WorkerBootstrapTests(unittest.TestCase):
                 "from pathlib import Path\n"
                 "TRACE = Path(os.environ['FLOATI_BOOTSTRAP_TRACE'])\n"
                 "GATE = Path(os.environ['FLOATI_BOOTSTRAP_READY_GATE'])\n"
-                "deadline = time.monotonic() + 2.0\n"
-                "while not GATE.exists() and time.monotonic() < deadline:\n"
+                "started = time.monotonic()\n"
+                "while not GATE.exists():\n"
+                "    if time.monotonic() - started >= 60:\n"
+                "        raise AssertionError(f'bootstrap import gate: readiness bound=60s elapsed={time.monotonic()-started:.3f}s host_load={os.getloadavg()}')\n"
                 "    time.sleep(0.01)\n"
                 "with TRACE.open('a', encoding='utf-8') as stream:\n"
                 "    stream.write(('import' if GATE.exists() else 'import-before-ready') + '\\n')\n"
@@ -1180,13 +1187,9 @@ class WorkerBootstrapTests(unittest.TestCase):
             self.addCleanup(channel.close)
             first = channel.recv()
             self.assertEqual("isolation_ready", first[0])
-            deadline = time.monotonic() + 2.0
-            while time.monotonic() < deadline:
-                if trace.exists() and "spawn" in trace.read_text(encoding="utf-8").splitlines():
-                    break
-                time.sleep(0.01)
-            else:
-                self.fail("adapter did not enter spawn after isolation readiness")
+            wait_until(lambda: trace.exists() and
+                "spawn" in trace.read_text(encoding="utf-8").splitlines(),
+                "adapter spawn after isolation readiness")
 
             os.kill(pid, signal.SIGTERM)
             self.assertEqual(143, self._wait(pid))

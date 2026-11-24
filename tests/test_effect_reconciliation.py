@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_barrier, wait_event
 import hashlib
 import importlib
 import json
@@ -430,7 +431,7 @@ class EffectControllerReconciliationTests(_GitFixture):
         original_binding = EffectController._operation_binding
 
         def launcher(request: ReconciliationRequest) -> ReconciliationResult:
-            barrier.wait(5)
+            wait_barrier(barrier, 'effect_reconciliation: barrier synchronization')
             return self._confirmed(request)
 
         def ordered_binding(
@@ -440,7 +441,7 @@ class EffectControllerReconciliationTests(_GitFixture):
             binding_calls[name] = binding_calls.get(name, 0) + 1
             if name == "reconciliation-retry-b" and binding_calls[name] == 2:
                 second_precheck.set()
-                if not first_appended.wait(5):
+                if not wait_event(first_appended, 'effect_reconciliation: first_appended synchronization'):
                     raise AssertionError("canonical retry row was not appended")
             return original_binding(controller, operation_id)
 
@@ -500,7 +501,7 @@ class EffectControllerReconciliationTests(_GitFixture):
         def pause_after_snapshot(value):
             if threading.current_thread().name == "overtaken-reconciliation":
                 paused.set()
-                if not resume.wait(5):
+                if not wait_event(resume, 'effect_reconciliation: resume synchronization', timeout=120):
                     raise AssertionError("overtaken reconciliation was not resumed")
             return original_now(value)
 
@@ -519,7 +520,7 @@ class EffectControllerReconciliationTests(_GitFixture):
             effects_module, "_effect_now", side_effect=pause_after_snapshot,
         ):
             delayed.start()
-            self.assertTrue(paused.wait(5), "delayed reconciliation never paused")
+            self.assertTrue(wait_event(paused, 'effect_reconciliation: paused synchronization'), "delayed reconciliation never paused")
             rows = [
                 controllers[0].reconcile(
                     intent["operation_id"], now=NOW + timedelta(seconds=25),
@@ -757,11 +758,14 @@ class CompensationTests(_GitFixture):
             self.source["operation_id"], **self.preview_args(),
         )
         before = self.case.effect_ledger.records()
-        for changed in (
+        for case_index, changed in enumerate((
             {"plan_digest": "0" * 64},
             {"plan": {**preview["plan"], "reason_code": "policy_required"}},
-        ):
-            with self.subTest(changed=changed), self.assertRaises(ProtocolRefusal):
+        )):
+            with self.subTest(case=(
+                "zero-preview-plan-digest",
+                "changed-preview-plan-reason-policy-required",
+            )[case_index]), self.assertRaises(ProtocolRefusal):
                 self.confirm(preview, **changed)
             self.assertEqual(before, self.case.effect_ledger.records())
 
@@ -1005,7 +1009,7 @@ class CompensationTests(_GitFixture):
         acceptance_outcome: list[object] = []
 
         def accept() -> None:
-            begin_acceptance.wait(5)
+            wait_event(begin_acceptance, 'effect_reconciliation: begin_acceptance synchronization')
             acceptance_entered.set()
             try:
                 acceptance_outcome.append(case.run_ledger.append(acceptance))
@@ -1031,7 +1035,7 @@ class CompensationTests(_GitFixture):
                     for row in case.effect_ledger.records()
                     ))
                     begin_acceptance.set()
-                    self.assertTrue(acceptance_entered.wait(5))
+                    self.assertTrue(wait_event(acceptance_entered, 'effect_reconciliation: acceptance_entered synchronization'))
                     thread.join(0.2)
                     acceptance_blocked.append(thread.is_alive())
                 yield
@@ -1073,7 +1077,7 @@ class CompensationTests(_GitFixture):
         failures: list[BaseException] = []
 
         def confirm_exact(controller: EffectController) -> None:
-            barrier.wait(5)
+            wait_barrier(barrier, 'effect_reconciliation: barrier synchronization')
             try:
                 results.append(controller.compensation_confirm(
                     self.source["operation_id"], plan=preview["plan"],

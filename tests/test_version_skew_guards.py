@@ -15,6 +15,7 @@ from floati.planes import LivenessPresenceStore
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.verification import DeliveryVerifier
+from floati.records import WAKE_HOLD_KINDS
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 
 
@@ -98,14 +99,16 @@ class VersionSkewGuardTests(unittest.TestCase):
         self.assertEqual([self.known_message], messages)
         self.assertIsNotNone(receipt)
         assert receipt is not None
-        self.assertEqual("delivery_receipt", receipt["kind"])
+        # BUS-DELIVERY-UNPRESENTED-1: this fixture presents with no live
+        # presenter journal, so the receipt is delivered_unpresented.
+        self.assertEqual("delivered_unpresented", receipt["kind"])
         self.assertEqual([self.known_message["id"]], receipt["item_ids"])
         self.assertEqual(
             receipt,
             read_records(
                 self.root,
                 public_ids.compose("receipts/deliveries/", public_ids.ledger(public_ids.worker("target"))),
-                allowed_kinds={"delivery_receipt", "wake_hold_receipt"},
+                allowed_kinds=set(WAKE_HOLD_KINDS),
             )[-1],
         )
         self.assert_skew_fact(skew)

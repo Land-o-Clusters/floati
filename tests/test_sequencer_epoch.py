@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_queue, wait_event
 import json
 import multiprocessing
 import os
@@ -47,7 +48,7 @@ def _hold_managed_owner(root_path, ready, release):
     try:
         with ManagedWriterLease(root, "sequencer-live", now=NOW):
             ready.set()
-            release.wait(5)
+            wait_event(release, 'sequencer_epoch: release synchronization', timeout=120)
     except Exception:
         ready.set()
         raise
@@ -64,12 +65,12 @@ def _abandon_managed_owner(root_path, ready):
 def _race_closed_takeover(root_path, sequencer_id, start, release, queue):
     try:
         root = FloatiRoot.open_direct_home(Path(root_path), create=False)
-        start.wait(5)
+        wait_event(start, 'sequencer_epoch: start synchronization')
         with ManagedWriterLease(
             root, sequencer_id, takeover=True, now=NOW + timedelta(seconds=2)
         ) as lease:
             queue.put(("ok", lease.epoch))
-            release.wait(5)
+            wait_event(release, 'sequencer_epoch: release synchronization', timeout=120)
     except ProtocolRefusal as exc:
         queue.put(("refused", exc.code))
     except Exception as exc:
@@ -83,7 +84,7 @@ def _append_while_holding_owner(root_path, entered_fsync, continue_fsync, queue)
 
     def blocked_append(path, encoded):
         entered_fsync.set()
-        if not continue_fsync.wait(5):
+        if not wait_event(continue_fsync, 'sequencer_epoch: continue_fsync synchronization', timeout=120):
             raise RuntimeError("test barrier timed out")
         return original(path, encoded)
 
@@ -153,7 +154,7 @@ class SequencerEpochTests(unittest.TestCase):
             target=_abandon_managed_owner, args=(str(self.root.path), ready)
         )
         process.start()
-        self.assertTrue(ready.wait(5))
+        self.assertTrue(wait_event(ready, 'sequencer_epoch: ready synchronization'))
         process.join(5)
         self.assertEqual(0, process.exitcode)
 
@@ -331,7 +332,7 @@ class SequencerEpochTests(unittest.TestCase):
             args=(str(self.root.path), ready, release),
         )
         process.start()
-        self.assertTrue(ready.wait(5))
+        self.assertTrue(wait_event(ready, 'sequencer_epoch: ready synchronization'))
         before = self.ledger.current()
         try:
             with self.assertRaises(ProtocolRefusal) as caught:
@@ -360,7 +361,7 @@ class SequencerEpochTests(unittest.TestCase):
         for process in processes:
             process.start()
         start.set()
-        results = [queue.get(timeout=3) for _ in processes]
+        results = [wait_queue(queue, 'sequencer_epoch: queue frame') for _ in processes]
         release.set()
         for process in processes:
             process.join(5)
@@ -453,8 +454,12 @@ class SequencerEpochTests(unittest.TestCase):
             lambda: self.ledger.release("sequencer-a", 1, NOW + timedelta(seconds=1)),
             lambda: self.ledger.takeover("sequencer-b", NOW + timedelta(seconds=1)),
         )
-        for call in calls:
-            with self.subTest(call=call):
+        for case_index, call in enumerate(calls):
+            with self.subTest(case=(
+                "epoch-enter-without-owner-proof",
+                "epoch-release-without-owner-proof",
+                "epoch-takeover-without-owner-proof",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     call()
                 self.assertEqual("sequencer_owner_required", caught.exception.code)
@@ -501,7 +506,7 @@ class SequencerEpochTests(unittest.TestCase):
             self.assertEqual(0, process.exitcode)
             self.assertEqual(
                 ("refused", "sequencer_lease_process_mismatch"),
-                queue.get(timeout=1),
+                wait_queue(queue, 'sequencer_epoch: queue frame'),
             )
             self.assertEqual([parent_record], run_ledger.records())
 
@@ -523,7 +528,7 @@ class SequencerEpochTests(unittest.TestCase):
                     ("refused", "sequencer_lease_process_mismatch"),
                     ("refused", "sequencer_lease_process_mismatch"),
                 ],
-                queue.get(timeout=1),
+                wait_queue(queue, 'sequencer_epoch: queue frame'),
             )
             self.assertEqual("entered", self.ledger.current()["operation"])
             self.assertIsNotNone(lease.managed_append_capability)
@@ -550,7 +555,7 @@ class SequencerEpochTests(unittest.TestCase):
                     ("refused", "sequencer_lease_process_mismatch"),
                     ("refused", "sequencer_lease_process_mismatch"),
                 ],
-                queue.get(timeout=1),
+                wait_queue(queue, 'sequencer_epoch: queue frame'),
             )
         finally:
             lease.__exit__(None, None, None)
@@ -593,7 +598,7 @@ class SequencerEpochTests(unittest.TestCase):
 
         def blocked_append(path, encoded):
             entered_fsync.set()
-            if not continue_fsync.wait(5):
+            if not wait_event(continue_fsync, 'sequencer_epoch: continue_fsync synchronization', timeout=120):
                 raise RuntimeError("test barrier timed out")
             return original(path, encoded)
 
@@ -617,7 +622,7 @@ class SequencerEpochTests(unittest.TestCase):
             with mock.patch.object(run_segments, "_append_frame", side_effect=blocked_append):
                 append_thread = threading.Thread(target=append_record)
                 append_thread.start()
-                self.assertTrue(entered_fsync.wait(5))
+                self.assertTrue(wait_event(entered_fsync, 'sequencer_epoch: entered_fsync synchronization'))
                 release_thread = threading.Thread(target=release_lease)
                 release_thread.start()
                 time.sleep(0.05)
@@ -644,7 +649,7 @@ class SequencerEpochTests(unittest.TestCase):
             args=(str(self.root.path), entered_fsync, continue_fsync, queue),
         )
         process.start()
-        self.assertTrue(entered_fsync.wait(5))
+        self.assertTrue(wait_event(entered_fsync, 'sequencer_epoch: entered_fsync synchronization'))
         try:
             with self.assertRaises(ProtocolRefusal) as caught:
                 ManagedWriterLease(
@@ -655,7 +660,7 @@ class SequencerEpochTests(unittest.TestCase):
             continue_fsync.set()
             process.join(5)
         self.assertEqual(0, process.exitcode)
-        self.assertEqual("ok", queue.get(timeout=1)[0])
+        self.assertEqual("ok", wait_queue(queue, 'sequencer_epoch: queue frame')[0])
 
     def test_lock_instrumentation_proves_grant_owner_run_and_epoch_separation(self) -> None:
         """Catches owner acquisition under run, epoch CAS under append, or epoch operations taking grant/run locks."""

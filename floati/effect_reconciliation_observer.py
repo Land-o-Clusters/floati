@@ -36,6 +36,7 @@ _MAX_REMOTE_ENV_BYTES = 4096
 _IO_TIMEOUT_SECONDS = 5.0
 _DESCRIPTOR_CLOSE_FLOOR = 256
 _FULL_OBJECT_ID = re.compile(r"[0-9a-f]{64}\Z")
+_REMOTE_FULL_OBJECT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _REF_TEXT = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,510}\Z")
 _BIDI_CONTROLS = frozenset({
     "LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI", "BN",
@@ -62,11 +63,18 @@ _FIXED_GIT_ENVIRONMENT = {
 }
 _GIT_PREFIX = (
     _GIT,
+    "-c", "gc.auto=0",
+    "-c", "gc.autoDetach=false",
+    "-c", "maintenance.auto=false",
     "-c", "core.hooksPath=/dev/null",
     "--no-lazy-fetch",
     "--no-optional-locks",
     "--no-replace-objects",
 )
+# ls-remote only reads the remote ref advertisement; it does not resolve local
+# objects. Keep local object reads fail-closed behind --no-lazy-fetch, but do
+# not require that Git 2.45 global option for the Git 2.43 remote read path.
+_REMOTE_GIT_PREFIX = tuple(option for option in _GIT_PREFIX if option != "--no-lazy-fetch")
 
 
 def _descriptor_close_end() -> int:
@@ -409,7 +417,7 @@ def _remote_result(request: object, repository_fd: Optional[int]):
     if hashlib.sha256(remote.encode("utf-8")).hexdigest() != request.target["identity_digest"]:
         return build_result(request, outcome="unknown", reason_code="remote_identity_mismatch")
     status, stdout, _ = _run_git(
-        [*_GIT_PREFIX, "ls-remote", "--refs", remote, full_ref],
+        [*_REMOTE_GIT_PREFIX, "ls-remote", "--refs", remote, full_ref],
         _git_environment(remote=True),
     )
     if status == "failed":
@@ -428,7 +436,7 @@ def _remote_result(request: object, repository_fd: Optional[int]):
     if (
         stdout != (line + "\n").encode("ascii")
         or len(fields) != 2
-        or _FULL_OBJECT_ID.fullmatch(fields[0]) is None
+        or _REMOTE_FULL_OBJECT_ID.fullmatch(fields[0]) is None
         or fields[1] != full_ref
     ):
         return build_result(request, outcome="unknown", reason_code="evidence_malformed")

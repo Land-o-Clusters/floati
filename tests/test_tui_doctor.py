@@ -47,6 +47,73 @@ class DoctorRendererContractTests(unittest.TestCase):
 
         self.assertEqual("Nothing to fix. Every check passed and the receipts agree.\n", self.render(artifact))
 
+    def test_healthy_recent_sessions_keep_native_and_cursor_evidence_visible(self) -> None:
+        """Catches the all-green shortcut hiding the requested session census."""
+        artifact = {"findings": [{"code": "wake_health", "severity": "ok", "subject": "builder-a",
+            "detail": "wake path projects healthy", "wake_health": {"node_id": "builder-a", "recent_sessions": {
+                "window_seconds": 3600, "window_start": "2026-10-02T11:00:00Z", "window_end": "2026-10-02T12:00:00Z",
+                "native_woke": {"coverage": "recorded_receipts_only", "source_path": "receipts/wakes/builder-a.jsonl", "sessions": [
+                    {"session_id": "native-a", "last_at": "2026-10-02T11:20:00Z", "last_record": {"line": 4}}]},
+                "cursor_local_publication": {"coverage": "incomplete", "source_path": "state/cursor-wait/builder-a/journal.jsonl",
+                    "legacy_row_count": 2, "invalid_row_count": 1, "sessions": [
+                    {"session_id": "cursor-a", "last_at": "2026-10-02T11:30:00Z", "last_record": {"line": 9}}]},
+            }}}]}
+        rendered = self.render(artifact)
+        self.assertTrue(rendered.startswith("Nothing to fix."))
+        self.assertIn("Native woke receipts", rendered)
+        self.assertIn("Cursor local publications", rendered)
+        self.assertIn('"native-a"', rendered)
+        self.assertIn('"cursor-a"', rendered)
+        self.assertIn("builder-a.jsonl:4", rendered)
+        self.assertIn("journal.jsonl:9", rendered)
+        self.assertIn("incomplete", rendered)
+        self.assertIn("2 legacy", rendered)
+        self.assertIn("1 invalid", rendered)
+
+    def test_recent_sessions_quote_hostile_values_and_keep_empty_coverage(self) -> None:
+        """Catches untrusted artifact strings injecting terminal lines or controls."""
+        artifact = {"findings": [{"code": "wake_health", "severity": "ok", "subject": "builder-a",
+            "wake_health": {"node_id": "builder-a", "recent_sessions": {
+                "native_woke": {"coverage": "recorded_receipts_only", "source_path": "receipts/wakes/builder-a.jsonl", "sessions": [
+                    {"session_id": "unsafe\x1b\n\u202e", "last_at": "stamp\r", "last_record": {"line": 1}}]},
+                "cursor_local_publication": {"coverage": "absent", "source_path": "state/cursor-wait/builder-a/journal.jsonl",
+                    "legacy_row_count": 0, "invalid_row_count": 0, "sessions": []},
+            }}}]}
+        rendered = self.render(artifact)
+        self.assertIn("none recorded in this window", rendered)
+        self.assertIn("absent", rendered)
+        self.assertIn("unsafe", rendered)
+        for control in ("\x1b", "\r", "\u202e"):
+            self.assertNotIn(control, rendered)
+        self.assertIn("\\n", rendered)
+
+    def test_recent_blocks_sort_after_red_and_ignore_malformed_or_unrelated_rows(self) -> None:
+        """Catches history hiding REDs, unstable census order, and untyped row output."""
+        findings = [{"code": "red", "severity": "error", "detail": "repair", "remediation": "inspect"}]
+        for node in ("builder-b", "builder-a"):
+            findings.append({"code": "wake_health", "severity": "ok", "wake_health": {
+                "node_id": node, "recent_sessions": {
+                    "native_woke": {"source_path": "source\n\x1b\u202e", "sessions": [
+                        {"session_id": session, "last_at": "stamp", "last_record": {"line": line}}
+                        for session, line in (("session-b", 2), ("bad-boolean", True), ("session-a", 1))]},
+                    "cursor_local_publication": {"source_path": "journal", "sessions": [],
+                        "coverage": "coverage\n\x1b\u202e", "invalid_row_count": False},
+                },
+            }})
+        findings.append({"code": "unrelated", "severity": "ok", "wake_health": {
+            "node_id": "unrelated-node", "recent_sessions": {},
+        }})
+        rendered = self.render({"findings": findings})
+        self.assertTrue(rendered.startswith("x red"))
+        self.assertLess(rendered.index('"builder-a"'), rendered.index('"builder-b"'))
+        self.assertLess(rendered.index('"session-a"'), rendered.index('"session-b"'))
+        self.assertNotIn("bad-boolean", rendered)
+        self.assertNotIn("unrelated-node", rendered)
+        for control in ("\x1b", "\u202e"):
+            self.assertNotIn(control, rendered)
+        self.assertIn("source\\n", rendered)
+        self.assertIn("coverage\\n", rendered)
+
     def test_findings_render_in_worst_first_triage_order(self) -> None:
         """Catches an arrival-order doctor hiding RED below lower-severity rows."""
 

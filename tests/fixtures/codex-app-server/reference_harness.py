@@ -4,14 +4,116 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import select
+import signal
 import shutil
 import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+
+
+def observed_identity(pid: int) -> object:
+    """Query only a retained PID; use the runner's native birth witness."""
+    source = Path(__file__).resolve().parents[3] / "scripts" / "parallel_processes.py"
+    spec = importlib.util.spec_from_file_location("reference_owned_process_identity", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    row = module.ProcessQuery().identity(pid)
+    if row is None:
+        return None
+    return {**row, "pgid": os.getpgid(pid), "sid": os.getsid(pid)}
+
+
+def observe_process(workspace: Path, role: str) -> int:
+    """An owned fixture child: readiness precedes completion, exit is bounded."""
+    evidence = workspace / ".floati"
+    stopped = [None]
+
+    def stop(number: int, frame: object) -> None:
+        if stopped[0] is None:
+            stopped[0] = number
+
+    for number in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(number, stop)
+    identity = observed_identity(os.getpid())
+    ready = {"role": role, "workspace": str(workspace), "identity": identity,
+             "observed_monotonic": time.monotonic()}
+    (evidence / (role + "-ready.json")).write_text(json.dumps(ready, sort_keys=True) + "\n")
+    print(json.dumps(ready, sort_keys=True), flush=True)
+    # A safety watchdog for the release handshake, not a product deadline.
+    deadline = time.monotonic() + 60
+    release = evidence / (role + "-release")
+    while stopped[0] is None and not release.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    result = {"role": role, "workspace": str(workspace), "ready_identity": identity,
+              "exit_identity": observed_identity(os.getpid()), "signal": stopped[0],
+              "reason": "signal" if stopped[0] is not None else "release" if release.exists() else "deadline",
+              "observed_monotonic": time.monotonic()}
+    (evidence / (role + "-exit.json")).write_text(json.dumps(result, sort_keys=True) + "\n")
+    return 0
+
+
+def collect_observed_descendant(child: subprocess.Popen, workspace: Path) -> None:
+    """Keep the exact handle until wait returns, including bounded-wait failure."""
+    errors = []
+    if child.poll() is None:
+        try:
+            child.terminate()
+        except OSError as error:
+            errors.append({"operation": "terminate", "error": repr(error)})
+    try:
+        code = child.wait(timeout=4)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        errors.append({"operation": "bounded_wait", "error": repr(error)})
+        try:
+            child.kill()
+        except OSError as error:
+            errors.append({"operation": "kill", "error": repr(error)})
+        code = child.wait()
+    result = {"pid": child.pid, "exit_code": code, "collected": True}
+    if errors:
+        result["collection_errors"] = errors
+    (workspace / ".floati" / "descendant-collected.json").write_text(
+        json.dumps(result, sort_keys=True) + "\n")
+    if child.stdout is not None:
+        child.stdout.close()
+
+
+def start_observed_descendant(workspace: Path) -> subprocess.Popen:
+    """Retain the real child before construction and record readiness."""
+    child = subprocess.Popen.__new__(subprocess.Popen)
+    try:
+        child.__init__([sys.executable, str(Path(__file__).resolve()), "--mode", "observed-descendant",
+                        "--observation-workspace", str(workspace)], cwd=workspace,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        started = time.monotonic()
+        bound = 60.0
+        ready, _, _ = select.select([child.stdout], [], [], bound)
+        if not ready:
+            raise RuntimeError(
+                "owned descendant did not publish readiness: "
+                f"bound={bound:.3f}s elapsed={time.monotonic() - started:.3f}s "
+                f"host_load={os.getloadavg()}"
+            )
+        row = json.loads(child.stdout.readline())
+        identity = row["identity"]
+        if (row["role"] != "descendant" or row["workspace"] != str(workspace)
+                or identity["pid"] != child.pid or identity["ppid"] != os.getpid()
+                or identity["pgid"] != os.getpgrp() or identity["sid"] != os.getsid(0)):
+            raise RuntimeError("owned descendant identity did not bind its native group")
+        proof = {"app_server": observed_identity(os.getpid()), "descendant": row,
+                 "workspace": str(workspace)}
+        (workspace / ".floati" / "owned-group.json").write_text(json.dumps(proof, sort_keys=True) + "\n")
+        return child
+    except BaseException:
+        if getattr(child, "pid", None) is not None:
+            collect_observed_descendant(child, workspace)
+        raise
 
 
 def read_message() -> dict:
@@ -118,6 +220,9 @@ def main() -> int:
             "complete-empty",
             "complete-many",
             "complete-background-mutate",
+            "complete-background-observed",
+            "observed-descendant",
+            "observed-peer",
             "complete-pathspec",
             "complete-replace-git",
             "complete-symlink",
@@ -138,7 +243,24 @@ def main() -> int:
     parser.add_argument("--tenant-target")
     parser.add_argument("--hard-alias")
     parser.add_argument("--symbolic-alias")
+    parser.add_argument("--observation-workspace")
     args = parser.parse_args()
+    if args.mode in ("observed-descendant", "observed-peer"):
+        if args.observation_workspace is None:
+            raise ValueError("observed process requires its exact workspace")
+        return observe_process(Path(args.observation_workspace), args.mode.removeprefix("observed-"))
+    observed_child = None
+    if args.mode == "complete-background-observed":
+        def stop_observed_group(number: int, frame: object) -> None:
+            # Keep EOF cleanup alive when the adapter signals its native group.
+            # The retained child still supplies the definitive wait receipt.
+            if observed_child is not None:
+                try:
+                    observed_child.send_signal(number)
+                except OSError:
+                    pass
+        for number in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(number, stop_observed_group)
     received: list[dict] = []
 
     initialize = read_message()
@@ -246,6 +368,7 @@ def main() -> int:
                 "complete-empty",
                 "complete-many",
                 "complete-background-mutate",
+                "complete-background-observed",
                 "complete-pathspec",
                 "complete-replace-git",
                 "complete-symlink",
@@ -270,6 +393,9 @@ def main() -> int:
                             str(workspace),
                         )
                     )
+                elif args.mode == "complete-background-observed":
+                    (workspace / "PROOF.txt").write_text("floati live worker proof\n", encoding="utf-8")
+                    observed_child = start_observed_descendant(workspace)
                 elif args.mode == "complete-many":
                     for index in range(33):
                         (workspace / f"proof-{index:02d}.txt").write_text(
@@ -312,6 +438,10 @@ def main() -> int:
         while read_message():
             pass
     except EOFError:
+        if observed_child is not None:
+            # Only this new mode owns this handle. Closing the real session
+            # releases and reaps its child before the app-server itself exits.
+            collect_observed_descendant(observed_child, workspace)
         return 0
 
 

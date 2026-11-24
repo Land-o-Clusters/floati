@@ -45,7 +45,10 @@ class SparseCursorTests(unittest.TestCase):
     def test_acknowledgment_can_leave_a_hole(self) -> None:
         shown, delivery = self.events.present("bob")
         self.assertEqual([item["id"] for item in self.messages], [item["id"] for item in shown])
-        self.assertEqual("delivery_receipt", delivery["kind"])
+        # BUS-DELIVERY-UNPRESENTED-1: this fixture presents with no live
+        # presenter journal, so the receipt is delivered_unpresented; the ack
+        # still stands and only the unacked hole re-presents.
+        self.assertEqual("delivered_unpresented", delivery["kind"])
         self.cursor.ack("bob", [self.messages[1]["id"]], acting_session_id="test-session")
         pending, _ = self.events.present("bob")
         self.assertEqual([self.messages[0]["id"], self.messages[2]["id"]], [item["id"] for item in pending])
@@ -221,7 +224,7 @@ class SparseCursorTests(unittest.TestCase):
             self.root,
             "events.jsonl",
             forged,
-            allowed_kinds={"message_envelope", "message_retracted"},
+            allowed_kinds={"message_envelope", "send_readiness_observation", "message_retracted"},
         )
         with self.assertRaises(IntegrityFailure) as event_error:
             self.events.event_records()

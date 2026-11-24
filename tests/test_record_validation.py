@@ -353,17 +353,20 @@ class RecordValidationTests(unittest.TestCase):
             )
         self.assertEqual("harness_segment_id_duplicate", duplicate.exception.code)
 
-        for mutate in (
+        for case_index, mutate in enumerate((
             lambda record: record["harness_segments"][0].update(
                 predecessor_segment_id="seg-" + uuid7_hex()
             ),
             lambda record: record["harness_segments"][1].pop(
                 "predecessor_segment_id"
             ),
-        ):
+        )):
             invalid = deepcopy(v1)
             mutate(invalid)
-            with self.subTest(invalid=invalid["harness_segments"]), self.assertRaises(
+            with self.subTest(case=(
+                "initial-segment-with-predecessor",
+                "resume-segment-without-predecessor",
+            )[case_index]), self.assertRaises(
                 ProtocolRefusal
             ) as candidate:
                 validate_record(

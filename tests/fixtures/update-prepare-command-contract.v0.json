@@ -1,0 +1,54 @@
+{
+  "arguments": [
+    {
+      "choices": [],
+      "default": null,
+      "item_type": "string",
+      "metavar": null,
+      "mutually_exclusive_group": null,
+      "name": "root",
+      "nargs": null,
+      "option_strings": [
+        "--root"
+      ],
+      "positional": false,
+      "repeat": false,
+      "required": true,
+      "type": "string"
+    },
+    {
+      "choices": [],
+      "default": false,
+      "item_type": "string",
+      "metavar": null,
+      "mutually_exclusive_group": null,
+      "name": "status",
+      "nargs": 0,
+      "option_strings": [
+        "--status"
+      ],
+      "positional": false,
+      "repeat": false,
+      "required": false,
+      "type": "boolean"
+    }
+  ],
+  "artifact_schema_version": null,
+  "example_argv": [
+    "update",
+    "prepare",
+    "--root",
+    "\u002fprivate/tmp/floati-contract"
+  ],
+  "executable": true,
+  "mcp_exposure": "never",
+  "mcp_omit": [],
+  "mcp_required": [],
+  "mutually_exclusive_groups": [],
+  "path": [
+    "update",
+    "prepare"
+  ],
+  "program": "floati update prepare",
+  "public": true
+}

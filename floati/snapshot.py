@@ -106,71 +106,23 @@ def _fingerprint(record_id: str) -> str:
     return hashlib.sha256(record_id.encode("utf-8")).hexdigest()[:16]
 
 
+def epoch_history(root: FloatiRoot):
+    """Return the complete verified receipt-owned epoch lineage."""
+    from .epoch_history import read_history
+
+    return read_history(root, max_records=MAX_LEDGER_RECORDS, max_bytes=MAX_LEDGER_BYTES)
+
+
 def _owned_epoch_archives(root: FloatiRoot) -> Tuple[Path, ...]:
-    """Follow only receipt-named, tenant-contained epoch archives."""
+    """Preserve the legacy Path API and its bounded-prefix behavior."""
+    from .epoch_history import read_history
 
-    events_path = root.resolve_relative("events.jsonl")
-    archives = []
-    seen = set()
-    for _index in range(MAX_LEDGER_RECORDS):
-        try:
-            status = events_path.lstat()
-            if stat.S_ISLNK(status.st_mode) or not stat.S_ISREG(status.st_mode):
-                if archives:
-                    raise IntegrityFailure(
-                        "epoch_receipt_chain_invalid",
-                        "a receipt-owned archive event ledger is not a regular file",
-                    )
-                break
-            data = events_path.read_bytes()
-            if len(data) > MAX_LEDGER_BYTES:
-                raise IntegrityFailure(
-                    "epoch_receipt_chain_invalid",
-                    "a receipt-owned epoch event ledger exceeds the read bound",
-                )
-            framed = decode_frames(data)
-            if not framed:
-                break
-            if framed[0].get("kind") != "bus_epoch_roll_receipt":
-                break
-            receipt = validate_record(
-                framed[0],
-                root.tenant_id,
-                frozenset({"bus_epoch_roll_receipt"}),
-                integrity=True,
-            )
-        except FileNotFoundError as exc:
-            if archives:
-                raise IntegrityFailure(
-                    "epoch_receipt_chain_invalid",
-                    "a receipt-owned archive event ledger is unavailable",
-                ) from exc
-            break
-        except FrameError as exc:
-            raise IntegrityFailure(
-                "epoch_receipt_chain_invalid",
-                "a claimed receipt-owned epoch event ledger is malformed",
-            ) from exc
-        except OSError as exc:
-            raise IntegrityFailure(
-                "epoch_receipt_chain_invalid",
-                "a claimed receipt-owned epoch event ledger is unavailable",
-            ) from exc
-        try:
-            from .bus_epoch import validate_epoch_receipt_archive
-
-            archive = validate_epoch_receipt_archive(root, receipt)
-        except ProtocolRefusal as exc:
-            raise IntegrityFailure(exc.code, exc.detail) from exc
-        if archive in seen:
-            raise IntegrityFailure(
-                "epoch_receipt_chain_invalid",
-                "roll receipt archive lineage contains a cycle",
-            )
-        seen.add(archive)
-        archives.append(archive)
-        events_path = archive / "events.jsonl"
-    return tuple(archives)
+    return tuple(
+        archive.legacy_path for archive in read_history(
+            root, max_records=MAX_LEDGER_RECORDS, max_bytes=MAX_LEDGER_BYTES,
+            legacy_bounded_prefix=True,
+        )
+    )
 
 
 def _anchor_was_archived(anchor: object, archives: Sequence[Path]) -> bool:
@@ -196,18 +148,33 @@ def _anchor_was_archived(anchor: object, archives: Sequence[Path]) -> bool:
     ):
         return False
     for archive in archives:
-        source = archive / relative
         try:
-            source_status = source.lstat()
-            if (
-                source.resolve(strict=False) != source
-                or stat.S_ISLNK(source_status.st_mode)
-                or not stat.S_ISREG(source_status.st_mode)
-            ):
-                continue
-            data = source.read_bytes()
+            root_status = archive.lstat()
         except OSError:
             continue
+        if stat.S_ISLNK(root_status.st_mode):
+            continue
+        if stat.S_ISREG(root_status.st_mode):
+            from .epoch_history import read_archived_bytes
+            try:
+                data = read_archived_bytes(archive, relative.as_posix())
+            except OSError:
+                continue
+            if data is None:
+                continue
+        else:
+            source = archive / relative
+            try:
+                source_status = source.lstat()
+                if (
+                    source.resolve(strict=False) != source
+                    or stat.S_ISLNK(source_status.st_mode)
+                    or not stat.S_ISREG(source_status.st_mode)
+                ):
+                    continue
+                data = source.read_bytes()
+            except OSError:
+                continue
         if (
             len(data) <= MAX_LEDGER_BYTES
             and offset <= len(data)
@@ -268,6 +235,10 @@ class SnapshotStore:
                 "snapshot_source_invalid", "snapshot source paths must be unique"
             )
         return sources
+
+    def _archives(self) -> Tuple[Path, ...]:
+        """Return native lineage; specialized readers may supply exact proof."""
+        return _owned_epoch_archives(self.root)
 
     def _read_source(self, source: SourceSpec) -> bytes:
         path = self.root.resolve_relative(source.relative)
@@ -488,7 +459,7 @@ class SnapshotStore:
             raise SnapshotRefusal(
                 "snapshot_source_set_mismatch", "derived snapshot sources are invalid"
             )
-        archives = _owned_epoch_archives(self.root)
+        archives = self._archives()
         if archives and any(
             _anchor_was_archived(anchor, archives) for anchor in anchors
         ):

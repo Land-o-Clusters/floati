@@ -148,8 +148,11 @@ class RoleLibraryTests(unittest.TestCase):
         self.write_source()
         link = self.base / 'link.json'
         link.symlink_to(self.source)
-        for source in (link, 'https://example.invalid/role.json'):
-            with self.subTest(source=str(source)), self.assertRaises(ProtocolRefusal):
+        for case_index, source in enumerate((link, 'https://example.invalid/role.json')):
+            with self.subTest(case=(
+                "symlink-local-role-source",
+                "https-role-source",
+            )[case_index]), self.assertRaises(ProtocolRefusal):
                 self.library.import_file(source, idempotency_key='bad-source')
         self.assertEqual([], self.receipts())
 

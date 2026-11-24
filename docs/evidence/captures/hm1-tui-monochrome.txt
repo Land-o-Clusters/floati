@@ -8,9 +8,9 @@
 │! STALE MUTEX builder-review-workspace holder:builder-review                                      │
 │                                                                                                  │
 │NODE               LIVE       AUTH       MUTEX      INBOX  LAST                                   │
-│> builder-review         ○          ○          ○          0  12:00:06.000                         │
+│> builder-review         ○          ○          ○          0  12:00:06.000  UNPRESENTED 1          │
 │  builder-app            ○          ○          ●          0  11:59:40.000                         │
-│  builder-core           ●          ●          ○          1  12:00:09.000                         │
+│  builder-core           ●          ●          ○          1  12:00:09.000  UNPRESENTED 1          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭ WORKERS ─────────────────────────────────────────────────────────────────────────────────────────╮

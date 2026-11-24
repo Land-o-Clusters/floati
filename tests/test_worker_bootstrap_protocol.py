@@ -22,6 +22,7 @@ from floati.worker_bootstrap_protocol import (
 )
 from floati.worker_errors import WorkerAdapterFailure
 from floati.worker_isolation import WorkerIsolationPolicy
+from tests.readiness import wait_poll
 
 
 class _StringSubclass(str):
@@ -137,7 +138,7 @@ class WorkerBootstrapProtocolTests(unittest.TestCase):
 
         for frame in frames:
             sender.send(frame)
-            self.assertTrue(receiver.poll(0.5))
+            wait_poll(receiver, "worker channel frame ready")
             self.assertEqual(receiver.recv(), frame)
 
     def test_channel_rejects_duplicate_keys_noncanonical_json_nan_trailing_and_oversize(self) -> None:
@@ -173,7 +174,7 @@ class WorkerBootstrapProtocolTests(unittest.TestCase):
         self.assert_isolation_refusal(lambda: receiver.poll(-0.1))
         self.assert_isolation_refusal(lambda: receiver.poll(math.inf))
         sender.close()
-        self.assertTrue(receiver.poll(0.5))
+        wait_poll(receiver, "worker channel EOF ready")
         self.assert_isolation_refusal(receiver.recv)
 
         raw_left, raw_right = socket.socketpair()
@@ -182,7 +183,7 @@ class WorkerBootstrapProtocolTests(unittest.TestCase):
         channel = BootstrapChannel(raw_left.detach())
         raw_right.sendall(struct.pack(">I", 24) + b'{"payload":')
         raw_right.shutdown(socket.SHUT_WR)
-        self.assertTrue(channel.poll(0.5))
+        wait_poll(channel, "worker channel partial frame EOF ready")
         self.assert_isolation_refusal(channel.recv)
         channel.close()
 

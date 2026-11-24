@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/capability-revoked-record.schema.json",
+  "title": "Floati Capability Revocation Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "grant_id", "reason_code", "replacement_policy_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^capability-revoked-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "capability_revoked"},
+    "grant_id": {"type": "string", "pattern": "^capability-grant-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "reason_code": {"type": "string", "enum": ["operator_revoked", "authority_revoked", "worker_unregistered", "policy_replaced"]},
+    "replacement_policy_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"reason_code": {"const": "policy_replaced"}}},
+      "then": {"properties": {"replacement_policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+      "else": {"properties": {"replacement_policy_digest": {"type": "null"}}}
+    }
+  ]
+}

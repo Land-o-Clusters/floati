@@ -30,6 +30,15 @@ PINNED_BOX_LEG_RUN = AT_BOX_LEG_RUN
 # AST site counts. A helper two tests call is one site; the box-leg pin
 # records how many tests actually skipped under run 33980338058.
 PINNED_SKIP_REASONS = {
+    'independent-parent fork race requires the supported POSIX host': {"sites": 2, "kind": HOST_CAPABILITY},
+    # HARBOR-PARALLEL-1: native-recorder fixtures exercise intentional outcomes;
+    # only the Linux tempfile contract is a host-capability guard. Counts come
+    # from skip_reason_counts(TESTS_DIRECTORY), including both expected failures.
+    '(expectedFailure)': {"sites": 2, "kind": PRODUCT},
+    'Linux tempfile root contract': {"sites": 1, "kind": HOST_CAPABILITY},
+    'deliberate skip': {"sites": 1, "kind": PRODUCT},
+    'skip': {"sites": 1, "kind": PRODUCT},
+    'subskip': {"sites": 1, "kind": PRODUCT},
     # FIXTURE-1's fence (train AV) skips by design in a projection, where the
     # export policy is absent and classification is the identity. H1-F1 Am.2's
     # projection-builder leg words the same skip: it cannot build a projection
@@ -43,6 +52,9 @@ PINNED_SKIP_REASONS = {
     # to say the same absence, which is why only the count moves.
     # PROJ-LEG-3 adds a sixth: the adapted-projection ledger leg, which
     # skips under the same guard for the same reason.
+    # Slice D consolidates the two no-listener projections under one guard.
+    # The raw-copy classified site-pin projection reuses this wording as a
+    # ninth site; only the count moves.
     "no export policy in this tree; classification is identity": {
         "sites": 9,
         "kind": PRODUCT,
@@ -64,7 +76,8 @@ PINNED_SKIP_REASONS = {
         "sites": 2,
         "kind": PRODUCT,
     },
-    "Pillow is not installed": {"sites": 7, "kind": HOST_CAPABILITY},
+    # MK-D1 repeatability adds two native capture controls; AST census: 10 sites.
+    "Pillow is not installed": {"sites": 10, "kind": HOST_CAPABILITY},
     "macOS descriptor surface": {"sites": 3, "kind": HOST_CAPABILITY},
     "Claude reference adapter is unavailable": {
         "sites": 1,
@@ -102,6 +115,10 @@ PINNED_SKIP_REASONS = {
     },
     "floati.mcp_pin is not implemented": {"sites": 1, "kind": PRODUCT},
     "harbor-only history contract": {"sites": 1, "kind": PRODUCT},
+    "public_shallow_history: public shallow clone omits exact commit(s) {dyn}": {
+        "sites": 1,
+        "kind": PRODUCT,
+    },
     "not in this tree (private to the harbor repository by export policy): {dyn}": {
         "sites": 1,
         "kind": PRODUCT,
@@ -120,6 +137,12 @@ PINNED_SKIP_REASONS = {
     },
     "reference adapter unavailable": {"sites": 1, "kind": HOST_CAPABILITY},
     "symlinks unavailable": {"sites": 1, "kind": HOST_CAPABILITY},
+    # HARBOR-PARALLEL-EPERM-1: the real alive-but-unreadable owned child is a
+    # setuid-root binary run by our own child; one helper, three callers.
+    "no setuid-root /usr/bin/top on this host; an owned child the runner cannot read is unobservable here": {
+        "sites": 1,
+        "kind": HOST_CAPABILITY,
+    },
     "this host does not expose both tmp directory spellings": {
         "sites": 1,
         "kind": HOST_CAPABILITY,

@@ -15,11 +15,11 @@ from floati.errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from floati.records import validate_record
 from floati.update_consent import UpdateConsentLedger
 from tests.schema_validation import SchemaValidationError, validate_json_schema
-from tests.test_fu1_g0 import FU1G0Tests, REPOSITORY_ROOT, _tree_bytes
-from tests.test_fu1_g1 import FU1G1Tests
+from tests import test_fu1_g0, test_fu1_g1
+from tests.test_fu1_g0 import REPOSITORY_ROOT, _tree_bytes
 
 
-class FU1G3RegistryTests(FU1G0Tests):
+class FU1G3RegistryTests(test_fu1_g0.FU1G0Tests):
     """Real-byte tests for the surgical G3 registry boundary."""
 
     def setUp(self) -> None:
@@ -413,7 +413,7 @@ class FU1G3RegistryTests(FU1G0Tests):
         )
 
 
-class FU1G3SagaTests(FU1G1Tests):
+class FU1G3SagaTests(test_fu1_g1.FU1G1Tests):
     """G3 must join the G2 frontier and not fabricate the ruled VS-7 evidence."""
 
     def setUp(self) -> None:
@@ -591,8 +591,62 @@ class FU1G3SagaTests(FU1G1Tests):
         )
 
 
-class FU1G3CompletionTests(FU1G1Tests):
+class _FU1G3CompletionFixture(test_fu1_g1._FU1G1Fixture):
+    def _complete_equal_encoder_g3(self, key: str) -> dict[str, object]:
+        return self._complete_equal_encoder_g3_context(key)[2]
+
+    def _complete_equal_encoder_g3_context(
+        self, key: str,
+    ) -> tuple[dict[str, object], object, dict[str, object]]:
+        from floati.fleet_update import commit_fleet_update_g3, preview_fleet_update
+        from floati.fleet_update_receipts import FleetUpdateReceiptLedger
+
+        plan, ledger = self._equal_encoder_g3_frontier(key)
+        completed = commit_fleet_update_g3(
+            plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
+        )
+        return plan, ledger, completed
+
+    def _equal_encoder_g3_frontier(
+        self, key: str,
+    ) -> tuple[dict[str, object], object]:
+        from floati.fleet_update import preview_fleet_update
+        from floati.fleet_update_receipts import FleetUpdateReceiptLedger
+
+        self.target_source.joinpath("floati", "records.py").write_bytes(b"current encoder\n")
+        self._write_manifest(self.target_source, "b" * 40)
+        plan = preview_fleet_update(root=self.root, actor=self.actor, destination=self.destination, target_source=self.target_source, target_source_sha="b" * 40, channel=self.channel, version=self.version, binding_path=self.binding_path, transport_registry=self.registry_path, transport_name=self.transport)
+        self._consent(); ledger = FleetUpdateReceiptLedger(self.root); started = ledger.start(plan, self.actor, key); predecessor = str(started["id"])
+        for _ in range(1 + len(plan["waiter_bindings"])):
+            step = self._append_observed_step(ledger, plan, self.actor, key, predecessor); predecessor = str(step["id"])
+        return plan, ledger
+
+    def _receipt_path(self) -> Path:
+        return self.root.path / "receipts/fleet-update" / f"{self.actor}.jsonl"
+
+    def _receipt_rows(self) -> list[dict[str, object]]:
+        return [
+            json.loads(line)
+            for line in self._receipt_path().read_text(encoding="utf-8").splitlines()
+        ]
+
+    def _write_receipt_rows(self, rows: list[dict[str, object]]) -> None:
+        self._receipt_path().write_text(
+            "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+
+
+class FU1G3CompletionTests(_FU1G3CompletionFixture, unittest.TestCase):
     """The equal-encoder terminal branch retains real registry bytes and receipts."""
+
+    # The fixed subtest parity reader still selects these two inherited IDs.
+    test_g1_fix3_bindings_validate_before_empty_or_excluded_workspace_maps = (
+        test_fu1_g1.FU1G1Tests.test_g1_fix3_bindings_validate_before_empty_or_excluded_workspace_maps
+    )
+    test_g1_reader_schema_and_runtime_reject_fabricated_rows = (
+        test_fu1_g1.FU1G1Tests.test_g1_reader_schema_and_runtime_reject_fabricated_rows
+    )
 
     def test_g3_equal_encoder_receipts_pins_before_terminal_completion(self) -> None:
         """Catches completion appended before the one joined two-pin replacement receipt."""
@@ -1090,47 +1144,3 @@ class FU1G3CompletionTests(FU1G1Tests):
                         hostile, self.root.tenant_id,
                         frozenset({str(hostile["kind"])}), integrity=False,
                     )
-
-    def _complete_equal_encoder_g3(self, key: str) -> dict[str, object]:
-        return self._complete_equal_encoder_g3_context(key)[2]
-
-    def _complete_equal_encoder_g3_context(
-        self, key: str,
-    ) -> tuple[dict[str, object], object, dict[str, object]]:
-        from floati.fleet_update import commit_fleet_update_g3, preview_fleet_update
-        from floati.fleet_update_receipts import FleetUpdateReceiptLedger
-
-        plan, ledger = self._equal_encoder_g3_frontier(key)
-        completed = commit_fleet_update_g3(
-            plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
-        )
-        return plan, ledger, completed
-
-    def _equal_encoder_g3_frontier(
-        self, key: str,
-    ) -> tuple[dict[str, object], object]:
-        from floati.fleet_update import preview_fleet_update
-        from floati.fleet_update_receipts import FleetUpdateReceiptLedger
-
-        self.target_source.joinpath("floati", "records.py").write_bytes(b"current encoder\n")
-        self._write_manifest(self.target_source, "b" * 40)
-        plan = preview_fleet_update(root=self.root, actor=self.actor, destination=self.destination, target_source=self.target_source, target_source_sha="b" * 40, channel=self.channel, version=self.version, binding_path=self.binding_path, transport_registry=self.registry_path, transport_name=self.transport)
-        self._consent(); ledger = FleetUpdateReceiptLedger(self.root); started = ledger.start(plan, self.actor, key); predecessor = str(started["id"])
-        for _ in range(1 + len(plan["waiter_bindings"])):
-            step = self._append_observed_step(ledger, plan, self.actor, key, predecessor); predecessor = str(step["id"])
-        return plan, ledger
-
-    def _receipt_path(self) -> Path:
-        return self.root.path / "receipts/fleet-update" / f"{self.actor}.jsonl"
-
-    def _receipt_rows(self) -> list[dict[str, object]]:
-        return [
-            json.loads(line)
-            for line in self._receipt_path().read_text(encoding="utf-8").splitlines()
-        ]
-
-    def _write_receipt_rows(self, rows: list[dict[str, object]]) -> None:
-        self._receipt_path().write_text(
-            "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
-            encoding="utf-8",
-        )

@@ -20,9 +20,10 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .bus_epoch import epoch_guard
 from .errors import ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import read_records, transact
+from .jsonl import read_records, read_records_sealed_snapshot, transact
 from .records import validate_record
 from .registry import utc_now
 from .root import FloatiRoot
@@ -38,6 +39,7 @@ _GRANT_SOURCES: tuple[tuple[str, frozenset[str]], ...] = (
 )
 _DELIVERY_SOURCES = ("receipts/deliveries", "receipts/acks")
 _BUNDLE_ENTRY_CEILING = 100000
+_DIRECTORY_BUNDLE_BASENAME = "receipts-read.json"
 
 _GRANT_ACT = (
     "run: floati confluence grant --root ROOT --consumer CONSUMER "
@@ -61,16 +63,18 @@ def _consumer(value: object) -> str:
 class ConfluenceGrantLedger:
     """Receipted, per-root, per-consumer read grants in one ledger."""
 
-    def __init__(self, root: FloatiRoot) -> None:
+    def __init__(self, root: FloatiRoot, *, _sealed_snapshot_reads: bool = False) -> None:
         if not isinstance(root, FloatiRoot):
             raise ProtocolRefusal(
                 "confluence_root_invalid",
                 "the confluence seam requires one validated direct-home root",
             )
         self.root = root
+        self._sealed_snapshot_reads = _sealed_snapshot_reads
 
     def _records(self) -> List[Dict[str, object]]:
-        return read_records(
+        reader = read_records_sealed_snapshot if self._sealed_snapshot_reads else read_records
+        return reader(
             self.root, GRANT_LEDGER, allowed_kinds=set(GRANT_KINDS))
 
     def _append(
@@ -158,11 +162,15 @@ class ConfluenceGrantLedger:
         return list(self._records())
 
 
-def _bundle_sources(root: FloatiRoot) -> List[tuple[str, frozenset[str]]]:
+def _bundle_sources(root: FloatiRoot, version: int) -> List[tuple[str, frozenset[str]]]:
     """The v0 allowlist, in fixed order, with per-node ledgers enumerated
     from the root's own declared receipts directories (own-root structure,
     never discovery beyond it)."""
     sources: List[tuple[str, frozenset[str]]] = []
+    if version == 2:
+        from .events import EVENT_KINDS
+
+        sources.append(("events.jsonl", EVENT_KINDS))
     for relative, kinds in _GRANT_SOURCES:
         sources.append((relative, kinds))
     for directory in _DELIVERY_SOURCES:
@@ -171,9 +179,11 @@ def _bundle_sources(root: FloatiRoot) -> List[tuple[str, frozenset[str]]]:
             continue
         for path in sorted(absolute.glob("*.jsonl")):
             relative = path.relative_to(root.path).as_posix()
-            kind = "delivery_receipt" if "deliveries" in directory\
-                else "ack_receipt"
-            sources.append((relative, frozenset({kind})))
+            kinds = (frozenset({"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"})
+                     if version == 2 and "deliveries" in directory
+                     else frozenset({"delivery_receipt", "delivered_unpresented"})
+                     if "deliveries" in directory else frozenset({"ack_receipt"}))
+            sources.append((relative, kinds))
     return sources
 
 
@@ -223,7 +233,7 @@ def confluence_release(
 
 
 def materialize_bundle(
-    root: FloatiRoot, *, consumer: object, out: object
+    root: FloatiRoot, *, consumer: object, out: object, version: int = 1
 ) -> Path:
     """Materialize the receipts-read bundle under the consumer's active
     grant. Physically read-only against the root: every ledger read uses
@@ -235,13 +245,58 @@ def materialize_bundle(
             "the confluence seam requires one validated direct-home root",
         )
     consumer = _consumer(consumer)
-    ledger = ConfluenceGrantLedger(root)
+    with epoch_guard(root):
+        document = _bundle_document(root, consumer, version)
+        if not isinstance(out, Path) or not out.is_absolute():
+            raise ProtocolRefusal(
+                "confluence_out_invalid",
+                "the bundle output must be one explicit absolute path")
+        publish_launches = version == 2 and out.name == _DIRECTORY_BUNDLE_BASENAME
+        out = out.resolve()
+        if out == root.path or root.path in out.parents:
+            raise ProtocolRefusal(
+                "confluence_out_invalid",
+                "the bundle output must be outside the fleet root")
+
+        launches = None
+        if publish_launches and out.name == _DIRECTORY_BUNDLE_BASENAME:
+            from .confluence_codex_launches import codex_launch_projection_bytes
+
+            launches = codex_launch_projection_bytes(root)
+
+    from .confluence_codex_launches import publish_bundle_files
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    publish_bundle_files(out, (json.dumps(document, indent=2) + "\n").encode("utf-8"), launches)
+    return out
+
+
+def _bundle_document(root, consumer, version):
+    # A complete bundle may read long ledgers, including its grant history.
+    # Seal each generation under its ledger lock, then read the complete
+    # prefix with only the shared epoch barrier. Grant administration retains
+    # its ordinary transaction/read behavior on the default ledger instance.
+    ledger = ConfluenceGrantLedger(root, _sealed_snapshot_reads=True)
     grant = ledger.require_active(consumer)
+    if version not in (1, 2) or isinstance(version, bool):
+        raise ProtocolRefusal("confluence_bundle_version_invalid", "bundle version must be 1 or 2")
 
     staged: List[Dict[str, object]] = []
-    for relative, kinds in _bundle_sources(root):
-        records = read_records(root, Path(relative), allowed_kinds=set(kinds))
+    excluded_wake_hold_receipt_count = 0
+    for relative, kinds in _bundle_sources(root, version):
+        records = read_records_sealed_snapshot(root, Path(relative), allowed_kinds=set(kinds))
+        if relative == "events.jsonl":
+            from .events import validate_event_records
+
+            validate_event_records(records)
         for ordinal, record in enumerate(records, start=1):
+            if record["kind"] == "wake_hold_receipt":
+                excluded_wake_hold_receipt_count += 1
+                continue
+            if relative == "events.jsonl" and record["kind"] not in {
+                "message_envelope", "message_retracted",
+            }:
+                continue
             staged.append({
                 "source": relative,
                 "source_ordinal": ordinal,
@@ -271,18 +326,21 @@ def materialize_bundle(
         default=str(grant["timestamp"]),
     )
     document = {
-        "schema_version": 1,
+        "schema_version": version,
         "kind": "receipts_read_bundle",
         "tenant_id": root.tenant_id,
         "snapshot_at": snapshot_at,
         "grant_id": str(grant["id"]),
         "entries": entries,
     }
-    if not isinstance(out, Path) or not out.is_absolute():
-        raise ProtocolRefusal(
-            "confluence_out_invalid",
-            "the bundle output must be one explicit absolute path")
-    out = Path(out.resolve())
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-    return out
+    if version == 2:
+        from datetime import datetime, timezone
+
+        from .roster import project_roster
+        from .confluence_fleet_state import project_fleet_state
+
+        document["excluded_wake_hold_receipt_count"] = excluded_wake_hold_receipt_count
+        observed_at = datetime.now(timezone.utc)
+        document["roster"] = project_roster(root, observed_at)
+        document["fleet_state"] = project_fleet_state(root, observed_at)
+    return document

@@ -657,7 +657,8 @@ class NodeBootProjection(_NodeProjection):
     def _artifact(self) -> Dict[str, object]:
         context = self._context()
         artifact = self._common_artifact(context, self._kind)
-        prompt = self._boot_prompt(context)
+        from .fleet_presence import with_presence
+        prompt = with_presence(self.root, self.node_id, self._boot_prompt(context))
         artifact["command"] = (
             f"Read your state file first: {artifact['state_file']}; "
             f"start the {artifact['harness']} seat for {artifact['node_id']} "

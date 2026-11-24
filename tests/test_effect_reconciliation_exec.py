@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import gc
 import hashlib
 import json
 import os
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
-from contextlib import ExitStack
+import warnings
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Callable, Optional
 from unittest import mock
@@ -24,6 +28,132 @@ from tests.test_effect_reconciliation_observer import (
     observer_exec_rebound_descriptors,
 )
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.readiness import wait_until
+
+
+class _ModuleView:
+    """Replace launcher bindings without changing modules used by foreign code."""
+
+    def __init__(self, module, **overrides):
+        self.module = module
+        self.overrides = overrides
+
+    def __getattr__(self, name):
+        return self.overrides.get(name, getattr(self.module, name))
+
+
+class _DescriptorCensus:
+    """Test-only ownership ledger; process-wide churn is diagnostic context only."""
+
+    @staticmethod
+    def describe(descriptor, directory):
+        try:
+            metadata = os.fstat(descriptor)
+            flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+        except OSError:
+            return None
+        try:
+            target = os.readlink(f"{directory}/{descriptor}")
+        except OSError:
+            target = "fstat:" + stat.filemode(metadata.st_mode)
+        return (metadata.st_dev, metadata.st_ino, metadata.st_rdev,
+                stat.S_IFMT(metadata.st_mode), flags, target)
+
+    @classmethod
+    def snapshot(cls, directory):
+        result = {}
+        for name in os.listdir(directory):
+            if name.isascii() and name.isdigit():
+                descriptor = int(name)
+                observed = cls.describe(descriptor, directory)
+                if observed is not None:
+                    result[descriptor] = observed
+        return result
+
+    def __init__(self, launcher, *, directory=None):
+        self.launcher = launcher
+        self.directory = directory or (
+            "/proc/self/fd" if sys.platform.startswith("linux") else "/dev/fd"
+        )
+        self.owned = {}
+        self.sockets = []
+        self.foreign_closes = []
+
+    def acquired(self, descriptor):
+        self.owned[descriptor] = self.describe(descriptor, self.directory)
+        return descriptor
+
+    def open(self, *args, **kwargs):
+        return self.acquired(os.open(*args, **kwargs))
+
+    def close(self, descriptor):
+        observed = self.describe(descriptor, self.directory)
+        owned = self.owned.get(descriptor)
+        if observed is not None and (owned is None or owned[:4] != observed[:4]):
+            self.foreign_closes.append((descriptor, observed))
+        os.close(descriptor)
+        self.owned.pop(descriptor, None)
+
+    def duplicate(self, descriptor, command, *args):
+        result = fcntl.fcntl(descriptor, command, *args)
+        if command in (fcntl.F_DUPFD, fcntl.F_DUPFD_CLOEXEC):
+            self.acquired(result)
+        return result
+
+    def socketpair(self, *args, **kwargs):
+        pair = socket.socketpair(*args, **kwargs)
+        for selected in pair:
+            self.acquired(selected.fileno())
+            self.sockets.append(selected)
+        return pair
+
+    @contextmanager
+    def check(self, testcase):
+        before = self.snapshot(self.directory)
+        threads_before = threading.active_count()
+        real_socket_close = socket.socket.close
+
+        def close_socket(selected):
+            descriptor = selected.fileno()
+            real_socket_close(selected)
+            # Match the object, never a reused fd number. A detached endpoint
+            # has fileno() == -1 and stays owned until raw-fd cleanup closes it.
+            if descriptor >= 0 and any(selected is value for value in self.sockets):
+                self.owned.pop(descriptor, None)
+
+        with mock.patch.object(self.launcher, "os", _ModuleView(
+            os, open=self.open, close=self.close,
+        )), mock.patch.object(self.launcher, "fcntl", _ModuleView(
+            fcntl, fcntl=self.duplicate,
+        )), mock.patch.object(self.launcher, "socket", _ModuleView(
+            socket, socketpair=self.socketpair,
+        )), mock.patch.object(socket.socket, "close", close_socket):
+            yield
+        after = self.snapshot(self.directory)
+        threads_after = threading.active_count()
+        leaked = {
+            descriptor: observed for descriptor, observed in self.owned.items()
+            # Targets/permissions/flags are diagnostic, not identity: Darwin
+            # changes a socket's displayed permissions when its peer closes.
+            if observed is not None and descriptor in after
+            and after[descriptor][:4] == observed[:4]
+        }
+        differences = [
+            f"leaked fd={descriptor} acquired={observed!r} "
+            f"before={before.get(descriptor)!r} after={after.get(descriptor)!r}"
+            for descriptor, observed in sorted(leaked.items())
+        ]
+        differences.extend(
+            f"foreign_close fd={descriptor} at_close={observed!r} "
+            f"before={before.get(descriptor)!r} after={after.get(descriptor)!r}"
+            for descriptor, observed in self.foreign_closes
+        )
+        if differences:
+            testcase.fail("; ".join([
+                f"descriptor census platform={sys.platform} "
+                f"threads_before={threads_before} threads_after={threads_after}",
+                *differences,
+            ]))
 
 
 class EffectReconciliationExecTests(unittest.TestCase):
@@ -394,12 +524,27 @@ class EffectReconciliationExecTests(unittest.TestCase):
         self.assertEqual(expected, result.observation)
 
     @staticmethod
+    def fixture_request_body() -> str:
+        """Request readiness is setup; observer deadlines remain product inputs."""
+        return (
+            "ready_bound = 60.0\n"
+            "ready_started = time.monotonic()\n"
+            "deadline = ready_started + ready_bound\n"
+            "try:\n"
+            "    header = _read_exact(3, 4, deadline)\n"
+            "    length = struct.unpack('>I', header)[0]\n"
+            "    body = _read_exact(3, length, deadline)\n"
+            "except BaseException as error:\n"
+            "    raise RuntimeError('observer fixture request readiness: '\n"
+            "        f'bound={ready_bound:.3f}s elapsed={time.monotonic()-ready_started:.3f}s '\n"
+            "        f'host_load={os.getloadavg()}') from error\n"
+        )
+
+    @staticmethod
     def valid_result_body(*, suffix: str = "") -> str:
         return (
-            "deadline = time.monotonic() + 2.0\n"
-            "header = _read_exact(3, 4, deadline)\n"
-            "length = struct.unpack('>I', header)[0]\n"
-            "request = decode_request_frame(header + _read_exact(3, length, deadline))\n"
+            EffectReconciliationExecTests.fixture_request_body()
+            + "request = decode_request_frame(header + body)\n"
             "result = build_result(request, outcome='unknown', "
             "reason_code='reconciliation_inconclusive', "
             "observation={'adapter': 'none'})\n"
@@ -407,19 +552,199 @@ class EffectReconciliationExecTests(unittest.TestCase):
             + suffix
         )
 
-    @staticmethod
-    def open_descriptors() -> set[int]:
-        directory = "/proc/self/fd" if sys.platform.startswith("linux") else "/dev/fd"
-        result = set()
-        for name in os.listdir(directory):
-            if name.isascii() and name.isdigit():
-                descriptor = int(name)
+    def descriptor_census(self):
+        return _DescriptorCensus(self.exec_module()).check(self)
+
+    def observe_spawn_refusal(self, spawn):
+        # These controls exercise resource ownership even on a host whose
+        # interpreter is refused. No executable is launched by the hook.
+        launcher = self.exec_module()
+        with mock.patch.object(launcher, "_trusted_interpreter", return_value=None),\
+                mock.patch.object(
+                    launcher, "_revalidate_trusted_interpreter", return_value=Path(sys.executable),
+                ):
+            result = self.observe(self.request_none(), spawn=spawn)
+        self.assertEqual("observer_launch_failed", result.reason_code)
+
+    def test_descriptor_census_ignores_foreign_collection_and_open_in_spawn(self) -> None:
+        """Unrelated finalizers and hook allocations must not accuse the launcher."""
+        for change in ("collect", "open"):
+            with self.subTest(change=change):
+                enabled = gc.isenabled()
+                gc.disable()
+                cycle = [self.protocol_path.open("rb")]
+                descriptor = cycle[0].fileno()
+                cycle.append(cycle)
+                opened = []
+
+                def foreign_change_then_refuse(*_args, **_kwargs):
+                    nonlocal cycle
+                    if change == "collect":
+                        cycle = None
+                        # An unclosed file is intentional in this GC control.
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", ResourceWarning)
+                            gc.collect()
+                        self.assert_closed(self, descriptor)
+                    else:
+                        opened.append(os.open(self.observer_path, os.O_RDONLY))
+                    raise OSError("synthetic spawn refusal")
+
                 try:
-                    os.fstat(descriptor)
-                except OSError:
-                    continue
-                result.add(descriptor)
-        return result
+                    with self.descriptor_census():
+                        self.observe_spawn_refusal(foreign_change_then_refuse)
+                finally:
+                    for value in opened:
+                        os.close(value)
+                    if cycle is not None:
+                        cycle[0].close()
+                        cycle = None
+                    gc.collect()
+                    if enabled:
+                        gc.enable()
+
+    def test_descriptor_census_detects_source_and_channel_leaks_with_diagnostics(self) -> None:
+        """Omitting either source or detached channel cleanup must still red."""
+        launcher = self.exec_module()
+        real_close = launcher._close_descriptors
+        for kind, index in (("source", -1), ("channel", 0)):
+            with self.subTest(kind=kind):
+                leaked = []
+
+                def omit_one_close(descriptors):
+                    selected = list(descriptors)
+                    if not leaked:
+                        leaked.append(selected.pop(index))
+                    real_close(selected)
+
+                def refuse(*_args, **_kwargs):
+                    raise OSError("synthetic spawn refusal")
+
+                try:
+                    with self.assertRaises(AssertionError) as caught:
+                        with self.descriptor_census(), mock.patch.object(
+                            launcher, "_close_descriptors", side_effect=omit_one_close,
+                        ):
+                            self.observe_spawn_refusal(refuse)
+                    message = str(caught.exception)
+                    self.assertIn("leaked", message)
+                    self.assertIn(str(leaked[0]), message)
+                    self.assertIn("threads_before=", message)
+                    self.assertIn("threads_after=", message)
+                    self.assertIn("platform=" + sys.platform, message)
+                    self.assertNotIn("\n", message)
+                finally:
+                    for descriptor in leaked:
+                        os.close(descriptor)
+
+    def test_descriptor_census_detects_launcher_close_of_foreign_descriptor(self) -> None:
+        """A shrinking descriptor count must not hide a wrongful launcher close."""
+        launcher = self.exec_module()
+        descriptor = os.open(self.protocol_path, os.O_RDONLY)
+        real_close = launcher._close_descriptors
+        closed = False
+
+        def close_foreign_too(descriptors):
+            nonlocal closed
+            real_close(descriptors)
+            if not closed:
+                launcher.os.close(descriptor)
+                closed = True
+
+        def refuse(*_args, **_kwargs):
+            raise OSError("synthetic spawn refusal")
+
+        try:
+            with self.assertRaises(AssertionError):
+                with self.descriptor_census(), mock.patch.object(
+                    launcher, "_close_descriptors", side_effect=close_foreign_too,
+                ):
+                    self.observe_spawn_refusal(refuse)
+        finally:
+            if not closed:
+                os.close(descriptor)
+
+    def test_descriptor_census_detects_close_even_when_foreign_number_is_reused(self) -> None:
+        """Closing and reopening the same file cannot hide a launcher violation."""
+        launcher = self.exec_module()
+        descriptor = os.open(self.protocol_path, os.O_RDONLY)
+        reopened = []
+
+        def close_then_reuse(*_args, **_kwargs):
+            launcher.os.close(descriptor)
+            replacement = os.open(self.protocol_path, os.O_RDONLY)
+            reopened.append(replacement)
+            self.assertEqual(descriptor, replacement)
+            raise OSError("synthetic spawn refusal")
+
+        try:
+            with self.assertRaisesRegex(AssertionError, "foreign_close") as caught:
+                with self.descriptor_census():
+                    self.observe_spawn_refusal(close_then_reuse)
+            self.assertIn("at_close=", str(caught.exception))
+            self.assertIn("threads_before=", str(caught.exception))
+            self.assertIn("threads_after=", str(caught.exception))
+            self.assertIn("platform=" + sys.platform, str(caught.exception))
+            self.assertNotIn("\n", str(caught.exception))
+        finally:
+            os.close(reopened[0] if reopened else descriptor)
+
+    def test_descriptor_census_linux_listing_records_target_or_fstat_type(self) -> None:
+        """Exercise Linux selection on this host, including vanished listing fds."""
+        descriptor = os.open(self.protocol_path, os.O_RDONLY)
+        native_directory = "/proc/self/fd" if sys.platform.startswith("linux") else "/dev/fd"
+        real_listdir = os.listdir
+        listed = []
+
+        def list_linux(directory):
+            listed.append(directory)
+            return real_listdir(native_directory) + ["2147483647", "not-a-descriptor"]
+
+        try:
+            with mock.patch.object(sys, "platform", "linux"):
+                census = _DescriptorCensus(self.exec_module())
+            with mock.patch.object(os, "listdir", side_effect=list_linux):
+                observed = census.snapshot(census.directory)
+            self.assertEqual(["/proc/self/fd"], listed)
+            self.assertNotIn(2147483647, observed)
+            self.assertEqual(stat.S_IFREG, observed[descriptor][3])
+            self.assertTrue(
+                observed[descriptor][-1].endswith(self.protocol_path.name)
+                or observed[descriptor][-1].startswith("fstat:-"),
+                observed[descriptor],
+            )
+        finally:
+            os.close(descriptor)
+
+    def test_descriptor_census_ignores_foreign_socket_reusing_closed_channel(self) -> None:
+        """A closed socket object cannot retain ownership of a reused fd."""
+        census = _DescriptorCensus(self.exec_module())
+        real_describe = census.describe
+        parent_descriptors = []
+
+        def matching_socket_identity(descriptor, directory):
+            observed = real_describe(descriptor, directory)
+            if observed is not None and observed[3] == stat.S_IFSOCK:
+                # Model a host where fstat does not distinguish socket generations.
+                return (observed[0], 0, *observed[2:])
+            return observed
+
+        def refuse(*_args, **_kwargs):
+            parent_descriptors.append(census.sockets[0].fileno())
+            raise OSError("synthetic spawn refusal")
+
+        foreign_sockets = []
+        try:
+            with mock.patch.object(
+                _DescriptorCensus, "describe", side_effect=matching_socket_identity,
+            ):
+                with census.check(self):
+                    self.observe_spawn_refusal(refuse)
+                    foreign_sockets.extend(socket.socketpair())
+                    self.assertIn(parent_descriptors[0], [s.fileno() for s in foreign_sockets])
+        finally:
+            for selected in foreign_sockets:
+                selected.close()
 
     @staticmethod
     def assert_closed(testcase: unittest.TestCase, descriptor: int) -> None:
@@ -511,8 +836,14 @@ class EffectReconciliationExecTests(unittest.TestCase):
         candidates = (None, 1, "python3", str(fake))
         if Path(sys.executable) != expected:
             candidates += (sys.executable,)
-        for candidate in candidates:
-            with self.subTest(candidate=candidate):
+        for case_index, candidate in enumerate(candidates):
+            with self.subTest(case=(
+                "missing-declaration",
+                "integer-declaration-1",
+                "relative-python3",
+                "writable-copied-interpreter",
+                "noncanonical-host-interpreter-alias",
+            )[case_index]):
                 with self.assertRaises((TypeError, OSError, ValueError)):
                     launcher._freeze_trusted_interpreter(candidate)
 
@@ -775,29 +1106,25 @@ class EffectReconciliationExecTests(unittest.TestCase):
         scenarios = ("success", "malformed", "timeout", "launch_failure")
         for scenario in scenarios:
             with self.subTest(scenario=scenario):
-                before = self.open_descriptors()
-                if self.untrusted_host_refuses_reconciliation():
+                if self.interpreter_trust_refusal is not None:
                     # The refusal opened both bound sources before it refused, so
                     # the descriptor claim is live on this host too — it is the
                     # only one of these four scenarios that can be reached.
-                    self.assertEqual(before, self.open_descriptors())
+                    with self.descriptor_census():
+                        self.assertTrue(self.untrusted_host_refuses_reconciliation())
                     continue
                 package = self.base / ("cleanup-" + scenario) / "floati"
                 old_paths = self.protocol_path, self.observer_path
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
                 if scenario == "malformed":
                     self.replace_main(
-                        "deadline = time.monotonic() + 2.0\n"
-                        "header = _read_exact(3, 4, deadline)\n"
-                        "length = struct.unpack('>I', header)[0]\n"
-                        "_read_exact(3, length, deadline)\n"
-                        "os.write(3, b'\\x00\\x00')\n"
+                        self.fixture_request_body()
+                        + "os.write(3, b'\\x00\\x00')\n"
                         "os.close(3)\n"
                         "raise SystemExit(0)\n"
                     )
                 elif scenario == "timeout":
                     self.replace_main("time.sleep(2.0)\n")
-                before = self.open_descriptors()
                 captured_sources: list[int] = []
                 captured_pids: list[int] = []
                 real_spawn = os.posix_spawn
@@ -814,10 +1141,11 @@ class EffectReconciliationExecTests(unittest.TestCase):
                     return pid
 
                 try:
-                    result = self.observe(
-                        self.request_none(), timeout_seconds=0.08,
-                        spawn=capture_then_spawn,
-                    )
+                    with self.descriptor_census():
+                        result = self.observe(
+                            self.request_none(), timeout_seconds=0.08,
+                            spawn=capture_then_spawn,
+                        )
                 finally:
                     self.protocol_path, self.observer_path = old_paths
                 self.assertEqual("unknown", result.outcome)
@@ -826,7 +1154,6 @@ class EffectReconciliationExecTests(unittest.TestCase):
                 for pid in captured_pids:
                     with self.assertRaises(ChildProcessError):
                         os.waitpid(pid, os.WNOHANG)
-                self.assertEqual(before, self.open_descriptors())
 
     def test_exec_cleanup_failures_are_explicit_and_exact_children_are_reaped(self) -> None:
         """Catches close, decode, interaction, or reap failure bypassing cleanup."""
@@ -1196,16 +1523,19 @@ class EffectReconciliationExecTests(unittest.TestCase):
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
                 if mode == "eof_without_result":
                     body = (
-                        "deadline = time.monotonic() + 2.0\n"
-                        "header = _read_exact(3, 4, deadline)\n"
-                        "length = struct.unpack('>I', header)[0]\n"
-                        "_read_exact(3, length, deadline)\n" + suffix
+                        self.fixture_request_body() + suffix
                     )
                 else:
                     body = self.valid_result_body(suffix=suffix)
                 self.replace_main(body)
                 try:
-                    result = self.observe(self.request_none(), timeout_seconds=0.3)
+                    # ER-EXEC-T1: the verdict these members earn is determined
+                    # by the bytes the child wrote, never by how fast the host
+                    # started it, so no test-tuned deadline rides the call: the
+                    # observer runs with the product's own default deadline.
+                    # The timeout reason is proved where it belongs, by the
+                    # designed-hang member whose child outlives any deadline.
+                    result = self.observe(self.request_none())
                 finally:
                     self.protocol_path, self.observer_path = old_paths
                 self.assertEqual(("unknown", reason), (result.outcome, result.reason_code))
@@ -1247,7 +1577,9 @@ class EffectReconciliationExecTests(unittest.TestCase):
                 self.protocol_path, self.observer_path = copy_exact_observer_source_package(package)
                 self.replace_main(self.valid_result_body(suffix=suffix))
                 try:
-                    result = self.observe(self.request_none(), timeout_seconds=0.6)
+                    # Same ER-EXEC-T1 law for the sibling byte-determined
+                    # members: the product default, never a tuned constant.
+                    result = self.observe(self.request_none())
                 finally:
                     self.protocol_path, self.observer_path = old_paths
                 self.assertEqual(("unknown", reason), (result.outcome, result.reason_code))
@@ -1278,6 +1610,10 @@ class EffectReconciliationExecTests(unittest.TestCase):
                 self.assertEqual(reason, result.reason_code)
                 self.assertIsNone(result.confirmation)
 
+    @staticmethod
+    def wait_for_descendant_pid(path: Path) -> None:
+        wait_until(path.exists, "hostile observer descendant publishes PID")
+
     def test_exec_timeout_reaps_observer_and_kills_term_ignoring_descendant_group(self) -> None:
         """Catches a separately grouped Git descendant surviving parent timeout cleanup."""
         repository, digest = self.make_repository()
@@ -1286,6 +1622,7 @@ class EffectReconciliationExecTests(unittest.TestCase):
         ):
             return
         descendant_pid = self.base / "term-ignoring-descendant.pid"
+        request_ready = self.base / "timeout-exercise-ready"
         helper = self.base / "hostile-git"
         helper.write_text(
             "#!/bin/sh\n"
@@ -1302,6 +1639,22 @@ class EffectReconciliationExecTests(unittest.TestCase):
             source.replace(fixed_git, "_GIT = " + repr(str(helper)), 1),
             encoding="utf-8",
         )
+        # Prepare the hostile child in the real observer's session before the
+        # timed request. The observer waits for that same child when asked to
+        # reconcile, so no second helper can race the readiness precondition.
+        self.replace_main(
+            "fixture_helper = subprocess.Popen(\n"
+            "    [_GIT], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n"
+            "    stderr=subprocess.DEVNULL, close_fds=True,\n"
+            ")\n"
+            f"while not os.path.exists({str(request_ready)!r}):\n"
+            "    time.sleep(0.01)\n"
+            "def wait_for_fixture_helper(arguments, environment):\n"
+            "    fixture_helper.wait()\n"
+            "    return 'timeout', b'', b''\n"
+            "_run_git = wait_for_fixture_helper\n"
+            "raise SystemExit(run_observer(repository_fd=_repository_descriptor_if_open()))\n"
+        )
         captured_observers: list[int] = []
         captured_spawn_kwargs: list[dict[str, object]] = []
         real_spawn = os.posix_spawn
@@ -1312,18 +1665,39 @@ class EffectReconciliationExecTests(unittest.TestCase):
             captured_spawn_kwargs.append(dict(kwargs))
             return pid
 
+        launcher = self.exec_module()
+        timed_observe = launcher.observe_effect_reconciliation
+
+        def observe_ready_descendant(request, **kwargs):
+            # This wrapper runs after the slow-start control has rewritten the
+            # helper, and before the product starts its unchanged 0.8 s budget.
+            process, channel = launcher._spawn_observer(request)
+            try:
+                self.wait_for_descendant_pid(descendant_pid)
+                request_ready.write_text("ready", encoding="ascii")
+                with mock.patch.object(
+                    launcher, "_spawn_observer", return_value=(process, channel),
+                ):
+                    return timed_observe(request, **kwargs)
+            finally:
+                channel.close()
+                if process.status is None:
+                    self.assertTrue(process.terminate_and_reap(), "fixture cleanup failed")
+
         descendant: Optional[int] = None
         try:
-            result = self.observe(
-                self.request_local(repository, digest),
-                timeout_seconds=0.8,
-                spawn=capture_then_spawn,
-            )
-            deadline = time.monotonic() + 2.0
-            while not descendant_pid.exists() and time.monotonic() < deadline:
-                time.sleep(0.01)
+            with mock.patch.object(
+                launcher, "observe_effect_reconciliation",
+                side_effect=observe_ready_descendant,
+            ):
+                result = self.observe(
+                    self.request_local(repository, digest),
+                    timeout_seconds=0.8,
+                    spawn=capture_then_spawn,
+                )
             self.assertTrue(descendant_pid.exists(), "hostile descendant did not launch")
             descendant = int(descendant_pid.read_text(encoding="ascii").strip())
+            deadline = time.monotonic() + 2.0
             while time.monotonic() < deadline:
                 try:
                     os.kill(descendant, 0)
@@ -1411,6 +1785,52 @@ class EffectReconciliationExecTests(unittest.TestCase):
             os.close(descriptor)
         except OSError:
             pass
+
+
+class ObserverPidReadinessTests(unittest.TestCase):
+    def test_timeout_cleanup_accepts_a_slow_helper_pid_write(self):
+        """A helper that starts slowly still reaches the fixture's readiness event."""
+        original_observe = EffectReconciliationExecTests.observe
+        started = False
+        delayed = False
+        observation = {}
+
+        def slow_pid_write(case, *args, **kwargs):
+            nonlocal started, delayed
+            if case.interpreter_trust_refusal is not None:
+                return original_observe(case, *args, **kwargs)
+            helper = case.base / "hostile-git"
+            startup_marker = case.base / "hostile-helper-started"
+            source = helper.read_text(encoding="utf-8")
+            helper.write_text(source.replace(
+                "trap '' TERM\n",
+                "trap '' TERM\n"
+                f"echo started > {str(startup_marker)!r}\n"
+                # Fault injection, not a readiness wait: longer than the
+                # fixture's two-second bound, shorter than a generous bound.
+                "/bin/sleep 2.25\n",
+                1,
+            ), encoding="utf-8")
+            delayed = True
+            result = original_observe(case, *args, **kwargs)
+            started = startup_marker.exists()
+            observation.update(
+                outcome=result.outcome, reason_code=result.reason_code,
+                timeout_seconds=kwargs.get("timeout_seconds"),
+                pid_file_at_return=(case.base / "term-ignoring-descendant.pid").exists(),
+            )
+            return result
+
+        case = EffectReconciliationExecTests(
+            "test_exec_timeout_reaps_observer_and_kills_term_ignoring_descendant_group"
+        )
+        result = unittest.TestResult()
+        with mock.patch.object(EffectReconciliationExecTests, "observe", slow_pid_write):
+            case.run(result)
+        if case.interpreter_trust_refusal is None:
+            self.assertTrue(delayed, str(result.failures + result.errors))
+            self.assertTrue(started, "delayed helper never reached its immediate startup marker")
+        self.assertTrue(result.wasSuccessful(), f"{observation!r}: {result.failures + result.errors!r}")
 
 
 if __name__ == "__main__":

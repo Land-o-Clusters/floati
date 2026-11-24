@@ -9,6 +9,8 @@ BUSY line, never the host-wide suite-process total.
 
 from __future__ import annotations
 
+from tests.readiness import Readiness
+
 import os
 import re
 import stat
@@ -77,8 +79,9 @@ class LeaseCheckFq11Tests(unittest.TestCase):
         sleeper_busy = re.compile(rf"BUSY pid\s+{child.pid}\b")
         before_out = after_out = ""
         after_status = 0
-        deadline = time.time() + 5
-        while time.time() < deadline:
+        readiness = Readiness("lease-check observing owned sleeper argv")
+        while True:
+            readiness.remaining()
             _before_status, before_out = self._run(narrow)
             after_status, after_out = self._run(LEASE_CHECK)
             if sleeper_busy.search(after_out) and not sleeper_busy.search(before_out):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
+import re
 import select
 import signal
 import shutil
@@ -131,17 +132,105 @@ def _board_watch_paths(root: Path) -> tuple[Path, ...]:
         paths.extend(
             path
             for name in files
-            if not (path := current_path / name).is_symlink()
+            if not (path := current_path / name).is_symlink() and not _host_probe_path(root, path)
         )
     return tuple(paths)
 
 
+def _host_observer_directory(root: Path, path: Path) -> bool:
+    try:
+        parts = path.relative_to(root).parts
+        return len(parts) == 3 and parts[:2] == ("state", "host-observations")
+    except (ValueError, TypeError):
+        return False
+
+
+def _host_probe_path(root: Path, path: Path) -> bool:
+    return _host_observer_directory(root, path.parent) and re.fullmatch(
+        r"\.floati-host-probe-[0-9a-f]{32}", path.name) is not None
+
+
+def _observer_directory_snapshot(root: Path, path: Path):
+    """Compare meaningful entries/inodes, excluding only owned UUID probes.
+
+    Directory mtime/ctime changes on every transient probe and carry no input
+    fact. Real entry metadata, including latest.json's identity, stays bound.
+    """
+    info = path.lstat()
+    entries = []
+    with os.scandir(path) as children:
+        for index, entry in enumerate(children):
+            if index >= 1024:
+                raise OSError(errno.EOVERFLOW, "observer watch entry bound exceeded")
+            probe = _host_probe_path(root, path / entry.name)
+            if probe and entry.is_file(follow_symlinks=False):
+                continue
+            try:
+                value = entry.stat(follow_symlinks=False)
+            except FileNotFoundError:
+                if probe:
+                    continue  # A completed transient probe may vanish during the scan.
+                raise
+            entries.append((entry.name, value.st_dev, value.st_ino, value.st_mode,
+                value.st_uid, value.st_gid, value.st_size, value.st_mtime_ns, value.st_ctime_ns))
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid, tuple(sorted(entries)))
+
+
+def _selected_watch_paths(root: Path, paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Watch named inputs and their existing parents, never discover a tree."""
+    selected = {root}
+    for target in paths:
+        target.relative_to(root)
+        chain = []
+        while target != root:
+            chain.append(target)
+            target = target.parent
+        for path in reversed(chain):
+            if path.is_symlink():
+                break
+            if path.exists():
+                selected.add(path)
+    return tuple(selected)
+
+
+def _open_selected_watch_path(root: Path, path: Path) -> int:
+    """Bind an input watch without following a substituted path component."""
+    import stat
+
+    path.relative_to(root)
+    parent = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    descriptor = None
+    try:
+        for component in path.parts[1:-1]:
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                            dir_fd=parent)
+            os.close(parent)
+            parent = child
+        descriptor = os.open(path.name,
+                             getattr(os, "O_EVTONLY", os.O_RDONLY) | os.O_NONBLOCK | os.O_NOFOLLOW,
+                             dir_fd=parent)
+        opened = os.fstat(descriptor)
+        named = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        if (not (stat.S_ISREG(opened.st_mode) or stat.S_ISDIR(opened.st_mode))
+                or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)):
+            raise OSError(errno.ESTALE, "selected watch path changed")
+        result, descriptor = descriptor, None
+        return result
+    finally:
+        os.close(parent)
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 class _KqueueBoardFilesystemWakeup:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, paths=None) -> None:
         self._root = root
+        self._paths = paths
         self._queue = select.kqueue()
         self._descriptors: dict[Path, int] = {}
         self._closed = False
+        self.coverage_lost = False
+        self._observer_snapshots = {}
         try:
             self._refresh()
         except BaseException:
@@ -152,7 +241,8 @@ class _KqueueBoardFilesystemWakeup:
         return self._queue.fileno()
 
     def _refresh(self) -> None:
-        current = set(_board_watch_paths(self._root))
+        current = set(_board_watch_paths(self._root) if self._paths is None
+                      else _selected_watch_paths(self._root, self._paths))
         if self._root not in current:
             raise ProtocolRefusal(
                 "board_event_watch_unavailable",
@@ -160,7 +250,22 @@ class _KqueueBoardFilesystemWakeup:
             )
         for path in tuple(self._descriptors):
             if path not in current:
+                self.coverage_lost = True
                 os.close(self._descriptors.pop(path))
+            elif self._paths is not None:
+                try:
+                    current_descriptor = _open_selected_watch_path(self._root, path)
+                    try:
+                        named = os.fstat(current_descriptor)
+                        watched = os.fstat(self._descriptors[path])
+                        if (named.st_dev, named.st_ino) != (watched.st_dev, watched.st_ino):
+                            self.coverage_lost = True
+                            os.close(self._descriptors.pop(path))
+                    finally:
+                        os.close(current_descriptor)
+                except OSError as exc:
+                    raise ProtocolRefusal("board_event_watch_unavailable",
+                                          BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL) from exc
         flags = (
             select.KQ_NOTE_WRITE
             | select.KQ_NOTE_EXTEND
@@ -172,11 +277,11 @@ class _KqueueBoardFilesystemWakeup:
         )
         for path in sorted(current - self._descriptors.keys()):
             try:
-                descriptor = os.open(
-                    path,
-                    getattr(os, "O_EVTONLY", os.O_RDONLY) | os.O_NONBLOCK,
-                )
+                descriptor = (os.open(path, getattr(os, "O_EVTONLY", os.O_RDONLY) | os.O_NONBLOCK)
+                              if self._paths is None else _open_selected_watch_path(self._root, path))
             except FileNotFoundError:
+                if self._paths is not None:
+                    self.coverage_lost = True
                 continue
             except OSError as exc:
                 raise ProtocolRefusal(
@@ -198,22 +303,60 @@ class _KqueueBoardFilesystemWakeup:
                     BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
                 ) from exc
             self._descriptors[path] = descriptor
+        self._observer_snapshots = {
+            path: _observer_directory_snapshot(self._root, path)
+            for path in self._descriptors
+            if _host_observer_directory(self._root, path) and path.is_dir()
+        }
 
-    def drain(self) -> None:
-        events = self._queue.control(
-            [], max(1, len(self._descriptors)), 0
-        )
+    def drain(self) -> bool:
+        prior_observers = dict(getattr(self, "_observer_snapshots", {}))
+        try:
+            events = self._queue.control([], max(1, len(self._descriptors)), 0)
+        except OSError:
+            self.coverage_lost = True
+            raise
+        paths_by_descriptor = {descriptor: path for path, descriptor in self._descriptors.items()}
+        changed = False
         invalid = {
             event.ident
             for event in events
             if event.fflags
             & (select.KQ_NOTE_RENAME | select.KQ_NOTE_DELETE | select.KQ_NOTE_REVOKE)
         }
+        if invalid or any(getattr(event, "flags", 0) & select.KQ_EV_ERROR for event in events):
+            self.coverage_lost = True
+            changed = True
+        for event in events:
+            path = paths_by_descriptor.get(event.ident)
+            if path is None:
+                self.coverage_lost = True
+                changed = True
+            elif self._paths is None:
+                if _host_observer_directory(self._root, path):
+                    try:
+                        previous = getattr(self, "_observer_snapshots", {}).get(path)
+                        if previous != _observer_directory_snapshot(self._root, path):
+                            changed = True
+                    except OSError:
+                        self.coverage_lost = True
+                        changed = True
+                else:
+                    changed = True
+            elif path in self._paths:
+                changed = True
         for path, descriptor in tuple(self._descriptors.items()):
             if descriptor in invalid:
                 os.close(descriptor)
                 del self._descriptors[path]
-        self._refresh()
+        try:
+            self._refresh()
+        except (OSError, ProtocolRefusal):
+            self.coverage_lost = True
+            raise
+        if self._paths is None and getattr(self, "_observer_snapshots", {}) != prior_observers:
+            changed = True
+        return changed
 
     def close(self) -> None:
         if self._closed:
@@ -236,20 +379,27 @@ class _InotifyBoardFilesystemWakeup:
         | 0x00000200
         | 0x00000400
         | 0x00000800
+        | 0x00002000
     )
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, paths=None) -> None:
         self._root = root
+        self._paths = paths
         self._libc = ctypes.CDLL(None, use_errno=True)
         self._libc.inotify_init1.argtypes = [ctypes.c_int]
         self._libc.inotify_init1.restype = ctypes.c_int
         self._libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
         self._libc.inotify_add_watch.restype = ctypes.c_int
+        if self._paths is not None:
+            self._libc.inotify_rm_watch.argtypes = [ctypes.c_int, ctypes.c_int]
+            self._libc.inotify_rm_watch.restype = ctypes.c_int
         self._descriptor = self._libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
         if self._descriptor < 0:
             raise OSError(ctypes.get_errno(), "inotify_init1 failed")
         self._watches: dict[Path, int] = {}
+        self._identities: dict[Path, tuple[int, int]] = {}
         self._closed = False
+        self.coverage_lost = False
         try:
             self._refresh()
         except BaseException:
@@ -260,7 +410,9 @@ class _InotifyBoardFilesystemWakeup:
         return self._descriptor
 
     def _refresh(self) -> None:
-        current = set(_board_watch_directories(self._root))
+        current = set(_board_watch_directories(self._root) if self._paths is None
+                      else (path for path in _selected_watch_paths(self._root, self._paths)
+                            if path.is_dir()))
         if self._root not in current:
             raise ProtocolRefusal(
                 "board_event_watch_unavailable",
@@ -268,19 +420,49 @@ class _InotifyBoardFilesystemWakeup:
             )
         watched = set(self._watches)
         for path in watched - current:
+            self.coverage_lost = True
+            if self._paths is not None:
+                self._libc.inotify_rm_watch(self._descriptor, self._watches[path])
+                self._identities.pop(path, None)
             del self._watches[path]
         # Reapply every watch: inotify binds to an inode, so a directory that
         # is deleted and recreated at the same path invalidates the old watch
         # even though the path remains present in our mapping.
         for path in sorted(current):
-            watch = self._libc.inotify_add_watch(
-                self._descriptor,
-                os.fsencode(path),
-                self._MASK,
-            )
+            selected_descriptor = None
+            try:
+                if self._paths is not None:
+                    selected_descriptor = _open_selected_watch_path(self._root, path)
+                    value = os.fstat(selected_descriptor)
+                    identity = (value.st_dev, value.st_ino)
+                    if path in self._watches and self._identities.get(path) != identity:
+                        self.coverage_lost = True
+                        self._libc.inotify_rm_watch(self._descriptor, self._watches.pop(path))
+                    self._identities[path] = identity
+                watch = self._libc.inotify_add_watch(
+                    self._descriptor,
+                    # Linux resolves this owned descriptor to the already
+                    # opened directory, even if a parent path is replaced.
+                    os.fsencode(path if selected_descriptor is None
+                                else "/proc/self/fd/" + str(selected_descriptor)),
+                    # A writable read-transaction lock close is not a change.
+                    self._MASK if self._paths is None else self._MASK & ~0x00000008,
+                )
+            except FileNotFoundError:
+                if self._paths is not None:
+                    self.coverage_lost = True
+                continue
+            except OSError as exc:
+                raise ProtocolRefusal("board_event_watch_unavailable",
+                                      BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL) from exc
+            finally:
+                if selected_descriptor is not None:
+                    os.close(selected_descriptor)
             if watch < 0:
                 error = ctypes.get_errno()
                 if error == errno.ENOENT:
+                    if self._paths is not None:
+                        self.coverage_lost = True
                     continue
                 raise ProtocolRefusal(
                     "board_event_watch_unavailable",
@@ -288,14 +470,50 @@ class _InotifyBoardFilesystemWakeup:
                 ) from OSError(error, "inotify_add_watch failed")
             self._watches[path] = watch
 
-    def drain(self) -> None:
+    def drain(self) -> bool:
+        import struct
+        changed = False
+        paths_by_watch = {watch: path for path, watch in self._watches.items()}
         while True:
             try:
-                if not os.read(self._descriptor, 65536):
+                data = os.read(self._descriptor, 65536)
+                if not data:
                     break
             except BlockingIOError:
                 break
-        self._refresh()
+            except OSError:
+                self.coverage_lost = True
+                raise
+            offset = 0
+            while offset < len(data):
+                if len(data) - offset < 16:
+                    self.coverage_lost = True
+                    changed = True
+                    break
+                watch, mask, _cookie, length = struct.unpack_from("iIII", data, offset)
+                if length > len(data) - offset - 16:
+                    self.coverage_lost = True
+                    changed = True
+                    break
+                name = os.fsdecode(data[offset + 16:offset + 16 + length].split(b"\0", 1)[0])
+                parent = paths_by_watch.get(watch)
+                if mask & (0x00004000 | 0x00008000 | 0x00002000 | 0x00000400 | 0x00000800) or parent is None:
+                    self.coverage_lost = True
+                    changed = True  # Overflow/lost watch never certifies quiet.
+                elif self._paths is None and (
+                        mask & 0x40000000 or not _host_probe_path(self._root, parent / name)):
+                    changed = True
+                elif self._paths is not None and parent / name in self._paths:
+                    changed = True
+                offset += 16 + length
+            if self._paths is not None:
+                break  # One bounded read; an event flood cannot hold a waiter.
+        try:
+            self._refresh()
+        except (OSError, ProtocolRefusal):
+            self.coverage_lost = True
+            raise
+        return changed
 
     def close(self) -> None:
         if self._closed:
@@ -308,7 +526,7 @@ class _InotifyBoardFilesystemWakeup:
 class BoardFilesystemWakeup:
     """Selectable, timer-free durable-root change source for the live Board."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, _paths=None) -> None:
         candidate = Path(root)
         try:
             resolved = candidate.resolve(strict=True)
@@ -328,9 +546,9 @@ class BoardFilesystemWakeup:
             )
         try:
             if hasattr(select, "kqueue"):
-                self._backend = _KqueueBoardFilesystemWakeup(resolved)
+                self._backend = _KqueueBoardFilesystemWakeup(resolved, paths=_paths)
             elif sys.platform.startswith("linux"):
-                self._backend = _InotifyBoardFilesystemWakeup(resolved)
+                self._backend = _InotifyBoardFilesystemWakeup(resolved, paths=_paths)
             else:
                 raise ProtocolRefusal(
                     "board_event_source_unsupported",
@@ -347,8 +565,12 @@ class BoardFilesystemWakeup:
     def fileno(self) -> int:
         return self._backend.fileno()
 
-    def drain(self) -> None:
-        self._backend.drain()
+    def drain(self) -> bool:
+        return self._backend.drain()
+
+    @property
+    def coverage_lost(self) -> bool:
+        return self._backend.coverage_lost
 
     def close(self) -> None:
         self._backend.close()
@@ -418,7 +640,48 @@ def state_signature(model: HarborBoardModel) -> str:
         model.consumption,
         model.worker_refusals,
         model.effects,
+        model.fleet_presence,
     ))
+
+
+def _with_car_execution(root, model, current):
+    from .seat_execution import SeatExecutionController
+    from .wake_health import WakeHealthProjection
+    controller = SeatExecutionController(root)
+    health = WakeHealthProjection(root)
+    return replace(model, nodes=tuple(dict(node, car_execution=controller.project(node["node_id"]),
+        stop_waiting=health.stop_waiting(node["node_id"], current))
+        for node in model.nodes))
+
+
+def _with_project_holds(root, model, current):
+    from .holds import hold_projection
+    from .fleet_presence import (AWAY_LINE, needs_you_return_reference, presence_line,
+                                 presence_status, presence_status_line)
+    from .inbound_hold import with_inbound_hold
+    presence = presence_status(root)
+    mode = presence["mode"]
+    banner = AWAY_LINE if mode == "AWAY" else presence_status_line(presence)
+    needs_you = needs_you_return_reference(root) if mode == "PRESENT" and presence["away_since"] else ""
+    return replace(model,
+        fleet_presence=banner if mode != "UNDECLARED" else "",
+        nodes=tuple(with_inbound_hold(root, dict(node, project_holds=hold_projection(root, node['node_id'], current),
+                                                 fleet_presence=presence_line(root, node['node_id'], presence=presence,
+                                                                              needs_you=needs_you)), current)
+                    for node in model.nodes))
+
+
+def _with_roster(root, model, current):
+    from .roster import project_roster
+
+    rows = {str(row["node_id"]): row for row in project_roster(root, current)}
+    return replace(
+        model,
+        nodes=tuple(
+            dict(node, roster=rows.get(str(node.get("node_id")), {}))
+            for node in model.nodes
+        ),
+    )
 
 
 def model_from_root(root: FloatiRoot, now: Optional[datetime] = None) -> HarborBoardModel:
@@ -433,7 +696,8 @@ def model_from_root(root: FloatiRoot, now: Optional[datetime] = None) -> HarborB
             discover_sources=FleetProjection(root)._status_sources,
         )
         loaded = store.load()
-        return _board_from_snapshot(root, current, loaded.payload, loaded.tails)
+        model = _board_from_snapshot(root, current, loaded.payload, loaded.tails)
+        return _with_roster(root, _with_project_holds(root, _with_car_execution(root, _with_disk_watch(root, model), current), current), current)
     except SnapshotRefusal:
         before_scan = None
         if store is not None:
@@ -444,6 +708,7 @@ def model_from_root(root: FloatiRoot, now: Optional[datetime] = None) -> HarborB
         model = _model_from_root_full(root, current)
         payload = {
             "model": model.to_snapshot(),
+            "message_progress_observation_version": FleetProjection.MESSAGE_PROGRESS_OBSERVATION_VERSION,
             "work_states": ConsumptionLedger(root).project(),
             "built_at": FleetProjection._timestamp(current),
             "time_sensitive": FleetProjection(root)._status_time_sensitive(),
@@ -453,7 +718,7 @@ def model_from_root(root: FloatiRoot, now: Optional[datetime] = None) -> HarborB
                 store.refresh(payload, expected=before_scan)
             except SnapshotRefusal:
                 pass
-        return model
+        return _with_roster(root, _with_project_holds(root, _with_car_execution(root, _with_disk_watch(root, model), current), current), current)
 
 
 def _model_from_root_full(root: FloatiRoot, current: datetime) -> HarborBoardModel:
@@ -461,34 +726,41 @@ def _model_from_root_full(root: FloatiRoot, current: datetime) -> HarborBoardMod
     snapshot["effects"] = EffectStatusProjection(root).summary()
     from .events import EVENT_KINDS
 
-    events = [
-        record
-        for record in read_records_snapshot(
-            root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
-        )
-        if record["kind"] == "message_envelope"
-    ]
+    frames = read_records_snapshot(root, "events.jsonl", allowed_kinds=set(EVENT_KINDS))
+    retracted = {row["retracted_message_id"] for row in frames if row["kind"] == "message_retracted"}
+    from .inbound_hold import mask_held_envelopes
+    events = mask_held_envelopes(root, [row for row in frames if row["kind"] == "message_envelope"])
     deliveries = []
     acknowledgments = []
     acked = set()
+    from .records import WAKE_HOLD_KINDS
+
     for node in snapshot["nodes"]:
         node_id = str(node["node_id"])
         node_acks = read_records_snapshot(
             root, Path("receipts/acks") / f"{node_id}.jsonl", allowed_kinds={"ack_receipt"}
         )
         node_deliveries = read_records_snapshot(
-            root, Path("receipts/deliveries") / f"{node_id}.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"}
+            root, Path("receipts/deliveries") / f"{node_id}.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS)
         )
         acknowledgments.extend(node_acks)
-        deliveries.extend(row for row in node_deliveries if row["kind"] == "delivery_receipt")
+        deliveries.extend(
+            row for row in node_deliveries
+            if row["kind"] in ("delivery_receipt", "delivered_unpresented")
+        )
         acked.update(str(item_id) for record in node_acks for item_id in record["item_ids"])
     nodes = []
+    presented = {item for row in deliveries if row["kind"] == "delivery_receipt" for item in row["item_ids"]}
     for source in snapshot["nodes"]:
         node = dict(source)
+        node["pending_at_pause"] = sum(1 for event in events
+            if event["recipient"] == node["node_id"] and event.get("message_class") == "fyi"
+            and event["id"] not in retracted and event["id"] not in acked and event["id"] not in presented)
         node["visible_message_id"] = next(
             (
                 str(event["id"]) for event in events
                 if event["recipient"] == node["node_id"] and event["id"] not in acked
+                and "inbound_hold" not in event
             ),
             None,
         )
@@ -506,13 +778,24 @@ def _model_from_root_full(root: FloatiRoot, current: datetime) -> HarborBoardMod
     return HarborBoardModel.from_projection(snapshot, work_items, receipts)
 
 
+def _with_disk_watch(root: FloatiRoot, model: HarborBoardModel) -> HarborBoardModel:
+    from .disk_watch import observe_disk_watch
+
+    observation = observe_disk_watch(root, statvfs=os.statvfs)
+    if int(observation["exit"]) == 0:
+        return model
+    effects = dict(model.effects)
+    effects["disk_watch"] = observation
+    return replace(model, effects=effects)
+
+
 def _board_from_snapshot(
     root: FloatiRoot,
     current: datetime,
     payload: dict[str, object],
     tails: dict[str, tuple[dict[str, object], ...]],
 ) -> HarborBoardModel:
-    if set(payload) != {"model", "work_states", "built_at", "time_sensitive"}:
+    if set(payload) != {"model", "work_states", "built_at", "time_sensitive", "message_progress_observation_version"}:
         raise SnapshotRefusal(
             "snapshot_payload_invalid", "board snapshot fields are invalid"
         )
@@ -521,7 +804,9 @@ def _board_from_snapshot(
     built_at = payload["built_at"]
     time_sensitive = payload["time_sensitive"]
     if (
-        not isinstance(raw_model, dict)
+        type(payload["message_progress_observation_version"]) is not int
+        or payload["message_progress_observation_version"] != FleetProjection.MESSAGE_PROGRESS_OBSERVATION_VERSION
+        or not isinstance(raw_model, dict)
         or not isinstance(work_states, dict)
         or not isinstance(built_at, str)
         or not isinstance(time_sensitive, bool)
@@ -537,6 +822,16 @@ def _board_from_snapshot(
         HarborBoardModel.from_snapshot(raw_model),
         observed_at=FleetProjection._timestamp(current),
     )
+    if any("seat_attention" not in node
+           or type(node.get("pending_at_pause")) is not int
+           or node["pending_at_pause"] < 0
+           or node.get("lifetime") not in {"permanent", "temporary"}
+           or not FleetProjection._valid_message_progress(node.get("message_progress"))
+           for node in model.nodes):
+        raise SnapshotRefusal(
+            "snapshot_payload_invalid",
+            "board snapshot predates current receipt progress testimony",
+        )
     unsupported = set()
     work_tail = ()
     for path, records in tails.items():
@@ -545,11 +840,18 @@ def _board_from_snapshot(
         if path == ConsumptionLedger.relative_path.as_posix():
             work_tail = records
         elif path == "events.jsonl":
+            if any("seat_attention" in node for node in model.nodes):
+                raise SnapshotRefusal(
+                    "snapshot_tail_history_required",
+                    "seat attention event tail needs full projection history",
+                )
             nodes = [dict(row) for row in model.nodes]
             by_id = {str(row["node_id"]): row for row in nodes}
             for record in records:
                 if record.get("kind") in {
-                    "delivery_claim", "ledger_repair_receipt",
+                    "delivery_claim", "ledger_repair_receipt", "send_readiness_observation",
+                    "seat_teardown_epoch_verification",
+                    "ask_question", "ask_answer", "ask_decline", "ask_timeout",
                 }:
                     continue
                 if record.get("kind") != "message_envelope":
@@ -569,6 +871,8 @@ def _board_from_snapshot(
                 if recipient is not None:
                     recipient["last_activity"] = record["timestamp"]
                     recipient["inbox_depth"] += 1
+                    if record.get("message_class") == "fyi":
+                        recipient["pending_at_pause"] += 1
                     if recipient.get("visible_message_id") is None:
                         recipient["visible_message_id"] = record["id"]
             model = replace(model, nodes=tuple(nodes))
@@ -577,31 +881,10 @@ def _board_from_snapshot(
                 model,
                 denials=model.denials + tuple(dict(record) for record in records),
             )
-        elif path.startswith("receipts/deliveries/"):
-            model = replace(
-                model,
-                deliveries=model.deliveries
-                + tuple(dict(record) for record in records),
-            )
-        elif path.startswith("receipts/acks/"):
-            visible = {
-                str(node.get("visible_message_id"))
-                for node in model.nodes
-                if node.get("visible_message_id") is not None
-            }
-            if any(
-                str(item_id) in visible
-                for record in records
-                for item_id in record["item_ids"]
-            ):
-                raise SnapshotRefusal(
-                    "snapshot_tail_history_required",
-                    "acknowledgment exposes omitted visible-message history",
-                )
-            model = replace(
-                model,
-                acknowledgments=model.acknowledgments
-                + tuple(dict(record) for record in records),
+        elif path.startswith(("receipts/deliveries/", "receipts/acks/", "receipts/consumed/")):
+            raise SnapshotRefusal(
+                "snapshot_tail_history_required",
+                "message progress tail needs validated receipt history",
             )
         elif path == "receipts/worker-refusals.jsonl":
             consumption = dict(model.consumption)
@@ -719,6 +1002,25 @@ def _read_terminal_input(
         return BoardFilesystemEvent()
     pending.extend(decoder.feed(os.read(descriptor, 64)))
     return "" if not pending else pending.pop(0)
+
+
+def _seat_attention_timeout(model: HarborBoardModel, now: datetime) -> Optional[float]:
+    """Wake at ruled thresholds or active holder checks; idle boards block."""
+    deadlines = [attention.get("next_check_at") for node in model.nodes
+                 if isinstance(attention := node.get("seat_attention"), Mapping)]
+    remaining = [(datetime.fromisoformat(value.replace("Z", "+00:00")) - now).total_seconds()
+                 for value in deadlines if isinstance(value, str)]
+    for node in model.nodes:
+        waiting = node.get("stop_waiting")
+        if isinstance(waiting, Mapping) and waiting.get("state") == "STOP_WAITING":
+            remaining.append(1.0)  # Physical death need not produce a filesystem event.
+            for field in ("next_check_at", "hold_deadline_at"):
+                value = waiting.get(field)
+                if isinstance(value, str):
+                    remaining.append((datetime.fromisoformat(value.replace("Z", "+00:00")) - now).total_seconds())
+    if any(node.get('project_holds', {}).get('holds') for node in model.nodes):
+        remaining.append(1.0)  # Refresh measured age and expected-release status.
+    return max(0.0, min(remaining)) if remaining else None
 
 
 def run_board(
@@ -841,22 +1143,26 @@ def run_board(
                     activity_overlays = overlay_plan.overlays
                     previous_frame = frame
                 needs_render = False
+            timeout = _seat_attention_timeout(model, datetime.now(timezone.utc))
             event = (
-                read_event(None)
+                read_event(timeout)
                 if read_event is not None
                 else _read_terminal_input(
                     input_stream,
-                    None,
+                    timeout,
                     decoder,
                     pending_inputs,
                     None if resize_wakeup is None else resize_wakeup.read_descriptor,
                     None if model_wakeup is None else model_wakeup.fileno(),
                 )
             )
+            if event == "" and timeout is not None:
+                event = BoardModelEvent(model_loader())
             if isinstance(event, BoardFilesystemEvent):
                 if model_wakeup is None:
                     raise RuntimeError("Board filesystem event has no source")
-                model_wakeup.drain()
+                if model_wakeup.drain() is False:
+                    continue
                 event = BoardModelEvent(model_loader())
             if isinstance(event, BoardModelEvent):
                 signature = state_signature(event.model)

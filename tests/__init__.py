@@ -25,13 +25,35 @@ import site
 import sys
 import tempfile
 
-from tests.temp_roots import REAL_TEMP_ROOT
+from tests.temp_roots import REAL_TEMP_ROOT, _PLATFORM_TEMP_ROOT
+from scripts.fixture_finalizer import install as _install_fixture_finalizer
+
+_install_fixture_finalizer(temp_root=REAL_TEMP_ROOT, platform_root=_PLATFORM_TEMP_ROOT)
+
+# HOME isolation alone cannot hide an inherited native inbox socket. Drop
+# session addresses and credentials before importing any test or product code.
+for _variable in ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN"):
+    os.environ.pop(_variable, None)
 
 REAL_HOME_BEFORE_PIN = os.environ.get("HOME", "")
 
 REAL_USER_SITE = site.getusersitepackages()
 
 HOME_PIN_ROOT = tempfile.mkdtemp(prefix="suite-home-", dir=REAL_TEMP_ROOT)
+
+# Product code makes fixed roots directly under the native temp root (the
+# worker workspace parent and the sequencer endpoint, floati/host_paths.py),
+# where a real fleet on this host keeps its own. Move them beneath one root
+# this process owns. The environment, not a patch, carries it, so every CLI
+# child derives the same roots and a test server and client still meet. It
+# sits on the platform root, not the possibly nested fixture root, so the
+# sequencer socket path stays inside sockaddr_un on both platforms. A nested
+# test process (a scratch server a test launches, a parallel worker) keeps
+# the root it inherited: minting its own would split server from client.
+# The product validates whichever value arrives and refuses a bad one.
+if "FLOATI_HOST_TEMP_ROOT" not in os.environ:
+    os.environ["FLOATI_HOST_TEMP_ROOT"] = tempfile.mkdtemp(prefix="fh-", dir=_PLATFORM_TEMP_ROOT)
+HOST_TEMP_ROOT = os.environ["FLOATI_HOST_TEMP_ROOT"]
 
 os.environ["HOME"] = HOME_PIN_ROOT
 os.environ["XDG_CONFIG_HOME"] = os.path.join(HOME_PIN_ROOT, ".config")

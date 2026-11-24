@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import sys
 import unicodedata
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from .bus_epoch import (
     LOCK_ORDER_WAKE,
@@ -19,6 +20,7 @@ from .bus_epoch import (
 from .errors import IntegrityFailure, ProtocolRefusal
 from .events import EVENT_KINDS as _EVENT_KINDS
 from .ids import uuid7_hex
+from .inbound_hold import withhold_unapproved_states
 from .jsonl import (
     VerifiedLedgerCursor,
     WAKE_HOLD_DELIVERY_DOMAIN,
@@ -53,6 +55,8 @@ def wake_hold_receipt(
     idempotency_key: str, limit: int, item_ids: Sequence[str],
     event_prefix_digest: str, delivery_prefix_digest: str,
     acknowledgment_prefix_digest: str, now: str, record_id: Optional[str] = None,
+    holder_released: bool = False,
+    inbound_hold_mask: Optional[str] = None,
 ) -> Dict[str, object]:
     """Build one exact closed receipt; validation remains the durable boundary."""
 
@@ -71,6 +75,10 @@ def wake_hold_receipt(
         "delivery_prefix_digest": delivery_prefix_digest,
         "acknowledgment_prefix_digest": acknowledgment_prefix_digest,
     }
+    if holder_released:
+        row.update(schema_version=2, selection_reason="holder_released")
+    if inbound_hold_mask is not None:
+        row.update(schema_version=4, inbound_hold_mask=inbound_hold_mask)
     row["decision_digest"] = wake_hold_decision_digest(row)
     return row
 
@@ -114,7 +122,7 @@ class WakeAttemptLedger:
         reason_code: Optional[str] = None,
     ) -> Dict[str, object]:
         from .cursor import SparseCursor
-        from .events import EVENT_KINDS, validate_event_records
+        from .send_prefix import event_references
 
         node = Registry(self.root).resolve_node_id(recipient, field="recipient")
         SparseCursor._session_component(acting_session_id)
@@ -131,10 +139,8 @@ class WakeAttemptLedger:
             raise ProtocolRefusal("item_ids_invalid", "wake attempt needs unique message ids")
         requested = list(item_ids)
 
-        events, _unrecognized = read_records_compatible(
-            self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS)
-        )
-        validate_event_records(events)
+        events, _retracted, _proof = event_references(
+            self.root, requested, physical_order=True, optimistic=True)
         envelopes = {
             str(row["id"]): row for row in events if row["kind"] == "message_envelope"
         }
@@ -142,26 +148,15 @@ class WakeAttemptLedger:
         recorded_outcome = outcome
         recorded_reason = reason_code
         selected = [envelopes.get(item_id) for item_id in requested]
-        missing = {item_id for item_id in requested if item_id not in envelopes}
+        missing = frozenset(item_id for item_id in requested if item_id not in envelopes)
         if missing:
-            from .snapshot import _owned_epoch_archives
+            from .epoch_history import archived_envelope_membership
 
-            for archive in _owned_epoch_archives(self.root):
-                archive_relative = archive.relative_to(self.root.tenant_home)
-                archived_events = read_records_snapshot(
-                    self.root,
-                    archive_relative / "events.jsonl",
-                    allowed_kinds=set(EVENT_KINDS),
+            if archived_envelope_membership(self.root, missing):
+                raise ProtocolRefusal(
+                    "wake_envelope_archived",
+                    "wake envelope moved to an owned epoch archive",
                 )
-                if any(
-                    row.get("kind") == "message_envelope"
-                    and row.get("id") in missing
-                    for row in archived_events
-                ):
-                    raise ProtocolRefusal(
-                        "wake_envelope_archived",
-                        "wake envelope moved to an owned epoch archive",
-                    )
         owned = (
             requested == [item_id for item_id in ordered if item_id in set(requested)]
             and all(
@@ -180,24 +175,57 @@ class WakeAttemptLedger:
             recorded_reason = "wake_envelope_not_owned"
 
         if recorded_outcome in {"woke", "queued"}:
-            delivery_path = SparseCursor(self.root)._delivery_relative_path_for(
-                node, worker_session_id=message_worker_session_id,
-            )
-            deliveries = read_records(
-                self.root, delivery_path,
-                allowed_kinds={"delivery_receipt", "wake_hold_receipt"},
-            )
-            matching = [
-                row for row in deliveries
-                if row.get("kind") == "wake_hold_receipt"
-                and row.get("id") == decision_receipt_id
-            ]
-            if not matching:
-                recorded_outcome = "refused"
-                recorded_reason = "wake_decision_missing"
-            elif matching[0].get("item_ids") != requested:
-                recorded_outcome = "refused"
-                recorded_reason = "wake_decision_mismatch"
+            if isinstance(decision_receipt_id, str) and decision_receipt_id.startswith("cursor-presentation-"):
+                from .cursor_presentations import CursorPresentationLedger
+
+                # The guarded reader proves the complete native prepare/flush
+                # history, epoch prefixes and exact delivery reproduction.
+                matching = [row for row in CursorPresentationLedger(self.root).read(node)
+                    if row["id"] == decision_receipt_id and row["phase"] == "flushed"]
+                if not matching:
+                    recorded_outcome = "refused"
+                    recorded_reason = "wake_decision_missing"
+                elif (
+                    message_worker_session_id is not None
+                    or matching[0]["node_id"] != node
+                    or matching[0]["acting_session_id"] != acting_session_id
+                    or matching[0]["item_ids"] != requested
+                ):
+                    recorded_outcome = "refused"
+                    recorded_reason = "wake_decision_mismatch"
+            else:
+                delivery_path = SparseCursor(self.root)._delivery_relative_path_for(
+                    node, worker_session_id=message_worker_session_id,
+                )
+                deliveries = read_records(
+                    self.root, delivery_path,
+                    allowed_kinds=set(WAKE_HOLD_KINDS),
+                )
+                matching = [
+                    row for row in deliveries
+                    if row.get("kind") == "wake_hold_receipt"
+                    and row.get("id") == decision_receipt_id
+                ]
+                if not matching:
+                    from .epoch_carry import original_carried_hold
+                    for carried in deliveries:
+                        if (carried.get("kind") != "wake_hold_receipt"
+                                or carried.get("schema_version") != 3
+                                or carried.get("recipient") != node
+                                or carried.get("worker_session_id") != message_worker_session_id
+                                or carried.get("item_ids") != requested):
+                            continue
+                        original, _before, _states = original_carried_hold(
+                            self.root, carried, node, message_worker_session_id)
+                        if original["id"] == decision_receipt_id:
+                            matching = [original]
+                            break
+                if not matching:
+                    recorded_outcome = "refused"
+                    recorded_reason = "wake_decision_missing"
+                elif matching[0].get("item_ids") != requested:
+                    recorded_outcome = "refused"
+                    recorded_reason = "wake_decision_mismatch"
 
         if recorded_outcome == "refused" and recorded_reason not in WAKE_ATTEMPT_REFUSED_REASONS:
             recorded_reason = "wake_prompt_failed"
@@ -268,6 +296,63 @@ def _claim_holder_released(root: FloatiRoot, node: str) -> bool:
     return classify_holder(read_holder_testimony(root, node)) == "released"
 
 
+def _wake_candidates(states):
+    from .mail_health import wake_eligible
+
+    fresh = [item for item in states if item.state == "fresh" and wake_eligible(item.message)]
+    held = [item for item in states if item.state == "held" and wake_eligible(item.message)]
+    return fresh, held
+
+
+def _excluded_mask(candidates, eligible):
+    """Record the hold policy's exclusions over the exact native candidate order."""
+    if len(candidates) == len(eligible):
+        return None
+    kept = {item.message["id"] for item in eligible}
+    mask = bytearray((len(candidates) + 7) // 8)
+    for index, item in enumerate(candidates):
+        if item.message["id"] not in kept:
+            mask[index // 8] |= 1 << (index % 8)
+    return base64.b64encode(mask).decode("ascii")
+
+
+def original_wake_selection(states, receipt):
+    """Reproduce a recorded native selection without consulting live holders.
+
+    A v2 decision authorizes only the original held-only branch. Its exact
+    ordered IDs and limit still have to reproduce; no caller gets new work.
+    Version-one receipts retain the historical fresh-only interpretation.
+    """
+    fresh, held = _wake_candidates(states)
+    if receipt.get("schema_version") == 3:
+        # The roll admitted the original decision before minting this row.
+        # Its new cut can include later mail and terminal siblings. Replaying
+        # selection there would invent a different decision; retain the exact
+        # attested IDs, in their native event order, without consulting archives.
+        selected = [item for item in states if item.message['id'] in receipt['item_ids']]
+        if [item.message['id'] for item in selected] != receipt['item_ids']:
+            raise _unavailable("carried hold differs from its roll-attested selection")
+        return selected, [item for item in held if item.message['id'] not in receipt['item_ids']]
+    if receipt.get("schema_version") == 4:
+        validate_record(dict(receipt), str(receipt["tenant_id"]), {"wake_hold_receipt"}, integrity=True)
+        candidates = fresh + held
+        mask = base64.b64decode(receipt["inbound_hold_mask"])
+        count = len(candidates)
+        if len(mask) != (count + 7) // 8 or not any(mask) or (
+                count % 8 and mask[-1] >> (count % 8)):
+            raise _unavailable("recorded inbound hold mask differs from its native candidate cut")
+        eligible = [item for index, item in enumerate(candidates)
+                    if not mask[index // 8] & (1 << (index % 8))]
+        fresh = [item for item in eligible if item.state == "fresh"]
+        held = [item for item in eligible if item.state == "held"]
+    if receipt.get("selection_reason") == "holder_released":
+        validate_record(dict(receipt), str(receipt["tenant_id"]), {"wake_hold_receipt"}, integrity=True)
+        if fresh or [item.message["id"] for item in held[:receipt["limit"]]] != receipt["item_ids"]:
+            raise _unavailable("recorded holder release differs from its original held-only selection")
+        return held, []
+    return fresh, held
+
+
 #: The event ledger has ONE permitted vocabulary and it belongs to the writer.
 #: This is deliberately the writer's own set, imported, rather than a second
 #: hand-written copy: on 2026-08-29 the copy here omitted ``delivery_claim`` —
@@ -334,9 +419,63 @@ def wake_coordination_guard(
         lock_relative = Path("receipts/wake-coordination") / node / "lane.lock"
         lock = root.resolve_relative(lock_relative)
         with _locked_path(
-            lock, exclusive=True, relative=lock_relative, timeout_seconds=5.0
+            lock, exclusive=True, relative=lock_relative, timeout_seconds=5.0,
+            # The enclosing scope tracks this physical lock at WAKE rank.
+            # Treating it as a JSONL ledger would reject the next seat's
+            # wake guard when an epoch roll coordinates several recipients.
+            order_tracked=False,
         ):
             yield
+
+
+def _has_rolled_wake_history(root):
+    from .bus_epoch import _physical_first_roll_receipt
+    from .errors import FloatiError
+
+    try:
+        return _physical_first_roll_receipt(root.resolve_relative("events.jsonl"), root.tenant_id) is not None
+    except (FloatiError, OSError, AttributeError, TypeError):
+        # The native reader owns diagnostics for malformed or unavailable heads.
+        return False
+
+
+class _RolledWakeProjection:
+    """Read a rolled cut under the epoch guard and commit it under its lane."""
+
+    def __init__(self, root, node, worker_session_id, lane, extra=()):
+        from .codex_wait_liveness import holder_testimony_relative
+        from .cursor import SparseCursor
+        from .inbound_hold import LEDGER
+
+        cursor = SparseCursor(root)
+        self.root, self.node, self.worker_session_id, self.lane = root, node, worker_session_id, lane
+        self.coordinates = (
+            Path("events.jsonl"),
+            cursor._delivery_relative_path_for(node, worker_session_id=worker_session_id),
+            cursor._relative_path_for(node, worker_session_id=worker_session_id),
+            LEDGER / (node + ".jsonl"),
+            holder_testimony_relative(node),
+            *extra,
+        )
+        self.cut = self._cut()
+        lane.close()
+        self.lane_held = False
+
+    def _cut(self):
+        from .send_prefix import _identity
+
+        return tuple(_identity(self.root.resolve_relative(path)) for path in self.coordinates)
+
+    def revalidate(self, acquire_native=None):
+        if self.cut is not None:
+            self.lane.enter_context(wake_coordination_guard(
+                self.root, self.node, worker_session_id=self.worker_session_id))
+            self.lane_held = True
+            if acquire_native is not None:
+                acquire_native()
+            if self._cut() != self.cut:
+                raise _unavailable("native wake inputs changed during rolled projection")
+            self.cut = None
 
 
 def _validate_wake_key(key: object) -> str:
@@ -353,6 +492,7 @@ def project_wake_items(
     acknowledgments: Sequence[Mapping[str, object]], recipient: str,
     worker_session_id: Optional[str], tenant_id: str, event_prefix_digests: Sequence[str],
     delivery_prefix_digests: Sequence[str], acknowledgment_prefix_digests: Sequence[str],
+    _hold_proofs=None,
 ) -> Tuple[WakeItemState, ...]:
     """Purely project message state from validated physical input order.
 
@@ -366,9 +506,16 @@ def project_wake_items(
         tenant = validate_identifier(tenant_id, "tenant")
     except ProtocolRefusal as exc:
         raise _unavailable("recipient is invalid") from exc
+    from .cut_prefix import CertifiedEventSource, CertifiedPrefixes
+    certified = type(events) is CertifiedEventSource
+    if _hold_proofs is not None:
+        from .epoch_carry import verify_hold_proof_source
+        verify_hold_proof_source(_hold_proofs,
+            (events, event_prefix_digests, deliveries, delivery_prefix_digests,
+             acknowledgments, acknowledgment_prefix_digests), node, worker_session_id, tenant)
     if (
         not event_prefix_digests or not delivery_prefix_digests or not acknowledgment_prefix_digests
-        or not all(isinstance(value, str) for value in event_prefix_digests)
+        or (not certified and not all(isinstance(value, str) for value in event_prefix_digests))
         or not all(isinstance(value, str) for value in delivery_prefix_digests)
         or not all(isinstance(value, str) for value in acknowledgment_prefix_digests)
         or len(event_prefix_digests) != len(events) + 1
@@ -376,11 +523,50 @@ def project_wake_items(
         or len(acknowledgment_prefix_digests) != len(acknowledgments) + 1
     ):
         raise _unavailable("validated raw prefix testimony is unavailable")
+    if certified:
+        if (events.root.tenant_id != tenant or type(event_prefix_digests) is not CertifiedPrefixes
+                or event_prefix_digests.source is not events):
+            raise _unavailable("validated raw prefix testimony is unavailable")
+        selected = events.matching(node, worker_session_id)
+        event_by_id = {row["id"]: row for _ordinal, row, _retracted in selected}
+        event_positions = {row["id"]: ordinal for ordinal, row, _retracted in selected}
+        matching = [row["id"] for _ordinal, row, _retracted in selected]
+        retracted = {row["id"] for _ordinal, row, removed in selected if removed}
+        class CutPositions:
+            def __contains__(self, digest):
+                return events.cut_position(digest) is not None
+            def __getitem__(self, digest):
+                value = events.cut_position(digest)
+                if value is None:
+                    raise KeyError(digest)
+                return value
+        event_prefix_positions = CutPositions()
+    else:
+        event_by_id, event_positions, matching, retracted = _native_wake_events(
+            events, node, worker_session_id, tenant)
+        # Keep the last occurrence for compatible native skipped-kind sources.
+        event_prefix_positions = {digest: position
+            for position, digest in enumerate(event_prefix_digests)}
+    matching_set = set(matching)
+    acknowledgment_prefix_set = set(acknowledgment_prefix_digests)
+    counts = {item_id: 0 for item_id in matching}
+    delivered = set()
+    presented = set()
+    seen_receipts = set()
+    return _project_wake_receipts(events, deliveries, acknowledgments, node, worker_session_id,
+        tenant, event_prefix_digests, delivery_prefix_digests, acknowledgment_prefix_digests,
+        _hold_proofs, event_by_id, event_positions, matching, retracted, matching_set,
+        event_prefix_positions, acknowledgment_prefix_set, counts, delivered, presented, seen_receipts)
+
+
+def _native_wake_events(events, node, worker_session_id, tenant):
+    """The original whole-source validation, unchanged on every cache miss."""
     validated_events: List[Dict[str, object]] = []
     for index, event in enumerate(events):
         try:
             validated_events.append(validate_record(
-                dict(event) if isinstance(event, Mapping) else event,
+                (event.copy() if type(event) is dict
+                 else dict(event) if isinstance(event, Mapping) else event),
                 tenant,
                 WAKE_EVENT_KINDS,
                 integrity=True,
@@ -400,7 +586,8 @@ def project_wake_items(
             f" ({getattr(exc, 'code', type(exc).__name__)})"
         ) from exc
     event_by_id: Dict[str, Mapping[str, object]] = {}
-    ordered: List[str] = []
+    event_positions: Dict[str, int] = {}
+    matching: List[str] = []
     retracted = set()
     for index, validated_event in enumerate(validated_events):
         kind = validated_event["kind"]
@@ -409,7 +596,10 @@ def project_wake_items(
             if not isinstance(item_id, str) or item_id in event_by_id:
                 raise _unavailable("events have duplicate or invalid message ids")
             event_by_id[item_id] = validated_event
-            ordered.append(item_id)
+            event_positions[item_id] = index + 1
+            if (validated_event.get("recipient") == node
+                    and validated_event.get("worker_session_id") == worker_session_id):
+                matching.append(item_id)
         elif kind == "message_retracted":
             item_id = validated_event["retracted_message_id"]
             if not isinstance(item_id, str) or item_id not in event_by_id or item_id in retracted:
@@ -421,15 +611,13 @@ def project_wake_items(
             raise _unavailable(
                 _malformed_event_detail(index, validated_event, "record_kind_invalid")
             )
-    matching = [
-        item_id for item_id in ordered
-        if event_by_id[item_id].get("recipient") == node
-        and event_by_id[item_id].get("worker_session_id") == worker_session_id
-    ]
-    matching_set = set(matching)
-    counts = {item_id: 0 for item_id in matching}
-    presented = set()
-    seen_receipts = set()
+    return event_by_id, event_positions, matching, retracted
+
+
+def _project_wake_receipts(events, deliveries, acknowledgments, node, worker_session_id,
+        tenant, event_prefix_digests, delivery_prefix_digests, acknowledgment_prefix_digests,
+        _hold_proofs, event_by_id, event_positions, matching, retracted, matching_set,
+        event_prefix_positions, acknowledgment_prefix_set, counts, delivered, presented, seen_receipts):
     for index, receipt in enumerate(deliveries):
         kind = receipt.get("kind")
         if kind not in WAKE_HOLD_KINDS or receipt.get("recipient") != node:
@@ -441,8 +629,10 @@ def project_wake_items(
             raise _unavailable("delivery receipt item ids are invalid")
         if any(not isinstance(item_id, str) or item_id not in matching_set for item_id in ids):
             raise _unavailable("delivery receipt names a foreign or absent message")
-        physical = [item_id for item_id in matching if item_id in ids]
-        if list(ids) != physical:
+        # Membership and uniqueness were established above. Increasing native
+        # event ordinals reproduce the physical-order filter without rescanning
+        # every message for each receipt.
+        if any(event_positions[left] >= event_positions[right] for left, right in zip(ids, ids[1:])):
             raise _unavailable("delivery receipt item ids are not physical event order")
         receipt_id = receipt.get("id")
         if receipt_id is not None:
@@ -454,27 +644,27 @@ def project_wake_items(
                 validate_record(dict(receipt), tenant, frozenset({"wake_hold_receipt"}), integrity=True)
             except (IntegrityFailure, ProtocolRefusal, KeyError, TypeError, ValueError) as exc:
                 raise _unavailable("wake hold testimony is malformed") from exc
-            if receipt.get("decision_digest") != wake_hold_decision_digest(receipt):
+            if receipt.get("schema_version") != 3 and receipt.get("decision_digest") != wake_hold_decision_digest(receipt):
                 raise _unavailable("wake hold decision digest was forged")
-            if receipt.get("delivery_prefix_digest") != delivery_prefix_digests[index]:
+            if receipt.get("schema_version") == 3 and (not events
+                    or events[0].get('kind') != 'bus_epoch_roll_receipt'
+                    or receipt['carried_from']['roll_receipt_id'] != events[0]['id']):
+                raise _unavailable("carried hold does not bind its native epoch roll")
+            imported = _hold_proofs is not None and _hold_proofs.validates(receipt)
+            if not imported and receipt.get("delivery_prefix_digest") != delivery_prefix_digests[index]:
                 raise _unavailable("hold receipt does not bind its immediate delivery prefix")
-            if receipt.get("event_prefix_digest") not in event_prefix_digests:
+            if not imported and receipt.get("event_prefix_digest") not in event_prefix_positions:
                 raise _unavailable("hold event prefix is not an ancestor")
-            latest_named_frame = max(
-                index for index, event in enumerate(events, start=1)
-                if event.get("kind") == "message_envelope" and event.get("id") in ids
-            )
-            covered_positions = [
-                position for position, digest in enumerate(event_prefix_digests)
-                if digest == receipt.get("event_prefix_digest")
-            ]
-            if not any(position >= latest_named_frame for position in covered_positions):
+            if not imported and event_prefix_positions[receipt["event_prefix_digest"]] < max(
+                    event_positions[item_id] for item_id in ids):
                 raise _unavailable("hold event prefix does not cover every named event")
-            if receipt.get("acknowledgment_prefix_digest") not in acknowledgment_prefix_digests:
+            if not imported and receipt.get("acknowledgment_prefix_digest") not in acknowledgment_prefix_set:
                 raise _unavailable("hold acknowledgment prefix is not an ancestor")
         for item_id in ids:
             counts[item_id] += 1
-            presented.add(item_id)
+            delivered.add(item_id)
+            if kind != "delivered_unpresented":
+                presented.add(item_id)
     acknowledged = set()
     for receipt in acknowledgments:
         if receipt.get("kind") != "ack_receipt" or receipt.get("recipient") != node:
@@ -483,7 +673,7 @@ def project_wake_items(
         if not isinstance(ids, list) or not ids or len(set(ids)) != len(ids):
             raise _unavailable("acknowledgment item ids are invalid")
         for item_id in ids:
-            if not isinstance(item_id, str) or item_id not in presented:
+            if not isinstance(item_id, str) or item_id not in delivered:
                 raise _unavailable("acknowledgment names an unpresented item")
             acknowledged.add(item_id)
     result = []
@@ -614,6 +804,7 @@ class WakeHoldController:
         self._prefix_cursors: Dict[
             Tuple[str, str, Optional[str]], VerifiedLedgerCursor
         ] = {}
+        self._certified_sources = {}
 
     def _prefix_cursor(
         self, plane: str, recipient: str, worker_session_id: Optional[str],
@@ -626,19 +817,21 @@ class WakeHoldController:
         return cursor
 
     def _read(
-        self, recipient: str, worker_session_id: Optional[str],
+        self, recipient: str, worker_session_id: Optional[str], *, _certified=False,
+        _before_native_read=None,
     ) -> Tuple[List[Dict[str, object]], Tuple[str, ...], List[Dict[str, object]], Tuple[str, ...], List[Dict[str, object]], Tuple[str, ...]]:
         from .cursor import SparseCursor
         from .events import EVENT_KINDS, validate_event_records
+        from . import cut_prefix, send_prefix
 
         cursor = SparseCursor(self.root)
         try:
-            events, event_prefixes = read_records_with_prefix_digests(
-                self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS), domain=self._EVENT_DOMAIN,
-                cursor=self._prefix_cursor("events", "", None),
-                skip_unknown_kinds=True,
-            )
-            validate_event_records(events)
+            planes = self._certified_sources.setdefault(recipient, {})
+            previous = planes.get(worker_session_id, next(reversed(planes.values()), None))
+            certified = (cut_prefix.certified_source(self.root, recipient, worker_session_id,
+                previous=previous) if _certified else None)
+            if certified is None and _before_native_read is not None:
+                _before_native_read()
             deliveries, delivery_prefixes = read_records_with_prefix_digests(
                 self.root, cursor._delivery_relative_path_for(recipient, worker_session_id=worker_session_id),
                 allowed_kinds=set(WAKE_HOLD_KINDS), domain=self._DELIVERY_DOMAIN,
@@ -649,7 +842,34 @@ class WakeHoldController:
                 allowed_kinds={"ack_receipt"}, domain=self._ACK_DOMAIN,
                 cursor=self._prefix_cursor("acknowledgments", recipient, worker_session_id),
             )
+            if certified is not None:
+                try:
+                    # Current retractions have no certified historical ordinal.
+                    # A retry needing an old cut therefore remains native.
+                    if (any(removed for _ordinal, _row, removed in certified.rows)
+                            and any(row.get("kind") == "wake_hold_receipt" for row in deliveries)):
+                        raise send_prefix.CacheMiss()
+                    certified.prepare_cuts(deliveries)
+                except send_prefix._CACHE_ERRORS:
+                    certified = None
+            if certified is not None:
+                planes[worker_session_id] = certified
+                events, event_prefixes = certified, cut_prefix.CertifiedPrefixes(certified)
+            else:
+                before = send_prefix._identity(self.root.resolve_relative("events.jsonl"))
+                events, event_prefixes = read_records_with_prefix_digests(
+                    self.root, "events.jsonl", allowed_kinds=set(EVENT_KINDS), domain=self._EVENT_DOMAIN,
+                    cursor=self._prefix_cursor("events", "", None), skip_unknown_kinds=True)
+                validate_event_records(events)
+                if _certified:
+                    planes.pop(worker_session_id, None)
+                    # A native fallback may bank exactly the cut it read. A
+                    # concurrent append makes publication decline, never guess.
+                    cut_prefix.warm(self.root, expected_identity=before)
         except (IntegrityFailure, ProtocolRefusal, KeyError, TypeError, ValueError) as exc:
+            from .waiter_lock_retry import current_lock_window, transient_ledger_timeout
+            if current_lock_window() is not None and transient_ledger_timeout(exc):
+                raise
             if isinstance(exc, IntegrityFailure) and exc.code == "consumption_state_unavailable":
                 raise
             raise _unavailable("wake consumption prefix is invalid") from exc
@@ -718,7 +938,13 @@ class WakeHoldController:
     def evaluate(
         self, recipient: str, *, idempotency_key: str, worker_session_id: Optional[str] = None,
         limit: int = 1000,
-    ) -> Dict[str, object]:
+        _authorize: Optional[Callable[[], bool]] = None,
+        _publish: Optional[Callable[[Dict[str, object]], None]] = None,
+        _conversation: Optional[Callable[[], Dict[str, object]]] = None,
+        _before_read: Optional[Callable[[], Optional[Dict[str, object]]]] = None,
+        _waiter_read=None,
+        _before_rolled_projection=None,
+    ) -> Optional[Dict[str, object]]:
         if globals() is not _WAKE_HOLD_CONTROLLER_GLOBALS:
             raise ProtocolRefusal(
                 "wake_controller_only",
@@ -730,12 +956,24 @@ class WakeHoldController:
                 idempotency_key=idempotency_key,
                 worker_session_id=worker_session_id,
                 limit=limit,
+                _authorize=_authorize,
+                _publish=_publish,
+                _conversation=_conversation,
+                _before_read=_before_read,
+                _waiter_read=_waiter_read,
+                _before_rolled_projection=_before_rolled_projection,
             )
 
     def _evaluate_already_guarded(
         self, recipient: str, *, idempotency_key: str, worker_session_id: Optional[str] = None,
         limit: int = 1000,
-    ) -> Dict[str, object]:
+        _authorize: Optional[Callable[[], bool]] = None,
+        _publish: Optional[Callable[[Dict[str, object]], None]] = None,
+        _conversation: Optional[Callable[[], Dict[str, object]]] = None,
+        _before_read: Optional[Callable[[], Optional[Dict[str, object]]]] = None,
+        _waiter_read=None,
+        _before_rolled_projection=None,
+    ) -> Optional[Dict[str, object]]:
         node = Registry(self.root).resolve_node_id(recipient, field="recipient")
         if worker_session_id is not None:
             from .cursor import SparseCursor
@@ -743,19 +981,74 @@ class WakeHoldController:
         key = _validate_wake_key(idempotency_key)
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
             raise ProtocolRefusal("presentation_limit_invalid", "presentation limit must be 1 through 1000")
-        with wake_coordination_guard(self.root, node, worker_session_id=worker_session_id):
-            events, event_prefixes, deliveries, delivery_prefixes, acknowledgments, acknowledgment_prefixes = self._read(node, worker_session_id)
+        projection = None
+
+        def finish(artifact):
+            if projection is not None:
+                projection.revalidate()
+            if _publish is not None:
+                _publish(artifact)
+            return artifact
+
+        with ExitStack() as lane:
+            lane.enter_context(wake_coordination_guard(self.root, node, worker_session_id=worker_session_id))
+            # The private callbacks are synchronous: classification precedes
+            # every read, and publication finishes before this physical guard
+            # releases. Default evaluator calls keep the same artifact path.
+            if _authorize is not None and not _authorize():
+                return None
+            if _before_read is not None:
+                # Native Stop may quarantine an unresolved epoch without
+                # interpreting selected frames. Authorization and both
+                # physical guards still precede this private callback.
+                quarantine = _before_read()
+                if quarantine is not None:
+                    return finish(quarantine)
+            def begin_rolled_projection():
+                nonlocal projection
+                if _has_rolled_wake_history(self.root):
+                    extra = _before_rolled_projection() if _before_rolled_projection is not None else ()
+                    projection = _RolledWakeProjection(self.root, node, worker_session_id, lane, extra)
+
+            if _conversation is None:
+                # A certified unrolled cut already proves its first frame.
+                # Avoid rereading the physical head when that bank answered.
+                source = self._read(node, worker_session_id, _certified=True,
+                    _before_native_read=begin_rolled_projection)
+            else:
+                begin_rolled_projection()
+                native_read = lambda: self._read(node, worker_session_id, _certified=False)
+                source = _waiter_read(native_read) if _waiter_read is not None else native_read()
+            events, event_prefixes, deliveries, delivery_prefixes, acknowledgments, acknowledgment_prefixes = source
+            if _conversation is not None:
+                # Native Stop publication has its own conversation-bound
+                # prepare/flush testimony. Default daemon/evaluator decisions
+                # and the sealed wake-hold append remain unchanged.
+                return finish(_conversation())
+            from .epoch_carry import verified_hold_proofs
+            from .cut_prefix import CertifiedEventSource, CertifiedPrefixes
+            try:
+                hold_proofs = None if type(events) is CertifiedEventSource else verified_hold_proofs(self.root,
+                    (events, event_prefixes, deliveries, delivery_prefixes, acknowledgments, acknowledgment_prefixes),
+                    node, worker_session_id)
+            except (IntegrityFailure, ProtocolRefusal) as exc:
+                # This public controller retains its native consumption-state
+                # refusal taxonomy when an apparent import has no valid origin.
+                # The pure resolver/planner still exposes strict carry errors.
+                raise _unavailable("wake hold origin proof is unavailable") from exc
             states = project_wake_items(
                 events=events, deliveries=deliveries, acknowledgments=acknowledgments,
                 recipient=node, worker_session_id=worker_session_id, tenant_id=self.root.tenant_id,
                 event_prefix_digests=event_prefixes, delivery_prefix_digests=delivery_prefixes,
                 acknowledgment_prefix_digests=acknowledgment_prefixes,
+                _hold_proofs=hold_proofs,
             )
             prior = [row for row in deliveries if row.get("kind") == "wake_hold_receipt" and row.get("idempotency_key") == key]
             if len(prior) > 1:
                 raise _unavailable("duplicate wake idempotency receipt")
-            fresh = [item for item in states if item.state == "fresh"]
-            held = [item for item in states if item.state == "held"]
+            fresh, held = _wake_candidates(states)
+            candidates = fresh + held
+            fresh, held = withhold_unapproved_states(self.root, node, fresh, held)
             if prior:
                 receipt = prior[0]
                 if receipt.get("recipient") != node or receipt.get("worker_session_id") != worker_session_id or receipt.get("limit") != limit:
@@ -766,35 +1059,50 @@ class WakeHoldController:
                     raise _unavailable("wake receipt item testimony is no longer present")
                 if all(item.state == "held" for item in selected):
                     try:
-                        event_count = event_prefixes.index(str(receipt["event_prefix_digest"]))
-                        delivery_count = delivery_prefixes.index(str(receipt["delivery_prefix_digest"]))
-                        acknowledgment_count = acknowledgment_prefixes.index(str(receipt["acknowledgment_prefix_digest"]))
-                        original_states = project_wake_items(
-                            events=events[:event_count], deliveries=deliveries[:delivery_count],
-                            acknowledgments=acknowledgments[:acknowledgment_count], recipient=node,
-                            worker_session_id=worker_session_id, tenant_id=self.root.tenant_id,
-                            event_prefix_digests=event_prefixes[:event_count + 1],
-                            delivery_prefix_digests=delivery_prefixes[:delivery_count + 1],
-                            acknowledgment_prefix_digests=acknowledgment_prefixes[:acknowledgment_count + 1],
-                        )
+                        if receipt.get("schema_version") == 3:
+                            from .epoch_carry import original_carried_hold
+                            receipt, _original_source, original_states = original_carried_hold(
+                                self.root, receipt, node, worker_session_id)
+                        elif hold_proofs is not None and hold_proofs.validates(receipt):
+                            _original_source, original_states = hold_proofs.original(receipt)
+                        else:
+                            event_count = event_prefixes.index(str(receipt["event_prefix_digest"]))
+                            delivery_count = delivery_prefixes.index(str(receipt["delivery_prefix_digest"]))
+                            acknowledgment_count = acknowledgment_prefixes.index(str(receipt["acknowledgment_prefix_digest"]))
+                            if type(events) is CertifiedEventSource:
+                                original_events = events.restricted(event_count, str(receipt["event_prefix_digest"]))
+                                original_prefixes = CertifiedPrefixes(original_events)
+                            else:
+                                original_events, original_prefixes = events[:event_count], event_prefixes[:event_count + 1]
+                            original_source = (original_events, original_prefixes,
+                                deliveries[:delivery_count], delivery_prefixes[:delivery_count + 1],
+                                acknowledgments[:acknowledgment_count], acknowledgment_prefixes[:acknowledgment_count + 1])
+                            original_proofs = (None if type(events) is CertifiedEventSource else
+                                verified_hold_proofs(self.root, original_source, node, worker_session_id))
+                            original_states = project_wake_items(
+                                events=original_source[0], deliveries=original_source[2], acknowledgments=original_source[4],
+                                recipient=node, worker_session_id=worker_session_id, tenant_id=self.root.tenant_id,
+                                event_prefix_digests=original_source[1], delivery_prefix_digests=original_source[3],
+                                acknowledgment_prefix_digests=original_source[5], _hold_proofs=original_proofs)
                     except (IntegrityFailure, ValueError, KeyError, TypeError) as exc:
                         raise _unavailable("wake retry ancestors cannot reconstruct the original decision") from exc
-                    original_fresh = [item for item in original_states if item.state == "fresh"]
-                    original_held = [item for item in original_states if item.state == "held"]
+                    original_fresh, original_held = original_wake_selection(original_states, receipt)
                     if [item.message.get("id") for item in original_fresh[:limit]] != ids:
                         raise _unavailable("wake retry receipt differs from its original semantic decision")
-                    return self._artifact(
+                    return finish(self._artifact(
                         tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id, limit=limit,
                         fresh=original_fresh, held=original_held, receipt=receipt,
                         event_digest=str(receipt["event_prefix_digest"]), delivery_digest=str(receipt["delivery_prefix_digest"]),
                         acknowledgment_digest=str(receipt["acknowledgment_prefix_digest"]),
-                    )
-                return self._artifact(
+                    ))
+                return finish(self._artifact(
                     tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id, limit=limit,
                     fresh=[], held=held, receipt=None, event_digest=event_prefixes[-1],
                     delivery_digest=delivery_prefixes[-1], acknowledgment_digest=acknowledgment_prefixes[-1],
-                )
+                ))
             chosen = fresh[:limit]
+            inbound_hold_mask = _excluded_mask(candidates, fresh + held)
+            holder_released = False
             if not chosen and held and _claim_holder_released(self.root, node):
                 # WD-3: the participation claim holding this work recorded a
                 # holder that is proven gone (pid and process start). A claim
@@ -805,25 +1113,30 @@ class WakeHoldController:
                 fresh = fresh + held
                 held = []
                 chosen = fresh[:limit]
+                holder_released = True
             if not chosen:
-                return self._artifact(
+                return finish(self._artifact(
                     tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id, limit=limit, fresh=[], held=held,
                     receipt=None, event_digest=event_prefixes[-1], delivery_digest=delivery_prefixes[-1],
                     acknowledgment_digest=acknowledgment_prefixes[-1],
-                )
+                ))
             receipt = wake_hold_receipt(
                 tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id,
                 idempotency_key=key, limit=limit, item_ids=[str(item.message["id"]) for item in chosen],
                 event_prefix_digest=event_prefixes[-1], delivery_prefix_digest=delivery_prefixes[-1],
                 acknowledgment_prefix_digest=acknowledgment_prefixes[-1],
                 now=utc_now(),
+                holder_released=holder_released,
+                inbound_hold_mask=inbound_hold_mask,
             )
+            if projection is not None:
+                projection.revalidate()
             self._append_receipt_already_guarded(node, worker_session_id, receipt)
-            return self._artifact(
+            return finish(self._artifact(
                 tenant_id=self.root.tenant_id, recipient=node, worker_session_id=worker_session_id, limit=limit,
                 fresh=fresh, held=held, receipt=receipt, event_digest=event_prefixes[-1],
                 delivery_digest=delivery_prefixes[-1], acknowledgment_digest=acknowledgment_prefixes[-1],
-            )
+            ))
 
 
 _WAKE_HOLD_EVALUATE_CODE = WakeHoldController._evaluate_already_guarded.__code__

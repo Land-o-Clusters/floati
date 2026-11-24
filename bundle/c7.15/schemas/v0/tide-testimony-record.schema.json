@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/tide-testimony-record.schema.json",
+  "title": "Floati Tide Testimony Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "node_id", "harness", "metric", "value", "command", "access_class", "stamp", "formula", "receipt_path", "idempotency_key"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^tide-testimony-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "tide_testimony_record"},
+    "node_id": {"$ref": "#/$defs/identifier"},
+    "harness": {"type": "string", "minLength": 1, "maxLength": 64},
+    "metric": {"$ref": "#/$defs/identifier"},
+    "value": {"type": "string", "pattern": "^0\\.[0-9]{6}$"},
+    "command": {"enum": ["/context", "/status", "/usage", "/cost"]},
+    "access_class": {"const": "B"},
+    "stamp": {"const": "SELF_REPORTED"},
+    "formula": {"type": "string", "minLength": 1, "maxLength": 500},
+    "receipt_path": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+  }
+}

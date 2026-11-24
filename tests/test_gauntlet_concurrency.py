@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from tests.readiness import Readiness, wait_event, wait_join, wait_queue
 from floati import fixture_ids as public_ids
 
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 import fcntl
 import hashlib
 import json
 import multiprocessing
 import os
+import queue
 import signal
 import sys
 import tempfile
@@ -17,6 +21,7 @@ import unittest
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
@@ -35,6 +40,7 @@ from floati.work import WorkLog
 from floati.worker_exec import SpawnedWorkerProcess
 from floati.admission import AdmissionEvaluator, AdmissionPlan
 from floati.policy import PolicyDeploymentChecker, RepositoryPolicy
+from floati.records import WAKE_HOLD_KINDS
 from tests.hm3i_gauntlet_fixtures import (
     CANONICAL_RUN_KINDS,
     assert_physical_projection,
@@ -46,6 +52,7 @@ from tests.hm3i_gauntlet_fixtures import (
     build_success_trace,
 )
 from tests.test_effect_controller import _EffectCase
+from tests.test_process_atomicity import assert_send_companions
 
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
@@ -63,6 +70,152 @@ OPERATIONS_PER_PROCESS = 10
 # outlives the budget. They are the product's CORRECT answer to a contended
 # host, not a failure, so a hammer that meets one reports a measurement.
 CONTENTION_REFUSAL_CODES = frozenset({"ledger_lock_timeout", "cas_lock_timeout"})
+LOCK_RETRY_REFUSAL_CODES = CONTENTION_REFUSAL_CODES | {"epoch_lock_timeout"}
+_NATIVE_FIXTURE = ContextVar("gauntlet_native_fixture", default=None)
+
+
+class _HammerProgress(NamedTuple):
+    pid: int
+    ordinal: int
+    record_id: str
+
+
+@contextmanager
+def _native_fixture_directory():
+    """Retain fixture bytes when native owner cleanup cannot be proved."""
+    directory = tempfile.TemporaryDirectory()
+    path = directory.__enter__()
+    state = {"path": path, "failures": []}
+    token = _NATIVE_FIXTURE.set(state)
+    try:
+        yield path
+    finally:
+        exception = sys.exc_info()
+        _NATIVE_FIXTURE.reset(token)
+        if state["failures"]:
+            # Also reaches the real finalizer through the opt-in schedule's
+            # fixture-only TemporaryDirectory wrapper. Do not call __exit__:
+            # explicit cleanup would delete even after finalizer detachment.
+            directory._finalizer.detach()
+            print(f"retained native fixture {path}; owner cleanup unproved: "
+                  f"{state['failures']}", file=sys.stderr)
+        else:
+            directory.__exit__(*exception)
+
+
+def _native_owner_state(owner):
+    state = {}
+    for name in ("pid", "ident", "exitcode", "is_alive"):
+        try:
+            value = getattr(owner, name, None)
+            state[name] = value() if name == "is_alive" else value
+        except Exception as failure:
+            state[name] = repr(failure)
+    return state
+
+
+def _reap_native_processes(processes, description, *, terminate_first=False):
+    """Attempt every owner, escalating without abandoning later children."""
+    failures = []
+    for process in processes:
+        attempts = []
+        try:
+            if process.pid is None:
+                continue
+            actions = ("terminate", "kill") if terminate_first else (None, "terminate", "kill")
+            for action in actions:
+                if action is not None:
+                    try:
+                        if process.is_alive():
+                            getattr(process, action)()
+                    except Exception as failure:
+                        attempts.append(f"{action}: {failure!r}")
+                try:
+                    wait_join(process, f"{description} pid={process.pid} {action or 'join'} cleanup")
+                    break
+                except Exception as failure:
+                    attempts.append(f"{action or 'join'} wait: {failure!r}")
+            else:
+                failures.append(f"{_native_owner_state(process)}; attempts={attempts}")
+        except Exception as failure:
+            failures.append(f"{_native_owner_state(process)}; cleanup={failure!r}; attempts={attempts}")
+    return failures
+
+
+def _finish_native_cleanup(description, failures, original_failure):
+    if not failures:
+        return
+    detail = f"{description} owner cleanup failures: {failures}"
+    fixture = _NATIVE_FIXTURE.get()
+    if fixture is not None:
+        fixture["failures"].append(detail)
+    if original_failure is None:
+        raise AssertionError(detail)
+    print(detail, file=sys.stderr)
+
+
+@contextmanager
+def _owned_native_processes(processes, description, *, releases=(), results=None):
+    """Reap every started fixture owner before its temporary tree is removed."""
+    try:
+        yield
+    finally:
+        original_failure = sys.exc_info()[1]
+        failures = []
+        for event in releases:
+            try:
+                event.set()
+            except Exception as failure:
+                failures.append(f"release: {failure!r}")
+        failures.extend(_reap_native_processes(processes, description))
+        if results is not None:
+            try:
+                results.close()
+            except Exception as failure:
+                failures.append(f"results close: {failure!r}")
+        _finish_native_cleanup(description, failures, original_failure)
+
+
+def _native_process_results(test, processes, results, description):
+    readiness = Readiness(description)
+    observed = []
+    try:
+        for index in range(len(processes)):
+            observed.append(wait_queue(results,
+                f"{description} result {index + 1}/{len(processes)}",
+                timeout=readiness.remaining()))
+        for process in processes:
+            wait_join(process, f"{description} pid={process.pid} exit",
+                      timeout=readiness.remaining())
+            test.assertFalse(process.is_alive())
+            test.assertEqual(0, process.exitcode)
+    except AssertionError as failure:
+        states = [(process.pid, process.exitcode, process.is_alive()) for process in processes]
+        raise AssertionError(f"{failure}; child (pid, exit, alive)={states}; "
+                             f"received={len(observed)}/{len(processes)}; "
+                             f"partial results={observed!r}") from failure
+    return observed
+
+
+@contextmanager
+def _observe_native_contention(path, contended, *, contender=None):
+    """Report a real failed nonblocking flock without changing its outcome."""
+    from threading import get_ident
+
+    identity = path.stat()
+    native_flock = fcntl.flock
+    def observe(descriptor, operation):
+        try:
+            return native_flock(descriptor, operation)
+        except BlockingIOError:
+            opened = os.fstat(descriptor)
+            if (operation & fcntl.LOCK_NB
+                    and (opened.st_dev, opened.st_ino) == (identity.st_dev, identity.st_ino)
+                    and (contender is None or get_ident() == contender.ident)):
+                contended.set()
+            raise
+    with mock.patch.object(fcntl, "flock", observe):
+        yield
 
 
 def _append_effect_process(
@@ -236,7 +389,7 @@ def _thread_ordered_action(
             finally:
                 first_committed.set()
             return
-        if not first_at_transaction.wait(10) or not first_committed.wait(10):
+        if not wait_event(first_at_transaction, "test_gauntlet_concurrency first_at_transaction") or not wait_event(first_committed, "test_gauntlet_concurrency first_committed"):
             raise RuntimeError("ordered thread transaction did not reach its fence")
         with original_lock(
             path, exclusive=exclusive, relative=relative,
@@ -270,7 +423,7 @@ def _hold_file_lock(lock_path: str, ready: object, release: object) -> None:
     with path.open("a+b") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         ready.set()
-        release.wait(10)
+        wait_event(release, "test_gauntlet_concurrency release")
 
 
 def _send_under_contention(base: str, results: object) -> None:
@@ -303,37 +456,58 @@ def _claim_under_contention(base: str, results: object) -> None:
         results.put(("ok", "claimed"))
 
 
-def _retry_lock_timeouts(operation: object) -> object:
+def _retry_lock_timeouts(
+    operation: object, *, contention_counts: dict[str, int] | None = None,
+) -> object:
     for _ in range(100):
         try:
             return operation()
         except ProtocolRefusal as exc:
-            if exc.code not in {"ledger_lock_timeout", "cas_lock_timeout"}:
+            if exc.code not in LOCK_RETRY_REFUSAL_CODES:
                 raise
+            if contention_counts is not None:
+                contention_counts[exc.code] = contention_counts.get(exc.code, 0) + 1
             time.sleep(0.01)
     raise RuntimeError("lock contention did not clear after bounded retries")
 
 
+def _hold_epoch_lock(base: str, ready: object, release: object, unlocked: object = None) -> None:
+    from floati.bus_epoch import epoch_guard
+
+    root = FloatiRoot.open(Path(base), "alpha")
+    with epoch_guard(root, exclusive=True):
+        ready.set()
+        if not wait_event(release, "test_gauntlet_concurrency release"):
+            raise RuntimeError("epoch fixture holder was not released")
+    if unlocked is not None:
+        unlocked.set()
+
+
 def _register_hammer(
-    base: str, index: int, start: object, results: object
+    base: str, index: int, start: object, results: object, *, progress=None
 ) -> None:
     registry = Registry(FloatiRoot.open(Path(base), "alpha"))
+    counts = {}
     start.wait()
     try:
         ids = []
         for item in range(OPERATIONS_PER_PROCESS):
             node = f"hammer-{index:02d}-{item:02d}"
             record = _retry_lock_timeouts(
-                lambda node=node: registry.register(node, "worker")
+                lambda node=node: registry.register(node, "worker"),
+                contention_counts=counts,
             )
             ids.append(record["id"])
-        results.put(("ok", ids))
+            if progress is not None:
+                progress.put(_HammerProgress(os.getpid(), len(ids), record["id"]))
+        results.put(("ok", ids, counts))
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc), counts))
 
 
-def _send_hammer(base: str, index: int, start: object, results: object) -> None:
+def _send_hammer(base: str, index: int, start: object, results: object, *, progress=None) -> None:
     events = EventLog(FloatiRoot.open(Path(base), "alpha"))
+    counts = {}
     start.wait()
     try:
         ids = []
@@ -348,32 +522,40 @@ def _send_hammer(base: str, index: int, start: object, results: object) -> None:
                     "docs/evidence/hm3h.md",
                     key,
                     idempotency_key=key,
-                )
+                ),
+                contention_counts=counts,
             )
             ids.append(record["id"])
-        results.put(("ok", ids))
+            if progress is not None:
+                progress.put(_HammerProgress(os.getpid(), len(ids), record["id"]))
+        results.put(("ok", ids, counts))
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc), counts))
 
 
 def _ack_hammer(
-    base: str, item_ids: list[str], start: object, results: object
+    base: str, item_ids: list[str], start: object, results: object, *, progress=None
 ) -> None:
     cursor = SparseCursor(FloatiRoot.open(Path(base), "alpha"))
+    counts = {}
     start.wait()
     try:
         record = _retry_lock_timeouts(
             lambda: cursor.ack(
                 "bob", item_ids, acting_session_id="gauntlet-session"
-            )
+            ),
+            contention_counts=counts,
         )
-        results.put(("ok", record["id"]))
+        if progress is not None:
+            progress.put(_HammerProgress(os.getpid(), 1, record["id"]))
+        results.put(("ok", record["id"], counts))
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc), counts))
 
 
-def _claim_hammer(base: str, start: object, results: object) -> None:
+def _claim_hammer(base: str, start: object, results: object, *, progress=None) -> None:
     work = WorkLog(FloatiRoot.open(Path(base), "alpha"))
+    counts = {}
     claimed = []
     start.wait()
     try:
@@ -382,16 +564,19 @@ def _claim_hammer(base: str, start: object, results: object) -> None:
                 item = _retry_lock_timeouts(
                     lambda: work.claim_owned_oldest(
                         public_ids.worker('alpha'), "work-claims", 1, now=NOW
-                    )
+                    ),
+                    contention_counts=counts,
                 )
             except ProtocolRefusal as exc:
                 if exc.code == "work_owned_open_absent":
                     break
                 raise
             claimed.append(item["id"])
-        results.put(("ok", claimed))
+            if progress is not None:
+                progress.put(_HammerProgress(os.getpid(), len(claimed), item["id"]))
+        results.put(("ok", claimed, counts))
     except Exception as exc:
-        results.put(("error", f"{type(exc).__name__}:{exc}"))
+        results.put(("error", _forked_writer_failure(exc), counts))
 
 
 def _decision_proposal() -> dict:
@@ -555,7 +740,9 @@ def _run_created_hammer(base: str, start: object, results: object) -> None:
         results.put(("error", _forked_writer_failure(exc)))
 
 
-def _run_trace_hammer(base: str, start: object, results: object) -> None:
+def _run_trace_hammer(
+    base: str, start: object, results: object, writer_role: str | None = None,
+) -> None:
     """Append a distinct owner-built successful trace and return its local expectation."""
 
     root = FloatiRoot.open_direct_home(Path(base), create=False)
@@ -568,17 +755,13 @@ def _run_trace_hammer(base: str, start: object, results: object) -> None:
             for record in trace.ledger.records()
             if record.get("run_id") == trace.run_id
         ]
-        results.put(
-            (
-                "ok",
-                (
-                    trace.run_id,
-                    trace.item_ids,
-                    assert_physical_projection(trace),
-                    [record["id"] for record in owned_records],
-                ),
-            )
+        payload = (
+            trace.run_id,
+            trace.item_ids,
+            assert_physical_projection(trace),
+            [record["id"] for record in owned_records],
         )
+        results.put(("ok", payload if writer_role is None else (writer_role, payload)))
     except ProtocolRefusal as exc:
         # A TYPED contention refusal is the lock's designed answer and gets its
         # own status, so the reader can tell it from every other refusal. Any
@@ -674,7 +857,7 @@ def _wake_session_evaluate_hammer(
 
 def _wake_ordered_action(
     base: str, action: str, item_id: str, session: str | None, first: bool,
-    first_locked: object, release_first: object, results: object,
+    first_locked: object, release_first: object, results: object, second_contended: object,
 ) -> None:
     """Run a real public operation while deterministically fencing its coordination lock."""
     from contextlib import contextmanager
@@ -688,33 +871,112 @@ def _wake_ordered_action(
         with real_guard(root_arg, recipient, worker_session_id=worker_session_id):
             if first:
                 first_locked.set()
-                if not release_first.wait(10):
+                if not wait_event(release_first, "test_gauntlet_concurrency release_first"):
                     raise RuntimeError("ordered wake action was not released")
             yield
 
     wake_hold_module.wake_coordination_guard = ordered_guard
     try:
-        if action == "evaluate":
-            row = wake_hold_module.WakeHoldController(root).evaluate(
-                "bob", idempotency_key="ordered-seed", worker_session_id=session,
-            )
-            results.put((action, "ok", row["state"]))
-        elif action == "ack":
-            SparseCursor(root).ack(
-                "bob", [item_id], acting_session_id="gauntlet-session",
-                worker_session_id=session,
-            )
-            results.put((action, "ok", "acknowledged"))
-        else:
-            EventLog(root).retract(
-                item_id, worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'),
-            )
-            results.put((action, "ok", "retracted"))
+        probe = (nullcontext() if first else _observe_native_contention(
+            root.resolve_relative("receipts/wake-coordination/bob/lane.lock"), second_contended))
+        with probe:
+            if action == "evaluate":
+                row = wake_hold_module.WakeHoldController(root).evaluate(
+                    "bob", idempotency_key="ordered-seed", worker_session_id=session,
+                )
+                results.put((action, "ok", row["state"]))
+            elif action == "ack":
+                SparseCursor(root).ack(
+                    "bob", [item_id], acting_session_id="gauntlet-session",
+                    worker_session_id=session,
+                )
+                results.put((action, "ok", "acknowledged"))
+            else:
+                EventLog(root).retract(
+                    item_id, worker_session_id=session, reason="sent_in_error", author=public_ids.worker('alpha'),
+                )
+                results.put((action, "ok", "retracted"))
     except BaseException as exc:
         results.put((action, "error", f"{type(exc).__name__}:{getattr(exc, 'code', '')}"))
 
 
 class ConcurrentWriterGauntletTests(unittest.TestCase):
+    def test_epoch_contention_is_counted_retried_and_has_one_send(self) -> None:
+        """A real epoch refusal retries the same send and keeps one effect."""
+        from floati import bus_epoch
+
+        with _native_fixture_directory() as directory:
+            base = Path(directory)
+            root = FloatiRoot.open(base, "alpha")
+            registry = Registry(root)
+            registry.register(public_ids.worker('alpha'), "worker")
+            registry.register("bob", "worker")
+            events = EventLog(root, registry)
+            context = multiprocessing.get_context("fork")
+            ready, release, unlocked = context.Event(), context.Event(), context.Event()
+            holder = context.Process(target=_hold_epoch_lock, args=(str(base), ready, release, unlocked))
+            counts = {}
+
+            def send():
+                try:
+                    return events.send(
+                        public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                        "docs/evidence/hm3h.md", "stable retry",
+                        idempotency_key="epoch-contention-stable-send",
+                    )
+                except ProtocolRefusal as exc:
+                    if exc.code == "epoch_lock_timeout":
+                        release.set()
+                        wait_event(unlocked, "epoch native holder unlock after counted refusal")
+                    raise
+
+            with _owned_native_processes([holder], "epoch contention", releases=[release]):
+                holder.start()
+                self.assertTrue(wait_event(ready, "test_gauntlet_concurrency ready"))
+                # Shorten only this fixture's wait; product policy stays 5 s.
+                with mock.patch.object(bus_epoch, "EPOCH_LOCK_TIMEOUT_SECONDS", 0.05):
+                    sent = _retry_lock_timeouts(send, contention_counts=counts)
+                release.set()
+                wait_join(holder, "epoch contention holder exit")
+            self.assertEqual(0, holder.exitcode)
+            self.assertEqual({"epoch_lock_timeout": 1}, counts)
+            self.assertEqual(sent["id"], send()["id"])
+            physical = read_records(root, "events.jsonl", allowed_kinds={
+                "message_envelope", "send_readiness_observation",
+            })
+            self.assertEqual(2, len(physical))
+            self.assertEqual(1, len(assert_send_companions(self, physical)))
+
+    def test_lock_retry_counts_each_typed_contention_before_success(self) -> None:
+        counts = {}
+        refusals = [ProtocolRefusal(code, "fixture contention") for code in (
+            "epoch_lock_timeout", "ledger_lock_timeout", "cas_lock_timeout",
+        )]
+        expected = object()
+        operation = mock.Mock(side_effect=[*refusals, expected])
+        with mock.patch.object(time, "sleep"):
+            self.assertIs(expected, _retry_lock_timeouts(operation, contention_counts=counts))
+        self.assertEqual(4, operation.call_count)
+        self.assertEqual({refusal.code: 1 for refusal in refusals}, counts)
+
+    def test_lock_retry_preserves_unrelated_refusal(self) -> None:
+        refusal = ProtocolRefusal("work_owned_open_absent", "no work")
+        operation = mock.Mock(side_effect=refusal)
+        counts = {}
+        with self.assertRaises(ProtocolRefusal) as caught:
+            _retry_lock_timeouts(operation, contention_counts=counts)
+        self.assertIs(refusal, caught.exception)
+        self.assertEqual(1, operation.call_count)
+        self.assertEqual({}, counts)
+
+    def test_lock_retry_exhaustion_keeps_the_counted_refusals(self) -> None:
+        operation = mock.Mock(side_effect=ProtocolRefusal("epoch_lock_timeout", "fixture contention"))
+        counts = {}
+        with mock.patch.object(time, "sleep"), self.assertRaisesRegex(RuntimeError, "bounded retries"):
+            _retry_lock_timeouts(operation, contention_counts=counts)
+        self.assertEqual(100, operation.call_count)
+        self.assertEqual({"epoch_lock_timeout": 100}, counts)
+
     @staticmethod
     def _hammer_failures(results: list[tuple[str, object]]) -> str:
         """Render every non-ok payload, so a red run names its own cause."""
@@ -730,8 +992,12 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
         target: object,
         args_for_index: object,
         *,
-        timeout: float = 30,
+        timeout: float = 300,
+        progress: bool = False,
+        progress_limit: int = 0,
     ) -> list[tuple[str, object]]:
+        if progress:
+            self.assertGreater(progress_limit, 0)
         context = multiprocessing.get_context("fork")
         start = context.Event()
         results = context.Queue()
@@ -739,17 +1005,148 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
             context.Process(
                 target=target,
                 args=args_for_index(index, start, results),
+                kwargs={"progress": results} if progress else {},
             )
             for index in range(HAMMER_PROCESSES)
         ]
-        for process in processes:
-            process.start()
-        start.set()
-        for process in processes:
-            process.join(timeout)
-            self.assertFalse(process.is_alive(), "hammer process exceeded its bound")
-            self.assertEqual(0, process.exitcode)
-        return [results.get(timeout=2) for _ in processes]
+        started = []
+        observed = []
+        actor_progress = {}
+        awaited = "native actor startup"
+        resume_generation = [0]
+        guard_generation = 0
+        previous_sigcont = None
+        sigcont_installed = False
+
+        def resumed(signum, frame):
+            resume_generation[0] += 1
+            if callable(previous_sigcont):
+                previous_sigcont(signum, frame)
+
+        def rearm_after_resume(guard):
+            nonlocal guard_generation
+            if guard_generation == resume_generation[0]:
+                return guard, False
+            guard_generation = resume_generation[0]
+            print(f"[MAC-LEG-FLAKE] {target.__name__} SIGCONT generation={guard_generation}; "
+                  f"rearmed watchdog={timeout:g}s; awaited={awaited}; "
+                  f"finals={len(observed)}/{len(processes)}; actor progress={actor_progress!r}",
+                  flush=True)
+            return Readiness(awaited, timeout=timeout), True
+
+        try:
+            for process in processes:
+                process.start()
+                started.append(process)
+            if progress:
+                # Install only in this parent after every fork. A real resume
+                # rearms the harness watchdog; it proves no product progress.
+                previous_sigcont = signal.getsignal(signal.SIGCONT)
+                signal.signal(signal.SIGCONT, resumed)
+                sigcont_installed = True
+            actor_progress = {process.pid: {"ordinal": 0, "record_id": None} for process in started}
+            if progress:
+                print(f"[MAC-LEG-FLAKE] {target.__name__} starting; "
+                      f"owned pids={[process.pid for process in started]}", flush=True)
+            start.set()
+            readiness = Readiness(
+                f"{target.__name__} hammer completion; pids={[p.pid for p in started]}",
+                timeout=timeout,
+            )
+            # Progress and final rows share each producer's FIFO. Draining
+            # all twelve finals therefore also drains their earlier progress,
+            # so no separate feeder can keep a finished writer alive.
+            while len(observed) < len(processes):
+                awaited = (f"{target.__name__} successful operation or final; "
+                           f"finals={len(observed)}/{len(processes)}")
+                readiness, _ = rearm_after_resume(readiness)
+                try:
+                    row = results.get_nowait()
+                except queue.Empty:
+                    try:
+                        row = wait_queue(results, awaited, timeout=readiness.remaining())
+                    except AssertionError:
+                        # An observer can resume after its guard while real
+                        # completion events are already queued. Consume them
+                        # before declaring the native work inactive.
+                        try:
+                            row = results.get_nowait()
+                        except queue.Empty:
+                            readiness, rearmed = rearm_after_resume(readiness)
+                            if rearmed:
+                                continue
+                            raise readiness.failure() from None
+                if progress and isinstance(row, _HammerProgress):
+                    self.assertIs(type(row.pid), int)
+                    self.assertIn(row.pid, actor_progress)
+                    self.assertIs(type(row.ordinal), int)
+                    self.assertEqual(actor_progress[row.pid]["ordinal"] + 1, row.ordinal)
+                    self.assertIsInstance(row.record_id, str)
+                    self.assertTrue(row.record_id)
+                    self.assertLess(
+                        sum(state["ordinal"] for state in actor_progress.values()),
+                        progress_limit,
+                        f"successful operation limit={progress_limit}; excess event={row!r}",
+                    )
+                    actor_progress[row.pid] = {"ordinal": row.ordinal, "record_id": row.record_id}
+                else:
+                    if progress:
+                        self.assertIsInstance(row, tuple)
+                        self.assertIn(len(row), (2, 3))
+                        self.assertIn(row[0], {"ok", "error", "contended"})
+                    observed.append(row)
+                if progress:
+                    # Only actual successful-return testimony or a native
+                    # final resets inactivity; retries emit neither.
+                    readiness = Readiness(awaited, timeout=timeout)
+            exit_readiness = (Readiness(f"{target.__name__} native exits", timeout=timeout)
+                              if progress else readiness)
+            for process in processes:
+                awaited = f"{target.__name__} pid={process.pid} native exit"
+                while True:
+                    exit_readiness, _ = rearm_after_resume(exit_readiness)
+                    try:
+                        wait_join(process, f"{target.__name__} pid={process.pid} exit",
+                                  timeout=exit_readiness.remaining())
+                        break
+                    except AssertionError:
+                        exit_readiness, rearmed = rearm_after_resume(exit_readiness)
+                        if not rearmed:
+                            raise
+                self.assertFalse(process.is_alive(), str(exit_readiness.failure()))
+                self.assertEqual(0, process.exitcode)
+        except AssertionError as failure:
+            states = [(p.pid, p.exitcode, p.is_alive()) for p in started]
+            raise AssertionError(f"{failure}; child (pid, exit, alive)={states}; "
+                                 f"received={len(observed)}/{len(processes)}; "
+                                 f"resume_generation={resume_generation[0]}; "
+                                 f"awaited={awaited}; actor progress={actor_progress!r}; "
+                                 f"partial results={observed!r}") from failure
+        finally:
+            if sigcont_installed:
+                signal.signal(signal.SIGCONT, previous_sigcont)
+            # A failed watchdog must not race fixture deletion with writers.
+            original_failure = sys.exc_info()[1]
+            cleanup_failures = _reap_native_processes(
+                processes, target.__name__, terminate_first=True)
+            try:
+                results.close()
+            except Exception as failure:
+                cleanup_failures.append(f"results close: {failure!r}")
+            _finish_native_cleanup(target.__name__, cleanup_failures, original_failure)
+        measured = [row[2] for row in observed if len(row) == 3]
+        if measured:
+            self.assertEqual(HAMMER_PROCESSES, len(measured))
+            totals = {}
+            for counts in measured:
+                for code, count in counts.items():
+                    self.assertIn(code, LOCK_RETRY_REFUSAL_CODES)
+                    self.assertIsInstance(count, int)
+                    self.assertGreater(count, 0)
+                    totals[code] = totals.get(code, 0) + count
+            print(f"[GAUNTLET-LINUX-LOCK-1] {target.__name__}: "
+                  f"{len(measured)} writers; counted retry refusals {json.dumps(totals, sort_keys=True)}")
+        return [(row[0], row[1]) for row in observed]
 
     def _contention_world(
         self, results: list[tuple[str, object]], *, writers: int
@@ -789,7 +1186,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
         return contended
 
     def test_ledger_lock_contention_is_typed_and_bounded(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
@@ -808,31 +1205,25 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 target=_send_under_contention,
                 args=(str(base), results),
             )
-            holder.start()
-            self.assertTrue(ready.wait(2))
-            contender.start()
-            contender.join(2)
-            try:
+            with _owned_native_processes([holder, contender], "ledger contention",
+                                         releases=[release], results=results):
+                holder.start()
+                self.assertTrue(wait_event(ready, "test_gauntlet_concurrency ready"))
+                contender.start()
+                observed = _native_process_results(self, [contender], results, "ledger contention")
                 self.assertFalse(
                     contender.is_alive(),
-                    "ledger lock acquisition exceeded the two-second gauntlet bound",
+                    "ledger contender must exit after reporting its result",
                 )
                 self.assertEqual(
                     ("refused", "ledger_lock_timeout"),
-                    results.get(timeout=1),
+                    observed[0],
                 )
-            finally:
                 release.set()
-                holder.join(2)
-                if contender.is_alive():
-                    contender.terminate()
-                    contender.join(2)
-                if holder.is_alive():
-                    holder.terminate()
-                    holder.join(2)
+                wait_join(holder, "ledger contention holder exit")
 
     def test_cas_lock_contention_is_typed_and_bounded(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             lock_path = root.resolve_relative(
@@ -851,31 +1242,25 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 target=_claim_under_contention,
                 args=(str(base), results),
             )
-            holder.start()
-            self.assertTrue(ready.wait(2))
-            contender.start()
-            contender.join(2)
-            try:
+            with _owned_native_processes([holder, contender], "CAS contention",
+                                         releases=[release], results=results):
+                holder.start()
+                self.assertTrue(wait_event(ready, "test_gauntlet_concurrency ready"))
+                contender.start()
+                observed = _native_process_results(self, [contender], results, "CAS contention")
                 self.assertFalse(
                     contender.is_alive(),
-                    "CAS lock acquisition exceeded the two-second gauntlet bound",
+                    "CAS contender must exit after reporting its result",
                 )
                 self.assertEqual(
                     ("refused", "cas_lock_timeout"),
-                    results.get(timeout=1),
+                    observed[0],
                 )
-            finally:
                 release.set()
-                holder.join(2)
-                if contender.is_alive():
-                    contender.terminate()
-                    contender.join(2)
-                if holder.is_alive():
-                    holder.terminate()
-                    holder.join(2)
+                wait_join(holder, "CAS contention holder exit")
 
     def test_twelve_process_send_register_ack_and_claim_torture_has_no_double_effects(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
@@ -887,9 +1272,12 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 lambda index, start, results: (
                     str(base), index, start, results
                 ),
+                progress=True,
+                progress_limit=HAMMER_PROCESSES * OPERATIONS_PER_PROCESS,
             )
             self.assertEqual(
-                {"ok"}, {status for status, _ in registration_results}
+                {"ok"}, {status for status, _ in registration_results},
+                self._hammer_failures(registration_results),
             )
             registry_rows = read_records(
                 root,
@@ -910,12 +1298,16 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 lambda index, start, results: (
                     str(base), index, start, results
                 ),
+                progress=True,
+                progress_limit=HAMMER_PROCESSES * OPERATIONS_PER_PROCESS,
             )
-            self.assertEqual({"ok"}, {status for status, _ in send_results})
-            event_rows = read_records(
-                root, "events.jsonl", allowed_kinds={"message_envelope"}
-            )
+            self.assertEqual({"ok"}, {status for status, _ in send_results},
+                             self._hammer_failures(send_results))
+            physical = read_records(root, "events.jsonl",
+                allowed_kinds={"message_envelope", "send_readiness_observation"})
+            event_rows = assert_send_companions(self, physical)
             expected_count = HAMMER_PROCESSES * OPERATIONS_PER_PROCESS
+            self.assertEqual(2 * expected_count, len(physical))
             self.assertEqual(expected_count, len(event_rows))
             self.assertEqual(
                 expected_count,
@@ -929,8 +1321,11 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
                 lambda _index, start, results: (
                     str(base), message_ids, start, results
                 ),
+                progress=True,
+                progress_limit=HAMMER_PROCESSES,
             )
-            self.assertEqual({"ok"}, {status for status, _ in ack_results})
+            self.assertEqual({"ok"}, {status for status, _ in ack_results},
+                             self._hammer_failures(ack_results))
             self.assertEqual(1, len({value for _, value in ack_results}))
             ack_rows = read_records(
                 root,
@@ -951,8 +1346,11 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
             claim_results = self.run_hammer(
                 _claim_hammer,
                 lambda _index, start, results: (str(base), start, results),
+                progress=True,
+                progress_limit=len(expected_work_ids),
             )
-            self.assertEqual({"ok"}, {status for status, _ in claim_results})
+            self.assertEqual({"ok"}, {status for status, _ in claim_results},
+                             self._hammer_failures(claim_results))
             claimed_ids = [
                 item_id
                 for _, process_claims in claim_results
@@ -963,7 +1361,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_same_decision_proposals_have_one_physical_and_logical_effect(self) -> None:
         """Catches concurrent decision writers that duplicate the same proposal or invent terminal decision state."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             _seed_decision_source(root)
@@ -979,7 +1377,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_policy_and_admission_readers_are_equal_and_leave_no_durable_side_effect(self) -> None:
         """Item 7/8 readers are concurrent pure inputs, not a hidden run/worker/cache owner."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "readers", create=True)
             policy = build_policy_case(root)
             admission = build_admission_case(root)
@@ -1004,7 +1402,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_same_run_created_candidates_are_one_idempotent_effect_and_divergence_is_typed(self) -> None:
         """Every contender sees the same run-created frame; changing its same-id payload never appends."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "idempotent", create=True)
             results = self.run_hammer(
                 _run_created_hammer,
@@ -1028,14 +1426,21 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_owner_built_runs_keep_per_run_projection_and_ids_distinct_under_contention(self) -> None:
         """Forked writers append complete governed runs without duplicate IDs or cross-run projection state."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "run-traces", create=True)
             results = self.run_hammer(
                 _run_trace_hammer,
-                lambda _index, start, queue: (str(root.path), start, queue),
+                lambda index, start, queue: (str(root.path), start, queue, f"declared-writer-{index}"),
             )
             contended = self._contention_world(results, writers=HAMMER_PROCESSES)
-            payloads = [value for status, value in results if status == "ok"]
+            role_payloads = [value for status, value in results if status == "ok"]
+            payloads = [value for _role, value in role_payloads]
+            writer_roles = {value[0]: role for role, value in role_payloads}
+            successful_roles = [role for role, _value in role_payloads]
+            self.assertTrue(set(successful_roles) <= {
+                f"declared-writer-{index}" for index in range(HAMMER_PROCESSES)
+            })
+            self.assertEqual(len(successful_roles), len(set(successful_roles)))
             self.assertEqual(HAMMER_PROCESSES, len(payloads) + len(contended))
             self.assertTrue(payloads, self._hammer_failures(results))
             run_ids = [value[0] for value in payloads]
@@ -1058,7 +1463,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
             self.assertLessEqual(len(created - set(run_ids)), len(contended))
             projection = ledger.project()
             for run_id, item_ids, expected, expected_ids in payloads:
-                with self.subTest(run_id=run_id):
+                with self.subTest(writer_role=writer_roles[run_id]):
                     run = projection.run(run_id)
                     owned = [record for record in records if record.get("run_id") == run_id]
                     self.assertEqual(expected_ids, [record["id"] for record in owned])
@@ -1084,7 +1489,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_process_trace_fixture_does_not_claim_unexecuted_run_kinds(self) -> None:
         """The contention axis must derive its vocabulary from its own process traces."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             results = self.run_hammer(
                 _run_full_trace_family_hammer,
                 lambda index, start, queue: (directory, index, start, queue),
@@ -1107,7 +1512,7 @@ class ConcurrentWriterGauntletTests(unittest.TestCase):
 
     def test_twelve_process_receipt_result_race_never_refuses_an_unrelated_run_created(self) -> None:
         """The receipt view is taken under the run lock, so another valid run cannot poison its projection."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = FloatiRoot.open_direct_home(Path(directory) / "receipt-race", create=True)
             results = self.run_hammer(
                 _mixed_run_receipt_race_hammer,
@@ -1255,7 +1660,7 @@ class EffectWorkerExecProcessTests(unittest.TestCase):
         def paused_external_reap(pid: int, options: int) -> tuple[int, int]:
             self.assertEqual((4242, os.WNOHANG), (pid, options))
             reap_locked.set()
-            if not resume_reap.wait(1.0):
+            if not wait_event(resume_reap, "test_gauntlet_concurrency resume_reap"):
                 raise RuntimeError("reap race did not resume")
             raise ChildProcessError
 
@@ -1281,12 +1686,12 @@ class EffectWorkerExecProcessTests(unittest.TestCase):
             )
             reap_thread = threading.Thread(target=process.join)
             reap_thread.start()
-            self.assertTrue(reap_locked.wait(1.0))
+            self.assertTrue(wait_event(reap_locked, "test_gauntlet_concurrency reap_locked"))
             signal_thread = threading.Thread(target=shutdown)
             signal_thread.start()
             resume_reap.set()
-            reap_thread.join(1.0)
-            signal_thread.join(1.0)
+            wait_join(reap_thread, "test_gauntlet_concurrency reap_thread")
+            wait_join(signal_thread, "test_gauntlet_concurrency signal_thread")
             self.assertFalse(reap_thread.is_alive(), "reap decision deadlocked")
             self.assertFalse(signal_thread.is_alive(), "signal decision deadlocked")
 
@@ -1307,7 +1712,7 @@ class EffectWorkerExecProcessTests(unittest.TestCase):
         def paused_process_group(pid: int) -> int:
             self.assertEqual(4242, pid)
             signal_locked.set()
-            if not resume_signal.wait(1.0):
+            if not wait_event(resume_signal, "test_gauntlet_concurrency resume_signal"):
                 raise RuntimeError("signal decision did not resume")
             return pid
 
@@ -1324,7 +1729,7 @@ class EffectWorkerExecProcessTests(unittest.TestCase):
         ):
             signal_thread = threading.Thread(target=process.terminate)
             signal_thread.start()
-            self.assertTrue(signal_locked.wait(1.0))
+            self.assertTrue(wait_event(signal_locked, "test_gauntlet_concurrency signal_locked"))
             join_thread = threading.Thread(target=timed_join)
             join_thread.start()
             try:
@@ -1334,8 +1739,8 @@ class EffectWorkerExecProcessTests(unittest.TestCase):
                 )
             finally:
                 resume_signal.set()
-                signal_thread.join(1.0)
-                join_thread.join(1.0)
+                wait_join(signal_thread, "test_gauntlet_concurrency signal_thread")
+                wait_join(join_thread, "test_gauntlet_concurrency join_thread")
             self.assertFalse(signal_thread.is_alive())
             self.assertFalse(join_thread.is_alive())
 
@@ -1552,7 +1957,42 @@ class ThreadObservationConcurrencyTests(unittest.TestCase):
 
 class EffectLedgerConcurrencyTests(unittest.TestCase):
     def setUp(self) -> None:
+        from multiprocessing import resource_tracker, synchronize, util
+
+        tracker = resource_tracker._resource_tracker
+        prior_pid = tracker._pid
+        prior_finalizers = frozenset(util._finalizer_registry)
+        self._effect_race_children_collected = True
+        self._effect_owned_temporaries = []
+
+        def close_owned_tracker() -> None:
+            if prior_pid is None and tracker._pid is not None:
+                self.assertTrue(self._effect_race_children_collected,
+                                "effect race child collection remains unproved")
+                # Tracebacks can retain Events after a test failure. Reap only
+                # this fixture's new SemLocks before its owned tracker exits.
+                for key, finalizer in list(util._finalizer_registry.items()):
+                    if (key not in prior_finalizers
+                            and finalizer._callback == synchronize.SemLock._cleanup):
+                        finalizer()
+                tracker._stop()
+                self.assertIsNone(tracker._pid)
+
+        self.addCleanup(close_owned_tracker)
         self.case = _EffectCase(self)
+        owned_temp = self.case.run.temp
+        matches = [index for index, (function, args, kwargs) in enumerate(self._cleanups)
+                   if getattr(function, "__self__", None) is owned_temp
+                   and getattr(function, "__func__", None) is tempfile.TemporaryDirectory.cleanup
+                   and args == () and kwargs == {}]
+        self.assertEqual(1, len(matches), "exact effect root cleanup must have one owner")
+        def cleanup_owned_root() -> None:
+            if self._effect_race_children_collected:
+                tempfile.TemporaryDirectory._rmtree(owned_temp.name)
+
+        self._cleanups[matches[0]] = (cleanup_owned_root, (), {})
+        self._effect_owned_temporaries.append(owned_temp)
+        self.assertIsNotNone(owned_temp._finalizer.detach())
         self.home = self.case.root.tenant_home
         self.root = self.case.root
         self.policy_path = self.case.run.policy_path
@@ -1628,49 +2068,83 @@ class EffectLedgerConcurrencyTests(unittest.TestCase):
 
         candidate = self.case.result_acceptance_candidate()
         context = multiprocessing.get_context("spawn")
-        start = context.Event()
-        outcomes = context.Queue()
-        acceptance = context.Process(
-            target=_task6_acceptance_process,
-            args=(str(self.home), candidate, start, outcomes),
-        )
-        intent = context.Process(
-            target=_task6_intent_process,
-            args=(
-                str(self.home), str(self.policy_path),
-                self.case.intent_args(), start, outcomes,
-            ),
-        )
-        acceptance.start()
-        intent.start()
-        start.set()
-        acceptance.join(20)
-        intent.join(20)
-        self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
+        self._effect_race_children_collected = False
+        start = outcomes = None
+        children = []
+        try:
+            start = context.Event()
+            outcomes = context.Queue()
+            acceptance = context.Process(
+                target=_task6_acceptance_process,
+                args=(str(self.home), candidate, start, outcomes),
+            )
+            children.append(acceptance)
+            intent = context.Process(
+                target=_task6_intent_process,
+                args=(
+                    str(self.home), str(self.policy_path),
+                    self.case.intent_args(), start, outcomes,
+                ),
+            )
+            children.append(intent)
+            acceptance.start()
+            intent.start()
+            start.set()
+            acceptance.join(20)
+            intent.join(20)
+            self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
 
-        observed = {outcomes.get(timeout=5)[0:2] for _ in range(2)}
-        labels = {row[0] for row in observed}
-        self.assertIn(
-            labels,
-            (
-                {"acceptance_ok", "intent_refused"},
-                {"intent_ok", "acceptance_refused"},
-            ),
-        )
-        refusals = {row[1] for row in observed if row[0].endswith("refused")}
-        self.assertTrue(
-            refusals <= {"effect_attempt_accepted", "effect_binding_required"},
-            refusals,
-        )
-        run_rows = RunLedger(self.root).records()
-        effect_rows = EffectLedger(self.root).records()
-        accepted_count = sum(row["kind"] == "result_accepted" for row in run_rows)
-        self.assertIn((accepted_count, len(effect_rows)), ((1, 0), (0, 1)))
-        lock_path = self.root.resolve_relative("effects/acceptance.lock")
-        self.assertEqual(b"", lock_path.read_bytes())
-        lock_path.unlink()
-        self.assertEqual(run_rows, RunLedger(self.root).records())
-        self.assertEqual(effect_rows, EffectLedger(self.root).records())
+            observed = {outcomes.get(timeout=5)[0:2] for _ in range(2)}
+            labels = {row[0] for row in observed}
+            self.assertIn(
+                labels,
+                (
+                    {"acceptance_ok", "intent_refused"},
+                    {"intent_ok", "acceptance_refused"},
+                ),
+            )
+            refusals = {row[1] for row in observed if row[0].endswith("refused")}
+            self.assertTrue(
+                refusals <= {"effect_attempt_accepted", "effect_binding_required"},
+                refusals,
+            )
+            run_rows = RunLedger(self.root).records()
+            effect_rows = EffectLedger(self.root).records()
+            accepted_count = sum(row["kind"] == "result_accepted" for row in run_rows)
+            self.assertIn((accepted_count, len(effect_rows)), ((1, 0), (0, 1)))
+            lock_path = self.root.resolve_relative("effects/acceptance.lock")
+            self.assertEqual(b"", lock_path.read_bytes())
+            lock_path.unlink()
+            self.assertEqual(run_rows, RunLedger(self.root).records())
+            self.assertEqual(effect_rows, EffectLedger(self.root).records())
+        finally:
+            cleanup_errors = []
+            if start is not None:
+                try:
+                    start.set()
+                except Exception as error:
+                    cleanup_errors.append(error)
+            for process in children:
+                if process.pid is None:
+                    continue
+                try:
+                    process.join(20)
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(5)
+                    if process.is_alive() or process.exitcode is None:
+                        raise RuntimeError("effect race child remained uncollected")
+                except Exception as error:
+                    cleanup_errors.append(error)
+            self._effect_race_children_collected = not cleanup_errors
+            if outcomes is not None:
+                try:
+                    outcomes.close()
+                    outcomes.join_thread()
+                except Exception as error:
+                    cleanup_errors.append(error)
+            if cleanup_errors:
+                raise cleanup_errors[0]
 
 class WakeHoldConcurrencyTests(unittest.TestCase):
     """Cross-process controller controls; a per-ledger lock alone permits duplicate presentation."""
@@ -1690,34 +2164,31 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
         context = multiprocessing.get_context("fork")
         start, results = context.Event(), context.Queue()
         processes = [context.Process(target=_wake_evaluate_hammer, args=(str(base), key, start, results)) for key in keys]
-        for process in processes:
-            process.start()
-        start.set()
-        observed = [results.get(timeout=10) for _ in processes]
-        for process in processes:
-            process.join(10)
-            self.assertFalse(process.is_alive())
-            self.assertEqual(0, process.exitcode)
+        with _owned_native_processes(processes, "wake hold race", releases=[start], results=results):
+            for process in processes:
+                process.start()
+            start.set()
+            observed = _native_process_results(self, processes, results, "wake hold race")
         return observed
 
     def test_concurrent_same_key_creates_one_hold_row(self) -> None:
         """Catches response-loss retries appending multiple canonical hold rows."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = self._root_with_message(Path(directory))
             observed = self._race(Path(directory), ["same-key"] * 4)
             self.assertEqual({"ok"}, {status for status, _value in observed})
-            rows = read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"})
+            rows = read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS))
             self.assertEqual(1, len(rows))
 
     def test_competing_keys_do_not_present_one_fresh_message_twice(self) -> None:
         """Catches independent decisions both classifying the same locked input as fresh."""
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = self._root_with_message(Path(directory))
             observed = self._race(Path(directory), ["left-key", "right-key"])
             self.assertEqual({"ok"}, {status for status, _value in observed})
             waking = [artifact for _status, artifact in observed if artifact["wake_required"]]
             self.assertEqual(1, len(waking))
-            rows = read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"})
+            rows = read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS))
             self.assertEqual(1, len(rows))
 
     def test_identical_keys_are_independent_only_across_session_ledgers(self) -> None:
@@ -1726,7 +2197,7 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
             "worker-018f7e9b3c137abc8def0123456789ab",
             "worker-018f7e9b3c147abc8def0123456789ab",
         )
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             base = Path(directory)
             root = FloatiRoot.open(base, "alpha")
             registry = Registry(root)
@@ -1748,14 +2219,12 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
                 )
                 for session in sessions
             ]
-            for process in processes:
-                process.start()
-            start.set()
-            observed = [results.get(timeout=10) for _ in processes]
-            for process in processes:
-                process.join(10)
-                self.assertFalse(process.is_alive())
-                self.assertEqual(0, process.exitcode)
+            with _owned_native_processes(processes, "session wake hold race",
+                                         releases=[start], results=results):
+                for process in processes:
+                    process.start()
+                start.set()
+                observed = _native_process_results(self, processes, results, "session wake hold race")
             self.assertEqual({"ok"}, {status for status, _artifact in observed})
             self.assertEqual(
                 {session for _status, artifact in observed for session in [artifact["worker_session_id"]]},
@@ -1771,35 +2240,62 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
             "worker-018f7e9b3c137abc8def0123456789ab",
             "worker-018f7e9b3c147abc8def0123456789ab",
         )
-        with tempfile.TemporaryDirectory() as directory:
+        with _native_fixture_directory() as directory:
             root = FloatiRoot.open(Path(directory), "alpha")
             Registry(root).register("bob", "worker")
             first_locked = threading.Event()
             release_first = threading.Event()
             second_locked = threading.Event()
+            second_contended = threading.Event()
+            thread_failures = []
 
             def hold_first() -> None:
-                with wake_coordination_guard(root, "bob", worker_session_id=sessions[0]):
-                    first_locked.set()
-                    self.assertTrue(release_first.wait(5))
+                try:
+                    with wake_coordination_guard(root, "bob", worker_session_id=sessions[0]):
+                        first_locked.set()
+                        self.assertTrue(wait_event(release_first, "test_gauntlet_concurrency release_first"))
+                except BaseException as failure:
+                    thread_failures.append(failure)
 
             def take_second() -> None:
-                self.assertTrue(first_locked.wait(5))
-                with wake_coordination_guard(root, "bob", worker_session_id=sessions[1]):
-                    second_locked.set()
+                try:
+                    self.assertTrue(wait_event(first_locked, "test_gauntlet_concurrency first_locked"))
+                    with wake_coordination_guard(root, "bob", worker_session_id=sessions[1]):
+                        second_locked.set()
+                except BaseException as failure:
+                    thread_failures.append(failure)
 
             first = threading.Thread(target=hold_first)
             second = threading.Thread(target=take_second)
-            first.start()
-            second.start()
-            self.assertTrue(first_locked.wait(5))
-            self.assertFalse(second_locked.wait(0.1))
-            release_first.set()
-            first.join(5)
-            second.join(5)
+            try:
+                first.start()
+                self.assertTrue(wait_event(first_locked, "test_gauntlet_concurrency first_locked"))
+                lock = root.resolve_relative("receipts/wake-coordination/bob/lane.lock")
+                with _observe_native_contention(lock, second_contended, contender=second):
+                    second.start()
+                    wait_event(second_contended, "second session native lane lock contention")
+                    self.assertFalse(second_locked.is_set())
+                    release_first.set()
+                    wait_join(first, "first session lane holder exit")
+                    wait_join(second, "second session lane holder exit")
+            finally:
+                original_failure = sys.exc_info()[1]
+                cleanup_failures = []
+                try:
+                    release_first.set()
+                except Exception as failure:
+                    cleanup_failures.append(f"release: {failure!r}")
+                for actor in (first, second):
+                    try:
+                        if actor.ident is not None:
+                            wait_join(actor, "session lane holder cleanup")
+                    except Exception as failure:
+                        cleanup_failures.append(f"{_native_owner_state(actor)}; cleanup={failure!r}")
+                _finish_native_cleanup("session lane holder", cleanup_failures, original_failure)
             self.assertFalse(first.is_alive())
             self.assertFalse(second.is_alive())
             self.assertTrue(second_locked.is_set())
+            self.assertEqual([], thread_failures)
             self.assertEqual(
                 ["lane.lock"],
                 sorted(path.name for path in self.root_paths(root, "bob")),
@@ -1813,24 +2309,27 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
     def _ordered_race(self, base: Path, first_action: str, second_action: str, item_id: str, session: str | None) -> list[tuple[str, str, str]]:
         context = multiprocessing.get_context("fork")
         first_locked, release_first, results = context.Event(), context.Event(), context.Queue()
-        first = context.Process(target=_wake_ordered_action, args=(str(base), first_action, item_id, session, True, first_locked, release_first, results))
-        second = context.Process(target=_wake_ordered_action, args=(str(base), second_action, item_id, session, False, first_locked, release_first, results))
-        first.start()
-        self.assertTrue(first_locked.wait(5))
-        second.start()
-        time.sleep(0.05)
-        release_first.set()
-        first.join(10)
-        second.join(10)
-        self.assertEqual((0, 0), (first.exitcode, second.exitcode))
-        return [results.get(timeout=2), results.get(timeout=2)]
+        second_contended = context.Event()
+        first = context.Process(target=_wake_ordered_action, args=(str(base), first_action, item_id, session, True, first_locked, release_first, results, second_contended))
+        second = context.Process(target=_wake_ordered_action, args=(str(base), second_action, item_id, session, False, first_locked, release_first, results, second_contended))
+        processes = [first, second]
+        with _owned_native_processes(processes, "ordered wake race",
+                                     releases=[release_first], results=results):
+            first.start()
+            self.assertTrue(wait_event(first_locked, "test_gauntlet_concurrency first_locked"))
+            second.start()
+            wait_event(second_contended, f"ordered {second_action} native lane lock contention")
+            release_first.set()
+            observed = _native_process_results(self, processes, results, "ordered wake race")
+            self.assertEqual((0, 0), (first.exitcode, second.exitcode))
+        return observed
 
     def test_evaluation_and_acknowledgment_are_serialized_in_both_lock_orders(self) -> None:
         """Catches ack and exact retry observing or publishing stale interleaved state."""
         from floati.wake_hold import WakeHoldController
 
         for first_action in ("evaluate", "ack"):
-            with self.subTest(first_action=first_action), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(first_action=first_action), _native_fixture_directory() as directory:
                 base = Path(directory)
                 root = self._root_with_message(base)
                 item_id = str(EventLog(root).records()[0]["id"])
@@ -1849,7 +2348,7 @@ class WakeHoldConcurrencyTests(unittest.TestCase):
 
         session = "worker-018f7e9b3c137abc8def0123456789ab"
         for first_action in ("evaluate", "retract"):
-            with self.subTest(first_action=first_action), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(first_action=first_action), _native_fixture_directory() as directory:
                 base = Path(directory)
                 root = FloatiRoot.open(base, "alpha")
                 registry = Registry(root)

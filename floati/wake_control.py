@@ -16,27 +16,13 @@ from .ids import uuid7_hex
 from .jsonl import transact
 from .registry import Registry, utc_now
 from .root import FloatiRoot
+from .session_identity import _RESERVED, _SESSION, validate_session_id
 
 
-_SESSION = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._:-]{0,255})$")
-_RESERVED = frozenset({"all", "global"})
 _KINDS = {"wake_control_receipt"}
 _MARKER_FIELDS = {
     "schema_version", "node_id", "session_digest", "state", "paused_at", "receipt_id",
 }
-
-
-def validate_session_id(value: object) -> str:
-    if (
-        not isinstance(value, str)
-        or _SESSION.fullmatch(value) is None
-        or value.casefold() in _RESERVED
-    ):
-        raise ProtocolRefusal(
-            "wake_session_invalid",
-            "wake control requires one exact terminal-safe session id; global and wildcard selectors are forbidden",
-        )
-    return value
 
 
 def _digest(session_id: str) -> str:
@@ -88,12 +74,21 @@ class WakeController:
         descriptor = -1
         try:
             descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            os.fchmod(descriptor, 0o600)
             if os.write(descriptor, encoded) != len(encoded):
                 raise OSError("short marker write")
             os.fsync(descriptor)
             os.close(descriptor)
             descriptor = -1
-            os.replace(temporary, path)
+            from .codex_hook_install import _rename_generation_noreplace
+            _rename_generation_noreplace(temporary, path)
+            if path.read_bytes() != encoded:
+                raise OSError("wake marker readback differs")
+            parent = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
         except OSError as exc:
             if descriptor >= 0:
                 os.close(descriptor)
@@ -201,7 +196,8 @@ class WakeController:
             ),
         }
 
-    def pause(self, node_id: str, session_id: str, *, idempotency_key: str) -> Dict[str, Any]:
+    def pause(self, node_id: str, session_id: str, *, idempotency_key: str,
+              reserve_receipt=None) -> Dict[str, Any]:
         node, _session, session_digest = self._identity(node_id, session_id)
         marker_path = self._marker(node, session_digest)
         with self._lock(node):
@@ -223,27 +219,146 @@ class WakeController:
                 "paused_at": row["timestamp"],
                 "receipt_id": row["id"],
             }
+            if reserve_receipt is not None:
+                if not callable(reserve_receipt):
+                    raise ProtocolRefusal("wake_pause_intent_invalid", "pause reservation requires a callable durable recorder",
+                        remedy="supply the exact native reserved pause receipt or ID from the seat ownership record")
+                from .records import validate_record
+                validate_record(row, self.root.tenant_id, frozenset(_KINDS), integrity=False)
+                # The caller cannot alter the native candidate after reservation.
+                reserve_receipt(json.loads(json.dumps(row)))
             self._write_marker(marker_path, marker)
             try:
                 committed = self._append(node, row)
             except Exception:
-                try:
-                    marker_path.unlink()
-                except OSError:
-                    pass
+                if reserve_receipt is None:
+                    try:
+                        marker_path.unlink()
+                    except OSError:
+                        pass
+                # Reserved callers have durable exact intent and can reconcile;
+                # do not unlink a possibly superseding marker on their behalf.
                 raise
+            from .wake_hints import publish_recipient_hint
+            publish_recipient_hint(self.root, node)
         return self._artifact(
             node=node, session_digest=session_digest, state="paused",
             marker=marker_path, receipt=committed, paused_at=str(row["timestamp"]),
         )
 
-    def resume(self, node_id: str, session_id: str, *, idempotency_key: str) -> Dict[str, Any]:
+    def reconcile_pause(self, node_id: str, session_id: str, *, expected_receipt: dict) -> Optional[dict]:
+        """Receipt only the exact reserved pause marker left by an interrupted pause."""
+        from .records import validate_record
+        from .jsonl import read_records_snapshot
+        import stat
+
+        node, _session, session_digest = self._identity(node_id, session_id)
+        try:
+            row = validate_record(expected_receipt, self.root.tenant_id,
+                frozenset(_KINDS), integrity=False)
+            if row["node_id"] != node or row["session_digest"] != session_digest or row["operation"] != "pause" or row["state"] != "paused" or row["predecessor_receipt_id"] is not None:
+                raise ValueError("reserved pause belongs to another coordinate or operation")
+        except (ProtocolRefusal, ValueError, KeyError, TypeError) as exc:
+            raise ProtocolRefusal("wake_pause_intent_invalid", "reserved native pause receipt is invalid",
+                remedy="supply the exact native reserved pause receipt or ID from the seat ownership record") from exc
+        marker_path = self._marker(node, session_digest)
+        with self._lock(node):
+            quarantine = self._resume_quarantine(marker_path, row["id"])
+            if not marker_path.exists() and not marker_path.is_symlink() and (quarantine.exists() or quarantine.is_symlink()):
+                marker_path = quarantine
+                parent = os.open(marker_path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(parent)
+                finally:
+                    os.close(parent)
+            marker = self._read_marker(marker_path, node, session_digest)
+            if marker is None:
+                return None  # Do not recreate an absent capability from old intent.
+            expected_marker = {"schema_version": 0, "node_id": node,
+                "session_digest": session_digest, "state": "paused",
+                "paused_at": row["timestamp"], "receipt_id": row["id"]}
+            metadata = marker_path.lstat()
+            if marker != expected_marker or marker_path.read_bytes() != self._encode_marker(expected_marker) or not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+                raise ProtocolRefusal("wake_pause_intent_conflict", "pause marker differs from the exact reserved native receipt; preserve it",
+                    remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+            descriptor = os.open(marker_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            try:
+                opened = os.fstat(descriptor)
+                if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino) or os.read(descriptor, 8193) != self._encode_marker(expected_marker):
+                    raise ProtocolRefusal("wake_pause_intent_conflict", "reserved marker changed before durable reconciliation",
+                        remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            parent = os.open(marker_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+            prior = read_records_snapshot(self.root, self._ledger(node), allowed_kinds=_KINDS)
+            matches = [existing for existing in prior if existing["id"] == row["id"] or existing["idempotency_key"] == row["idempotency_key"]]
+            if matches and (len(matches) != 1 or matches[0] != row):
+                raise ProtocolRefusal("wake_pause_intent_conflict", "native pause ID or key has conflicting evidence; preserve it",
+                    remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+            return matches[0] if matches else self._append(node, row)
+
+    @staticmethod
+    def _resume_quarantine(path: Path, receipt_id: str) -> Path:
+        return path.with_name("." + path.name + ".resume-" + receipt_id)
+
+    def resume(self, node_id: str, session_id: str, *, idempotency_key: str,
+               expected_pause_receipt_id: Optional[str] = None) -> Dict[str, Any]:
+        if expected_pause_receipt_id is not None and (not isinstance(expected_pause_receipt_id, str) or re.fullmatch(r"wake-control-[0-9a-f]{32}", expected_pause_receipt_id) is None):
+            raise ProtocolRefusal("wake_pause_intent_invalid", "resume requires an exact native pause receipt ID",
+                remedy="supply the exact native reserved pause receipt or ID from the seat ownership record")
         node, _session, session_digest = self._identity(node_id, session_id)
         marker_path = self._marker(node, session_digest)
         with self._lock(node):
+            quarantine = None if expected_pause_receipt_id is None else self._resume_quarantine(marker_path, expected_pause_receipt_id)
+            original_path = marker_path
+            if quarantine is not None and (quarantine.exists() or quarantine.is_symlink()):
+                if marker_path.exists() or marker_path.is_symlink():
+                    raise ProtocolRefusal("wake_pause_intent_conflict", "pause and conditional removal staging both exist; preserve them",
+                        remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+                marker_path = quarantine
             marker = self._read_marker(marker_path, node, session_digest)
             if marker is None:
                 raise ProtocolRefusal("wake_session_not_paused", "session has no pause marker")
+            if expected_pause_receipt_id is not None and marker["receipt_id"] != expected_pause_receipt_id:
+                raise ProtocolRefusal("wake_pause_intent_conflict", "resume predecessor was superseded; preserve the current pause marker",
+                    remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+            if expected_pause_receipt_id is not None:
+                from .jsonl import read_records_snapshot
+                import stat
+                pauses = [entry for entry in read_records_snapshot(self.root, self._ledger(node), allowed_kinds=_KINDS)
+                    if entry["id"] == expected_pause_receipt_id]
+                metadata = marker_path.lstat()
+                if len(pauses) != 1 or pauses[0]["operation"] != "pause" or pauses[0]["state"] != "paused" or pauses[0]["node_id"] != node or pauses[0]["session_digest"] != session_digest or pauses[0]["timestamp"] != marker["paused_at"] or marker_path.read_bytes() != self._encode_marker(marker) or not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+                    raise ProtocolRefusal("wake_pause_intent_conflict", "conditional resume lacks the exact receipted pause marker",
+                        remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+                verified_identity = (metadata.st_dev, metadata.st_ino)
+                verified_bytes = self._encode_marker(marker)
+            if quarantine is not None and marker_path != quarantine:
+                from .codex_hook_install import _rename_generation_noreplace
+                metadata = marker_path.lstat()
+                encoded = marker_path.read_bytes()
+                _rename_generation_noreplace(marker_path, quarantine)
+                moved = quarantine.lstat()
+                if (moved.st_dev, moved.st_ino) != (metadata.st_dev, metadata.st_ino) or quarantine.read_bytes() != encoded:
+                    try:
+                        _rename_generation_noreplace(quarantine, original_path)
+                    except OSError as exc:
+                        raise ProtocolRefusal("wake_pause_intent_conflict", "replacement marker preserved at " + str(quarantine),
+                            remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat") from exc
+                    raise ProtocolRefusal("wake_pause_intent_conflict", "replacement pause marker preserved without a resume receipt",
+                        remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
+                marker_path = quarantine
+            if quarantine is not None:
+                parent = os.open(marker_path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(parent)
+                finally:
+                    os.close(parent)
             row = self._receipt(
                 node=node,
                 session_digest=session_digest,
@@ -252,17 +367,41 @@ class WakeController:
                 predecessor=str(marker["receipt_id"]),
                 idempotency_key=idempotency_key,
             )
-            committed = self._append(node, row)
             try:
+                committed = self._append(node, row)
+            except Exception:
+                if quarantine is not None:
+                    from .codex_hook_install import _rename_generation_noreplace
+                    try:
+                        _rename_generation_noreplace(quarantine, original_path)
+                    except OSError:
+                        pass
+                raise
+            try:
+                if quarantine is not None:
+                    current = marker_path.lstat()
+                    if not stat.S_ISREG(current.st_mode) or current.st_uid != os.getuid() or stat.S_IMODE(current.st_mode) != 0o600 or (current.st_dev, current.st_ino) != verified_identity or marker_path.read_bytes() != verified_bytes:
+                        raise ProtocolRefusal("wake_pause_intent_conflict", "conditional removal staging changed after the resume receipt; preserve it",
+                            remedy="preserve the current marker and native ledger; inspect superseding evidence before removing the seat")
                 marker_path.unlink()
+                if quarantine is not None:
+                    if marker_path.exists() or marker_path.is_symlink():
+                        raise OSError("conditional pause removal readback differs")
+                    parent = os.open(marker_path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(parent)
+                    finally:
+                        os.close(parent)
             except OSError as exc:
                 raise ProtocolRefusal(
                     "wake_marker_unavailable",
                     "resume was receipted but the exact pause marker remains",
                 ) from exc
+            from .wake_hints import publish_recipient_hint
+            publish_recipient_hint(self.root, node)
         return self._artifact(
             node=node, session_digest=session_digest, state="active",
-            marker=marker_path, receipt=committed, paused_at=None,
+            marker=original_path, receipt=committed, paused_at=None,
         )
 
     def status(self, node_id: str, session_id: str) -> Dict[str, Any]:

@@ -10,6 +10,16 @@ from typing import Dict, Iterable, List
 from .identity_fence import RETIRED_PRODUCT_NAME
 
 
+# The public pre-push fence also carries this module with identity_fence
+# alone. Keep that standalone import surface; native policy tests check
+# these literals alongside the ordinary git_process tuple.
+_GIT_MAINTENANCE_OPTIONS = (
+    "-c", "gc.auto=0",
+    "-c", "gc.autoDetach=false",
+    "-c", "maintenance.auto=false",
+)
+
+
 # The scrub vocabulary. Every token is hex-built for the same reason: a scanner
 # that spells the string it forbids becomes a finding of itself. The code beside
 # each token is what a caller reports, so a fence can say WHICH name fired
@@ -271,7 +281,7 @@ def scan_git_history_notes(root: Path) -> List[str]:
 def _git(root: Path, *arguments: str) -> bytes:
     try:
         result = subprocess.run(
-            ["git", "--no-replace-objects", *arguments],
+            ["git", *_GIT_MAINTENANCE_OPTIONS, "--no-replace-objects", *arguments],
             cwd=root,
             env=_git_environment(),
             check=False,
@@ -304,7 +314,8 @@ def _tracked_files(root: Path) -> List[Path] | None:
 
     try:
         probe = subprocess.run(
-            ["git", "--no-replace-objects", "rev-parse", "--is-inside-work-tree"],
+            ["git", *_GIT_MAINTENANCE_OPTIONS, "--no-replace-objects",
+             "rev-parse", "--is-inside-work-tree"],
             cwd=root,
             env=_git_environment(),
             check=False,
@@ -318,7 +329,8 @@ def _tracked_files(root: Path) -> List[Path] | None:
         if probe.stdout.strip() != b"true":
             raise RuntimeError("tracked source scrub requires a work tree")
         result = subprocess.run(
-            ["git", "--no-replace-objects", "ls-files", "-z", "--cached"],
+            ["git", *_GIT_MAINTENANCE_OPTIONS, "--no-replace-objects",
+             "ls-files", "-z", "--cached"],
             cwd=root,
             env=_git_environment(),
             check=False,

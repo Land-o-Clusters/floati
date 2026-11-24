@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/needs-item.schema.json",
+  "title": "Floati Needs-You Inbox Item v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "id", "tenant_id", "timestamp", "actor", "item_kind",
+    "statement", "coordinates", "supersedes", "idempotency_key", "request_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "needs_item"},
+    "id": {"$ref": "#/$defs/item_id"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "actor": {"$ref": "#/$defs/identifier"},
+    "item_kind": {"enum": ["review", "approval", "question"]},
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "detail", "provenance"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "detail": {"anyOf": [{"type": "string", "minLength": 1, "maxLength": 2048}, {"type": "null"}]},
+        "provenance": {"const": "claimed"}
+      }
+    },
+    "coordinates": {
+      "type": "array", "maxItems": 1,
+      "items": {
+        "oneOf": [
+          {"$ref": "bound-record-common.schema.json#/$defs/ref"},
+          {
+            "allOf": [
+              {"$ref": "bound-record-common.schema.json#/$defs/commit"},
+              {"properties": {"provenance": {"const": "claimed"}}}
+            ]
+          },
+          {
+            "allOf": [
+              {"$ref": "bound-record-common.schema.json#/$defs/files"},
+              {"properties": {"provenance": {"const": "observed"}}}
+            ]
+          }
+        ]
+      }
+    },
+    "supersedes": {"anyOf": [{"$ref": "#/$defs/item_id"}, {"type": "null"}]},
+    "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "request_digest": {"$ref": "bound-record-common.schema.json#/$defs/sha256"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "item_id": {"type": "string", "pattern": "^needs-item-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+  }
+}

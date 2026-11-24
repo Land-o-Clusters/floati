@@ -18,6 +18,8 @@ G3  controls: a python process WITHOUT a suite word stays invisible, and a
 
 from __future__ import annotations
 
+from tests.readiness import READY_SECONDS, Readiness
+
 import os
 import re
 import subprocess
@@ -99,7 +101,7 @@ class _SleeperWorld:
         return process.pid
 
     @staticmethod
-    def _wait_until_observable(pid: int, filename: str, budget_seconds: float = 10.0) -> None:
+    def _wait_until_observable(pid: int, filename: str, budget_seconds: float = READY_SECONDS) -> None:
         """Precondition only: the count is meaningful once the sleeper is visible
         to ``ps`` under its OWN argv, so wait for that rather than assume it. The
         fork/exec window is real but it was NOT what red landing I's legs - that
@@ -111,9 +113,9 @@ class _SleeperWorld:
         """
         import time
 
-        deadline = time.monotonic() + budget_seconds
-        probe = None
-        while time.monotonic() < deadline:
+        readiness = Readiness(f"owned sleeper pid {pid} argv {filename!r}", budget_seconds)
+        while True:
+            readiness.remaining()
             probe = subprocess.run(
                 ["ps", "-o", "state=,command=", "-p", str(pid)],
                 capture_output=True,
@@ -124,10 +126,6 @@ class _SleeperWorld:
             if len(fields) == 2 and fields[0] not in ("Z", "") and filename in fields[1]:
                 return
             time.sleep(0.02)
-        raise AssertionError(
-            f"precondition: sleeper pid {pid} never became observable to ps under "
-            f"{filename!r} within {budget_seconds}s (last ps: {probe.stdout.strip()!r})"
-        )
 
     def lease_check_counts(self) -> tuple[int, list[str]]:
         completed = subprocess.run(
@@ -146,10 +144,10 @@ class _SleeperWorld:
 
 
     def reap(self, pid: int) -> None:
-        """Kill and REAP one spawned sleeper, then wait until ps no longer
-        names it at all - gone, not a zombie: a Linux zombie keeps its
-        original argv readable and lease-check's python filter would still
-        count it."""
+        """Kill and reap one spawned sleeper, then wait until ps no longer
+        names it: absence is the strongest termination proof across platforms.
+        macOS zombies have no argv; Linux frees cmdline and procps brackets comm,
+        so neither preserves the suite argv that lease-check's filter requires."""
 
         import signal
         import time

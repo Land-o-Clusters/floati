@@ -157,7 +157,14 @@ class MultiBusHarborChartTests(unittest.TestCase):
                     MultiBusHarborChart(path, now=NOW).artifact()
 
     def test_chart_is_read_only_for_registry_and_every_declared_bus(self) -> None:
-        """Catches chart rendering creating locks, receipts, or repair files."""
+        """Warm chart preserves every byte, including its ruled disposable bank."""
+        from floati.registry_prefix import warm
+        from tests.fixtures.bus_scale_census.bus_scale_registry_prefix_effects import verify_warmed_registry_clone
+        for root in (self.alpha, self.beta):
+            seed = {path.relative_to(root.tenant_home).as_posix(): path.read_bytes()
+                    for path in root.tenant_home.rglob("*") if path.is_file()}
+            self.assertIsNotNone(warm(root))
+            verify_warmed_registry_clone(root.tenant_home, seed)
         before = self._snapshot()
 
         MultiBusHarborChart(self.registry_path, now=NOW).artifact()

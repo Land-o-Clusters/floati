@@ -13,8 +13,10 @@ import time
 from pathlib import Path
 from typing import Dict, Mapping, Optional, Sequence
 
+from . import mail_summary, send_prefix
 from .errors import ProtocolRefusal
 from .events import EventLog
+from .git_process import GIT_MAINTENANCE_OPTIONS
 from .ids import uuid7_hex
 from .jsonl import append_record
 from .worktree_safety import require_worktree_commits_referenced
@@ -150,6 +152,7 @@ class DeliveryVerifier:
     ) -> subprocess.CompletedProcess[bytes]:
         argv = [
             "/usr/bin/git",
+            *GIT_MAINTENANCE_OPTIONS,
             "--no-optional-locks",
             "--no-replace-objects",
             "-c",
@@ -181,14 +184,16 @@ class DeliveryVerifier:
     def _claim(self, claim_id: object) -> Dict[str, object]:
         if not isinstance(claim_id, str):
             raise ProtocolRefusal("claim_id_invalid", "--claim must name one delivery claim id")
-        claim = next(
-            (
-                row
-                for row in self.events.strict_event_records()
-                if row.get("kind") == "delivery_claim" and row.get("id") == claim_id
-            ),
-            None,
-        )
+        try:
+            prefix = mail_summary._load_events(self.root)
+            row = prefix.get("id", claim_id)
+            if prefix.payload["identity"] != send_prefix._identity(prefix.path):
+                raise send_prefix.CacheMiss()
+            claim = (row if row is not None and row.get("kind") == "delivery_claim"
+                and row.get("id") == claim_id else None)
+        except send_prefix._CACHE_ERRORS:
+            claim = next((row for row in self.events.strict_event_records()
+                if row.get("kind") == "delivery_claim" and row.get("id") == claim_id), None)
         if claim is None:
             raise ProtocolRefusal("claim_unknown", "the named delivery claim is absent")
         return claim

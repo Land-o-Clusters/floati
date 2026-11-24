@@ -11,6 +11,7 @@ import selectors
 import socket
 import stat
 import struct
+import sys
 import threading
 from collections import OrderedDict, deque
 from copy import deepcopy
@@ -20,6 +21,7 @@ from pathlib import Path
 from typing import Deque, Dict, List, Optional, Tuple
 
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
+from .host_paths import HOST_TEMP_ROOT_VARIABLE, host_temp_root_override
 from .root import FloatiRoot, validate_identifier
 from .run_segments import SegmentConfig
 from .runtruth import (
@@ -737,6 +739,8 @@ def _canonical_evaluated_intent(
 # tests/test_retired_name_pins.py through the real path.
 _RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
 _SEQUENCER_ENDPOINT_PREFIX = _RETIRED_NAME + "-sequencer-"
+# sockaddr_un.sun_path capacity less its terminating NUL.
+_SOCKET_PATH_BYTES = {"darwin": 103, "linux": 107}
 
 
 def sequencer_socket_path(root: FloatiRoot) -> Path:
@@ -745,7 +749,17 @@ def sequencer_socket_path(root: FloatiRoot) -> Path:
     if not isinstance(root, FloatiRoot):
         raise ProtocolRefusal("root_required", "sequencer requires a validated root")
     identity = hashlib.sha256(str(root.tenant_home).encode("utf-8")).hexdigest()[:32]
-    return Path("\x2ftmp") / (_SEQUENCER_ENDPOINT_PREFIX + identity) / "sequencer.sock"
+    # The server binds and every client connects through this one function,
+    # so both follow the same host temporary root override or neither does.
+    override = host_temp_root_override()
+    parent = Path("\x2ftmp") if override is None else override
+    endpoint = parent / (_SEQUENCER_ENDPOINT_PREFIX + identity) / "sequencer.sock"
+    if len(os.fsencode(str(endpoint))) > _SOCKET_PATH_BYTES.get(sys.platform, 103):
+        raise ProtocolRefusal(
+            "host_temp_root_invalid",
+            f"{HOST_TEMP_ROOT_VARIABLE} is too long for a local sequencer socket path",
+        )
+    return endpoint
 
 
 @dataclass(frozen=True)

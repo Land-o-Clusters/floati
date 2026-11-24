@@ -155,25 +155,46 @@ class _WakeDaemonFixture(unittest.TestCase):
 class WakeDaemonRedTests(_WakeDaemonFixture):
 
     def test_queued_attempt_survives_transition_failure_without_false_wake(self) -> None:
+        from datetime import datetime, timezone
+        from floati import bus_epoch
+        from floati.epoch_carry import build_carry_plan
         from floati.jsonl import read_records
-        self.bind(resume_state="resume_unproven")
-        self.consent()
-        self.send_unbound()
-        self.adapter.outcome = "queued"
-        daemon = self.daemon()
-        with mock.patch.object(daemon, "_transition", side_effect=OSError("injected transition failure")):
-            with self.assertRaises(OSError):
-                daemon.run_cycle(100.0)
-        result = self.daemon().run_cycle(102.0)
-        self.assertEqual("queued", result["state"])
-        self.assertEqual(1, len(self.adapter.calls))
-        self.assertEqual("resume_unproven", self.adapter.exact_binding().resume_state)
-        runtime = json.loads(daemon.runtime_path.read_text())
-        self.assertEqual([102.0], runtime["wake_timestamps"])
-        rows = read_records(self.root, public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))), allowed_kinds={"wake_attempt_receipt"})
-        self.assertEqual(["queued"], [row["outcome"] for row in rows])
-        lifecycle = read_records(self.root, lifecycle_relative(self.coordinate.node_id), allowed_kinds={"wake_daemon_lifecycle_receipt"})
-        self.assertEqual("unknown", lifecycle[-1]["state"])
+
+        def planner(root, old):
+            carry = build_carry_plan(root, old)
+            return carry.live_payloads, {"trigger": "ack",
+                "policy": {"max_bytes": 1, "max_age_days": 7, "source": "operator_declared"},
+                "observed_bytes": next(len(raw) for name, _plane, raw in old if name == "events.jsonl"),
+                "observed_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                "epoch_started_at": None, "due_reasons": ["bytes"]}
+
+        for rolls in (0, 1, 2):
+            with self.subTest(rolls=rolls):
+                fixture = _WakeDaemonFixture("runTest")
+                fixture.setUp()
+                try:
+                    fixture.bind(resume_state="resume_unproven")
+                    fixture.consent()
+                    fixture.send_unbound()
+                    fixture.adapter.outcome = "queued"
+                    daemon = fixture.daemon()
+                    with mock.patch.object(daemon, "_transition", side_effect=OSError("injected transition failure")):
+                        with self.assertRaises(OSError):
+                            daemon.run_cycle(100.0)
+                    for _ in range(rolls):
+                        bus_epoch.roll_automatic_epoch(fixture.root, actor="sender", planner=planner)
+                    result = fixture.daemon().run_cycle(102.0)
+                    self.assertEqual("queued", result["state"])
+                    self.assertEqual(1, len(fixture.adapter.calls))
+                    self.assertEqual("resume_unproven", fixture.adapter.exact_binding().resume_state)
+                    runtime = json.loads(daemon.runtime_path.read_text())
+                    self.assertEqual([102.0], runtime["wake_timestamps"])
+                    rows = read_records(fixture.root, public_ids.compose("receipts/wakes/", public_ids.ledger(public_ids.builder("a"))), allowed_kinds={"wake_attempt_receipt"})
+                    self.assertEqual(["queued"], [row["outcome"] for row in rows])
+                    lifecycle = read_records(fixture.root, lifecycle_relative(fixture.coordinate.node_id), allowed_kinds={"wake_daemon_lifecycle_receipt"})
+                    self.assertEqual("unknown", lifecycle[-1]["state"])
+                finally:
+                    fixture.doCleanups()
 
     def test_no_consent_means_no_runtime_or_owner_files(self) -> None:
         daemon = self.daemon()
@@ -362,6 +383,19 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         self.bind()
         self.consent()
 
+    def test_restart_before_next_poll_reads_certified_epoch_without_replaying_mail(self) -> None:
+        from tests.bus_scale_io import IOProbe
+
+        first = self.daemon().run_cycle(100.0)
+        self.assertEqual("idle", first["state"])
+        self.send()
+        with IOProbe(self.root.tenant_home) as probe:
+            restarted = self.daemon().run_cycle(100.0)
+        probe.assert_complete()
+        self.assertEqual("wake_daemon_poll_not_due", restarted["reason_code"])
+        self.assertEqual(first["next_poll_at"], restarted["next_poll_at"])
+        self.assertEqual(0, probe.read_bytes_by_path.get("events.jsonl", 0))
+
     def test_idle_fresh_woke_and_held_transitions_are_deterministic(self) -> None:
         daemon = self.daemon()
         self.assertEqual("idle", daemon.run_cycle(100.0)["state"])
@@ -370,7 +404,7 @@ class WakeDaemonGreenTests(_WakeDaemonFixture):
         self.assertEqual("woke", woke["state"])
         self.assertIn(message["id"], self.adapter.calls[0][1])
         self.assertEqual(
-            [{"id": message["id"], "note": "wake daemon evidence"}],
+            [{"id": message["id"], "note": "wake daemon evidence", "sender": message["sender"]}],
             self.adapter.calls[0][3],
         )
         self.assertEqual("held", daemon.run_cycle(104.0)["state"])

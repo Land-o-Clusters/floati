@@ -28,6 +28,8 @@ from .wake_daemon_roll import (
 DAEMON_KINDS = frozenset({
     "wake_daemon_consent_receipt",
     "wake_daemon_lifecycle_receipt",
+    "wake_daemon_directory_ownership_record",
+    "codex_binding_repair_receipt",
 })
 SUPPORTED_HARNESSES = frozenset({"codex", "cursor", "grok-build", "zcode"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -143,6 +145,7 @@ class DaemonConsentLedger:
         max_backoff_seconds: int,
         activation_epoch: int,
         idempotency_key: str,
+        idle_retire_days: Optional[int] = None,
     ) -> Dict[str, Any]:
         self._require_coordinate(coordinate)
         adapter_version = _version(adapter_version)
@@ -151,6 +154,18 @@ class DaemonConsentLedger:
         maximum = _positive_integer(max_poll_seconds, "max_poll_seconds", maximum=86400)
         backoff = _positive_integer(max_backoff_seconds, "max_backoff_seconds", maximum=86400)
         epoch = _positive_integer(activation_epoch, "activation_epoch", maximum=2**63 - 1)
+        # WD-4: the idle window is end-user configuration, written under the
+        # consent kind's NEXT schema version. None keeps the legacy v0/v1
+        # shape byte-identical; a value emits schema_version 2.
+        if idle_retire_days is not None and (
+            isinstance(idle_retire_days, bool)
+            or not isinstance(idle_retire_days, int)
+            or not 0 <= idle_retire_days <= 3650
+        ):
+            raise ProtocolRefusal(
+                "idle_retire_days_invalid",
+                "idle_retire_days must be an integer 0 through 3650 (0 = never)",
+            )
         if maximum < minimum:
             raise ProtocolRefusal("wake_daemon_poll_bounds_invalid", "maximum poll is below minimum")
         if backoff < maximum:
@@ -176,6 +191,9 @@ class DaemonConsentLedger:
             "predecessor_receipt_id": None,
             "idempotency_key": key,
         }
+        if idle_retire_days is not None:
+            row["schema_version"] = 2
+            row["idle_retire_days"] = int(idle_retire_days)
         return self._append(coordinate, row)
 
     def revoke(
@@ -274,7 +292,16 @@ class DaemonLifecycleLedger:
         idempotency_key: str,
         exception_type: Optional[str] = None,
         exception_message: Optional[str] = None,
+        conflict_remedy: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Append one lifecycle receipt, idempotent on ``idempotency_key``.
+
+        F2-TAKEOVER-DAEMON-1: a key that already holds different content is
+        still refused - the guard is unchanged - but the refusal now names
+        the key, the receipt that spent it and the fields that differ, and
+        carries ``conflict_remedy``: the caller that composed the key is the
+        one that knows which act clears its collision.
+        """
         if coordinate.root is not self.root:
             raise ProtocolRefusal("wake_daemon_coordinate_invalid", "lifecycle coordinate belongs to another root")
         # The lifecycle append is the one per-cycle write: it owns the
@@ -318,11 +345,19 @@ class DaemonLifecycleLedger:
             for existing in prior:
                 if existing.get("idempotency_key") != row["idempotency_key"]:
                     continue
-                if all(existing.get(field) == row.get(field) for field in semantic):
+                differing = [
+                    field for field in semantic if existing.get(field) != row.get(field)
+                ]
+                if not differing:
                     return existing, None
+                # The key leads the detail: the cycle_exception receipt keeps
+                # only the first CYCLE_EXCEPTION_MESSAGE_BOUND characters.
                 raise ProtocolRefusal(
                     "wake_daemon_lifecycle_idempotency_conflict",
-                    "wake daemon lifecycle key has different content",
+                    f"wake daemon lifecycle key {row['idempotency_key']} is already "
+                    f"spent with different {', '.join(differing)} by receipt "
+                    f"{existing.get('id')}",
+                    remedy=conflict_remedy,
                 )
             validate_record(row, self.root.tenant_id, DAEMON_KINDS, integrity=False)
             return row, row
@@ -332,6 +367,59 @@ class DaemonLifecycleLedger:
             lifecycle_relative(coordinate.node_id),
             decide,
             allowed_kinds=DAEMON_KINDS,
+        )
+
+    def record_directory_ownership(
+        self,
+        coordinate: DaemonCoordinate,
+        *,
+        lifecycle_receipt_id: str,
+        unit_path: str,
+        unit_digest: str,
+        created_directories: list[Dict[str, Any]],
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        """Append optional ownership after the unit's installed receipt.
+
+        This shares the lifecycle ledger's governed transaction and retention.
+        It deliberately does not trigger another roll between the two appends.
+        A missing append grants no directory-removal authority.
+        """
+        if coordinate.root is not self.root:
+            raise ProtocolRefusal(
+                "wake_daemon_coordinate_invalid", "directory ownership belongs to another root"
+            )
+        row = {
+            "schema_version": 1,
+            "id": "wake-daemon-directory-ownership-" + uuid7_hex(),
+            "tenant_id": self.root.tenant_id,
+            "timestamp": utc_now(),
+            "kind": "wake_daemon_directory_ownership_record",
+            "node_id": coordinate.node_id,
+            "harness": coordinate.harness,
+            "coordinate_digest": coordinate.digest,
+            "lifecycle_receipt_id": lifecycle_receipt_id,
+            "unit_path": unit_path,
+            "unit_digest": unit_digest,
+            "created_directories": created_directories,
+            "idempotency_key": DaemonConsentLedger._key(idempotency_key),
+        }
+        validate_record(row, self.root.tenant_id, DAEMON_KINDS, integrity=False)
+        semantic = tuple(key for key in row if key not in {"id", "timestamp"})
+
+        def decide(prior: list[Dict[str, Any]]):
+            for existing in prior:
+                if existing.get("idempotency_key") == row["idempotency_key"]:
+                    if all(existing.get(field) == row[field] for field in semantic):
+                        return existing, None
+                    raise ProtocolRefusal(
+                        "idempotency_conflict", "directory ownership key has different content",
+                        remedy="use a fresh key for a different directory ownership record",
+                    )
+            return row, row
+
+        return transact(
+            self.root, lifecycle_relative(coordinate.node_id), decide, allowed_kinds=DAEMON_KINDS
         )
 
 
@@ -358,6 +446,7 @@ class AdapterBindingStore:
         adapter_digest: str,
         binding_epoch: int,
         resume_state: Optional[str] = None,
+        expected_executable_digest: Optional[str] = None,
     ) -> Dict[str, Any]:
         self._require_coordinate(coordinate)
         session = validate_session_id(session_id)
@@ -368,7 +457,10 @@ class AdapterBindingStore:
                 + ", ".join(sorted(_BINDABLE_RESUME_STATES)),
             )
         workspace_path = self._ordinary_directory(workspace, "workspace")
-        executable_path = self._ordinary_executable(executable)
+        executable_path = self._binding_executable(coordinate, executable)
+        # The fixed adapter constant declares Codex. The resolved target is
+        # testimony: its disappearance can be distinguished from byte drift
+        # at a still-existing target without changing the binding shape.
         record = {
             "schema_version": _schema_version(coordinate.harness),
             "tenant_id": self.root.tenant_id,
@@ -384,6 +476,10 @@ class AdapterBindingStore:
             "adapter_digest": _sha256(adapter_digest, "adapter_digest"),
             "binding_epoch": _positive_integer(binding_epoch, "binding_epoch", maximum=2**63 - 1),
         }
+        if (expected_executable_digest is not None
+                and record['executable_digest'] != _sha256(expected_executable_digest, 'expected_executable_digest')):
+            raise ProtocolRefusal('wake_daemon_codex_identity_changed',
+                'executable bytes changed after provider identification')
         if resume_state is not None:
             record["resume_state"] = resume_state
         encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
@@ -404,6 +500,35 @@ class AdapterBindingStore:
         return self.read(coordinate)
 
     def read(self, coordinate: DaemonCoordinate) -> Dict[str, Any]:
+        record = self._read_metadata(coordinate)
+        try:
+            executable = self._binding_executable(coordinate, Path(record["executable"]))
+            current_digest = hashlib.sha256(executable.read_bytes()).hexdigest()
+        except (ProtocolRefusal, OSError, RuntimeError) as exc:
+            _, remedy = executable_drift_remedy(
+                coordinate, record, Path(record["executable"]), None)
+            raise ProtocolRefusal(
+                "wake_daemon_executable_invalid",
+                f"adapter executable is missing, unreadable, or invalid: {record['executable']}",
+                remedy=remedy,
+            ) from exc
+        if current_digest != record["executable_digest"]:
+            detail, remedy = executable_drift_remedy(coordinate, record, executable, current_digest)
+            raise ProtocolRefusal("wake_daemon_executable_digest_mismatch", detail, remedy=remedy)
+        self._validate_metadata_contract(record)
+        from .wake_daemon_adapters import CODEX_EXECUTABLE
+        declared_codex = coordinate.harness == "codex" and record["executable"] == str(CODEX_EXECUTABLE)
+        if not declared_codex and str(executable) != record["executable"]:
+            raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding paths are not canonical")
+        return record
+
+    def _read_metadata(self, coordinate: DaemonCoordinate) -> Dict[str, Any]:
+        """Validate the closed identity before executable use or explicit refresh.
+
+        This never authorizes execution. Refresh callers must independently
+        prove the existing seat and current waiter claim before writing.
+        """
+        self._require_coordinate(coordinate)
         path = self.path(coordinate)
         if path.is_symlink() or not path.is_file():
             raise ProtocolRefusal("wake_daemon_binding_absent", "exact daemon adapter binding is absent")
@@ -437,19 +562,33 @@ class AdapterBindingStore:
         ):
             raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding identity is invalid")
         workspace = self._ordinary_directory(Path(str(record["workspace"])), "workspace")
-        executable = self._ordinary_executable(Path(str(record["executable"])))
-        if hashlib.sha256(executable.read_bytes()).hexdigest() != record.get("executable_digest"):
-            raise ProtocolRefusal("wake_daemon_executable_digest_mismatch", "adapter executable digest changed")
+        if not isinstance(record["executable"], str) or not Path(record["executable"]).is_absolute():
+            raise IntegrityFailure("wake_daemon_binding_invalid", "adapter executable path must be absolute")
+        if str(workspace) != record["workspace"]:
+            raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding paths are not canonical")
+        return dict(record)
+
+    @staticmethod
+    def _validate_metadata_contract(record: Dict[str, Any]) -> None:
+        # Reads report executable drift before other contract errors, as they
+        # did before metadata-only recovery existed. Refresh must validate
+        # these fields explicitly without trusting or executing old bytes.
+        _sha256(record.get("executable_digest"), "executable_digest")
         _sha256(record.get("adapter_digest"), "adapter_digest")
         _version(record.get("adapter_version"))
         _positive_integer(record.get("binding_epoch"), "binding_epoch", maximum=2**63 - 1)
-        if str(workspace) != record["workspace"] or str(executable) != record["executable"]:
-            raise IntegrityFailure("wake_daemon_binding_invalid", "adapter binding paths are not canonical")
         if "resume_state" in record and record["resume_state"] not in _BINDABLE_RESUME_STATES:
             raise IntegrityFailure(
                 "wake_daemon_binding_invalid", "adapter binding resume_state is invalid"
             )
-        return dict(record)
+
+    @classmethod
+    def _binding_executable(cls, coordinate: DaemonCoordinate, value: Path) -> Path:
+        from .wake_daemon_adapters import CODEX_EXECUTABLE
+
+        if coordinate.harness == "codex" and value == CODEX_EXECUTABLE:
+            value = value.resolve(strict=True)
+        return cls._ordinary_executable(value)
 
     def remove(self, coordinate: DaemonCoordinate) -> Dict[str, Any]:
         record = self.read(coordinate)
@@ -480,3 +619,67 @@ class AdapterBindingStore:
         if not stat.S_ISREG(mode) or mode & 0o111 == 0:
             raise ProtocolRefusal("wake_daemon_executable_invalid", "adapter executable must be executable")
         return resolved
+
+
+def lifecycle_conflict_remedy(runtime_path: Path) -> str:
+    """The one act that clears a daemon's spent lifecycle key.
+
+    The daemon composes its key from the runtime it persists (instance id and
+    cycle index). A conflict means that runtime points at a slot the ledger
+    already holds. The runtime is the disposable side by design - an absent
+    runtime is initialized on the next cycle, under an instance and cycle
+    count this process has never spent - while the ledger is the durable
+    record and is never edited. So the act removes the runtime file, and it
+    is the same typeable line for every harness, Codex included.
+    """
+    import shlex
+
+    return shlex.join(["rm", "--", str(runtime_path)])
+
+
+def executable_drift_remedy(
+    coordinate: DaemonCoordinate,
+    record: Dict[str, Any],
+    executable: Path,
+    current_digest: Optional[str],
+) -> tuple[str, str]:
+    """Describe observed drift and the existing explicit binding writer."""
+    import shlex
+
+    recorded_digest = record['executable_digest']
+    if not isinstance(recorded_digest, str) or _SHA256.fullmatch(recorded_digest) is None:
+        recorded_digest = 'invalid recorded digest'
+    detail = (
+        f"adapter executable changed: recorded executable {record['executable']}; "
+        f"current executable {executable}; recorded SHA-256 {recorded_digest}; "
+        f"current SHA-256 {current_digest if current_digest is not None else 'unreadable'}"
+    )
+    epoch = record['binding_epoch']
+    if type(epoch) is not int or not 1 <= epoch <= 2**63 - 1:
+        # Adapter callers can pass a projection. Never turn unchecked
+        # metadata into command syntax.
+        return detail, (
+            "rebind through floati wake daemon bind --help with a valid positive "
+            "--binding-epoch; the recorded binding epoch is invalid"
+        )
+    argv = [
+        "floati", "wake", "daemon", "bind", "--root", str(coordinate.root.path),
+        "--as", coordinate.node_id, "--harness", coordinate.harness,
+        "--session", str(record['session_id']), "--workspace", str(record['workspace']),
+        "--executable", str(executable), "--binding-epoch", str(epoch),
+    ]
+    if coordinate.harness == "codex":
+        from .codex_wait_contract import CodexWaitSessionLedger
+        from .wake_daemon_adapters import CODEX_EXECUTABLE
+
+        # Boarding claims the acting session before its resume step. An old
+        # adapter can therefore name the predecessor; the remedy must name
+        # the current claim, which the refresh independently revalidates.
+        claims = read_records_snapshot(coordinate.root,
+            CodexWaitSessionLedger._relative(coordinate.node_id),
+            allowed_kinds=CodexWaitSessionLedger._KINDS)
+        matching = [row for row in claims if row["workspace"] == str(record["workspace"])]
+        if matching:
+            argv[argv.index("--session") + 1] = str(matching[-1]["acting_session_id"])
+        argv[argv.index("--executable") + 1] = str(CODEX_EXECUTABLE)
+    return detail, shlex.join(argv)

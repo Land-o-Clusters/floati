@@ -14,6 +14,7 @@ from floati.cursor import SparseCursor
 from floati.events import EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.bus_scale_io import IOProbe
 
 
 NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc)
@@ -156,19 +157,86 @@ class AckHygieneTests(unittest.TestCase):
         self.assertEqual(before, self.log.records())
         self.assertEqual([first["id"], second["id"]], [row["message_id"] for row in items])
         acknowledged, delivered = items
+        # BUS-DELIVERY-UNPRESENTED-1: this fixture presents with no live
+        # presenter journal, so its deliveries receipt delivered_unpresented,
+        # never delivered; the ack still stands and the times stay receipt-only.
         self.assertEqual("acknowledged", acknowledged["state"])
-        self.assertEqual(_stamp(20), acknowledged["delivered_at"])
+        self.assertFalse(acknowledged["delivered"])
+        self.assertIsNone(acknowledged["delivered_at"])
+        self.assertEqual(_stamp(20), acknowledged["delivered_unpresented_at"])
         self.assertEqual(_stamp(5), acknowledged["acknowledged_at"])
-        self.assertEqual(600, acknowledged["delivery_latency_seconds"])
-        self.assertEqual(900, acknowledged["acknowledgment_latency_seconds"])
-        self.assertEqual("delivered_unacknowledged", delivered["state"])
-        self.assertEqual(300, delivered["delivery_latency_seconds"])
+        self.assertIsNone(acknowledged["delivery_latency_seconds"])
+        self.assertIsNone(acknowledged["acknowledgment_latency_seconds"])
+        self.assertEqual("delivered_unpresented", delivered["state"])
+        self.assertFalse(delivered["delivered"])
+        self.assertEqual(_stamp(20), delivered["delivered_unpresented_at"])
+        self.assertIsNone(delivered["delivery_latency_seconds"])
         self.assertIsNone(delivered["acknowledged_at"])
         self.assertEqual(1200, delivered["attention_age_seconds"])
+
+    def test_sent_selects_sender_receipts_without_replaying_unrelated_events(self) -> None:
+        from floati.sent import SentProjection
+
+        # Keep automatic epoch-age maintenance outside this sender-selection
+        # bound while retaining the fixture's exact minute offsets.
+        clock = mock.patch(__name__ + ".NOW", datetime.now(timezone.utc))
+        clock.start()
+        self.addCleanup(clock.stop)
+        first = self._send(30, "acknowledged selected mail")
+        second = self._send(25, "unacknowledged selected mail")
+        with mock.patch("floati.events.utc_now", return_value=_stamp(24)):
+            private = self.log.send("sender", "recipient", "floati", "a" * 40,
+                "docs/x.md", "selected worker mail", worker_session_id="selected-worker")
+        with mock.patch("floati.events.utc_now", return_value=_stamp(23)):
+            removed = self.log.send("sender", "recipient", "floati", "a" * 40,
+                "docs/x.md", "retracted sender mail", worker_session_id="removed-worker")
+        self.log.retract(removed["id"], worker_session_id="removed-worker",
+            reason="sent_in_error", author="sender")
+        with mock.patch("floati.events.utc_now", return_value=_stamp(20)):
+            self.log.present("recipient")
+            self.log.present("recipient", worker_session_id="selected-worker")
+        SparseCursor(self.root).ack(
+            "recipient", [str(first["id"])],
+            acting_session_id="selected-sender", now=NOW - timedelta(minutes=5),
+        )
+        SparseCursor(self.root).ack(
+            "recipient", [str(private["id"])], worker_session_id="selected-worker",
+            acting_session_id="selected-worker-reader", now=NOW - timedelta(minutes=5),
+        )
+        expected = SentProjection(self.root).items("sender", now=NOW)
+        self.assertEqual([first["id"], second["id"], private["id"], removed["id"]],
+                         [row["message_id"] for row in expected])
+        self.assertEqual(["acknowledged", "delivered_unpresented", "acknowledged", "undelivered"],
+                         [row["state"] for row in expected])
+
+        # Native appends advance their certified event prefix. A different
+        # sender must not add history reads to this sender's unchanged answer.
+        self.registry.register("other-sender", "codex")
+        with mock.patch("floati.events.utc_now", return_value=_stamp(2)):
+            self.log.send("other-sender", "recipient", "floati", "b" * 40,
+                          "docs/other.md", "unrelated sender mail")
+        with IOProbe(self.root.tenant_home) as probe:
+            actual = SentProjection(self.root).items("sender", now=NOW)
+        probe.assert_complete()
+        self.assertEqual(expected, actual)
+        self.assertEqual(0, probe.read_bytes_by_path.get("events.jsonl", 0),
+                         "selected sender status replayed certified global event history")
+
+        latest = self._send(1, "new selected sender mail")
+        with IOProbe(self.root.tenant_home) as probe:
+            actual = SentProjection(self.root).items("sender", now=NOW)
+        probe.assert_complete()
+        self.assertEqual(expected, actual[:-1])
+        self.assertEqual(latest["id"], actual[-1]["message_id"])
+        self.assertEqual("undelivered", actual[-1]["state"])
+        self.assertEqual(0, probe.read_bytes_by_path.get("events.jsonl", 0),
+                         "new sender membership was not certified by its native append")
 
     def test_sent_cli_emits_the_receipt_projection_without_mcp_exposure(self) -> None:
         message = self._send(3, "cli")
         stdout = io.StringIO()
+        inbox_bank = self.root.tenant_home / ".inbox-prefix"
+        self.assertFalse(inbox_bank.exists())
 
         with mock.patch("floati.sent._utc_now", return_value=NOW), redirect_stdout(stdout):
             status = main(
@@ -180,6 +248,15 @@ class AckHygieneTests(unittest.TestCase):
         self.assertEqual("sent", artifact["command"])
         self.assertEqual("ok", artifact["status"])
         self.assertEqual(message["id"], artifact["evidence"]["items"][0]["message_id"])
+        self.assertFalse(inbox_bank.exists(), "sender observation created a recipient index")
+
+        from floati.sent import SentProjection
+        checkpoint = self.root.tenant_home / ".send-prefix/checkpoint.json"
+        checkpoint.unlink()
+        items = SentProjection(self.root).items("sender", now=NOW)
+        self.assertEqual(artifact["evidence"]["items"], items)
+        self.assertFalse(checkpoint.exists(), "cold sender observation repaired its disposable certificate")
+        self.assertFalse(inbox_bank.exists(), "cold sender observation created a recipient index")
 
         from floati.cli import _parser
 

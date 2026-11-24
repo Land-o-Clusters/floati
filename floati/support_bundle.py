@@ -21,7 +21,6 @@ from .host_facts import collect_host_facts
 from .identity_fence import (
     GOVERNED_TEMP_FENCES,
     GOVERNED_TEMP_PREFIXES,
-    redact_governed_temp_prefixes,
     HOME_PATTERN,
     HOME_PREFIX,
     OWNER_USERNAME,
@@ -83,7 +82,12 @@ class _OpaqueMember(Exception):
 
 def _scrub_string(value: str) -> str:
     scrubbed = HOME_PATTERN.sub("~", value).replace(HOME_PREFIX, "~/")
-    scrubbed = redact_governed_temp_prefixes(scrubbed)
+    # Support exports forbid the raw governed bytes even inside a path
+    # component (for example a tmp-prefixed private temporary directory).
+    # The publication redactor instead preserves embedded path fragments so
+    # documented CLI examples retain their meaning; that is a different fence.
+    for prefix in sorted(GOVERNED_TEMP_PREFIXES, key=len, reverse=True):
+        scrubbed = scrubbed.replace(prefix, "<temp>")
     return scrubbed.replace(OWNER_USERNAME, "<operator>")
 
 
@@ -208,7 +212,7 @@ def _tail_jsonl(path: Path, lines: int) -> Mapping[str, object]:
 def derive_collectors(
     root: FloatiRoot, source: Path, lines: int
 ) -> Tuple[Collector, ...]:
-    """Derive named collectors, including every JSONL plane in the explicit root."""
+    """Derive named collectors for the explicit root's exportable JSONL planes."""
 
     from .doctor import Doctor
     from .registry import Registry
@@ -259,7 +263,16 @@ def derive_collectors(
             lambda: collect_host_facts(install_path=selected_source),
         ),
     ]
-    for path in sorted(root.path.rglob("*.jsonl")):
+    from .adhoc_records import PROVIDER_STATE_DIRECTORY
+    from .dispatch_records import DIRECTORY as DISPATCH_DIRECTORY
+    private_directories = {PROVIDER_STATE_DIRECTORY.name, DISPATCH_DIRECTORY.name}
+    ledger_paths = []
+    for current, directories, files in os.walk(root.path, topdown=True, followlinks=False):
+        # Conversation storage is excluded before descent and collector
+        # construction, rather than read and sanitized after the fact.
+        directories[:] = [name for name in directories if name.casefold() not in private_directories]
+        ledger_paths.extend(Path(current) / name for name in files if name.endswith(".jsonl"))
+    for path in sorted(ledger_paths):
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(root.path).as_posix()

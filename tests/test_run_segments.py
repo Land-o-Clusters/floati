@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_event, wait_join
 import json
 import os
 import tempfile
@@ -207,18 +208,18 @@ class SegmentedRunStoreTests(unittest.TestCase):
 
         def stale_inactive() -> bool:
             checked.set()
-            self.assertTrue(release.wait(2))
+            self.assertTrue(wait_event(release, "test_run_segments release"))
             return False
 
         append_result: list[object] = []
         with mock.patch.object(store, "is_active", side_effect=stale_inactive):
             worker = threading.Thread(target=lambda: append_result.append(self.append(store, raced_record, "raced")))
             worker.start()
-            self.assertTrue(checked.wait(2))
+            self.assertTrue(wait_event(checked, "test_run_segments checked"))
             self.assertTrue(original_is_active() is False)
             store.activate(now=self.NOW)
             release.set()
-            worker.join(2)
+            wait_join(worker, "test_run_segments worker")
         self.assertFalse(worker.is_alive())
         self.assertEqual(["raced"], append_result)
         self.assertEqual([legacy_record], _read_path_records(legacy, "alpha", self.KINDS))
@@ -229,16 +230,16 @@ class SegmentedRunStoreTests(unittest.TestCase):
 
         def stale_read() -> bool:
             read_checked.set()
-            self.assertTrue(read_release.wait(2))
+            self.assertTrue(wait_event(read_release, "test_run_segments read_release"))
             return False
 
         read_result: list[list[dict]] = []
         with mock.patch.object(store, "is_active", side_effect=stale_read):
             reader = threading.Thread(target=lambda: read_result.append(store.records()))
             reader.start()
-            self.assertTrue(read_checked.wait(2))
+            self.assertTrue(wait_event(read_checked, "test_run_segments read_checked"))
             read_release.set()
-            reader.join(2)
+            wait_join(reader, "test_run_segments reader")
         self.assertFalse(reader.is_alive())
         self.assertEqual([legacy_record, raced_record, active_record], read_result[0])
 
@@ -356,7 +357,7 @@ class SegmentedRunStoreTests(unittest.TestCase):
             self.assertEqual(["enter", "exit"], events)
 
     def test_invalid_constructor_inputs_refuse(self) -> None:
-        for root, kinds, config in (
+        for case_index, (root, kinds, config) in enumerate((
             (object(), self.KINDS, SegmentConfig()),
             (self.root, frozenset(), SegmentConfig()),
             (self.root, frozenset({"not_a_kind"}), SegmentConfig()),
@@ -364,8 +365,16 @@ class SegmentedRunStoreTests(unittest.TestCase):
             (self.root, self.KINDS, SegmentConfig(max_records=0)),
             (self.root, self.KINDS, SegmentConfig(max_bytes=65535)),
             (self.root, self.KINDS, SegmentConfig(max_bytes=64 * 1024 * 1024 + 1)),
-        ):
-            with self.subTest(root=root, kinds=kinds, config=config), self.assertRaises((ProtocolRefusal, TypeError)):
+        )):
+            with self.subTest(case=(
+                "nonroot-object",
+                "empty-kinds",
+                "unknown-kind-not-a-kind",
+                "boolean-max-records",
+                "zero-max-records",
+                "max-bytes-65535",
+                "max-bytes-64MiB-plus-one",
+            )[case_index]), self.assertRaises((ProtocolRefusal, TypeError)):
                 SegmentedRunStore(root, kinds, config)  # type: ignore[arg-type]
 
     def test_append_error_rolls_back_complete_frame(self) -> None:

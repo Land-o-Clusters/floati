@@ -42,6 +42,9 @@ _NODE_ADD_PLAN_REMEDY = (
 _NODE_ADD_FULLY_FLAGGED_REMEDY = TUI_DOOR_COPY[
     "tui.door.node_add_fully_flagged_remedy"
 ]
+_NODE_PROJECTION_ARGUMENTS = (
+    "root", "node", "declared_roots", "managed_executable", "profile",
+)
 
 
 def _root(path: str | None) -> FloatiRoot:
@@ -162,7 +165,16 @@ def _register_node(args: argparse.Namespace) -> HandlerResult:
 
 
 def _retire_node(args: argparse.Namespace) -> HandlerResult:
-    evidence = retire_node(_root(args.root), args.node)
+    root = _root(args.root)
+    evidence = retire_node(root, args.node)
+    # F2-RETIRED-HOME-DISARM-1: retiring disarms every hook config the
+    # node's recorded old homes still hold for this root, with a receipt.
+    from .retired_home_disarm import disarm_retired_homes
+
+    disarm_retired_homes(
+        root, args.node, new_home=None,
+        idempotency_key="retire-" + args.node,
+    )
     return "ok", dict(evidence["registry"], workspace=evidence["workspace"]), OK
 
 
@@ -288,6 +300,13 @@ def _node_retire(args: argparse.Namespace) -> HandlerResult:
     result = NodeWizard(
         root, RegistryAdminBackend(root), id_factory=uuid7_hex
     ).retire_from_keys([args.node], preview)
+    # F2-RETIRED-HOME-DISARM-1: retiring disarms every hook config the
+    # node's recorded old homes still hold for this root, with a receipt.
+    from .retired_home_disarm import disarm_retired_homes
+
+    disarm_retired_homes(
+        root, args.node, new_home=None, idempotency_key="node-retire-" + args.node
+    )
     return "ok", _previewed(result, preview), OK
 
 
@@ -310,6 +329,15 @@ def _node_spawn(args: argparse.Namespace) -> HandlerResult:
         ordinal=args.ordinal,
     )
     return "ok", result, OK
+
+
+def _node_person(args: argparse.Namespace) -> HandlerResult:
+    from .persons import Persons
+
+    record = Persons(_root(args.root)).record(
+        args.node, args.person if args.person_command == "set" else None,
+    )
+    return "ok", record, OK
 
 
 def _node_switch(args: argparse.Namespace) -> HandlerResult:
@@ -345,6 +373,17 @@ def _answer_values(template: RoleTemplate, raw_answers: Iterable[str]) -> list[s
 def _node_role(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     templates = _templates(root)
+    wizard = RoleStepWizard(root, RegistryAdminBackend(root), templates, id_factory=uuid7_hex)
+    if args.template is None:
+        if args.answers:
+            from .errors import ProtocolRefusal
+            raise ProtocolRefusal("role_answer_invalid", "--answer requires an explicit --template",
+                remedy="omit --answer for the role interview, or supply --template with all its answers")
+        wizard.backend.active_node(args.node)
+        sys.stderr.write("Available role templates: " + ", ".join(sorted(templates)) + "\n")
+        result = wizard.assign_plain(sys.stdin, sys.stderr, node_id=args.node,
+            expected_predecessor=args.expected_predecessor)
+        return "ok", result, OK
     template = templates.get(args.template)
     if template is None:
         from .errors import ProtocolRefusal
@@ -353,9 +392,9 @@ def _node_role(args: argparse.Namespace) -> HandlerResult:
             remedy="pass --template a role that role list shows for this --root")
     preview = io.StringIO()
     values = [args.node, args.template, *_answer_values(template, args.answers)]
-    result = RoleStepWizard(
-        root, RegistryAdminBackend(root), templates, id_factory=uuid7_hex
-    ).assign_from_keys(values, preview)
+    result = wizard.assign_from_keys(
+        values, preview, expected_predecessor=args.expected_predecessor
+    )
     return "ok", _previewed(result, preview), OK
 
 
@@ -589,26 +628,45 @@ class _LiveNodeProjectionSource:
         self.declarations = DeclaredRoots(declared_roots)
         self.managed_executable = managed_executable
         self.profile = profile
+        self._registry_cut = None
+
+    def _cut(self, node=None):
+        from .registry_prefix import read_cut, RELATIVE
+        from .send_prefix import _identity
+        from .root import validate_identifier
+        if node is not None:
+            node = validate_identifier(node, "node")
+        cut = self._registry_cut
+        if (cut is None or (node is not None and cut.node != node)
+                or cut.identity != _identity(self.root.resolve_relative(RELATIVE))):
+            cut = self._registry_cut = read_cut(self.root, node)
+        return cut
 
     def _enrich(self, record: Mapping[str, Any]) -> Dict[str, Any]:
         node_id = str(record["node_id"])
         role = self.backend.role_record(node_id)
+        return self._project_node(record, role)
+
+    @staticmethod
+    def _project_node(record: Mapping[str, Any], role: Mapping[str, Any]) -> Dict[str, Any]:
         return {
             "tenant_id": record["tenant_id"],
-            "node_id": node_id,
+            "node_id": str(record["node_id"]),
             "role": role["template_role"],
             "harness": record["role"],
             "state": record["state"],
         }
 
     def active_node(self, node_id: str) -> Mapping[str, object]:
-        return self._enrich(self.backend.active_node(node_id))
+        record, role = self.backend.projection_node(self._cut(node_id), node_id)
+        return self._project_node(record, role)
 
     def active_nodes(self) -> list[Mapping[str, object]]:
-        return [self._enrich(record) for record in self.backend.active_nodes()]
+        return self.backend.projection_roster(self._cut())
 
     def role_record(self, node_id: str) -> Mapping[str, object]:
-        return self.backend.role_record(node_id)
+        _record, role = self.backend.projection_node(self._cut(node_id), node_id)
+        return role
 
     def declared_roots(self) -> tuple[Dict[str, Any], ...]:
         return tuple(
@@ -622,11 +680,11 @@ class _LiveNodeProjectionSource:
         )
 
     def wake_status(self, node_id: str) -> str:
-        self.backend.active_node(node_id)
+        self.backend.projection_node(self._cut(node_id), node_id)
         return "none"
 
     def managed_verbs(self, node_id: str, harness: str) -> ManagedVerbShape:
-        active = self.backend.active_node(node_id)
+        active, _role = self.backend.projection_node(self._cut(node_id), node_id)
         if active["role"] != harness:
             from .errors import ProtocolRefusal
 
@@ -651,19 +709,29 @@ def _projection_source(args: argparse.Namespace, root: FloatiRoot) -> _LiveNodeP
 
 
 def _node_boot(args: argparse.Namespace) -> HandlerResult:
-    root = _root(args.root)
-    projection = NodeBootProjection(
-        root, args.node, _projection_source(args, root), _templates(root)
-    )
-    return "ok", projection.project(), OK
+    if args.session is None:
+        root = _root(args.root)
+        projection = NodeBootProjection(
+            root, args.node, _projection_source(args, root), _templates(root)
+        )
+        return "ok", projection.project(), OK
+    from .node_turnover import NodeTurnover
+    service = NodeTurnover.from_workspace(Path.cwd(), node=args.node, root=args.root)
+    return "ok", service.boot(args.session, runtime=args.runtime,
+        hooks=args.hooks, destination=args.destination,
+        acknowledge_stop_hook_change=args.acknowledge_stop_hook_change), OK
 
 
 def _node_teardown(args: argparse.Namespace) -> HandlerResult:
-    root = _root(args.root)
-    projection = NodeTeardownProjection(
-        root, args.node, _projection_source(args, root), _templates(root)
-    )
-    return "ok", projection.project(), OK
+    if args.session is None:
+        root = _root(args.root)
+        projection = NodeTeardownProjection(
+            root, args.node, _projection_source(args, root), _templates(root)
+        )
+        return "ok", projection.project(), OK
+    from .node_turnover import NodeTurnover
+    service = NodeTurnover.from_workspace(Path.cwd(), node=args.node, root=args.root)
+    return "ok", service.teardown(args.session, repo=args.repo, doc=args.doc), OK
 
 
 def _node_explain(args: argparse.Namespace) -> HandlerResult:
@@ -752,7 +820,12 @@ def _wake_wait(args: argparse.Namespace) -> int:
     from .errors import ProtocolRefusal
     from .root import validate_identifier
 
-    _require_cursor_harness(args.harness)
+    if args.harness == "claude":
+        from .claude_hook_install import run_claude_stop_wait
+
+        return run_claude_stop_wait(args)
+    if args.harness != "zcode":
+        _require_cursor_harness(args.harness)
     validate_identifier(args.actor, field="node")
     if sys.stdin.isatty():
         raise _echo_cursor_wait_refusal(
@@ -775,6 +848,12 @@ def _wake_wait(args: argparse.Namespace) -> int:
             )
         )
     limit = args.loop_limit
+    if args.harness == "zcode":
+        from .zcode_hook_install import run_zcode_stop_wait
+
+        return run_zcode_stop_wait(root=Path(args.root), node=args.actor,
+            payload=decoded, stdout=sys.stdout, stderr=sys.stderr,
+            poll_seconds=float(args.poll_seconds))
     try:
         return run_cursor_stop_wait(
             root=Path(args.root),
@@ -791,11 +870,124 @@ def _wake_wait(args: argparse.Namespace) -> int:
         raise _echo_cursor_wait_refusal(exc)
 
 
+def _hook_relay(args: argparse.Namespace) -> int:
+    from .claude_hook_relay import run_claude_relay
+    return run_claude_relay(args)
+
+
 def _hook_install(args: argparse.Namespace) -> HandlerResult:
+    from .errors import ProtocolRefusal
+
+    if args.prepare_only:
+        if args.harness != "codex" or args.actor is not None or args.workspace is not None or args.wait_deadline_seconds is not None:
+            raise ProtocolRefusal("arguments_invalid",
+                "--prepare-only is Codex global Stop preparation; it takes no seat or wait deadline",
+                remedy="use --harness codex and omit --as, --workspace and --wait-deadline-seconds")
+        missing = [name for name in ("hooks", "destination", "hook_timeout_seconds",
+            "acknowledge_stop_hook_change") if getattr(args, name) is None]
+        if missing:
+            raise ProtocolRefusal("codex_hook_install_coordinates_missing",
+                "Codex hook preparation requires explicit " + ", ".join("--" + name.replace("_", "-") for name in missing),
+                remedy="pass the exact hook preparation command printed by seat add")
+        from .codex_hook_install import CodexHookInstaller
+        evidence = CodexHookInstaller(source_root=Path(args.runtime), bus_home=Path(args.root),
+            hooks_path=Path(args.hooks), destination=Path(args.destination)).prepare(
+                hook_timeout_seconds=args.hook_timeout_seconds,
+                acknowledge_stop_hook_change=args.acknowledge_stop_hook_change)
+        return "ok", evidence, OK
+    if args.actor is None or args.workspace is None:
+        raise ProtocolRefusal("arguments_invalid", "seat hook install requires --as and --workspace",
+            remedy="pass both seat coordinates, or use --prepare-only for a Codex global Stop hook")
+    if args.harness == "claude":
+        from .claude_hook_install import install_claude_hook
+
+        if any(getattr(args, name) is not None for name in (
+                "destination", "hook_timeout_seconds", "wait_deadline_seconds",
+                "acknowledge_stop_hook_change")):
+            raise ProtocolRefusal("claude_hook_options_invalid",
+                "Claude uses the shared hold constant and only an explicit --hooks settings path",
+                remedy="remove Codex-only flags; pass --hooks as the explicit Claude settings path")
+        return "ok", install_claude_hook(workspace=Path(args.workspace),
+            root=Path(args.root), node=args.actor, runtime=Path(args.runtime),
+            hooks=None if args.hooks is None else Path(args.hooks)), OK
+
+    codex_options = ("hooks", "destination", "hook_timeout_seconds",
+        "wait_deadline_seconds", "acknowledge_stop_hook_change")
+    if args.harness == "codex":
+        missing = [name for name in codex_options if getattr(args, name) is None]
+        if missing:
+            raise ProtocolRefusal("codex_hook_install_coordinates_missing",
+                "Codex hook install requires explicit " + ", ".join(
+                    "--" + name.replace("_", "-") for name in missing),
+                remedy="pass every named Codex installation coordinate explicitly; no home or destination is inferred")
+        from .codex_hook_install import CodexHookInstaller
+
+        evidence = CodexHookInstaller(source_root=Path(args.runtime),
+            bus_home=Path(args.root), hooks_path=Path(args.hooks),
+            destination=Path(args.destination)).install(Path(args.workspace), args.actor,
+                hook_timeout_seconds=args.hook_timeout_seconds,
+                wait_deadline_seconds=args.wait_deadline_seconds,
+                acknowledge_stop_hook_change=args.acknowledge_stop_hook_change,
+                include_host_observers=True)
+        return "ok", evidence, OK
+    if any(getattr(args, name) is not None for name in codex_options):
+        raise ProtocolRefusal("cursor_hook_install_codex_options",
+            "Codex-only hook installation flags cannot be used for Cursor",
+            remedy="remove Codex-only flags when using --harness cursor")
+    if args.harness == "zcode":
+        from .zcode_hook_install import install_zcode_hook
+
+        evidence = install_zcode_hook(
+            workspace=Path(args.workspace),
+            root=Path(args.root),
+            node=args.actor,
+            runtime=Path(args.runtime),
+        )
+        return "ok", evidence, OK
     from .cursor_wait import install_cursor_hook
 
     _require_cursor_harness(args.harness)
     evidence = install_cursor_hook(
+        workspace=Path(args.workspace),
+        root=Path(args.root),
+        node=args.actor,
+        runtime=Path(args.runtime),
+    )
+    return "ok", evidence, OK
+
+
+def _hook_uninstall(args: argparse.Namespace) -> HandlerResult:
+    from .errors import ProtocolRefusal
+
+    if args.harness == "claude":
+        from .claude_hook_install import uninstall_claude_hook
+
+        return "ok", uninstall_claude_hook(workspace=Path(args.workspace),
+            root=Path(args.root), node=args.actor, runtime=Path(args.runtime),
+            hooks=None if args.hooks is None else Path(args.hooks)), OK
+    if args.hooks is not None:
+        raise ProtocolRefusal("hook_uninstall_options_invalid",
+            "--hooks is supported only for Claude uninstall",
+            remedy="remove --hooks for Cursor or zcode; use --harness claude for explicit settings restoration")
+    if args.harness == "cursor":
+        from .cursor_user_hook import uninstall_cursor_seat_marker
+
+        evidence = uninstall_cursor_seat_marker(
+            workspace=Path(args.workspace),
+            root=Path(args.root),
+            node=args.actor,
+            runtime=Path(args.runtime),
+        )
+        return "ok", evidence, OK
+    if args.harness != "zcode":
+        raise ProtocolRefusal(
+            "zcode_hook_uninstall_harness_unsupported",
+            "only the zcode harness can uninstall this project Stop hook",
+            remedy="pass --harness zcode",
+        )
+    from .zcode_hook_install import uninstall_zcode_hook
+
+    evidence = uninstall_zcode_hook(
         workspace=Path(args.workspace),
         root=Path(args.root),
         node=args.actor,
@@ -817,21 +1009,25 @@ def _wake_pause(args: argparse.Namespace) -> HandlerResult:
 
 
 def _wake_resume(args: argparse.Namespace) -> HandlerResult:
+    from .doctor_disk_watch import attach_disk_watch_report
     from .wake_control import WakeController
 
-    artifact = WakeController(_root(args.root)).resume(
+    root = _root(args.root)
+    artifact = WakeController(root).resume(
         args.actor,
         args.session,
         idempotency_key=args.idempotency_key
         or "wake-cli-resume-" + uuid7_hex(),
     )
-    return "ok", artifact, OK
+    return "ok", attach_disk_watch_report(root, artifact), OK
 
 
 def _wake_status(args: argparse.Namespace) -> HandlerResult:
+    from .doctor_disk_watch import attach_disk_watch_report
     from .wake_control import WakeController
 
-    return "ok", WakeController(_root(args.root)).status(args.actor, args.session), OK
+    root = _root(args.root)
+    return "ok", attach_disk_watch_report(root, WakeController(root).status(args.actor, args.session)), OK
 
 
 def _seat_board(args: argparse.Namespace) -> HandlerResult:
@@ -840,6 +1036,61 @@ def _seat_board(args: argparse.Namespace) -> HandlerResult:
         args.session,
         idempotency_key=args.idempotency_key, take_over=args.take_over)
     return "ok", result, OK
+
+
+def _seat_teardown(args: argparse.Namespace) -> HandlerResult:
+    from .seat_teardown import SeatTeardown
+    result = SeatTeardown(_root(args.root)).teardown(args.actor, Path(args.home), args.session,
+        repo=args.repo, doc=args.doc, idempotency_key=args.idempotency_key)
+    return "ok", result, OK
+
+
+def _seat_migrate(args: argparse.Namespace) -> HandlerResult:
+    from .seat_migration import migrate
+    receipt = migrate(_root(args.root), args.actor, Path(args.workspace),
+        idempotency_key=args.idempotency_key, coordinator=args.coordinator)
+    return "ok", receipt, OK
+
+
+def _seat_add(args: argparse.Namespace) -> HandlerResult:
+    from .seat_onboarding import add
+    from .errors import ProtocolRefusal
+    import subprocess
+    try:
+        result = add(_root(args.root), home=Path(args.home), source=Path(args.source),
+            gateway_config=Path(args.gateway_config), codex_config=Path(args.codex_config),
+            transport=args.transport, coordinator=args.coordinator, repo=args.repo,
+            mode=args.mode, node=args.node, profile=args.profile,
+            codex_executable=args.codex_executable, warm_build_script=args.warm_build_script,
+            rehome=args.rehome, codex_hooks=args.codex_hooks)
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+        raise ProtocolRefusal("seat_onboard_io_failed", "seat preparation could not complete: " + str(exc),
+            remedy="inspect the named home's private ownership record and logs; run seat remove with the same root/home to recover before retrying") from exc
+    return "ok", result, OK
+
+
+def _seat_remove(args: argparse.Namespace) -> HandlerResult:
+    from .seat_onboarding import remove
+    from .errors import ProtocolRefusal
+    import subprocess
+    try:
+        result = remove(_root(args.root), home=Path(args.home))
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+        raise ProtocolRefusal("seat_onboard_io_failed", "seat removal could not complete: " + str(exc),
+            remedy="preserve the named ownership record and retry seat remove with the same root/home after correcting the I/O failure") from exc
+    return "ok", result, OK
+
+
+def _seat_retire(args: argparse.Namespace) -> HandlerResult:
+    from .codex_wait_contract import live_claimed_trees
+    from .row_tree_retire import offer_row_trees
+
+    root = _root(args.root)
+    try:
+        claimed = live_claimed_trees(root)
+    except OSError:
+        return "ok", offer_row_trees(root, apply=False, derivation_failed=True), OK
+    return "ok", offer_row_trees(root, apply=args.apply, claimed_trees=claimed), OK
 
 
 def _wake_arm(args: argparse.Namespace) -> HandlerResult:
@@ -893,15 +1144,20 @@ def _wake_daemon_display(artifact: Mapping[str, Any]) -> str:
         WAKE_DAEMON_REVOKED_DISPLAY,
         WAKE_DAEMON_RUNNING_DISPLAY,
         WAKE_DAEMON_STOPPED_DISPLAY,
+        WAKE_DAEMON_SYSTEMD_INSTALLED_DISPLAY,
+        WAKE_DAEMON_SYSTEMD_REMOVED_DISPLAY,
         WAKE_DAEMON_UNKNOWN_DISPLAY,
     )
 
     state = artifact.get("state")
+    systemd = sys.platform.startswith("linux")
     return {
-        "installed": WAKE_DAEMON_INSTALLED_DISPLAY,
+        "installed": (
+            WAKE_DAEMON_SYSTEMD_INSTALLED_DISPLAY if systemd else WAKE_DAEMON_INSTALLED_DISPLAY
+        ),
         "running": WAKE_DAEMON_RUNNING_DISPLAY,
         "stopped": WAKE_DAEMON_STOPPED_DISPLAY,
-        "removed": WAKE_DAEMON_REMOVED_DISPLAY,
+        "removed": WAKE_DAEMON_SYSTEMD_REMOVED_DISPLAY if systemd else WAKE_DAEMON_REMOVED_DISPLAY,
         "revoked": WAKE_DAEMON_REVOKED_DISPLAY,
     }.get(state, WAKE_DAEMON_UNKNOWN_DISPLAY)
 
@@ -954,9 +1210,26 @@ def _bind_resume_probe(
     observed = round(time.monotonic() - started, 3)
     if result.outcome != "woke":
         excerpt = result.stderr_excerpt
+        if coordinate.harness == "zcode":
+            from .adapters.zcode import zcode_startup_refusal
+
+            refusal = zcode_startup_refusal(executable, excerpt)
+            if refusal is not None:
+                raise refusal
         excerpt_clause = (
             ", stderr={0}".format(excerpt) if isinstance(excerpt, str) and excerpt else ""
         )
+        if (coordinate.harness == "zcode" and isinstance(excerpt, str)
+                and "无法定位 CLI ZCode Built-in Provider Config" in excerpt):
+            raise ProtocolRefusal(
+                "wake_bind_provider_config_missing",
+                f"zcode resume probe could not locate its builtin provider config; "
+                f"stderr={excerpt}",
+                remedy=(
+                    "restore config/provider/zcode-builtin.json beside the declared "
+                    "ZCode resource tree and retry the bind probe"
+                ),
+            )
         raise ProtocolRefusal(
             "wake_bind_target_unresumable",
             f"resume probe failed after {observed}s "
@@ -967,17 +1240,22 @@ def _bind_resume_probe(
 
 
 def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
-    from .copy import WAKE_DAEMON_BOUND_DISPLAY, WAKE_DAEMON_GROK_BOUND_DISPLAY
-    from .errors import ProtocolRefusal
+    from .copy import (
+        WAKE_DAEMON_BOUND_DISPLAY, WAKE_DAEMON_GROK_BOUND_DISPLAY,
+        WAKE_DAEMON_ZCODE_BOUND_DISPLAY,
+    )
     from .wake_daemon_adapters import adapter_contract_digest, resume_probe_class
     from .wake_daemon_contract import AdapterBindingStore
 
     coordinate = _wake_daemon_coordinate(args)
     if coordinate.harness == "codex":
-        raise ProtocolRefusal(
-            "wake_daemon_codex_binding_source_invalid",
-            "Codex daemon binding is accepted only from trusted waiter participation",
+        from .wake_daemon_adapters import refresh_codex_daemon_binding
+
+        artifact = refresh_codex_daemon_binding(
+            coordinate, session_id=args.session, workspace=Path(args.workspace),
+            executable=Path(args.executable), binding_epoch=args.binding_epoch,
         )
+        return "ok", artifact, OK
     # WD-R5a: an adapter that declares no resume_probe class cannot be bound.
     probe_class = resume_probe_class(coordinate.harness)
     workspace_path = Path(args.workspace)
@@ -999,11 +1277,11 @@ def _wake_daemon_bind(args: argparse.Namespace) -> HandlerResult:
         binding_epoch=args.binding_epoch,
         resume_state=resume_state,
     )
-    artifact["display"] = (
-        WAKE_DAEMON_GROK_BOUND_DISPLAY
-        if coordinate.harness == "grok-build"
-        else WAKE_DAEMON_BOUND_DISPLAY
-    )
+    artifact["display"] = {
+        "cursor": WAKE_DAEMON_BOUND_DISPLAY,
+        "grok-build": WAKE_DAEMON_GROK_BOUND_DISPLAY,
+        "zcode": WAKE_DAEMON_ZCODE_BOUND_DISPLAY,
+    }[coordinate.harness]
     return "ok", artifact, OK
 
 
@@ -1083,15 +1361,60 @@ def _wake_daemon_revoke(args: argparse.Namespace) -> HandlerResult:
     return "ok", artifact, OK
 
 
-def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
+def _startup_retire_recorded_with_prefix_predecessor(
+    coordinate: object,
+    *,
+    consent: Mapping[str, Any],
+    activation_epoch: int,
+    key: str,
+) -> bool:
+    """True when this key is already spent and differs only by predecessor.
+
+    Pre-fix serve (3c83f002) wrote a non-null predecessor. The R1 pin writes
+    None. That is the same retirement; decide() must stay closed for every
+    other field.
+    """
+
     from .jsonl import read_records_snapshot
+    from .wake_daemon_contract import DAEMON_KINDS, _schema_version
+    from .wake_daemon_roll import lifecycle_relative
+
+    proposed = {
+        "schema_version": _schema_version(coordinate.harness),
+        "tenant_id": coordinate.root.tenant_id,
+        "kind": "wake_daemon_lifecycle_receipt",
+        "node_id": coordinate.node_id,
+        "harness": coordinate.harness,
+        "coordinate_digest": coordinate.digest,
+        "daemon_instance_id": "daemon-serve-startup",
+        "activation_epoch": int(activation_epoch),
+        "event": "stopped",
+        "state": "stopped",
+        "reason_code": "wake_daemon_epoch_moved",
+        "adapter_digest": str(consent["adapter_digest"]),
+        "plist_digest": None,
+        "session_digest": None,
+        "predecessor_receipt_id": None,
+        "idempotency_key": key,
+    }
+    for existing in read_records_snapshot(
+        coordinate.root,
+        lifecycle_relative(coordinate.node_id),
+        allowed_kinds=DAEMON_KINDS,
+    ):
+        if existing.get("idempotency_key") != key:
+            continue
+        differing = [
+            field for field in proposed if existing.get(field) != proposed.get(field)
+        ]
+        return differing == ["predecessor_receipt_id"]
+    return False
+
+
+def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
     from .wake_daemon import WakeDaemon
     from .wake_daemon_adapters import wake_adapter_for
-    from .wake_daemon_contract import (
-        DAEMON_KINDS,
-        DaemonConsentLedger,
-        DaemonLifecycleLedger,
-    )
+    from .wake_daemon_contract import DaemonConsentLedger, DaemonLifecycleLedger
 
     coordinate = _wake_daemon_coordinate(args)
     consent = DaemonConsentLedger(coordinate.root).require_active(coordinate)
@@ -1101,33 +1424,33 @@ def _wake_daemon_serve(args: argparse.Namespace) -> HandlerResult:
         # KeepAlive relaunches a non-zero exit every ThrottleInterval
         # seconds forever (36,722 refusals in one seat's stderr). One typed
         # lifecycle receipt, then a clean exit ends it.
-        lifecycle_rows = [
-            row
-            for row in read_records_snapshot(
-                coordinate.root,
-                Path("receipts/wake-daemon") / f"{coordinate.node_id}.jsonl",
-                allowed_kinds=DAEMON_KINDS,
-            )
-            if row.get("kind") == "wake_daemon_lifecycle_receipt"
-            and row.get("coordinate_digest") == coordinate.digest
-        ]
-        prior = lifecycle_rows[-1] if lifecycle_rows else None
-        DaemonLifecycleLedger(coordinate.root).record(
-            coordinate,
-            daemon_instance_id="daemon-serve-startup",
-            activation_epoch=int(args.activation_epoch),
-            event="stopped",
-            state="stopped",
-            reason_code="wake_daemon_epoch_moved",
-            adapter_digest=str(consent["adapter_digest"]),
-            plist_digest=None,
-            session_digest=None,
-            predecessor_receipt_id=None if prior is None else str(prior["id"]),
-            idempotency_key=(
-                f"serve-startup-retired-{coordinate.digest[:16]}"
-                f"-{args.activation_epoch}-{int(consent['activation_epoch'])}"
-            ),
+        # WAKE-RETIRE-KEY-1: pin predecessor None. A KeepAlive spawn under
+        # the same stale/active pair must replay that receipt (exit 0), not
+        # conflict because the last lifecycle id moved. A different pair is
+        # a different key. A different payload on this key still conflicts.
+        # R2 / C5: a pre-fix retirement already spent this key with a
+        # non-null predecessor. That shape is the retirement; do not
+        # rewrite it. decide() still refuses any other field change.
+        key = (
+            f"serve-startup-retired-{coordinate.digest[:16]}"
+            f"-{args.activation_epoch}-{int(consent['activation_epoch'])}"
         )
+        if not _startup_retire_recorded_with_prefix_predecessor(
+            coordinate, consent=consent, activation_epoch=int(args.activation_epoch), key=key
+        ):
+            DaemonLifecycleLedger(coordinate.root).record(
+                coordinate,
+                daemon_instance_id="daemon-serve-startup",
+                activation_epoch=int(args.activation_epoch),
+                event="stopped",
+                state="stopped",
+                reason_code="wake_daemon_epoch_moved",
+                adapter_digest=str(consent["adapter_digest"]),
+                plist_digest=None,
+                session_digest=None,
+                predecessor_receipt_id=None,
+                idempotency_key=key,
+            )
         return (
             "ok",
             {
@@ -1180,12 +1503,12 @@ def _add_zcode_executable_declarations(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--zcode-entry-executable", metavar='EXE')
 
 
-def _add_projection_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--root", required=True)
-    parser.add_argument("--node", required=True, metavar='NODE')
-    parser.add_argument("--declared-roots", required=True, metavar='FILE')
-    parser.add_argument("--managed-executable", required=True, metavar='EXE')
-    parser.add_argument("--profile", required=True, metavar='PROFILE')
+def _add_projection_arguments(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
+    parser.add_argument("--root", required=required)
+    parser.add_argument("--node", required=required, metavar='NODE')
+    parser.add_argument("--declared-roots", required=required, metavar='FILE')
+    parser.add_argument("--managed-executable", required=required, metavar='EXE')
+    parser.add_argument("--profile", required=required, metavar='PROFILE')
     parser.add_argument("--json", action="store_true")
 
 
@@ -1194,6 +1517,16 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
 
     node = commands.add_parser("node")
     node_commands = node.add_subparsers(dest="node_command", required=True)
+
+    person = node_commands.add_parser("person")
+    person_commands = person.add_subparsers(dest="person_command", required=True)
+    for operation in ("set", "clear"):
+        person_operation = person_commands.add_parser(operation)
+        person_operation.add_argument("--root", required=True)
+        person_operation.add_argument("--node", required=True)
+        if operation == "set":
+            person_operation.add_argument("--person", required=True)
+        person_operation.set_defaults(handler=_node_person)
 
     add = node_commands.add_parser("add")
     add.add_argument("--root")
@@ -1240,16 +1573,28 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     role_step = node_commands.add_parser("role")
     role_step.add_argument("--root", required=True)
     role_step.add_argument("--node", required=True, metavar='NODE')
-    role_step.add_argument("--template", required=True)
+    role_step.add_argument("--template")
     role_step.add_argument("--answer", dest="answers", action="append", default=[])
+    role_step.add_argument("--expected-predecessor")
     role_step.set_defaults(handler=_node_role)
 
-    boot = node_commands.add_parser("boot")
-    _add_projection_arguments(boot)
+    boot = node_commands.add_parser("boot",
+        floati_required_without_session=_NODE_PROJECTION_ARGUMENTS)
+    _add_projection_arguments(boot, required=False)
+    boot.add_argument('--session', metavar='SESSION')
+    boot.add_argument('--runtime', metavar='RUNTIME')
+    boot.add_argument('--hooks', '--settings', metavar='HOOKS')
+    boot.add_argument('--destination', metavar='DESTINATION')
+    boot.add_argument('--acknowledge-stop-hook-change')
     boot.set_defaults(handler=_node_boot)
 
-    teardown = node_commands.add_parser("teardown")
-    _add_projection_arguments(teardown)
+    teardown = node_commands.add_parser("teardown",
+        floati_required_without_session=_NODE_PROJECTION_ARGUMENTS,
+        floati_required_with_session=("repo", "doc"))
+    _add_projection_arguments(teardown, required=False)
+    teardown.add_argument('--session', metavar='SESSION')
+    teardown.add_argument('--repo', metavar='REPO')
+    teardown.add_argument('--doc', metavar='DOC')
     teardown.set_defaults(handler=_node_teardown)
 
     explain = node_commands.add_parser("explain")
@@ -1380,6 +1725,23 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
 
     seat = commands.add_parser("seat")
     seat_commands = seat.add_subparsers(dest="seat_command", required=True)
+    add = seat_commands.add_parser("add")
+    for option, metavar in (("root", "ROOT"), ("home", "PATH"), ("source", "PATH"),
+            ("gateway-config", "PATH"), ("codex-config", "PATH"),
+            ("transport", "TRANSPORT"), ("coordinator", "NODE"), ("repo", "REPO")):
+        add.add_argument("--" + option, required=True, metavar=metavar)
+    add.add_argument("--mode", choices=("desktop", "cli"), default="desktop")
+    add.add_argument("--node", metavar="NODE")
+    add.add_argument("--profile", metavar="PROFILE")
+    add.add_argument("--codex-executable", metavar="EXE")
+    add.add_argument("--codex-hooks", metavar="PATH")
+    add.add_argument("--warm-build-script", metavar="FILE")
+    add.add_argument("--rehome", action="store_true")
+    add.set_defaults(handler=_seat_add, artifact_schema_version=1)
+    remove = seat_commands.add_parser("remove")
+    remove.add_argument("--root", required=True, metavar="ROOT")
+    remove.add_argument("--home", required=True, metavar="PATH")
+    remove.set_defaults(handler=_seat_remove, artifact_schema_version=1)
     board = seat_commands.add_parser("board")
     board.add_argument("--root", metavar="ROOT", required=True)
     board.add_argument("--as", metavar="NODE", dest="actor", required=True)
@@ -1388,16 +1750,54 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     board.add_argument("--idempotency-key", metavar="KEY", required=True)
     board.add_argument("--take-over", action="store_true")
     board.set_defaults(handler=_seat_board, artifact_schema_version=1)
+    teardown = seat_commands.add_parser("teardown")
+    teardown.add_argument("--root", required=True)
+    teardown.add_argument("--as", dest="actor", required=True, metavar='NODE')
+    teardown.add_argument("--home", required=True, metavar='HOME')
+    teardown.add_argument("--session", required=True, metavar='SESSION')
+    teardown.add_argument("--repo", required=True, metavar='REPO')
+    teardown.add_argument("--doc", required=True, metavar='DOC')
+    teardown.add_argument("--idempotency-key", required=True, metavar='KEY')
+    teardown.set_defaults(handler=_seat_teardown, artifact_schema_version=1)
+    migrate = seat_commands.add_parser("migrate")
+    migrate.add_argument("--root", metavar="ROOT", required=True)
+    migrate.add_argument("--as", metavar="NODE", dest="actor", required=True)
+    migrate.add_argument("--workspace", metavar="PATH", required=True)
+    migrate.add_argument("--idempotency-key", metavar="KEY", required=True)
+    migrate.add_argument("--coordinator", metavar="NODE")
+    migrate.set_defaults(handler=_seat_migrate, artifact_schema_version=1)
+    retire = seat_commands.add_parser("retire")
+    retire.add_argument("--root", required=True, metavar="ROOT")
+    retire.add_argument("--apply", action="store_true")
+    retire.set_defaults(handler=_seat_retire, artifact_schema_version=1)
 
     hook = commands.add_parser("hook")
     hook_commands = hook.add_subparsers(dest="hook_command", required=True)
+    hook_relay = hook_commands.add_parser("relay", help=argparse.SUPPRESS, floati_public=False)
+    from .claude_hook_relay import add_relay_arguments
+    add_relay_arguments(hook_relay)
+    hook_relay.set_defaults(direct_handler=_hook_relay)
     hook_install = hook_commands.add_parser("install")
-    hook_install.add_argument("--harness", choices=("cursor",), required=True)
+    hook_install.add_argument("--harness", choices=("cursor", "codex", "zcode", "claude"), required=True)
     hook_install.add_argument("--root", required=True)
-    hook_install.add_argument("--as", dest="actor", required=True, metavar="NODE")
-    hook_install.add_argument("--workspace", required=True)
+    hook_install.add_argument("--as", dest="actor", metavar="NODE")
+    hook_install.add_argument("--workspace")
+    hook_install.add_argument("--prepare-only", action="store_true")
     hook_install.add_argument("--runtime", required=True)
+    hook_install.add_argument("--hooks", "--settings")
+    hook_install.add_argument("--destination")
+    hook_install.add_argument("--hook-timeout-seconds", type=int)
+    hook_install.add_argument("--wait-deadline-seconds", type=int)
+    hook_install.add_argument("--acknowledge-stop-hook-change")
     hook_install.set_defaults(handler=_hook_install)
+    hook_uninstall = hook_commands.add_parser("uninstall")
+    hook_uninstall.add_argument("--harness", choices=("cursor", "zcode", "claude"), required=True)
+    hook_uninstall.add_argument("--hooks", "--settings")
+    hook_uninstall.add_argument("--root", required=True)
+    hook_uninstall.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    hook_uninstall.add_argument("--workspace", required=True)
+    hook_uninstall.add_argument("--runtime", required=True)
+    hook_uninstall.set_defaults(handler=_hook_uninstall)
 
     wake = commands.add_parser("wake")
     wake_commands = wake.add_subparsers(dest="wake_command", required=True)
@@ -1428,7 +1828,7 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     wake_arm.set_defaults(handler=_wake_arm)
 
     wake_wait = wake_commands.add_parser("wait")
-    wake_wait.add_argument("--harness", choices=("cursor",), required=True)
+    wake_wait.add_argument("--harness", choices=("cursor", "zcode", "claude"), required=True)
     wake_wait.add_argument("--root", required=True)
     wake_wait.add_argument("--as", dest="actor", required=True, metavar="NODE")
     wake_wait.add_argument("--runtime", required=True)

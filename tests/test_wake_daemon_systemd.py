@@ -3,6 +3,7 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -341,6 +342,165 @@ class WakeDaemonSystemdUserUnitTests(unittest.TestCase):
         removed = manager.remove(expected_plist_digest=installed["plist_digest"])
         self.assertEqual("removed", removed["state"])
         self.assertFalse(manager.unit_path.exists())
+
+    def test_remove_only_prunes_empty_directories_created_by_install(self) -> None:
+        """A scratch HOME returns to its original directories after removal."""
+        for scenario in ("empty", "config", "systemd", "user", "foreign", "replaced", "rolled", "epoch-rolled", "reinstalled", "swapped", "restore-conflict"):
+            with self.subTest(scenario=scenario):
+                home = self.base / ("home-" + scenario)
+                home.mkdir()
+                units = home / ".config" / "systemd" / "user"
+                existing = {"config": units.parent.parent, "systemd": units.parent,
+                            "user": units}.get(scenario)
+                if existing is not None:
+                    existing.mkdir(parents=True)
+                with patch.dict(os.environ, {"HOME": str(home)}):
+                    manager = self.manager(user_units_directory=None)
+                    manager.install()
+                    if scenario == "foreign":
+                        (units / "foreign.service").write_text("foreign\n")
+                    if scenario == "replaced":
+                        units.rename(home / "saved-user")
+                        units.mkdir()
+                        (home / "saved-user" / manager.unit_name).rename(manager.unit_path)
+                    if scenario == "rolled":
+                        policy = self.root.path / "state" / "ledger-policy.json"
+                        policy.write_text(json.dumps({"schema_version": 0, "max_bytes": 1,
+                                                      "max_age_days": 3650}))
+                        for _ in range(12):
+                            manager.install()
+                        manager.stop()
+                    if scenario == "epoch-rolled":
+                        from datetime import datetime, timezone
+                        from floati.bus_epoch import roll_bus_epoch
+                        from floati.jsonl import read_records_snapshot
+                        from floati.planes import AuthorityGrantStore
+                        from floati.wake_daemon_contract import DAEMON_KINDS
+                        from floati.wake_daemon_roll import lifecycle_relative
+
+                        relative = lifecycle_relative(self.coordinate.node_id)
+                        before = read_records_snapshot(self.root, relative, allowed_kinds=DAEMON_KINDS)
+                        ownership = [row for row in before
+                                     if row["kind"] == "wake_daemon_directory_ownership_record"]
+                        self.assertTrue(ownership, "install must retain directory ownership before rolling")
+                        AuthorityGrantStore(self.root).grant_exact(
+                            "bus-epoch-roll", self.coordinate.node_id, 1, datetime.now(timezone.utc),
+                        )
+                        rolled = roll_bus_epoch(
+                            self.root, actor=self.coordinate.node_id, idempotency_key="directory-ownership-roll",
+                        )
+                        self.assertEqual("bus_epoch_roll_receipt", rolled["receipt"]["kind"])
+                        after = read_records_snapshot(self.root, relative, allowed_kinds=DAEMON_KINDS)
+                        self.assertEqual(before, after)
+                    if scenario == "reinstalled":
+                        manager.remove()
+                        existing = units.parent
+                        existing.mkdir(parents=True)
+                        manager.install()
+                    # A fresh invocation and repeated install must retain ownership.
+                    self.manager(user_units_directory=None).install()
+                    if scenario in {"swapped", "restore-conflict"}:
+                        from floati.wake_daemon_systemd import _rename_directory_noreplace
+
+                        swapped = False
+                        raced_identity = None
+
+                        def replace_directory(parent_fd, source, target):
+                            nonlocal swapped, raced_identity
+                            if source == "user" and not swapped:
+                                swapped = True
+                                units.rename(home / "saved-user")
+                                units.mkdir()
+                            if target == "user" and scenario == "restore-conflict":
+                                units.mkdir()
+                                raced_identity = units.stat().st_ino
+                            return _rename_directory_noreplace(parent_fd, source, target)
+
+                        with patch("floati.wake_daemon_systemd._rename_directory_noreplace", side_effect=replace_directory):
+                            self.manager(user_units_directory=None).remove()
+                        if scenario == "restore-conflict":
+                            self.assertEqual(raced_identity, units.stat().st_ino)
+                    else:
+                        self.manager(user_units_directory=None).remove()
+                if scenario in {"foreign", "replaced", "swapped", "restore-conflict"}:
+                    self.assertTrue(units.is_dir())
+                elif existing is not None:
+                    self.assertTrue(existing.is_dir())
+                    self.assertEqual([], list(existing.iterdir()))
+                else:
+                    self.assertEqual([], list(home.iterdir()))
+
+    def test_uninstall_sweep_prunes_only_its_created_unit_directories(self) -> None:
+        """The public uninstall path consumes the unit install's ownership."""
+        from floati.uninstall import UninstallWriter
+
+        for scenario in ("empty", "systemd", "shared", "retired", "legacy", "append-failed"):
+            with self.subTest(scenario=scenario):
+                preexisting = scenario == "systemd"
+                home = self.base / ("sweep-home-" + scenario)
+                home.mkdir()
+                units = home / ".config" / "systemd" / "user"
+                if preexisting:
+                    units.parent.mkdir(parents=True)
+                manager = self.manager(user_units_directory=units)
+                if scenario in {"legacy", "append-failed"}:
+                    from floati.wake_daemon_contract import DaemonLifecycleLedger
+
+                    with patch.object(
+                        DaemonLifecycleLedger, "record_directory_ownership", create=True,
+                        side_effect=OSError("ownership append unavailable") if scenario == "append-failed" else None,
+                        return_value=None,
+                    ):
+                        installed = manager.install()
+                    self.assertEqual("installed", installed["state"])
+                else:
+                    manager.install()
+                if scenario == "shared":
+                    from floati.wake_daemon_systemd import SystemdUserUnitManager
+
+                    Registry(self.root).register(public_ids.builder("b"), "worker")
+                    other = DaemonCoordinate(self.root, public_ids.builder("b"), "cursor")
+                    AdapterBindingStore(self.root).write(
+                        other, session_id="other-session", workspace=self.workspace,
+                        executable=self.executable, adapter_version="1",
+                        adapter_digest=adapter_contract_digest("cursor"), binding_epoch=1,
+                    )
+                    DaemonConsentLedger(self.root).consent(
+                        other, adapter_version="1", adapter_digest=adapter_contract_digest("cursor"),
+                        min_poll_seconds=1, max_poll_seconds=30, max_backoff_seconds=120,
+                        activation_epoch=1, idempotency_key="other-consent",
+                    )
+                    SystemdUserUnitManager(
+                        other, installed_launcher=self.launcher, user_units_directory=units,
+                        runner=self.runner,
+                    ).install()
+                if scenario == "retired":
+                    Registry(self.root).retire(self.coordinate.node_id)
+                destination = self.base / ("sweep-install-" + scenario)
+                tool = destination / "scripts" / "floati"
+                tool.parent.mkdir(parents=True)
+                tool.write_bytes(b"tool\n")
+                metadata = destination / ".floati-install" / "manifest.v0.json"
+                metadata.parent.mkdir()
+                metadata.write_text(json.dumps({
+                    "schema_version": 0, "source_ref": "refs/heads/main", "source_sha": "a" * 40,
+                    "files": [{"path": "scripts/floati", "sha256": hashlib.sha256(tool.read_bytes()).hexdigest()}],
+                }))
+                result = UninstallWriter(
+                    destination, wake_sweep=True,
+                    launch_agents_directory=home / "Library" / "LaunchAgents",
+                    user_units_directory=units, supervisor_runner=self.runner,
+                    systemctl_locator=lambda: str(self.systemctl),
+                ).run()
+                self.assertEqual(2 if scenario == "shared" else 1, len(result["wake_daemons_removed"]))
+                if scenario in {"legacy", "append-failed"}:
+                    self.assertTrue(units.is_dir())
+                    self.assertEqual([], list(units.iterdir()))
+                elif preexisting:
+                    self.assertTrue(units.parent.is_dir())
+                    self.assertEqual([], list(units.parent.iterdir()))
+                else:
+                    self.assertEqual([], list(home.iterdir()))
 
     def test_every_digest_mismatch_refusal_names_an_action_and_the_exact_path(
         self,

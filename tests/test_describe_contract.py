@@ -93,10 +93,35 @@ class DescribeContractTests(unittest.TestCase):
         hidden = described - public
 
         self.assertEqual(_registered_paths(parser), described)
-        self.assertEqual(155, contract["command_count"])
+        # Harbor train 14 (seat 25): hold, hold/release, hold/start (HOLD-1), reclaim
+        # (F2-DISK-RECLAIM-1) and seat/retire (F2-ROW-TREE-RETIRE-1) join the live
+        # parser; explicit consume adds one public command in this row.
+        # Re-derived from describe_parser; hidden command set stays exact.
+        # F2-SEAT-TEARDOWN-1 adds the public performing teardown command.
+        # F2-HOOK-INSTALL-ZCODE-1 keeps the public hook uninstall command.
+        # NET-ASK-1 and BUS-ARCHIVE-RETENTION-1 add public ask and backup.
+        # FLEET-ADHOC-THREADS-1 adds the native ad-hoc commands.
+        # Explicit person membership adds node/person and its set/clear verbs.
+        # Claude's context relay adds one internal, non-MCP command.
+        # Work queue notifications add one public work/notify command.
+        # Work handoffs add the group and its record and show commands.
+        # NEEDS-YOU-INBOX-1 adds the public needs family: needs and its seven verbs.
+        # Dispatch records add the public dispatch group and its five verbs.
+        # Checkout liveness adds one public observer command.
+        # NET-TERRITORY-1 adds public territory and its declare/release/show/preview
+        # verbs, and the observed overlap/observe read.
+        # NET-QUIET-1 adds the public quiet group and its four verbs.
+        # Fleet night mode adds the public presence/set command.
+        # Network setup adds the public setup command.
+        # Ask and work replay share one public command.
+        # Upgrade preparation adds the public update/prepare command.
+        # Inbound mail holds add a command group and its start and show leaves.
+        # NEEDS-YOU-OBSERVED-1 adds the public needs observe verb.
+        self.assertEqual(215, contract["command_count"])
         self.assertEqual(len(described), contract["command_count"])
-        self.assertEqual(145, len(public))
+        self.assertEqual(204, len(public))
         self.assertEqual({
+            ("hook", "relay"),
             ("wake-evaluate",),
             ("wake-record",),
             ("wake-callback",),

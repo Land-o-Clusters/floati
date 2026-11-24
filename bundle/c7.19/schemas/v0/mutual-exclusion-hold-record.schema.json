@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/mutual-exclusion-hold-record.schema.json",
+  "title": "Floati Mutual Exclusion Hold Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "resource_id",
+    "holder",
+    "epoch",
+    "acquired_at",
+    "renewed_at",
+    "expires_at",
+    "released_at",
+    "ttl_seconds",
+    "deadline_seconds",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^hold-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "mutual_exclusion_hold"},
+    "resource_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "holder": {"type": "string", "minLength": 1, "maxLength": 64},
+    "epoch": {"type": "integer", "minimum": 1},
+    "acquired_at": {"type": "string", "format": "date-time"},
+    "renewed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "released_at": {"type": ["string", "null"], "format": "date-time"},
+    "ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "deadline_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "state": {"type": "string", "enum": ["active", "released", "expired"]}
+  }
+}

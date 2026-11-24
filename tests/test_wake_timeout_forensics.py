@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.readiness import READY_SECONDS, wait_until
+
 import json
 import os
 import signal
@@ -99,18 +101,15 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
             os.close(read_fd)
             os.close(write_fd)
 
-    def _wait_for_marker_content(self, marker: Path, expected: str, timeout: float = 3.0) -> str:
-        deadline = time.monotonic() + timeout
-        content = ""
-        while time.monotonic() < deadline:
+    def _wait_for_marker_content(self, marker: Path, expected: str, timeout: float = READY_SECONDS) -> str:
+        def read_expected():
             try:
                 content = marker.read_text(encoding="utf-8")
             except FileNotFoundError:
-                content = ""
-            if content == expected:
-                break
-            time.sleep(0.02)
-        return content
+                return None
+            return content if content == expected else None
+        return wait_until(read_expected, "complete forensic marker " + marker.name,
+            timeout=timeout)
 
     def _terminate_for_cleanup(self, pid: int) -> None:
         try:

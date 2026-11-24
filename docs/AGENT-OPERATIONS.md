@@ -52,6 +52,41 @@ configured, every downstream diagnosis starts in the wrong place.
 
 ## Verbs — full reference (from AGENTS.md)
 
+### Creating work for a persistent ad-hoc worker
+
+After creating a profile and explicitly granting its launch capability with
+`worker adhoc profile --grant-launch`, bind work to that profile through the CLI:
+
+```text
+floati work add --root /absolute/fleet --title 'native task' --owner builder-a --adhoc-profile adhoc-profile-...
+```
+
+Use the returned work ID as `work_item_id` in the coordinator's dispatch JSON.
+Bank that JSON in the profile's repository and send its exact SHA and document
+through the coordinator's ordinary `send` command. Then run:
+
+```text
+floati worker adhoc run --root /absolute/fleet --as builder-a --session parent-session --profile adhoc-profile-... --envelope msg-... --idempotency-key dispatch-1
+```
+
+`--adhoc-profile` derives the existing borrowed workspace, lane and lease binding;
+it cannot be combined with `--workspace`. It does not create authority or launch
+approval. A stale lease, replaced profile binding or foreign owner still refuses.
+Admission also continues to accept an exact existing CAR row/repository/branch
+binding.
+
+`adhoc_dispatch_authentication_failed` identifies work ownership/binding failures
+separately from inactive or mismatched authority. For work failures, the remedy
+creates replacement bound work. The coordinator must bank and send a new dispatch
+using its returned ID; the old work and Git dispatch cannot be edited in place.
+For authority failures, the named active architect runs the exact `floati grant`
+remedy. A missing grant starts at epoch 1; expired or revoked grants need the next
+epoch. If the remedy names a different epoch from the dispatch, the coordinator
+must bank and send a replacement dispatch for that epoch before running it.
+An already-current grant is reused rather than renewed. No remedy bypasses the
+separate human launch grant; a changed authority coordinate needs its own launch
+approval. If there is no active architect, resolve the named role refusal first.
+
 
 Every durable verb requires an explicit absolute `--root`; there is no default
 root, no home scan, and no discovery. `COMMAND --help` prints the full
@@ -59,15 +94,32 @@ contract for each.
 
 - **Bootstrap:** `init` (create/validate one direct-home fleet root;
   `--solo NODE --harness H` for one-seat setup) · `register` · `retire`
-  (self-retirement only).
+  (caller-selected NODE; self-registration and self-retirement are operating
+  conventions, with no binding to the calling seat).
 - **Nodes and roles:** `node {add|retire|drain|switch|role|boot|teardown|explain|state-flush}`
   (preview-first; temporary nodes take `--lease-minutes`) · `role {list|show|new|edit|validate|import}`.
 - **Mail:** `send --root --from --to --repo --sha SHA --doc PATH --note TEXT
-  [--reply-to ID] [--idempotency-key KEY]` · `inbox --session SESSION`
+  [--reply-to ID] [--message-class {normal,fyi}] [--idempotency-key KEY]` · `inbox --session SESSION`
   (ack-on-drain by default; `--peek` is explicit) · `ack` (repeat `--id` for one
-  exact batch) · `sent` (read-only sender receipt projection). Delivery and
-  acknowledgment are separate receipts; `status: ok` from `send` proves the
+  exact batch) · `consume ID --root ROOT --as NODE --session SESSION
+  --idempotency-key KEY` (explicit ACTED after ACK) · `sent` (read-only sender
+  receipt projection). Delivery, acknowledgment, and consumption are separate
+  receipts; `status: ok` from `send` proves the
   append, never the delivery.
+  `--message-class fyi` appends non-waking mail: inbox or the next Stop
+  presents it, but an already-idle Stop waiter and the wake daemon leave it
+  pending. The board labels it `PENDING-AT-PAUSE`. An omitted class means
+  `normal`; historical envelopes remain valid with their original wake behavior.
+  A new send journals `recipient_readiness` **as observed at** its `observed_at`,
+  in one event batch with the envelope. It checks the administrative lease,
+  native Stop-hold testimony and recent completed board. One proven arrangement
+  gives `recipient_wake_arranged`; all three affirmative absences give
+  `recipient_not_listening`; unreadable or missing provenance gives `unknown`.
+  The observation is historical testimony, not a promise through append or a
+  proof of a running process. A later pause or retirement can change the next
+  send's observation without rewriting this one. Exact retries return the
+  journaled observation; old envelopes without it return historical `unknown`
+  with no invented mechanism checks.
 - **Truth surfaces:** `describe --json` · `verify` · `journal {checkpoint|verify}` ·
   `signature {sign|verify}` · `status` · `snapshot` (consented maintainer bundle) ·
   `log` (`--replay` reconstructs from the
@@ -85,12 +137,30 @@ contract for each.
   translated into "down".
 - **Epoch lifecycle:** `epoch roll --root ROOT --as NODE --idempotency-key KEY`
   performs one authority-gated coherent roll of the selected event, delivery,
-  and acknowledgment planes.
+  and acknowledgment planes. Ordinary native send, inbox, ACK and Stop activity
+  also maintains due epochs as the active registered node, without a separate
+  manual roll grant. The epoch defaults are 8 MiB of active events or seven
+  days from the current epoch's first frame; `state/ledger-policy.json` may
+  declare the existing positive `max_bytes` and `max_age_days` values. Daemon
+  lifecycle receipts retain their separate thirty-day default. Automatic rolls
+  carry pending messages and their native proof; an unchanged nonreclaimable
+  carried set does not produce repeated archives. Recovery precedes another
+  automatic roll and refuses differing live history. Existing exact uncompressed
+  archives remain retained; this feature performs no compression or expiry.
+  The epoch lock is fair to exclusive callers: while one waits, new shared
+  callers queue behind it for up to half their own wait budget, so an
+  exclusive wait ends when the shared work already in front of it does.
 - **Confluence:** `confluence {grant|revoke|status|bundle}` — the read
   seam for a consuming observer app: one explicit per-root, per-consumer
   read grant; the bundle materializes the receipts-read surface under the
   grant it was produced under. No discovery, no watcher, no network, no
-  mutation API.
+  mutation API. Existing receipts-read bundle versions 1 and 2 retain their
+  closed allowlists and omit `receipts/consumed/` and `consumption_receipt`.
+  Consumption is available through the native receipt history; exporting it
+  would require a separately versioned bundle contract. This omission does
+  not expand their supported historical record generations: current
+  `delivered_unpresented` records remain outside both closed bundle schemas,
+  and actor-bound version-one ACKs remain outside the version-one bundle.
 - **Work:** `grant` / `grant revoke` · `work` · `worker` · `sequencer`
   · `supervise` · `orchestrate`.
 - **Intake:** `intake {scan|adopt|show}` reads or adopts explicitly supplied
@@ -127,6 +197,18 @@ contract for each.
 - **Lifecycle:** `install` · `update` · `update rollback --to SHA` · `uninstall` (see Install above) · `purge`
   (moves only explicitly named roots to Trash; never deletes).
 
+After updating an installation, prepare each existing fleet root before its
+first send. Run `floati update prepare --root /absolute/fleet` until its
+`state` is `done`. Each call validates up to 4,096 frames or 2 MiB of
+history, finishing the current frame. The result reports `validated_bytes`,
+`source_bytes` and `frames`. To check progress, add `--status`. After an
+interruption, repeat the same command to resume.
+
+A send can proceed while preparation is `pending` or `in_progress`. On a
+long history it reports the native validation on stderr before reading the
+ledger. Historical matches can require another validation until preparation
+finishes.
+
 **Managed wrappers:** a harness seat provisioned with a managed bus profile
 sends through its wrapper binary, which pins root/from/repo and takes exactly
 `<wrapper> <profile> send --to NODE --sha SHA --doc PATH --idempotency-key KEY
@@ -136,7 +218,96 @@ and the acting session is required. A seat's own boot projection (`node boot`)
 prints its exact wrapper shapes — use those verbatim, never a remembered
 shape.
 
+## Preparing and removing one Codex seat
+
+`seat add` takes the existing fleet root, committed source repository, an absent
+home, exact gateway registry and Codex config files, installed transport name,
+coordinator and repository label. It creates `home/repo`, `home/wt` and
+`home/scratch`; adds a gateway profile and project trust entry; registers its
+suggested unused node; arms the exact workspace waiter; and publishes the seat
+declaration. Existing fleet governance and the reviewed global Codex Stop hook
+are prerequisites. This verb does not install or retrust a global hook.
+Before ownership writes and on completed-add replay, it checks the selected
+transport's canonical ordinary interpreter and install, exact manifest digest
+and source pin, bounded file hashes and required client entries. Missing or
+changed installed bytes refuse; removal remains available to reverse the owned
+seat when its transport is broken. These static checks do not prove a live
+waiter or the first real Stop-hook fire.
+Seat add/remove also require Python 3.11 or newer for standard-library TOML
+validation, or optional `tomli` on Python 3.9/3.10; otherwise they refuse before
+configuration writes. The package's runtime dependency list remains empty.
+
+```text
+floati seat add --root /absolute/fleet --home /absolute/seats/new-seat --source /absolute/source --gateway-config /absolute/codex/fleet-bus-profiles.json --codex-config /absolute/codex/config.toml --transport installed --coordinator architect --repo project --mode desktop
+floati seat remove --root /absolute/fleet --home /absolute/seats/new-seat
+```
+
+The desktop artifact says **open Codex on `home/repo` and paste this**, followed
+by its boot prompt. Opening the parent home instead does not bind the gateway
+to a Git repository. `--mode cli --codex-executable /absolute/codex` uses the
+explicit CLI's stdio app-server to create a saved thread without starting a
+model turn. The creator reads its thread to materialize native storage before
+it closes and is collected. A named unsupported history read is retained as
+absence in the transcript; it is not persistence proof. An independent provider
+must resume the exact stored ID with history hydration excluded, then close
+and be collected too. That resume proves stored availability; no-turn evidence
+comes from the new creation and the closed startup protocol, not a history scan.
+The artifact
+records the native Floati pause receipt and prints the exact CLI resume command
+and boot prompt. Both provider connections and the resume command bind
+`CODEX_HOME` to the declared `config.toml` directory. No starter child remains
+running. On the first seat turn,
+boarding claims and resumes that exact session through the normal wake path.
+An app-server version that cannot resume the saved empty thread refuses rather
+than reporting a usable seat. Thread creation,
+workspace mapping and waiter consent are distinct from proving that a fresh
+Stop hook actually fires; the result reports hearing and live waiter as
+unproven until that later observation. A compiled source package also requires
+its committed executable `--warm-build-script scripts/example.sh`; output goes
+to the owned `scratch/warm-build.log`, with build files confined to `repo/.build`.
+CLI startup owns its two logs under `scratch`; the boot prompt does not authorize
+workspace edits. Those output paths are recorded before launch and their exact
+contents recorded after the child stops, including a failed launch or build.
+Removal can therefore reverse completed child writes while preserving unexpected
+files. An interrupted child whose output capture was not durably finalized
+requires inspection and refuses destructive removal.
+
+Each configuration replacement has a private backup and byte/mode validation.
+The durable ownership record under the named fleet root records transaction
+intent before mutation and the home inventory before publication. Repeating
+an unchanged completed add replays its artifact after verifying its current
+capabilities. `seat remove` checks the home inventory and incarnation, removes
+the exact profile/trust/map capabilities and its owned CLI pause marker,
+disarms consent, retires registration
+and deletes the owned home. Its before/after inventory proves that reversal.
+Unrelated settings are preserved. Edited homes, uncertain staging directories
+and replaced capabilities produce typed refusals that preserve foreign data.
+Native receipts, private backups and retired registry/consent history remain
+auditable. Interrupted removal resumes from its durable progress record.
+
+`--rehome --node EXISTING --profile EXISTING` explicitly reuses one prior
+Codex identity. It replaces that profile, removes its old trust entry and
+waiter mappings, and archives a missing-executable adapter only when there is
+no runtime evidence. It never starts or repairs a daemon. The full prior-mail
+cut is saved as historical evidence and receives exact delivery and SEEN
+receipts in bounded batches. Messages arriving after that cut remain pending.
+The previous unowned home and its contents are retained.
+
 ## Seat boarding — an explicit turnover operation
+
+A seat that has never boarded — registered before the governed path existed, so the
+workspace carries no `SEAT.json` — migrates ONCE, by verb, before its first board
+(`doctor` prints this exact command as its `seat_declaration_absent` remedy):
+
+```sh
+floati seat migrate --root /absolute/fleet --as NODE --workspace /absolute/workspace --idempotency-key KEY
+```
+
+The migration publishes fleet governance (when the root has none, with the ruled
+values; the coordinator derives from the registry's active architect role, else pass
+`--coordinator`) and the workspace declaration, from the registry's own records, with
+a receipt. It runs once per registered workspace; every later turnover is the board
+below, in one step.
 
 ```sh
 floati seat board --root /absolute/fleet --as NODE --workspace /absolute/workspace --idempotency-key KEY --session SESSION
@@ -147,6 +318,19 @@ consented Codex waiter binding. The product CLI requires an explicit
 `--session`; it never reads the runtime environment for identity. Health
 notices require the caller to supply that declaration alongside their exact
 root/node/workspace command. No session discovery or hook installation occurs.
+
+Codex daemon bindings retain the fixed `/opt/homebrew/bin/codex` declaration
+and the SHA-256 of its ordinary resolved target. Every read and wake verifies
+the target digest; the wake executes that verified canonical target. Moving
+identical bytes to a new package version keeps the binding usable. Changed
+bytes require the registered trusted Codex Stop waiter to refresh the binding
+before retrying boarding. A missing legacy version path prints the exact
+`floati wake daemon bind` recovery command. Run that command after reviewing
+the replacement, then retry boarding with the same key. The Codex bind route
+only refreshes an existing binding for its declared workspace and epoch,
+with armed consent and the current waiter
+claim. It does not create a binding or take over a session. Generic executable
+symlinks remain refused; the fixed declaration alone is not executable trust.
 
 No claim or a claim already belonging to that session can proceed. Any other
 recorded claimant requires explicit `--take-over`; the refusal names it.
@@ -203,6 +387,23 @@ coherent when nobody is watching every window.
   the same guarded operation. If a workflow explicitly peeks first, acknowledge
   the exact reviewed batch before continuing; replies and work receipts carry
   disagreement, action, and completion.
+- **Consumption is an explicit ACTED receipt.** `consume ID --root ROOT --as
+  NODE --session SESSION --idempotency-key KEY` requires the recipient's prior
+  ACK for that exact envelope; it never authors an ACK automatically. A valid
+  predecessor chat's ACK may support the act, while the consumption receipt
+  records the current acting session. Repeating the recipient and envelope
+  replays the original receipt. `work complete --consume ID --session SESSION`
+  accepts 1–1000 unique envelopes and validates the entire batch before writing.
+  It writes consumption before completion. Consumption without completion is
+  a legal durable state; retry finishes without duplicate consumption. Omitted
+  `--consume` retains the existing completion behavior. Delivery, ACK, boarding,
+  and bare completion never synthesize consumption.
+- **Historical progress can be unknown.** A cross-ledger gap in one node's
+  historical evidence reports `message_progress.state: unknown`, its stable
+  `reason_code`, and null counts for that node. Status, board observation and
+  receipt history remain usable; raw receipt history is retained. Unknown is
+  never displayed as measured zero. Consumption authoring still validates its
+  exact ACK/delivery evidence and refuses an invalid reference.
 - **Answer with coordinates, not summaries.** A report that names an exact commit, file,
   and count can be independently verified; "done" cannot. Copy SHAs by command
   substitution — never retype one by hand.
@@ -229,7 +430,24 @@ coherent when nobody is watching every window.
   gateway requires an argument the bare CLI calls optional, the gateway is the contract
   for that seat. Read the shape where you were told to invoke it; the wrapper's doc names
   every difference on purpose.
-- **Boarding order is fixed: attach, take over the wake claim, then drain.** A session
+- **Turnover is one verb per thread. `/boardbus` is the only command a new thread
+needs. Every projected operator boarding command selects `--take-over` explicitly;
+`/takeover` remains the standalone spelling. Successful boarding presents the
+verified artifact's `takeover_report`: `TOOK OVER <node> from <session or none>`.
+A replay retains historical displacement but reports no new displacement and
+does not drain or acknowledge again. The unflagged native verb keeps its false
+default, and a contested call prints:
+**Another thread still holds this seat** — `<claimant session>`, bound `<time>`.
+If that thread is closed or abandoned, run `/takeover`.
+
+| situation | what the user runs | what happens |
+| --- | --- | --- |
+| first time on a seat (registered, never boarded) | `/boardbus` | migrates once (`seat migrate`, the coordinator derived or the ruled `--coordinator`), then boards |
+| a new thread on the same seat, the old thread CLOSED | `/boardbus` | explicitly takes over the prior claim and reports its session |
+| a new thread while the old thread is STILL OPEN | `/boardbus` | explicitly takes over the live predecessor, receipted and reported |
+| the Stop hook untrusted (after install or update) | `/boardbus` stops with BL-11's banner | trust once in Codex, relaunch, `/boardbus` |
+
+Boarding order is fixed: attach, take over the wake claim, then drain.** A session
   that drains before it arms answers its mail once and goes deaf to everything after.
   Turnover is the designed case — takeover replaces exactly one predecessor's authority
   and never multiplies waiters. If attach reports hook trust pending, the one-time

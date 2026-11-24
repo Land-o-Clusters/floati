@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/spawn-group-created-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "parent_item_id",
+    "parent_attempt_id",
+    "parent_fence_token",
+    "parent_spawn_policy_id",
+    "group_key",
+    "max_children",
+    "max_depth",
+    "child_capability_ceiling",
+    "aggregate_budget",
+    "workspace_policy",
+    "deadline",
+    "join_mode",
+    "required_count",
+    "on_late_result",
+    "on_child_failure",
+    "cancel_remaining_after_success"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^spawn-group-created-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "kind": {
+      "const": "spawn_group_created"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_item_id": {
+      "type": "string",
+      "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_attempt_id": {
+      "type": "string",
+      "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_fence_token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_spawn_policy_id": {
+      "type": "string",
+      "pattern": "^attempt-spawn-policy-bound-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "group_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "max_children": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "child_capability_ceiling": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/capability_set"
+    },
+    "aggregate_budget": {
+      "$ref": "spawn-plan-amendment-record.schema.json#/$defs/budget"
+    },
+    "workspace_policy": {
+      "enum": [
+        "patch_only",
+        "isolated_worktree"
+      ]
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "join_mode": {
+      "enum": [
+        "all_accepted",
+        "all_terminal",
+        "quorum",
+        "first_accepted"
+      ]
+    },
+    "required_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 8
+    },
+    "on_late_result": {
+      "enum": [
+        "quarantine",
+        "operator_decision"
+      ]
+    },
+    "on_child_failure": {
+      "enum": [
+        "fail_group",
+        "continue_until_join_impossible"
+      ]
+    },
+    "cancel_remaining_after_success": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "quorum"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "max_children": {
+                "const": 1
+              },
+              "required_count": {
+                "const": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 2
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 3
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 4
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 5
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 6
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 7
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "max_children": {
+                "const": 8
+              },
+              "required_count": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "first_accepted"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_count": {
+            "const": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "enum": [
+              "all_accepted",
+              "all_terminal"
+            ]
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_count": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

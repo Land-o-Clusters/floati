@@ -13,8 +13,12 @@ by name and never by pid alone -- a reused pid is a dead holder wearing it.
 from __future__ import annotations
 
 import ctypes
+import errno
 import json
+import math
 import os
+import re
+import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +61,7 @@ class HolderTestimony:
     pid: int
     process_start_epoch: float
     timestamp: str
+    invocation_id: Optional[str] = None
 
 
 def process_alive(pid: int) -> bool:
@@ -75,6 +80,96 @@ def process_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _linux_start_epoch(pid: int) -> Optional[float]:
+    try:
+        stat_raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        boot_raw = Path("/proc/stat").read_text(encoding="utf-8")
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    except OSError as exc:
+        raise ProtocolRefusal(
+            "codex_wait_start_time_unmeasurable",
+            "native process start time is unreadable for PID " + str(pid),
+            remedy="restore readable native process metadata before proving holder exit",
+        ) from exc
+    after_comm = stat_raw.rpartition(")")[2].split()
+    if len(after_comm) < 22:
+        return None
+    boot = None
+    for line in boot_raw.splitlines():
+        if line.startswith("btime "):
+            boot = int(line.split()[1])
+            break
+    ticks_per_second = os.sysconf("SC_CLK_TCK")
+    if boot is None or ticks_per_second <= 0:
+        return None
+    return boot + int(after_comm[19]) / ticks_per_second
+
+
+def _darwin_process_info(pid: int) -> Optional[Dict[str, Any]]:
+    """Read public kernel metadata, including processes owned by other users.
+
+    Darwin SDK sys/sysctl.h: CTL_KERN/KERN_PROC/KERN_PROC_PID returns
+    struct kinfo_proc. sys/proc.h: kp_proc.p_starttime is a timeval;
+    kp_proc.p_pid and p_stat identify its process and state. sys/sysctl.h:
+    kp_eproc.e_ppid is its parent. The LP64 ABI is 648 bytes, with those
+    fields at 0, 40, 36 and 560. Check size, PID and field bounds before use.
+    This is the same public interface ps uses; proc_pidinfo alone can deny
+    access to root's login/sshd even though this metadata is published.
+    """
+    mib = (ctypes.c_int * 4)(1, 14, 1, pid)
+    buffer = ctypes.create_string_buffer(648)
+    size = ctypes.c_size_t(ctypes.sizeof(buffer))
+    ctypes.set_errno(0)
+    received = _LIBSYSTEM.sysctl(mib, 4, buffer, ctypes.byref(size), None, 0)
+    if received != 0:
+        error = ctypes.get_errno()
+        if error in {errno.ENOENT, errno.ESRCH}:
+            return None
+        # A host may restrict sysctl too. Try the other documented native
+        # interface, but never reinterpret permission denial as process exit.
+        return _darwin_proc_info(pid, prior="sysctl(KERN_PROC_PID) errno=" + str(error))
+    if size.value == 0:
+        return None
+    raw = buffer.raw
+    seconds, microseconds = struct.unpack_from("=qi", raw, 0)
+    parent = struct.unpack_from("=i", raw, 560)[0]
+    if (size.value != 648 or struct.unpack_from("=i", raw, 40)[0] != pid
+            or seconds <= 0 or not 0 <= microseconds < 1_000_000
+            or not 0 <= parent <= _PID_BOUND or raw[36] not in {1, 2, 3, 4, 5}):
+        raise ProtocolRefusal(
+            "codex_wait_start_time_unmeasurable",
+            "invalid sysctl(KERN_PROC_PID) kinfo_proc metadata for PID " + str(pid),
+            remedy="restore a supported native kinfo_proc layout before proving holder exit",
+        )
+    return {"process_start_epoch": seconds + microseconds / 1e6,
+            "parent_pid": parent, "status": raw[36]}
+
+
+def _darwin_proc_info(pid: int, *, prior: str) -> Optional[Dict[str, Any]]:
+    """Fallback only when the public kernel query could not read metadata."""
+    info = _ProcBsdInfo()
+    ctypes.set_errno(0)
+    received = _LIBPROC.proc_pidinfo(
+        ctypes.c_int(pid), ctypes.c_int(_PROC_PIDTBSDINFO),
+        ctypes.c_ulonglong(0), ctypes.byref(info), ctypes.c_int(ctypes.sizeof(info)),
+    )
+    error = ctypes.get_errno()
+    if received <= 0 and error in {errno.ENOENT, errno.ESRCH}:
+        return None
+    if (received != ctypes.sizeof(info) or info.pbi_pid != pid
+            or info.pbi_start_tvsec <= 0 or info.pbi_start_tvusec >= 1_000_000
+            or info.pbi_ppid > _PID_BOUND or info.pbi_status not in {1, 2, 3, 4, 5}):
+        raise ProtocolRefusal(
+            "codex_wait_start_time_unmeasurable",
+            "native process metadata is unreadable for PID " + str(pid)
+            + "; tried " + prior + ", proc_pidinfo(PROC_PIDTBSDINFO) errno=" + str(error),
+            remedy="restore readable native process metadata before proving holder exit",
+        )
+    return {"process_start_epoch": info.pbi_start_tvsec + info.pbi_start_tvusec / 1e6,
+            "parent_pid": info.pbi_ppid, "status": info.pbi_status}
 
 
 if sys.platform == "darwin":
@@ -107,66 +202,25 @@ if sys.platform == "darwin":
         ]
 
     _PROC_PIDTBSDINFO = 3
-    _LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib")
+    _LIBPROC = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
     _LIBPROC.proc_pidinfo.restype = ctypes.c_int
+    _LIBSYSTEM = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+    _LIBSYSTEM.sysctl.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_uint,
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_void_p, ctypes.c_size_t]
+    _LIBSYSTEM.sysctl.restype = ctypes.c_int
 
     def _start_epoch(pid: int) -> Optional[float]:
-        info = _ProcBsdInfo()
-        received = _LIBPROC.proc_pidinfo(
-            ctypes.c_int(pid), ctypes.c_int(_PROC_PIDTBSDINFO),
-            ctypes.c_ulonglong(0), ctypes.byref(info),
-            ctypes.c_int(ctypes.sizeof(info)),
-        )
-        if received <= 0:
-            return None
-        if info.pbi_pid != pid:
-            raise ProtocolRefusal(
-                "codex_wait_start_time_unmeasurable",
-                "the process start layout did not read back the queried pid",
-                remedy=(
-                    "re-measure the proc_pidinfo proc_bsdinfo layout against "
-                    "/bin/ps -o lstart= and update _ProcBsdInfo; until then the "
-                    "holder classifies unproven and work stays held"
-                ),
-            )
-        if info.pbi_start_tvusec >= 1_000_000:
-            raise ProtocolRefusal(
-                "codex_wait_start_time_unmeasurable",
-                "the process start microseconds are outside a timeval",
-                remedy=(
-                    "re-measure the proc_pidinfo proc_bsdinfo layout against "
-                    "/bin/ps -o lstart= and update _ProcBsdInfo; until then the "
-                    "holder classifies unproven and work stays held"
-                ),
-            )
-        return info.pbi_start_tvsec + info.pbi_start_tvusec / 1e6
+        info = _darwin_process_info(pid)
+        return None if info is None else info["process_start_epoch"]
 
 else:
-
-    def _start_epoch(pid: int) -> Optional[float]:
-        try:
-            stat_raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-            boot_raw = Path("/proc/stat").read_text(encoding="utf-8")
-        except OSError:
-            return None
-        after_comm = stat_raw.rpartition(")")[2].split()
-        if len(after_comm) < 22:
-            return None
-        boot = None
-        for line in boot_raw.splitlines():
-            if line.startswith("btime "):
-                boot = int(line.split()[1])
-                break
-        ticks_per_second = os.sysconf("SC_CLK_TCK")
-        if boot is None or ticks_per_second <= 0:
-            return None
-        return boot + int(after_comm[19]) / ticks_per_second
+    _start_epoch = _linux_start_epoch
 
 
 def process_start_epoch(pid: int) -> Optional[float]:
     """Measure one process's start as seconds since the epoch, or None.
 
-    ``None`` is absent: a dead pid, or a live one this host cannot measure.
+    ``None`` means absent or unmeasurable; native access errors are typed refusals.
     """
 
     if not isinstance(pid, int) or isinstance(pid, bool) or not 1 <= pid <= _PID_BOUND:
@@ -180,6 +234,7 @@ def process_start_epoch(pid: int) -> Optional[float]:
 
 def write_holder_testimony(
     root: FloatiRoot, node_id: str, session_id: str,
+    *, invocation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Record who holds the claim: this process's pid and measured start.
 
@@ -189,6 +244,11 @@ def write_holder_testimony(
 
     node = validate_identifier(node_id, "node")
     session = validate_session_id(session_id)
+    if invocation_id is not None and (
+        not isinstance(invocation_id, str)
+        or re.fullmatch(r"stop-hold-[0-9a-f]{32}", invocation_id) is None
+    ):
+        raise ValueError("holder invocation must name the actual native Stop hold")
     pid = os.getpid()
     measured = process_start_epoch(pid)
     if measured is None:
@@ -210,6 +270,14 @@ def write_holder_testimony(
         "process_start_epoch": measured,
         "timestamp": utc_now(),
     }
+    if invocation_id is not None:
+        row["invocation_id"] = invocation_id
+    _write_holder_row(root, node, row)
+    return row
+
+
+def _write_holder_row(root: FloatiRoot, node: str, row: Dict[str, Any]) -> None:
+    """Publish the existing bounded holder state; callers own its native guard."""
     encoded = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     path = holder_testimony_path(root, node)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +298,71 @@ def write_holder_testimony(
     finally:
         os.close(descriptor)
     os.replace(temporary, path)
+
+
+def _stable_holder_row(root: FloatiRoot, node: str) -> Optional[Dict[str, Any]]:
+    """Strict ordinary snapshot; malformed or racing state is never absence."""
+    from .recipient_mechanisms import _json, _read
+    path = root.tenant_home / holder_testimony_relative(node)
+    try:
+        snapshot = _read(path, _TESTIMONY_MAX_BYTES, with_identity=True)
+    except FileNotFoundError:
+        try:
+            _read(path, _TESTIMONY_MAX_BYTES, with_identity=True)
+        except FileNotFoundError:
+            return None
+        raise ValueError("holder appeared during absence observation")
+    row = _json(snapshot[0])
+    if _decode_holder_testimony(root, node, row) is None:
+        raise ValueError("holder state is not a valid testimony")
+    if _read(path, _TESTIMONY_MAX_BYTES, with_identity=True) != snapshot:
+        raise ValueError("holder changed during observation")
     return row
+
+
+def _holder_invocation_absent(root: FloatiRoot, node: str, invocation: str) -> bool:
+    try:
+        row = _stable_holder_row(root, node)
+        return row is None or row.get("invocation_id") != invocation
+    except (OSError, ValueError, TypeError, ProtocolRefusal, OverflowError, RecursionError):
+        return False
+
+
+def _owned_holder_for_start(root: FloatiRoot, start: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Recover a committed-then-raised publication only from retained native identity."""
+    row = _stable_holder_row(root, start["node_id"])
+    if row is None or row.get("invocation_id") != start["invocation_id"] or (
+            row["session_id"] != start["acting_session_id"] or row["pid"] != os.getpid()):
+        return None
+    measured = process_start_epoch(os.getpid())
+    if measured is None or abs(measured - row["process_start_epoch"]) > _START_TOLERANCE_SECONDS:
+        return None
+    return row
+
+
+def _retire_holder_invocation(root: FloatiRoot, node: str, owned: Dict[str, Any]) -> None:
+    """Retire only this process's exact acquired invocation under the node guard.
+
+    Keep process testimony for existing claim-liveness consumers. A late exit
+    cannot rewrite a successor's holder, even in the same acting session.
+    """
+    if owned.get("pid") != os.getpid() or not owned.get("invocation_id"):
+        return
+    from .recipient_mechanisms import _json, _read
+    path = holder_testimony_path(root, node)
+    try:
+        snapshot = _read(path, _TESTIMONY_MAX_BYTES, with_identity=True)
+    except FileNotFoundError:
+        return
+    try:
+        current = _json(snapshot[0])
+    except (ValueError, UnicodeDecodeError):
+        return
+    if current != owned or _read(path, _TESTIMONY_MAX_BYTES, with_identity=True) != snapshot:
+        return
+    retired = dict(owned)
+    retired.pop("invocation_id")
+    _write_holder_row(root, node, retired)
 
 
 def read_holder_testimony(root: FloatiRoot, node_id: str) -> Optional[HolderTestimony]:
@@ -251,10 +383,15 @@ def read_holder_testimony(root: FloatiRoot, node_id: str) -> Optional[HolderTest
         row = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not isinstance(row, dict) or set(row) != {
+    return _decode_holder_testimony(root, node_id, row)
+
+
+def _decode_holder_testimony(root: FloatiRoot, node_id: str, row: Any) -> Optional[HolderTestimony]:
+    fields = {
         "schema_version", "kind", "tenant_id", "node_id", "session_id",
         "pid", "process_start_epoch", "timestamp",
-    }:
+    }
+    if not isinstance(row, dict) or set(row) not in (fields, fields | {"invocation_id"}):
         return None
     if row["schema_version"] != _TESTIMONY_SCHEMA_VERSION or row["kind"] != HOLDER_TESTIMONY_KIND:
         return None
@@ -264,7 +401,9 @@ def read_holder_testimony(root: FloatiRoot, node_id: str) -> Optional[HolderTest
     if not isinstance(pid, int) or isinstance(pid, bool) or not 1 <= pid <= _PID_BOUND:
         return None
     start = row["process_start_epoch"]
-    if isinstance(start, bool) or not isinstance(start, (int, float)) or start < 0:
+    if isinstance(start, bool) or not isinstance(start, (int, float)) or (
+        not math.isfinite(start) or start < 0
+    ):
         return None
     try:
         session = validate_session_id(row["session_id"])
@@ -273,8 +412,13 @@ def read_holder_testimony(root: FloatiRoot, node_id: str) -> Optional[HolderTest
     timestamp = row["timestamp"]
     if not isinstance(timestamp, str) or not 1 <= len(timestamp) <= 64:
         return None
+    invocation = row.get("invocation_id")
+    if "invocation_id" in row and (not isinstance(invocation, str)
+            or re.fullmatch(r"stop-hold-[0-9a-f]{32}", invocation) is None):
+        return None
     return HolderTestimony(
         session_id=session, pid=pid, process_start_epoch=float(start), timestamp=timestamp,
+        invocation_id=invocation,
     )
 
 

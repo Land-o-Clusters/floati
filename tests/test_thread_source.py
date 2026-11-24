@@ -46,9 +46,49 @@ class ThreadSourceTests(unittest.TestCase):
         command, methods, params, diagnostic = self.command(mode)
         return CodexLocalThreadSource._for_test(command), methods, params, diagnostic
 
-    def read_from_harness(self, mode: str, *, deadline: float = 1.0):
+    def read_from_harness(self, mode: str, *, deadline: float = 1.0, controlled: bool = False):
         source, methods, params, diagnostic = self.source(mode)
-        result = source.read(THREAD_ID, deadline_seconds=deadline)
+        if controlled:
+            from types import SimpleNamespace
+            import floati.thread_source as thread_source
+
+            native_select = thread_source.select
+            native_send = thread_source._send
+            native_cleanup = thread_source._cleanup
+            native_time = thread_source.time
+            thread_read_sent = [False]
+
+            def ready_select(readers, writers, exceptional, timeout=None):
+                if timeout is not None and timeout > 0 and not (
+                    mode == "hang" and thread_read_sent[0]
+                ):
+                    # Each native chunk waits for actual fixture bytes/EOF,
+                    # including oversized frames split by pipe backpressure.
+                    # Scheduling between chunks is outside the parser clock.
+                    return native_select.select(readers, writers, exceptional)
+                # Trailing-byte probes remain zero-time observations. The
+                # initialized-but-silent hang keeps its native deadline wait.
+                return native_select.select(readers, writers, exceptional, timeout)
+
+            def send(stream, message):
+                result = native_send(stream, message)
+                if message.get("id") == 2 and message.get("method") == "thread/read":
+                    thread_read_sent[0] = True
+                return result
+
+            def cleanup(process):
+                # Cleanup has its own real termination/reaping clocks. Do
+                # not freeze them along with the protocol observation clock.
+                with mock.patch.object(thread_source, "time", native_time):
+                    return native_cleanup(process)
+
+            with mock.patch.object(thread_source, "time", SimpleNamespace(monotonic=lambda: 0.0)),\
+                    mock.patch.object(thread_source, "select", SimpleNamespace(select=ready_select)),\
+                    mock.patch.object(thread_source, "_send", send),\
+                    mock.patch.object(thread_source, "_cleanup", cleanup):
+                result = source.read(THREAD_ID, deadline_seconds=deadline)
+        else:
+            result = source.read(THREAD_ID, deadline_seconds=deadline)
         method_rows = methods.read_text(encoding="utf-8").splitlines()
         parameter_row = (
             json.loads(params.read_text(encoding="utf-8")) if params.exists() else None
@@ -159,9 +199,9 @@ class ThreadSourceTests(unittest.TestCase):
         }
         for mode, reason in expected.items():
             with self.subTest(mode=mode):
-                lawful, _, _, _ = self.read_from_harness("idle")
+                lawful, _, _, _ = self.read_from_harness("idle", controlled=True)
                 self.assertEqual("observed", lawful.observation_outcome)
-                result, _, _, _ = self.read_from_harness(mode, deadline=0.25)
+                result, _, _, _ = self.read_from_harness(mode, deadline=0.25, controlled=True)
                 self.assertEqual(("unknown", reason), (result.observation_outcome, result.observation_reason))
                 self.assertEqual(("unknown", None, None), (result.provider_status, result.active_flags, result.provider_updated_at))
 

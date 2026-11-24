@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_event, wait_join
 from tests.test_cli import LAUNCHER
 
 import fcntl
@@ -219,8 +220,12 @@ class GovernedLedgerRepairTests(unittest.TestCase):
         """Catches G4 accepting an absolute, traversing, or alternate ledger coordinate."""
         before = self._snapshot()
         repair = self._repair()
-        for ledger in (str(self.ledger), "../events.jsonl", "other.jsonl"):
-            with self.subTest(ledger=ledger):
+        for case_index, ledger in enumerate((str(self.ledger), "../events.jsonl", "other.jsonl")):
+            with self.subTest(case=(
+                "absolute-selected-ledger",
+                "parent-traversal-events-ledger",
+                "alternate-other-ledger",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal):
                     repair.quarantine(ledger, self.bad_id, key="repair-1")
                 self.assertEqual(before, self._snapshot())
@@ -339,7 +344,7 @@ class GovernedLedgerRepairTests(unittest.TestCase):
             fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
             worker = threading.Thread(target=quarantine_while_contended)
             worker.start()
-            self.assertTrue(started.wait(1), "repair thread did not start")
+            self.assertTrue(wait_event(started, "test_ledger_repair started"), "repair thread did not start")
             self.assertFalse(
                 finished.wait(0.15),
                 "repair must not finish while another holder owns events.jsonl.lock",
@@ -347,7 +352,7 @@ class GovernedLedgerRepairTests(unittest.TestCase):
             self.assertEqual(before, self._snapshot())
             fcntl.flock(holder.fileno(), fcntl.LOCK_UN)
 
-        worker.join(2)
+        wait_join(worker, "test_ledger_repair worker")
         self.assertFalse(
             worker.is_alive(), "repair did not proceed after the lock was released"
         )

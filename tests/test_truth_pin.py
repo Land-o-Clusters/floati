@@ -35,6 +35,7 @@ not been caught yet.
 from __future__ import annotations
 
 import re
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -308,12 +309,16 @@ class TruthPinTests(unittest.TestCase):
         )
 
     def test_a_fifth_outbound_path_reds_and_names_the_new_path(self) -> None:
-        planted = REPOSITORY_ROOT / "floati" / "_truth_pin_planted_egress.py"
-        self.addCleanup(lambda: planted.exists() and planted.unlink())
+        temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
+        self.addCleanup(temporary.cleanup)
+        source = Path(temporary.name) / "floati"
+        shutil.copytree(REPOSITORY_ROOT / "floati", source, symlinks=True)
+        planted = source / "_truth_pin_planted_egress.py"
         planted.write_text("import http.client\n", encoding="utf-8")
         findings = truth_pin_findings(
             README.read_text(encoding="utf-8"),
             TRUTH.read_text(encoding="utf-8"),
+            surface=measure_network_surface(source),
         )
         named = [row for row in findings if "census has 5" in row and "http.client" in row]
         self.assertTrue(named, findings)

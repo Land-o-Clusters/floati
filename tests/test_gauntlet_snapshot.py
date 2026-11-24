@@ -3,6 +3,7 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import hashlib
+import hmac
 import json
 import os
 import tempfile
@@ -38,6 +39,7 @@ from tests.hm3i_gauntlet_fixtures import (
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
 UUID = "018f7e9b3c117abc8def0123456789ab"
+INBOX_NOTE = "snapshot gauntlet"
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,24 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             if anchor["byte_offset"] > 0
         )
 
+    @staticmethod
+    def rewrite_inbox(
+        case: ReaderCase,
+        mutation: Callable[[dict[str, object]], None],
+        *,
+        authenticate: bool = True,
+    ) -> None:
+        def encode(value):
+            return json.dumps(value, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=True).encode("ascii")
+
+        envelope = json.loads(case.snapshot_path.read_bytes())
+        mutation(envelope["payload"])
+        if authenticate:
+            secret = (case.snapshot_path.parent / "seal.key").read_bytes()
+            envelope["seal"] = hmac.new(secret, encode(envelope["payload"]), hashlib.sha256).hexdigest()
+        case.snapshot_path.write_bytes(encode(envelope))
+
     def build_case(self, base: Path, name: str) -> ReaderCase:
         root = FloatiRoot.open_direct_home(base / f"gauntlet-{name}", create=True)
         registry = Registry(root)
@@ -95,13 +115,13 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         WorkLog(root).add("gauntlet item", public_ids.worker('alpha'), [], now=NOW)
         if name == "inbox":
             registry.register("bob", "worker")
-            EventLog(root).send(
+            message = EventLog(root).send(
                 public_ids.worker('alpha'),
                 "bob",
                 "floati",
                 "a" * 40,
                 "docs/evidence/HM3H-GAUNTLET.md",
-                "snapshot gauntlet",
+                INBOX_NOTE,
                 idempotency_key="snapshot-gauntlet",
             )
             answer = lambda: EventLog(root).present("bob")[0]
@@ -136,14 +156,24 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         else:
             raise AssertionError(f"unknown reader {name}")
         expected = answer()
-        snapshots = list(
-            (root.tenant_home / ".floati-snapshots" / "v0").glob(
-                f"{prefix}*.json"
+        if name == "inbox":
+            # Inbox deliberately replaced SnapshotStore with this durable
+            # recipient prefix. Exercise the artifact the next call trusts.
+            self.assertEqual([message], expected)
+            snapshot_path = root.tenant_home / ".inbox-prefix" / "checkpoint.json"
+            self.assertTrue(snapshot_path.is_file(), "inbox must publish its prefix proof")
+            self.assertEqual([], list(
+                (root.tenant_home / ".floati-snapshots" / "v0").glob("inbox-*.json")
+            ))
+        else:
+            snapshots = list(
+                (root.tenant_home / ".floati-snapshots" / "v0").glob(
+                    f"{prefix}*.json"
+                )
             )
-        )
-        self.assertEqual(1, len(snapshots), "Floati snapshot reader must publish one cache")
+            self.assertEqual(1, len(snapshots), "Floati snapshot reader must publish one cache")
+            snapshot_path = snapshots[0]
         self.assertFalse(os.path.lexists(root.tenant_home / f"{LEGACY_PREFIX}-snapshots"))
-        snapshot_path = snapshots[0]
         case = ReaderCase(name, root, answer, snapshot_path)
         self.assertEqual(expected, case.answer())
         return case
@@ -152,6 +182,10 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         case.snapshot_path.write_bytes(b'{"snapshot_version":0')
 
     def mutate_stale_boundary(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            self.rewrite_inbox(case, lambda payload: payload.__setitem__("offset", payload["offset"] - 1))
+            return
+
         def mutation(envelope: dict[str, object]) -> None:
             anchor = self.nonempty_anchor(envelope)
             anchor["byte_offset"] -= 1
@@ -159,6 +193,11 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         self.rewrite(case.snapshot_path, mutation)
 
     def mutate_past_eof(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            source = case.root.resolve_relative("events.jsonl")
+            self.rewrite_inbox(case, lambda payload: payload.__setitem__("offset", source.stat().st_size + 1))
+            return
+
         def mutation(envelope: dict[str, object]) -> None:
             anchor = self.nonempty_anchor(envelope)
             source = case.root.resolve_relative(anchor["path"])
@@ -167,6 +206,10 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         self.rewrite(case.snapshot_path, mutation)
 
     def mutate_ordinal(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            self.rewrite_inbox(case, lambda payload: payload.__setitem__("count", payload["count"] + 1))
+            return
+
         def mutation(envelope: dict[str, object]) -> None:
             anchor = self.nonempty_anchor(envelope)
             anchor["record_ordinal"] += 1
@@ -174,6 +217,11 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         self.rewrite(case.snapshot_path, mutation)
 
     def mutate_foreign_root(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            self.rewrite_inbox(case, lambda payload: payload["binding"].__setitem__(
+                "root", str(case.root.path) + "-other"))
+            return
+
         self.rewrite(
             case.snapshot_path,
             lambda envelope: envelope.__setitem__(
@@ -182,12 +230,28 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
         )
 
     def mutate_version(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            self.rewrite_inbox(case, lambda payload: payload["binding"].__setitem__("format", "inbox-prefix-unknown"))
+            return
+
         self.rewrite(
             case.snapshot_path,
             lambda envelope: envelope.__setitem__("snapshot_version", 1),
         )
 
     def mutate_payload_bytes(self, case: ReaderCase) -> None:
+        if case.name == "inbox":
+            # The recipient and message-ID entries wrap the same note differently.
+            # Replace its JSON string in every copy, leaving each stored seal intact.
+            note = json.dumps(INBOX_NOTE).encode("ascii")
+            changed = 0
+            for path in (case.snapshot_path.parent / "nodes").iterdir():
+                data = path.read_bytes()
+                if note in data:
+                    path.write_bytes(data.replace(note, b'"hostile cached message"'))
+                    changed += 1
+            self.assertGreaterEqual(changed, 2, "expected multiple cached copies of the selected note")
+            return
         self.rewrite(
             case.snapshot_path,
             lambda envelope: envelope["payload"].__setitem__(
@@ -195,6 +259,21 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             ),
             checksum=False,
         )
+
+    def mutate_directory_bytes(self, case: ReaderCase) -> None:
+        (case.snapshot_path.parent / "directory.bin").write_bytes(b"hostile directory")
+
+    def mutate_bucket_bytes(self, case: ReaderCase) -> None:
+        buckets = list((case.snapshot_path.parent / "buckets").iterdir())
+        self.assertTrue(buckets, "inbox must cache selected membership")
+        for path in buckets:
+            path.write_bytes(b"hostile bucket")
+
+    def mutate_seal_bytes(self, case: ReaderCase) -> None:
+        path = case.snapshot_path.parent / "seal.key"
+        original = path.read_bytes()
+        self.assertTrue(original)
+        path.write_bytes(bytes([original[0] ^ 1]) + original[1:])
 
     def test_every_hostile_snapshot_degrades_to_authoritative_answer(self) -> None:
         mutations = (
@@ -207,16 +286,28 @@ class HostileSnapshotGauntletTests(unittest.TestCase):
             self.mutate_payload_bytes,
         )
         for reader in ("status", "inbox", "replay", "board"):
-            for mutation in mutations:
+            reader_mutations = mutations
+            if reader == "inbox":
+                reader_mutations += (
+                    self.mutate_directory_bytes,
+                    self.mutate_bucket_bytes,
+                    self.mutate_seal_bytes,
+                )
+            for mutation in reader_mutations:
                 with self.subTest(reader=reader, mutation=mutation.__name__):
                     with tempfile.TemporaryDirectory() as directory:
                         case = self.build_case(Path(directory), reader)
                         expected = case.answer()
+                        source = case.root.resolve_relative("events.jsonl")
+                        original = source.read_bytes() if reader == "inbox" else None
                         mutation(case)
 
                         actual = case.answer()
 
                         self.assertEqual(expected, actual)
+                        if reader == "inbox":
+                            self.assertEqual(original, source.read_bytes())
+                            self.assertEqual(expected, case.answer())
 
     def test_symlinked_snapshot_directory_cannot_escape_tenant_or_fail_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -53,8 +53,12 @@ def _select_git_executable(explicit: object = None) -> str:
     )
 
 
-def _banked_sha_predicate() -> Callable[[str], None]:
-    """Return RB-1's send-side fence itself; prep-clear grows no second one."""
+def _banked_sha_predicate() -> Callable[..., None]:
+    """Return RB-1's send-side fence itself; prep-clear grows no second one.
+
+    The call passes the validated workspace so the pushed tip is judged
+    against the repository it was read from (SEND-SHA-RESOLVES-1).
+    """
 
     from .cli import _require_banked_sha
 
@@ -298,7 +302,7 @@ class PrepClear:
             )
 
         pushed_tip = state["pushed_tip"]
-        _banked_sha_predicate()(pushed_tip)
+        _banked_sha_predicate()(pushed_tip, str(path))
         recipient = self._architect(to)
 
         envelope = EventLog(self.root).send(

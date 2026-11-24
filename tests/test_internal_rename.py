@@ -49,7 +49,6 @@ FROZEN_IDENTITY_FORBIDDEN_TOKENS = (
 _LEGACY_MODULE_ROOT = RETIRED_SHORT
 LEGACY_MODULE_NAMESPACE = re.compile(
     rf"""
-    (?x)
     (?:
         (?<![A-Za-z0-9_]){re.escape(_LEGACY_MODULE_ROOT)}\.[A-Za-z_][A-Za-z0-9_]*
         |
@@ -62,7 +61,8 @@ LEGACY_MODULE_NAMESPACE = re.compile(
         \bpython(?:3)?\s+-m\s+{re.escape(_LEGACY_MODULE_ROOT)}
         (?:\.[A-Za-z_][A-Za-z0-9_]*)?(?=$|\s|[\"'])
     )
-    """
+    """,
+    re.VERBOSE,
 )
 
 

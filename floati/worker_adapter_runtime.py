@@ -22,15 +22,19 @@ def run_adapter_session(
     isolation_policy: Optional[WorkerIsolationPolicy],
     *,
     process_group_mode: str = "legacy",
+    native_thread_context: Optional[dict] = None,
 ) -> None:
     """Run the existing adapter callback protocol after isolation is ready."""
 
     try:
+        borrowed = isolation_policy is not None and isolation_policy.workspace_mode == "borrowed"
+        if borrowed != (native_thread_context is not None):
+            raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         if type(process_group_mode) is not str or process_group_mode not in {
             "legacy", "inherited",
         }:
             raise WorkerAdapterFailure("adapter_error")
-        if isolation_policy is not None and getattr(
+        if not borrowed and isolation_policy is not None and getattr(
             adapter, "requires_workspace", False
         ):
             set_prepared_workspace = getattr(
@@ -65,6 +69,23 @@ def run_adapter_session(
                         ("process_group", process_group)
                     )
                 )
+        deadline = time.monotonic() + deadline_seconds
+        if borrowed:
+            from .native_thread_protocol import NativeThreadEmitter
+            from .worker_bootstrap_protocol import validate_native_thread_context
+            native_context = validate_native_thread_context(native_thread_context)
+            slot = native_context["provider_state_binding"]
+            if (process_group_mode != "inherited"
+                or item.get("adhoc_binding") != native_context["workspace_binding"]
+                or item.get("workspace") != str(isolation_policy.workspace)
+                or slot["path"] != str(isolation_policy.provider_state)
+                or (slot["dev"], slot["ino"]) != isolation_policy.provider_state_identity):
+                raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
+            setter = getattr(adapter, "set_native_thread_context", None)
+            if not callable(setter):
+                raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
+            emitter = NativeThreadEmitter(native_context, channel=channel, deadline=deadline)
+            setter(native_context, emitter.emit)
         if spawn_context is not None:
             set_spawn_context = getattr(adapter, "set_spawn_context", None)
             if not callable(set_spawn_context):
@@ -81,7 +102,6 @@ def run_adapter_session(
                 deepcopy(effect_context),
                 lambda event: channel.send(("effect", deepcopy(event))),
             )
-        deadline = time.monotonic() + deadline_seconds
         handle = adapter.spawn(  # type: ignore[attr-defined]
             item, deadline_seconds=max(0.001, deadline - time.monotonic())
         )
@@ -92,6 +112,8 @@ def run_adapter_session(
         bindings = adapter.drive(  # type: ignore[attr-defined]
             handle, item, deadline_seconds=remaining
         )
+        if borrowed:
+            channel.send(("native_transport", getattr(adapter, "last_native_transport", None)))
         channel.send(("result", bindings))
         if effect_context is not None:
             remaining = deadline - time.monotonic()
@@ -111,7 +133,15 @@ def run_adapter_session(
                 raise WorkerAdapterFailure("adapter_error")
             channel.send(("observation_closed_ack", None))
     except WorkerAdapterFailure as failure:
-        channel.send(("failure", failure.code))
+        if native_thread_context is not None:
+            from .native_thread_protocol import _FAILURES
+            if failure.code in _FAILURES:
+                channel.send(("native_failure", {"reason_code": failure.code,
+                    "worker_failure": _FAILURES[failure.code]}))
+            else:
+                channel.send(("failure", failure.code))
+        else:
+            channel.send(("failure", failure.code))
     except Exception:
         channel.send(("failure", "adapter_error"))
     finally:

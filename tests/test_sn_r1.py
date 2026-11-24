@@ -21,6 +21,7 @@ from floati.cli import main
 from floati.jsonl import read_records
 from floati.records import is_known_record_kind, validate_record
 from floati.root import resolve_command_root
+from tests.banked_sha_fixture import banked_send_repository
 
 
 def root_entries(root: Path) -> dict[str, tuple[str, bytes]]:
@@ -70,14 +71,16 @@ class SNR1TimingReceiptTests(unittest.TestCase):
 
     def test_send_writes_one_post_bind_row(self) -> None:
         self.initialize()
+        repository, sha = banked_send_repository(Path(self.temp.name))
         status, artifact = self.run_cli(
             "send",
             "--root", str(self.home),
             "--from", "sender",
             "--to", "recipient",
             "--repo", "floati",
-            "--sha", "a" * 40,
-            "--doc", "docs/evidence/checkpoint.md",
+            "--sha", sha,
+            "--repository", str(repository),
+            "--doc", "note.md",
             "--note", "notice",
         )
         self.assertEqual(0, status, artifact)
@@ -143,14 +146,16 @@ class SNR1TimingReceiptTests(unittest.TestCase):
         """Identity bound, content refused: the row exists and names the code."""
 
         self.initialize()
+        repository, sha = banked_send_repository(Path(self.temp.name))
         status, artifact = self.run_cli(
             "send",
             "--root", str(self.home),
             "--from", "sender",
             "--to", "recipient",
             "--repo", "floati",
-            "--sha", "a" * 40,
-            "--doc", "docs/evidence/checkpoint.md",
+            "--sha", sha,
+            "--repository", str(repository),
+            "--doc", "note.md",
             "--note", "one line\nand a second",
         )
         self.assertEqual(20, status, artifact)

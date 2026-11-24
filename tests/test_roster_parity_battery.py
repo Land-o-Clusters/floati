@@ -270,9 +270,10 @@ class RosterParityBattery(unittest.TestCase):
         )
         process = mock.Mock(spec=subprocess.Popen)
         process.pid = 4242
-        process.wait.side_effect = subprocess.TimeoutExpired(
-            cmd="fake-harness", timeout=10,
-        )
+        process.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="fake-harness", timeout=10), 0,
+        ]
+        process.returncode = 0
         adapter._active_process = process
 
         with mock.patch(

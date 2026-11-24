@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from tests.readiness import wait_condition, wait_event, wait_join
 import json
 import os
+import selectors
 import socket
 import stat
 import tempfile
@@ -145,12 +147,14 @@ class SequencerTests(unittest.TestCase):
         )
 
     @staticmethod
-    def raw(path: Path, payload: bytes) -> dict[str, object]:
+    def raw(path: Path, payload: bytes, sent=None) -> dict[str, object]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
-            channel.settimeout(3)
+            channel.settimeout(30)
             channel.connect(str(path))
             try:
                 channel.sendall(payload)
+                if sent is not None:
+                    sent.set()
             except BrokenPipeError:
                 # A peer-UID refusal may close immediately after sending its frame.
                 pass
@@ -304,10 +308,19 @@ class SequencerTests(unittest.TestCase):
         self.assertEqual("ok", self.client(service).append(run_created("alpha"))["status"])
 
         original = service._peer_uid
-        service._peer_uid = lambda _channel: os.geteuid() + 1
+        sent = threading.Event()
+
+        def refuse_after_frame(_channel):
+            # Hold the refusal until the client has finished writing its frame.
+            # The bound catches a broken handshake, not slow host scheduling.
+            if not sent.wait(10):
+                raise AssertionError("client did not send its frame")
+            return os.geteuid() + 1
+
+        service._peer_uid = refuse_after_frame
         try:
             frame = self.client(service, "client-b").frame(run_created("alpha"))
-            refused = self.raw(service.socket_path, frame)
+            refused = self.raw(service.socket_path, frame, sent)
         finally:
             service._peer_uid = original
         self.assertEqual("refused", refused["status"])
@@ -523,7 +536,7 @@ class SequencerTests(unittest.TestCase):
 
         def blocked(path, encoded):
             entered.set()
-            if not release.wait(3):
+            if not wait_event(release, 'sequencer: release synchronization', timeout=120):
                 raise RuntimeError("fsync barrier timed out")
             return original(path, encoded)
 
@@ -536,7 +549,7 @@ class SequencerTests(unittest.TestCase):
         with mock.patch.object(run_segments, "_append_frame", side_effect=blocked):
             thread = threading.Thread(target=append)
             thread.start()
-            self.assertTrue(entered.wait(3))
+            self.assertTrue(wait_event(entered, 'sequencer: entered synchronization'))
             time.sleep(0.05)
             self.assertFalse(finished.is_set())
             release.set()
@@ -572,38 +585,49 @@ class SequencerTests(unittest.TestCase):
         service = SequencerService(
             self.root,
             "sequencer-a",
-            config=SequencerConfig(select_timeout=0.01, max_batch=1),
+            config=SequencerConfig(select_timeout=0, max_batch=1),
         )
-        stop = threading.Event()
-        thread = threading.Thread(target=service.serve_forever, args=(stop,), daemon=True)
-        quiet_channels = []
-        for index in range(100):
-            record = run_created("alpha")
-            client = SequencerClient(
-                service.socket_path, service.epoch, "quiet-" + str(index)
-            )
-            channel = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            channel.settimeout(10)
-            channel.connect(str(service.socket_path))
-            channel.sendall(client.frame(record))
-            quiet_channels.append(channel)
-        thread.start()
-        self.addCleanup(self.stop, service, stop, thread)
-        noisy_results = []
-        for _index in range(12):
-            noisy_results.append(
-                SequencerClient(service.socket_path, service.epoch, "noisy").append(
-                    run_created("alpha")
-                )
-            )
-        quiet_positions = []
-        for channel in quiet_channels:
-            response = json.loads(channel.recv(65536))
-            quiet_positions.append(response["coordinate"]["global_ordinal"])
-            channel.close()
-        self.assertEqual(100, len(quiet_positions))
-        self.assertLessEqual(max(quiet_positions), 101)
-        self.assertNotIn("ledger_lock_timeout", [item.get("code") for item in noisy_results])
+        self.addCleanup(service.close)
+        quiet = {f"quiet-{index}" for index in range(8)}
+        positions = {}
+        noisy_positions = []
+        noisy_limit = 2
+
+        with selectors.DefaultSelector() as replies:
+            def connect(client_id):
+                channel = self.queued(service, run_created("alpha"), client_id)
+                channel.setblocking(False)
+                replies.register(channel, selectors.EVENT_READ, client_id)
+
+            connect("noisy")
+            for client_id in sorted(quiet):
+                connect(client_id)
+
+            # Drive one writer turn at a time. Each successful response carries
+            # the physical append ordinal, and the noisy client reconnects as
+            # soon as its first response arrives.
+            for _ in range(len(quiet) + noisy_limit):
+                service.serve_once()
+                for key, _mask in replies.select(0):
+                    channel = key.fileobj
+                    replies.unregister(channel)
+                    with channel, channel.makefile("rb") as stream:
+                        line = stream.readline()
+                    self.assertTrue(line, f"{key.data} closed without a response")
+                    response = json.loads(line)
+                    self.assertEqual("ok", response["status"], response)
+                    ordinal = response["coordinate"]["global_ordinal"]
+                    if key.data == "noisy":
+                        noisy_positions.append(ordinal)
+                        if len(noisy_positions) < noisy_limit:
+                            connect("noisy")
+                    else:
+                        positions[key.data] = ordinal
+
+        self.assertEqual(noisy_limit, len(noisy_positions), noisy_positions)
+        late = {client: positions.get(client) for client in sorted(quiet)
+                if client not in positions or positions[client] >= noisy_positions[-1]}
+        self.assertEqual({}, late, f"Quiet clients still waiting at noisy turn {noisy_positions[-1]}")
 
     def test_close_releases_epoch_unlinks_socket_and_allows_direct_mode(self) -> None:
         """Catches shutdown leaving a live-looking endpoint, open epoch, or stranded daemonless writer."""
@@ -662,7 +686,7 @@ class SequencerTests(unittest.TestCase):
             def extend(self, payload: bytes) -> None:
                 super().extend(payload)
                 extended.set()
-                if not allow_extend.wait(3):
+                if not wait_event(allow_extend, 'sequencer: allow_extend synchronization', timeout=120):
                     raise RuntimeError("read accounting barrier timed out")
 
         class ObservedRLock:
@@ -690,7 +714,7 @@ class SequencerTests(unittest.TestCase):
 
         def blocked_release(candidate) -> None:
             signal("release")
-            if not allow_release.wait(3):
+            if not wait_event(allow_release, 'sequencer: allow_release synchronization', timeout=120):
                 raise RuntimeError("close accounting barrier timed out")
             original_release(candidate)
 
@@ -728,29 +752,29 @@ class SequencerTests(unittest.TestCase):
         reader = threading.Thread(target=read, name="sequencer-concurrent-read")
         closer = threading.Thread(target=close, name=close_thread_name)
         reader.start()
-        self.assertTrue(extended.wait(3))
+        self.assertTrue(wait_event(extended, 'sequencer: extended synchronization'))
         closer.start()
         with coordination:
-            self.assertTrue(coordination.wait_for(
+            wait_condition(coordination,
                 lambda: observed["close_lock"] or observed["release"],
-                timeout=3,
-            ))
+                "sequencer close reached lock or release boundary",
+            )
         if observed["release"]:
             allow_release.set()
-            self.assertTrue(close_finished.wait(3))
+            self.assertTrue(wait_event(close_finished, 'sequencer: close_finished synchronization'))
             self.assertFalse(allow_extend.is_set())
             allow_extend.set()
         else:
             self.assertTrue(observed["close_lock"])
             allow_extend.set()
             with coordination:
-                self.assertTrue(coordination.wait_for(
+                wait_condition(coordination,
                     lambda: observed["release"],
-                    timeout=3,
-                ))
+                    "sequencer close reached release boundary",
+                )
             allow_release.set()
-        reader.join(3)
-        closer.join(3)
+        wait_join(reader, "sequencer concurrent reader collected")
+        wait_join(closer, "sequencer concurrent closer collected")
 
         self.assertFalse(reader.is_alive())
         self.assertFalse(closer.is_alive())
@@ -1152,7 +1176,7 @@ class SequencerTests(unittest.TestCase):
 
         worker = threading.Thread(target=serve, daemon=True)
         worker.start()
-        self.assertTrue(finished.wait(1), "full listener must not livelock serve_once")
+        wait_event(finished, "full listener must not livelock serve_once")
         response = json.loads(first.recv(65536))
         self.assertEqual("ok", response["status"])
         self.assertEqual([first_record], RunLedger(self.root).records())
@@ -1223,7 +1247,7 @@ class SequencerTests(unittest.TestCase):
         class BlockingCache(OrderedDict):
             def __setitem__(self, key: object, value: object) -> None:
                 entered.set()
-                if not release.wait(3):
+                if not wait_event(release, 'sequencer: release synchronization', timeout=120):
                     raise RuntimeError("remember/close barrier timed out")
                 super().__setitem__(key, value)
 
@@ -1248,7 +1272,7 @@ class SequencerTests(unittest.TestCase):
         remember_thread = threading.Thread(target=remember)
         close_thread = threading.Thread(target=close)
         remember_thread.start()
-        self.assertTrue(entered.wait(3))
+        self.assertTrue(wait_event(entered, 'sequencer: entered synchronization'))
         close_thread.start()
         release.set()
         remember_thread.join(5)

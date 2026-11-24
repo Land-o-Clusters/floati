@@ -22,6 +22,7 @@ from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.waiter_timing import scripted_readiness
 
 
 class WakeWaiterContinuityTests(unittest.TestCase):
@@ -122,7 +123,7 @@ class WakeWaiterContinuityTests(unittest.TestCase):
             stdout=io.StringIO(),
             stderr=exhausted_err,
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
         self.assertEqual(
             ["exhausted"],
@@ -142,7 +143,7 @@ class WakeWaiterContinuityTests(unittest.TestCase):
         )
         self.assertEqual(["paused"], [row["reason_code"] for row in self.rows(root)])
 
-        # not claimant after an in-flight takeover
+        # A former claimant is superseded after an in-flight takeover.
         root, workspace, participant = self.fixture("not-claimant")
         consent = CodexWaitConsentLedger(root).require_armed(participant.binding)
         CodexWaitSessionLedger(root).arm(
@@ -164,9 +165,9 @@ class WakeWaiterContinuityTests(unittest.TestCase):
             bus_home=root.path,
             hook_payload={"cwd": str(workspace), "session_id": "seat-primary"},
             stdout=io.StringIO(), stderr=io.StringIO(),
-            monotonic=lambda: clock[0], sleep=takeover,
+            monotonic=lambda: clock[0], wait_readable=scripted_readiness((takeover), interval=(1.0)), sleep=takeover,
         )
-        self.assertEqual(["not_claimant"], [row["reason_code"] for row in self.rows(root)])
+        self.assertEqual(["superseded_session"], [row["reason_code"] for row in self.rows(root)])
 
         # breaker
         root, workspace, participant = self.fixture("breaker")
@@ -252,7 +253,7 @@ class WakeWaiterContinuityTests(unittest.TestCase):
             stdout=stdout,
             stderr=stderr,
             monotonic=lambda: clock[0],
-            sleep=sleep,
+            wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
         )
 
         self.assertEqual(1.0, clock[0])

@@ -4,6 +4,7 @@ from floati import fixture_ids as public_ids
 
 import hashlib
 import json
+import os
 import re
 import tempfile
 import unittest
@@ -1728,7 +1729,7 @@ class SchemaContractTests(unittest.TestCase):
             "idempotency_key",
         }
         self.assertEqual(expected, set(envelope["required"]))
-        optional = {"reply_to", "worker_session_id", "attempt_binding"}
+        optional = {"reply_to", "worker_session_id", "attempt_binding", "address_preview", "message_class"}
         self.assertEqual(expected | optional, set(envelope["properties"]))
         self.assertTrue(optional.isdisjoint(envelope["required"]))
         self.assertEqual(
@@ -1808,6 +1809,68 @@ class SchemaContractTests(unittest.TestCase):
                 "work-018f0f23abcd71238000000000000000",
             )
         )
+
+    def test_bound_record_common_schema_reserves_all_four_closed_coordinates(self) -> None:
+        common = V1_SCHEMA_DIR / "bound-record-common.schema.json"
+        repository = "/repository"
+        sha = "a" * 40
+        coordinates = [
+            {"kind": "ref", "repository": repository, "ref": "HEAD", "commit": sha, "paths": []},
+            {"kind": "commit", "repository": repository, "commit": sha},
+            {"kind": "files", "repository": repository, "files": [{"path": "result.txt", "sha256": "b" * 64}]},
+            {"kind": "brief", "dispatch_id": "dispatch-example", "revision": None},
+        ]
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as directory:
+            stored = Path(directory) / common.name
+            stored.write_bytes(common.read_bytes())
+            schema = Path(directory) / "coordinates.schema.json"
+            schema.write_text(json.dumps({"$ref": common.name + "#/$defs/coordinates"}), encoding="utf-8")
+            for coordinate in coordinates:
+                with self.subTest(kind=coordinate["kind"]):
+                    validate_json_schema([dict(coordinate, provenance="observed")], schema)
+                    validate_json_schema([dict(coordinate, provenance="claimed")], schema)
+                    with self.assertRaises(SchemaValidationError):
+                        validate_json_schema([dict(coordinate, provenance="derived")], schema)
+                    with self.assertRaises(SchemaValidationError):
+                        validate_json_schema([dict(coordinate, provenance="observed", extra=True)], schema)
+
+    def test_work_notification_journal_enforces_intent_and_sent_null_rules(self) -> None:
+        """A notification cannot claim a send without its exact envelope evidence."""
+        suffix = "018f0f23abcd71238000000000000000"
+        intent = {
+            "schema_version": 0, "id": "work-notification-" + suffix,
+            "tenant_id": "alpha", "timestamp": "2026-08-15T12:00:00.000Z",
+            "kind": "work_notification_record", "work_item_id": "work-" + suffix,
+            "phase": "intent", "transition": "add", "dispatcher": "bravo",
+            "recipient": None, "transition_id": None, "envelope_id": None,
+            "idempotency_key": None,
+        }
+        sent = dict(intent, phase="sent", recipient=public_ids.worker('alpha'),
+                    envelope_id="msg-" + suffix, idempotency_key="work-add-work-" + suffix + "-" + public_ids.worker('alpha'))
+        completed = dict(sent, transition="complete", transition_id="transition-" + suffix)
+        valid = (intent, sent, completed)
+        invalid = [dict(intent, transition="complete")]
+        invalid.extend(dict(intent, **{field: sent[field]})
+                       for field in ("recipient", "envelope_id", "idempotency_key"))
+        invalid.append(dict(intent, transition_id=completed["transition_id"]))
+        invalid.extend(dict(sent, **{field: None})
+                       for field in ("recipient", "envelope_id", "idempotency_key", "dispatcher"))
+        invalid.extend((dict(sent, transition_id=completed["transition_id"]),
+                        dict(completed, transition_id=None), dict(sent, extra="foreign"),
+                        dict(sent, recipient="../foreign"), dict(sent, envelope_id="foreign"),
+                        dict(sent, work_item_id="foreign"), dict(sent, idempotency_key="x" * 129)))
+        schema = SCHEMA_DIR / "work-notification-record.schema.json"
+        for expected, rows in ((True, valid), (False, invalid)):
+            for candidate in rows:
+                with self.subTest(expected=expected, candidate=candidate):
+                    if expected:
+                        self.assertEqual(candidate, validate_record(candidate, "alpha", frozenset({"work_notification_record"}), integrity=False))
+                        validate_json_schema(candidate, schema)
+                    else:
+                        with self.assertRaises(ProtocolRefusal):
+                            validate_record(candidate, "alpha", frozenset({"work_notification_record"}), integrity=False)
+                        with self.assertRaises(SchemaValidationError):
+                            validate_json_schema(candidate, schema)
 
     def test_work_item_runtime_accepts_only_the_floati_workspace_root(self) -> None:
         """Catches runtime acceptance of a retired governed-workspace coordinate."""
@@ -2034,6 +2097,50 @@ class SchemaContractTests(unittest.TestCase):
             invalid = dict(spawn_dispatch)
             invalid.pop("adapter")
             validate_json_schema(invalid, dispatch_path)
+
+
+class SchemaDocumentMemoIsContentKeyedTests(unittest.TestCase):
+    """HARBOR-SPEED-R-C: the parsed-schema memo can never serve a changed file stale."""
+
+    def test_rewritten_schema_and_ref_target_are_re_read(self) -> None:
+        from tests import schema_validation
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary)
+            schema = root / "root.schema.json"
+            target = root / "target.schema.json"
+            schema.write_text('{"$ref": "target.schema.json#/$defs/v"}', encoding="utf-8")
+            target.write_text('{"$defs": {"v": {"type": "string"}}}', encoding="utf-8")
+            validate_json_schema("text", schema)
+
+            # The memo is live: an unchanged re-validation parses nothing new.
+            entries = len(schema_validation._DOCUMENT_MEMO)
+            validate_json_schema("text", schema)
+            self.assertEqual(entries, len(schema_validation._DOCUMENT_MEMO))
+
+            # Same path, same length, same mtime, different bytes in the $ref
+            # target: a stat-keyed memo would still accept the string.
+            before = target.stat()
+            target.write_text('{"$defs": {"v": {"type": "number"}}}', encoding="utf-8")
+            os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+            self.assertEqual(before.st_size, target.stat().st_size)
+            self.assertEqual(before.st_mtime_ns, target.stat().st_mtime_ns)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema("text", schema)
+            validate_json_schema(1, schema)
+
+            # The root schema itself is re-read too.
+            schema.write_text('{"type": "boolean"}', encoding="utf-8")
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema(1, schema)
+            validate_json_schema(True, schema)
+
+            # Reverting the bytes is served the original document again.
+            schema.write_text('{"$ref": "target.schema.json#/$defs/v"}', encoding="utf-8")
+            target.write_text('{"$defs": {"v": {"type": "string"}}}', encoding="utf-8")
+            validate_json_schema("text", schema)
+            with self.assertRaises(SchemaValidationError):
+                validate_json_schema(1, schema)
 
 
 if __name__ == "__main__":

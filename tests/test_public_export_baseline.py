@@ -67,6 +67,7 @@ SHIPPED_DEPENDENCIES = (
     "tests/temp_roots.py",
     "tests/test_public_export_baseline.py",
     "tests/fixtures/baseline-1-f1/public-export-baseline.v0.json",
+    "scripts/fixture_finalizer.py",
     "scripts/regen_public_baseline.py",
 )
 

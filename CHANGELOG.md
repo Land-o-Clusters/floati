@@ -4,6 +4,10 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
+## [Unreleased]
+
+Ledger contract: `c7.20`.
+
 ## [0.1.2] — 2026-09-12
 
 ### Added

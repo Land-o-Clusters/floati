@@ -7,28 +7,52 @@ from datetime import datetime, timezone
 from typing import Mapping, Optional, Sequence
 
 
+def wake_eligible(message: Mapping[str, object]) -> bool:
+    """Legacy envelopes wake normally; FYI waits for explicit presentation."""
+
+    return message.get("message_class", "normal") != "fyi"
+
+
 @dataclass(frozen=True)
 class RecipientReadiness:
-    """What the registry lease says about a recipient's wake arrangement."""
+    """A frozen observation of the recipient's native wake arrangements."""
 
     state: str
     reason: str
     observed_at: str
+    mechanism_evidence: tuple = ()
 
     @classmethod
-    def from_lease(
-        cls, lease: Mapping[str, object], *, observed_at: str
-    ) -> "RecipientReadiness":
-        if lease.get("state") == "active":
-            return cls("recipient_wake_arranged", "active_lease", observed_at)
-        return cls("recipient_not_listening", "no_active_lease", observed_at)
+    def observe(cls, root, node_id: str, *, observed_at: str) -> "RecipientReadiness":
+        from .bus_epoch import epoch_guard
+        from .wake_hold import wake_coordination_guard
+        with epoch_guard(root, exclusive=False):
+            with wake_coordination_guard(root, node_id):
+                return cls._observe_already_guarded(root, node_id, observed_at=observed_at)
 
-    def artifact(self) -> dict[str, str]:
-        return {
+    @classmethod
+    def _observe_already_guarded(cls, root, node_id: str, *, observed_at: str) -> "RecipientReadiness":
+        from .recipient_mechanisms import observe_mechanisms
+        facts = observe_mechanisms(root, node_id, observed_at=observed_at)
+        reasons = ("active_lease", "stop_hook", "seat_board")
+        for reason, fact in zip(reasons, facts):
+            if fact["state"] == "arranged":
+                return cls("recipient_wake_arranged", reason, observed_at, tuple(facts))
+        if all(fact["state"] == "absent" for fact in facts):
+            return cls("recipient_not_listening", "all_mechanisms_absent", observed_at, tuple(facts))
+        return cls("unknown", "mechanism_evidence_incomplete", observed_at, tuple(facts))
+
+    def artifact(self) -> dict[str, object]:
+        result = {
             "state": self.state,
             "reason": self.reason,
             "observed_at": self.observed_at,
         }
+        if self.mechanism_evidence:
+            result["checked_mechanisms"] = ["lease", "stop_hook", "seat_board"]
+            result["mechanism_evidence"] = [dict(fact, sources=[dict(source) for source in fact["sources"]])
+                for fact in self.mechanism_evidence]
+        return result
 
 
 def oldest_unread_fact(

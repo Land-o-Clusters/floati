@@ -279,9 +279,10 @@ class ContextProjectionTests(unittest.TestCase):
         self.assertEqual("operator_supplied", projected["inputs"]["source"])
         self.assertEqual(
             {
-                "declared_roots": "<DECLARED_ROOTS_FILE>",
-                "managed_executable": "<MANAGED_EXECUTABLE>",
-                "profile": "<PROFILE>",
+                "current_session": "<CURRENT_NATIVE_SESSION>",
+                "next_session": "<NEXT_NATIVE_SESSION>",
+                "repo": "<REPO>",
+                "doc": "<DOC>",
                 "prior_mtime_ns": "<PRIOR_MTIME_NS>",
             },
             projected["inputs"]["values"],
@@ -296,12 +297,12 @@ class ContextProjectionTests(unittest.TestCase):
                 root,
                 "--node",
                 "builder-a",
-                "--declared-roots",
-                "<DECLARED_ROOTS_FILE>",
-                "--managed-executable",
-                "<MANAGED_EXECUTABLE>",
-                "--profile",
-                "<PROFILE>",
+                "--session",
+                "<CURRENT_NATIVE_SESSION>",
+                "--repo",
+                "<REPO>",
+                "--doc",
+                "<DOC>",
             ],
             projected["steps"][0]["argv"],
         )
@@ -322,10 +323,15 @@ class ContextProjectionTests(unittest.TestCase):
             ["--prior-mtime-ns", "<PRIOR_MTIME_NS>"],
             projected["steps"][1]["optional_argv"],
         )
-        expected_boot = list(projected["steps"][0]["argv"])
-        expected_boot[2] = "boot"
+        expected_boot = ["floati", "node", "boot", "--root", root,
+                         "--node", "builder-a", "--session", "<NEXT_NATIVE_SESSION>"]
         self.assertEqual(expected_boot, projected["steps"][2]["argv"])
         self.assertEqual(["--json"], projected["steps"][2]["optional_argv"])
+        self.assertEqual(1, projected["schema_version"])
+        self.assertEqual(
+            ["node_teardown_result", "node_state_flush_receipt", "node_boot_result"],
+            [step["artifact_kind"] for step in projected["steps"]],
+        )
         role = self.source.roles["builder-a"]
         self.assertEqual(
             {
@@ -407,7 +413,7 @@ class ContextProjectionTests(unittest.TestCase):
             self.assertNotIn("DRAFT -", board)
             validate_json_schema(
                 artifact,
-                self.repo / "schemas" / "v0" / "context-projection.schema.json",
+                self.repo / "schemas" / "v1" / "context-projection.schema.json",
             )
         turnover_board = turnover.render()
         self.assertLess(
@@ -418,6 +424,56 @@ class ContextProjectionTests(unittest.TestCase):
             turnover_board.index("node state-flush"),
             turnover_board.index("node boot"),
         )
+
+    def test_turnover_projected_commands_parse_with_explicit_native_inputs(self) -> None:
+        """A read-only recipe must print commands accepted by the live parser."""
+        from floati.cli import _parser
+
+        _, ContextTurnoverProjection, _, _ = _context_api()
+        artifact = ContextTurnoverProjection(
+            self.root, "builder-a", source=self.source
+        ).project()
+        parser = _parser()
+        replacements = {
+            "<CURRENT_NATIVE_SESSION>": "native-ending-session",
+            "<NEXT_NATIVE_SESSION>": "native-fresh-session",
+            "<REPO>": "floati",
+            "<DOC>": "docs/evidence/retention.md",
+            "<PRIOR_MTIME_NS>": "123",
+        }
+        for step in artifact["steps"]:
+            with self.subTest(verb=step["argv"][2]):
+                argv = [replacements.get(part, part) for part in
+                        step["argv"][1:] + step["optional_argv"]]
+                parsed = parser.parse_args(argv)
+                if parsed.node_command != "state-flush":
+                    expected = ("native-ending-session" if parsed.node_command == "teardown"
+                                else "native-fresh-session")
+                    self.assertEqual(expected, parsed.session)
+
+    def test_legacy_turnover_v0_remains_schema_valid_and_renderable(self) -> None:
+        """Historical recipes retain their original schema and reader contract."""
+        _, ContextTurnoverProjection, _, render = _context_api()
+        artifact = ContextTurnoverProjection(
+            self.root, "builder-a", source=self.source
+        ).project()
+        artifact["schema_version"] = 0
+        artifact["inputs"]["values"] = {
+            "declared_roots": "<DECLARED_ROOTS_FILE>",
+            "managed_executable": "<MANAGED_EXECUTABLE>",
+            "profile": "<PROFILE>",
+            "prior_mtime_ns": "<PRIOR_MTIME_NS>",
+        }
+        shared = ["--root", str(self.root.path), "--node", "builder-a",
+                  "--declared-roots", "<DECLARED_ROOTS_FILE>",
+                  "--managed-executable", "<MANAGED_EXECUTABLE>",
+                  "--profile", "<PROFILE>"]
+        for index, verb in ((0, "teardown"), (2, "boot")):
+            artifact["steps"][index]["artifact_kind"] = "node_" + verb + "_projection"
+            artifact["steps"][index]["argv"] = ["floati", "node", verb, *shared]
+        schema = self.repo / "schemas" / "v0" / "context-projection.schema.json"
+        validate_json_schema(artifact, schema)
+        self.assertIn("--declared-roots", render(artifact))
 
     def test_projection_schema_refuses_measurement_copy_in_status_message(self) -> None:
         """Catches the JSON contract admitting a digit, fraction, or ASCII gauge."""

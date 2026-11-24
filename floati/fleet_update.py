@@ -20,6 +20,8 @@ from .codex_hook_install import (
     commit_waiter_rebind,
     plan_waiter_rebind,
     stage_waiter_runtime,
+    STOP_HOOK_ACK_REMEDY,
+    STOP_HOOK_CHANGE_CONSEQUENCE,
 )
 from .codex_hook_trust import codex_hook_current_hash, observe_codex_waiter_hooks, observe_rebound_waiter
 from .deploy import DeploymentWriter, render_install_metadata
@@ -625,7 +627,12 @@ def _waiter_from_configuration(configuration: Path, store: Path) -> Tuple[bytes,
                         candidates.append(candidate)
     if len(candidates) != 1:
         raise ProtocolRefusal("fleet_update_waiter_binding_invalid", "configuration must name exactly one Floati Stop waiter")
-    launcher = _canonical_file(candidates[0], "fleet_update_waiter_binding_invalid")
+    launcher = candidates[0]
+    if launcher.is_symlink() and launcher.parent.name == "current":
+        # BL-11: the stable launcher is one symlink into the store; its
+        # resolution is the canonical generation file the hook runs.
+        launcher = launcher.resolve(strict=True)
+    launcher = _canonical_file(launcher, "fleet_update_waiter_binding_invalid")
     tree = launcher.parent.parent
     try:
         relative = tree.relative_to(store)
@@ -806,7 +813,7 @@ def _explicit_executable(value: object, code: str) -> str:
         ):
             raise OSError("not one canonical executable")
     except OSError as exc:
-        raise ProtocolRefusal(code, "executable must be an explicit canonical executable") from exc
+        raise ProtocolRefusal(code, "the executable must be an explicit canonical path") from exc
     return str(path)
 
 
@@ -1127,6 +1134,116 @@ def stage_fleet_update(
     }
 
 
+def _required_stop_hook_pairs(
+    plan: Dict[str, object],
+) -> List[Dict[str, str]]:
+    """Exact (preimage, target) pairs a G2 commit must name to rewrite Stop bytes.
+
+    Private on purpose: this is what the gate compares a supplied set
+    against. A caller that feeds this back as its acknowledgement has
+    computed consent, not given it (R5.1).
+    """
+
+    digest = plan.get("target_waiter_digest")
+    bindings = plan.get("waiter_bindings")
+    if (
+        not isinstance(digest, str)
+        or _SHA256.fullmatch(digest) is None
+        or not isinstance(bindings, list)
+    ):
+        return []
+    required: List[Dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        configuration = binding.get("configuration")
+        store = binding.get("store")
+        if not isinstance(configuration, str) or not isinstance(store, str):
+            continue
+        staged = plan_waiter_rebind(Path(configuration), Path(store), digest)
+        preimage = str(staged["current_hook_hash"])
+        target = str(staged["target_hook_hash"])
+        if preimage == target or (preimage, target) in seen:
+            continue
+        seen.add((preimage, target))
+        required.append({"preimage": preimage, "target": target})
+    return required
+
+
+def _named_rebind_ack(
+    staged_waiter: Dict[str, object],
+    acknowledged: set[tuple[str, str]],
+) -> Dict[str, Optional[str]]:
+    preimage = str(staged_waiter["current_hook_hash"])
+    target = str(staged_waiter["target_hook_hash"])
+    if (preimage, target) not in acknowledged:
+        return {}
+    return {
+        "acknowledge_stop_hook_change": f"{preimage}:{target}",
+    }
+
+
+def _require_supplied_stop_hook_acknowledgements(
+    plan: Dict[str, object],
+    supplied: object,
+) -> set[tuple[str, str]]:
+    required = {
+        (row["preimage"], row["target"])
+        for row in _required_stop_hook_pairs(plan)
+    }
+    if supplied is None:
+        supplied = []
+    if not isinstance(supplied, (list, tuple)):
+        raise ProtocolRefusal(
+            "stop_hook_definition_change_unacknowledged",
+            "Stop-hook acknowledgement must name exact preimage and target hashes",
+            remedy=STOP_HOOK_ACK_REMEDY,
+        )
+    pairs: set[tuple[str, str]] = set()
+    for row in supplied:
+        if not isinstance(row, dict):
+            raise ProtocolRefusal(
+                "stop_hook_definition_change_unacknowledged",
+                "Stop-hook acknowledgement must name exact preimage and target hashes",
+                remedy=STOP_HOOK_ACK_REMEDY,
+            )
+        preimage = row.get("preimage")
+        target = row.get("target")
+        if (
+            not isinstance(preimage, str)
+            or not isinstance(target, str)
+            or _SHA256.fullmatch(preimage) is None
+            or _SHA256.fullmatch(target) is None
+        ):
+            raise ProtocolRefusal(
+                "stop_hook_definition_change_unacknowledged",
+                "Stop-hook acknowledgement must name exact preimage and target hashes",
+                remedy=STOP_HOOK_ACK_REMEDY,
+            )
+        pairs.add((preimage, target))
+    if not required:
+        return pairs
+    if pairs != required:
+        bindings = plan.get("waiter_bindings")
+        hooks_path = Path(".")
+        if isinstance(bindings, list) and bindings and isinstance(bindings[0], dict):
+            hooks_path = Path(str(bindings[0].get("configuration", ".")))
+        named = next(iter(sorted(f"{pre}:{tgt}" for pre, tgt in required)))
+        raise ProtocolRefusal(
+            "stop_hook_definition_change_unacknowledged",
+            (
+                f"this operation would change the Stop-hook definition at {hooks_path}; "
+                f"{STOP_HOOK_CHANGE_CONSEQUENCE}"
+            ),
+            remedy=(
+                "re-run the operator native install with --acknowledge-stop-hook-change "
+                f"{named} after reading that {STOP_HOOK_CHANGE_CONSEQUENCE}"
+            ),
+        )
+    return pairs
+
+
 def commit_fleet_update_g2(
     *,
     plan: Dict[str, object],
@@ -1136,6 +1253,7 @@ def commit_fleet_update_g2(
     target_source: Path,
     installer_executable: str | Path,
     git_executable: str | Path,
+    stop_hook_acknowledgements: Optional[Sequence[Dict[str, str]]] = None,
     _fault_hook: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, object]:
     """Commit only G2's shared-install and waiter-binding saga steps.
@@ -1161,6 +1279,8 @@ def commit_fleet_update_g2(
     inputs = plan.get("inputs")
     if not isinstance(inputs, dict):
         raise ProtocolRefusal("fleet_update_plan_invalid", "G2 commit plan lacks named coordinates")
+    from .bridge_rebank import refuse_adopted_bridge_fleet_update
+    refuse_adopted_bridge_fleet_update(inputs["destination"], inputs["transport"])
     ledger = FleetUpdateReceiptLedger(root)
     # Pure staging is allowed before exclusion, but none of its observations
     # authorize a later mutation.  Re-run the whole decision after acquiring
@@ -1204,6 +1324,7 @@ def commit_fleet_update_g2(
             actor=actor,
             idempotency_key=idempotency_key,
             execution_token=execution_token,
+            stop_hook_acknowledgements=stop_hook_acknowledgements,
             fault_hook=_fault_hook,
         )
 
@@ -1267,6 +1388,7 @@ def _commit_fleet_update_g2_guarded(
     actor: str,
     idempotency_key: str,
     execution_token: object,
+    stop_hook_acknowledgements: Optional[Sequence[Dict[str, str]]],
     fault_hook: Optional[Callable[[str], None]],
 ) -> Dict[str, object]:
     """Perform the G2 saga while one exact root execution guard is held."""
@@ -1283,6 +1405,9 @@ def _commit_fleet_update_g2_guarded(
     )
     _verify_waiter_generation_targets(
         fresh.get("waiter_bindings"), fresh.get("target_waiter_digest")
+    )
+    acknowledged = _require_supplied_stop_hook_acknowledgements(
+        fresh, stop_hook_acknowledgements
     )
     start = ledger._start_guarded(
         fresh, actor, idempotency_key, execution_token
@@ -1389,7 +1514,9 @@ def _commit_fleet_update_g2_guarded(
             )
             ledger._require_execution_token(execution_token)
             commit_waiter_rebind(
-                staged_waiter, _fault_hook=fault_hook
+                staged_waiter,
+                _fault_hook=fault_hook,
+                **_named_rebind_ack(staged_waiter, acknowledged),
             )
             ledger._require_execution_token(execution_token)
             recovery = _waiter_recovery_evidence(staged_waiter)
@@ -1398,7 +1525,9 @@ def _commit_fleet_update_g2_guarded(
         else:
             ledger._require_execution_token(execution_token)
             commit_waiter_rebind(
-                staged_waiter, _fault_hook=fault_hook
+                staged_waiter,
+                _fault_hook=fault_hook,
+                **_named_rebind_ack(staged_waiter, acknowledged),
             )
             ledger._require_execution_token(execution_token)
             recovery = _waiter_recovery_evidence(staged_waiter)
@@ -1540,6 +1669,8 @@ def preview_fleet_update(
 
     root, selected_actor, raw_destination, raw_source, selected_source_sha, selected_channel, version, raw_binding, raw_registry, selected_transport = _lexical_inputs(root, actor, destination, target_source, target_source_sha, channel, version, binding_path, transport_registry, transport_name)
     selected_destination = _canonical_directory(raw_destination, "fleet_update_destination_invalid")
+    from .bridge_rebank import refuse_adopted_bridge_fleet_update
+    refuse_adopted_bridge_fleet_update(selected_destination, selected_transport)
     selected_source = _canonical_directory(raw_source, "fleet_update_target_invalid")
 
     metadata_path = _canonical_file(selected_destination / ".floati-install" / "manifest.v0.json", "fleet_update_install_metadata_invalid")
@@ -1790,6 +1921,8 @@ def commit_fleet_update_g3(
     )
 
     authenticated = authenticate_plan(plan, actor, root)
+    from .bridge_rebank import refuse_adopted_bridge_fleet_update
+    refuse_adopted_bridge_fleet_update(authenticated["inputs"]["destination"], authenticated["inputs"]["transport"])
     if authenticated.get("requires_epoch_roll") is False and (epoch_roll is not None or _epoch_roll_result is not None):
         raise ProtocolRefusal("fleet_update_epoch_roll_unexpected", "stable encoders must not carry epoch-roll testimony")
     if authenticated.get("requires_epoch_roll") is True:

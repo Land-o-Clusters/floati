@@ -59,6 +59,8 @@ class RoleAssignmentBackend(Protocol):
 
     def current_architect(self) -> Dict[str, Any]: ...
 
+    def current_role(self, node_id: str) -> Optional[Dict[str, Any]]: ...
+
     def commit_role(self, plan: RoleAssignmentPlan) -> Dict[str, Any]: ...
 
 
@@ -156,7 +158,12 @@ class RoleStepWizard:
             raise ProtocolRefusal("wizard_input_invalid", "wizard answers must be text")
         return answers
 
-    def _plan(self, values: Iterable[str]) -> RoleAssignmentPlan:
+    def _plan(
+        self,
+        values: Iterable[str],
+        *,
+        expected_predecessor: Optional[str] = None,
+    ) -> RoleAssignmentPlan:
         provided = self._input(values)
         if len(provided) < 2:
             raise ProtocolRefusal(
@@ -193,6 +200,32 @@ class RoleStepWizard:
             code="role_assignment_invalid",
             expected_node=node,
         )
+        latest = self.backend.current_role(node)
+        if latest is None:
+            predecessor = None
+        else:
+            from .doctor import _legacy_role_binding
+
+            if (
+                latest.get("template_role") != template.role
+                or _legacy_role_binding(template, latest) is None
+            ):
+                raise ProtocolRefusal(
+                    "role_preview_invalid", "role predecessor is stale"
+                )
+            predecessor = latest.get("id")
+            if (
+                latest.get("kind") != "registry_role_record"
+                or not isinstance(predecessor, str)
+                or not predecessor
+            ):
+                raise ProtocolRefusal(
+                    "role_preview_invalid", "role predecessor is stale"
+                )
+        if expected_predecessor is not None and predecessor != expected_predecessor:
+            raise ProtocolRefusal(
+                "role_preview_invalid", "role predecessor is stale"
+            )
         record: Dict[str, Any] = {
             "schema_version": 0,
             "id": self._id(),
@@ -205,7 +238,7 @@ class RoleStepWizard:
             "template_sha256": template.digest,
             "answers": resolved,
             "state": "active",
-            "predecessor_role_record_id": None,
+            "predecessor_role_record_id": predecessor,
         }
         return RoleAssignmentPlan(
             node_id=node,
@@ -222,14 +255,23 @@ class RoleStepWizard:
         )
         output.flush()
 
-    def assign_from_keys(self, values: Iterable[str], output: TextIO) -> Dict[str, Any]:
-        plan = self._plan(values)
+    def assign_from_keys(
+        self,
+        values: Iterable[str],
+        output: TextIO,
+        *,
+        expected_predecessor: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        plan = self._plan(values, expected_predecessor=expected_predecessor)
         self._preview(plan.record, output)
         return dict(self.backend.commit_role(plan))
 
-    def assign_plain(self, input_stream: TextIO, output: TextIO) -> Dict[str, Any]:
-        answers = []
-        for prompt in ("node id: ", "role template: "):
+    def assign_plain(self, input_stream: TextIO, output: TextIO, *,
+                     node_id: Optional[str] = None,
+                     expected_predecessor: Optional[str] = None) -> Dict[str, Any]:
+        answers = [] if node_id is None else [node_id]
+        prompts = ("node id: ", "role template: ") if node_id is None else ("role template: ",)
+        for prompt in prompts:
             output.write(prompt)
             output.flush()
             value = input_stream.readline()
@@ -245,4 +287,4 @@ class RoleStepWizard:
                 raise ProtocolRefusal("wizard_input_closed", "plain input ended before preview")
             answers.append(value.rstrip("\r\n"))
         output.write("\n")
-        return self.assign_from_keys(answers, output)
+        return self.assign_from_keys(answers, output, expected_predecessor=expected_predecessor)

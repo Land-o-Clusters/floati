@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/work-handoff-record.schema.json",
+  "title": "Floati Work Handoff Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "id", "tenant_id", "timestamp", "work_item_id",
+    "actor", "work_receipts", "coordinates", "supersedes", "runs",
+    "remaining", "statements", "idempotency_key", "request_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "work_handoff_record"},
+    "id": {"type": "string", "pattern": "^work-handoff-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "actor": {"$ref": "#/$defs/identifier"},
+    "work_receipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "completion_id", "provenance"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/transition"},
+        "completion_id": {"anyOf": [{"$ref": "#/$defs/transition"}, {"type": "null"}]},
+        "provenance": {"const": "observed"}
+      }
+    },
+    "coordinates": {
+      "type": "array", "minItems": 1, "maxItems": 2, "items": false,
+      "prefixItems": [
+        {
+          "allOf": [
+            {"$ref": "bound-record-common.schema.json#/$defs/ref"},
+            {"properties": {"ref": {"const": "HEAD"}, "paths": {"const": []}, "provenance": {"const": "observed"}}}
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "bound-record-common.schema.json#/$defs/files"},
+            {"properties": {"provenance": {"const": "observed"}}}
+          ]
+        }
+      ]
+    },
+    "supersedes": {
+      "type": ["string", "null"],
+      "pattern": "^work-handoff-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "runs": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/run"}},
+    "remaining": {"$ref": "#/$defs/claimed_texts"},
+    "statements": {"$ref": "#/$defs/claimed_texts"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+    "request_digest": {"$ref": "bound-record-common.schema.json#/$defs/sha256"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "transition": {"type": "string", "pattern": "^transition-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "exit_code", "test_count", "test_count_source", "provenance"],
+      "properties": {
+        "argv": {
+          "type": "array", "minItems": 1, "maxItems": 32,
+          "prefixItems": [{"type": "string", "pattern": "^/", "maxLength": 1024}],
+          "items": {"type": "string", "maxLength": 1024}
+        },
+        "exit_code": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "test_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 9223372036854775807},
+        "test_count_source": {"enum": ["unittest_result", "unittest_result_unavailable", "not_instrumented"]},
+        "provenance": {"const": "observed"}
+      },
+      "if": {"properties": {"test_count_source": {"const": "unittest_result"}}},
+      "then": {"properties": {"test_count": {"type": "integer"}}},
+      "else": {"properties": {"test_count": {"type": "null"}}}
+    },
+    "claimed_texts": {
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": {"$ref": "bound-record-common.schema.json#/$defs/claimed_text"}
+    }
+  }
+}

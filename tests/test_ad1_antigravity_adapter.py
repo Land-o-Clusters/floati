@@ -7,7 +7,9 @@ Live --version belongs in a sha-pinned receipt, not this suite.
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
 import importlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -50,27 +52,22 @@ class AntigravityWorkAdapterTests(unittest.TestCase):
         names = [name for name, _cls in ROSTER]
         self.assertIn("antigravity", names)
 
-    def test_named_agy_binary_is_present(self) -> None:
-        """Filesystem fact only. Do not launch the live binary here.
-
-        The path is operator-declared; where it is not declared or not present
-        the typed absence is asserted instead. THE DISCRIMINATION SURVIVES
-        EITHER WAY: whatever is declared must not be the Homebrew cask, which
-        is a different and older build (1.1.5, against the bound 1.1.22).
-        """
-        executable = harness_declaration.live_executable_or_typed_absence(
-            self, "agy"
-        )
-        if executable is None:
-            return
-        self.assertNotEqual(executable, AGY_CASK)
-        self.assertTrue(executable.is_file(), f"missing {executable}")
-        self.assertGreater(executable.stat().st_size, 0)
-
     def test_declaration_file_names_no_operator(self) -> None:
         """The declaration is the one file most likely to leak the account."""
         assert_source_names_no_operator(self, "tests/harness_declarations.json")
         assert_source_names_no_operator(self, "tests/harness_declaration.py")
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as directory:
+            declaration = Path(directory) / "harnesses.json"
+            declaration.write_text("{}", encoding="utf-8")
+            loader = unittest.TestLoader()
+            suite = loader.loadTestsFromName("tests.harbor_host_binaries")
+            self.assertEqual([], loader.errors)
+            output = io.StringIO()
+            with mock.patch.object(harness_declaration, "DECLARATION_PATH", declaration), redirect_stdout(output):
+                result = suite.run(unittest.TestResult())
+        self.assertTrue(result.wasSuccessful(), (result.errors, result.failures))
+        self.assertGreater(result.testsRun, 0)
+        self.assertIn("harness_agy_executable_undeclared", output.getvalue())
 
     def test_adapter_deadline_exceeded_uses_fixture_slow_binary(self) -> None:
         """Suite pins the adapter's bounded timeout, not a live agy quirk."""

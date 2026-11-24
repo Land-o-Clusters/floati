@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/mcp-integration-pin.schema.json",
+  "title": "Floati MCP Integration Pin v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "integration_id",
+    "server_command",
+    "server_executable_digest",
+    "server_config_digest",
+    "transport",
+    "declared_capabilities",
+    "tools",
+    "network_posture",
+    "first_seen",
+    "last_verified",
+    "pin_state",
+    "unknown_fields"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^mcp-integration-pin-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "mcp_integration_pin"},
+    "integration_id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "server_command": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "prefixItems": [
+        {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true}
+      ],
+      "items": {"type": "string", "minLength": 1, "maxLength": 4096, "x-floati-terminal-unsafe": true}
+    },
+    "server_executable_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "server_config_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "transport": {"enum": ["stdio", "local_socket"]},
+    "declared_capabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"}
+    },
+    "tools": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "x-floati-sorted-unique-key": "name",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "schema_digest", "description_digest"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 256, "x-floati-terminal-unsafe": true},
+          "schema_digest": {"$ref": "#/$defs/sha256"},
+          "description_digest": {"$ref": "#/$defs/sha256"}
+        }
+      }
+    },
+    "network_posture": {"enum": ["none", "pinned_server_only"]},
+    "first_seen": {"$ref": "#/$defs/timestamp"},
+    "last_verified": {"$ref": "#/$defs/timestamp"},
+    "pin_state": {"const": "pinned"},
+    "unknown_fields": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "x-floati-sorted-unique": true,
+      "items": {"enum": ["server_config_digest", "server_executable_digest"]}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"server_executable_digest": {"type": "null"}}, "required": ["server_executable_digest"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "server_executable_digest"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "server_executable_digest"}}}}}
+    },
+    {
+      "if": {"properties": {"server_config_digest": {"type": "null"}}, "required": ["server_config_digest"]},
+      "then": {"properties": {"unknown_fields": {"contains": {"const": "server_config_digest"}, "minContains": 1}}},
+      "else": {"properties": {"unknown_fields": {"not": {"contains": {"const": "server_config_digest"}}}}}
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"}
+  }
+}

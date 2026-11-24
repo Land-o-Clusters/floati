@@ -707,6 +707,63 @@ class SeatDeclaration:
                 binding.close()
 
     @classmethod
+    def publish_declared_workspace(
+        cls,
+        workspace: Path,
+        node_id: str,
+        root: FloatiRoot,
+        governance: FleetGovernance,
+    ) -> Tuple["SeatDeclaration", bool]:
+        """Publish the governed declaration at a mapped boarding workspace.
+
+        BL-10: the boarding coordinate is the mapped project directory, not the
+        node's state directory, so the migration writes the marker there from
+        the registry's own records. Idempotent: an agreeing marker is left
+        standing; a disagreeing marker refuses.
+        """
+        if not isinstance(root, FloatiRoot) or not isinstance(
+            governance, FleetGovernance
+        ):
+            raise ProtocolRefusal(
+                "workspace_declaration_invalid",
+                "workspace declaration requires validated root governance",
+            )
+        if governance.tenant_id != root.tenant_id or governance.root != str(root.path):
+            raise ProtocolRefusal(
+                "fleet_governance_mismatch",
+                "fleet governance does not match the validated root",
+            )
+        node = validate_identifier(node_id, "node")
+        path = Path(workspace)
+        if path.is_symlink() or not path.is_dir():
+            raise ProtocolRefusal(
+                "node_workspace_invalid",
+                "workspace declaration requires an existing workspace directory",
+            )
+        declaration = cls(
+            1,
+            root.tenant_id,
+            str(root.path),
+            node,
+            governance.topology,
+            governance.coordinator,
+            governance.coordinator_authority,
+            governance.owner_tier,
+        )
+        existing = cls.load(path)
+        if existing is not None:
+            if existing != declaration:
+                raise ProtocolRefusal(
+                    "workspace_identity_mismatch",
+                    "existing workspace declaration disagrees with the requested seat",
+                )
+            return existing, False
+        _write_new_json(
+            path / SEAT_MARKER, declaration.artifact(), label="workspace_declaration"
+        )
+        return declaration, True
+
+    @classmethod
     def _load_bound(cls, binding: WorkspaceBinding) -> Optional["SeatDeclaration"]:
         identity = _stat_at(binding.workspace_descriptor, SEAT_MARKER)
         if identity is None:

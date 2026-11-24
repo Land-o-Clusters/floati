@@ -43,7 +43,9 @@
       "pattern": "^(?!/)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:\\/|$))[^/]+(?:/[^/]+)*$"
     },
     "note": {"type": "string", "maxLength": 1024},
+    "message_class": {"enum": ["normal", "fyi"]},
     "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+    "address_preview": {"$ref": "../v1/recipient-preview.schema.json"},
     "reply_to": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
     "worker_session_id": {"type": "string", "minLength": 1, "maxLength": 512},
     "attempt_binding": {

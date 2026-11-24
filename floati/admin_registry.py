@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shlex
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, TYPE_CHECKING
 
@@ -34,6 +36,7 @@ class RegistryAdminBackend:
     ) -> None:
         self.root = root
         self.registry = Registry(root)
+        self._selected_node = None
         self.repository = (
             None
             if repository is None
@@ -44,9 +47,23 @@ class RegistryAdminBackend:
         records, _unrecognized, _versions = read_registry_compatible(self.root)
         return records
 
+    @contextmanager
+    def read_once(self, *, node_id: str):
+        """Share one selected membership, lease and role cut for a caller."""
+        node = validate_identifier(node_id, "node")
+        with self.registry.read_once(node_id=node):
+            previous = self._selected_node
+            self._selected_node = node
+            try:
+                yield self
+            finally:
+                self._selected_node = previous
+
     def _latest(self, kind: str, node_id: str) -> Optional[Dict[str, Any]]:
         node = validate_identifier(node_id, "node")
-        for record in reversed(self._records()):
+        rows = (self.registry._selected_rows(node)
+                if self._selected_node == node else self._records())
+        for record in reversed(rows):
             if record.get("kind") == kind and record.get("node_id") == node:
                 return dict(record)
         return None
@@ -229,9 +246,78 @@ class RegistryAdminBackend:
 
         self.active_node(node_id)
         latest = self._latest("registry_role_record", node_id)
+        return self._require_active_role(node_id, latest)
+
+    def _require_active_role(
+        self, node_id: str, latest: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         if latest is None or latest.get("state") != "active":
-            raise ProtocolRefusal("role_assignment_missing", "node has no active role record")
+            raise ProtocolRefusal(
+                "role_assignment_missing",
+                f"node {node_id!r} has no active role record; run the role interview "
+                "and choose its template and declared answers",
+                remedy=shlex.join([
+                    "floati", "node", "role", "--root", str(self.root.tenant_home),
+                    "--node", node_id,
+                ]),
+            )
         return latest
+
+    def active_nodes_with_roles(self) -> list[tuple[Dict[str, Any], Dict[str, Any]]]:
+        """Join membership and roles from one freshly validated registry cut."""
+        from . import send_prefix
+        from .registry_prefix import read_catalog, read_selected_nodes
+
+        source = None
+        try:
+            before = send_prefix._identity(self.registry.path)
+            catalog, _activity = read_catalog(self.root)
+            latest = {str(row["node_id"]): row for row in catalog
+                      if row.get("kind") == "registry_entry"}
+            nodes = sorted(node for node, row in latest.items() if row.get("state") == "active")
+            selected = read_selected_nodes(self.root, nodes)
+            # The readers each validate their own cut. A registration or role
+            # change between them needs the original single-cut native join,
+            # rather than a roster from one cut and roles from another.
+            if before == send_prefix._identity(self.registry.path):
+                source = selected
+        except send_prefix._CACHE_ERRORS:
+            pass
+        if source is None:
+            source = self._records()
+        registrations: Dict[str, Dict[str, Any]] = {}
+        roles: Dict[str, Dict[str, Any]] = {}
+        for record in source:
+            kind = record.get("kind")
+            if kind == "registry_entry":
+                registrations[str(record["node_id"])] = record
+            elif kind == "registry_role_record":
+                roles[str(record["node_id"])] = record
+        return [
+            (dict(registrations[node]), dict(self._require_active_role(node, roles.get(node))))
+            for node in sorted(registrations)
+            if registrations[node].get("state") == "active"
+        ]
+
+    def projection_node(self, cut, node_id):
+        """Retain native active-node/role refusals on a selected registry cut."""
+        node = validate_identifier(node_id, "node")
+        latest = {row["kind"]: row for row in cut.rows if row.get("node_id") == node}
+        registration = latest.get("registry_entry")
+        if registration is None or registration.get("state") != "active":
+            raise ProtocolRefusal("unknown_node", f"node {node!r} is not active")
+        role = self._require_active_role(node, latest.get("registry_role_record"))
+        return dict(registration), dict(role)
+
+    def projection_roster(self, cut):
+        """Project only the four roster facts needed by the public fleet map."""
+        result = []
+        for node, harness, template, state in cut.roster:
+            role = self._require_active_role(node, None if template is None else
+                {"template_role": template, "state": state})
+            result.append({"tenant_id": self.root.tenant_id, "node_id": node,
+                "harness": harness, "role": role["template_role"], "state": "active"})
+        return result
 
     def commit_switch(self, plan: ProviderSwitchPlan) -> Dict[str, Any]:
         def decide(existing: list[Dict[str, Any]], records: Sequence[Dict[str, Any]]) -> None:
@@ -252,6 +338,11 @@ class RegistryAdminBackend:
                 raise ProtocolRefusal("provider_preview_invalid", "switch preview binding is invalid")
 
         return self._commit(plan.records, decide)
+
+    def current_role(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Return the latest role row for compare-and-swap, or None if none exists."""
+
+        return self._latest("registry_role_record", node_id)
 
     def current_architect(self) -> Dict[str, Any]:
         """Resolve the one active architect from latest role records (ARCH-0).

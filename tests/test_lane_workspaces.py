@@ -16,6 +16,7 @@ from floati.framing import decode_frames
 from floati.git_process import fixed_git_command, fixed_git_environment
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.git_fixture_cache import cached_tree
 
 
 class LaneWorkspaceTests(unittest.TestCase):
@@ -27,15 +28,22 @@ class LaneWorkspaceTests(unittest.TestCase):
         Registry(self.root).register("builder", "Codex")
         self.repository = self.base / "repository"
         self.repository.mkdir()
-        self._git(self.repository, "init", "--quiet", "--initial-branch=main")
-        self._git(self.repository, "config", "user.name", "Fixture Builder")
-        self._git(self.repository, "config", "user.email", "fixture@example.invalid")
-        self._git(self.repository, "config", "extensions.worktreeConfig", "true")
-        (self.repository / "tracked.txt").write_text("base\n", encoding="utf-8")
-        self._git(self.repository, "add", "tracked.txt")
-        self._git(self.repository, "commit", "--quiet", "-m", "fixture base")
-        self.base_sha = self._git(self.repository, "rev-parse", "HEAD")
-        self._git(self.repository, "update-ref", "refs/remotes/origin/main", self.base_sha)
+
+        def build(repository):
+            self._git(repository, "init", "--quiet", "--initial-branch=main")
+            self._git(repository, "config", "user.name", "Fixture Builder")
+            self._git(repository, "config", "user.email", "fixture@example.invalid")
+            self._git(repository, "config", "extensions.worktreeConfig", "true")
+            (repository / "tracked.txt").write_text("base\n", encoding="utf-8")
+            self._git(repository, "add", "tracked.txt")
+            self._git(repository, "commit", "--quiet", "-m", "fixture base")
+            base_sha = self._git(repository, "rev-parse", "HEAD")
+            self._git(repository, "update-ref", "refs/remotes/origin/main", base_sha)
+            return base_sha
+
+        # Built once per process; every test owns an independent copy.
+        self.base_sha = cached_tree(
+            self.repository, ("test_lane_workspaces.repository",), build, git="/usr/bin/git")
         self.lanes_root = self.base / "lanes"
         self.launch_agents = self.base / "LaunchAgents"
         self.launch_agents.mkdir()
@@ -174,18 +182,20 @@ class LaneWorkspaceTests(unittest.TestCase):
         payload.write_bytes(b"unmanaged fixture\x00\xff")
         digest = hashlib.sha256(payload.read_bytes()).hexdigest()
         self._state("lane-board.json", {"schema_version": 0, "rows": {"row-five": "landed"}})
-        preview = service.sweep()
+        preview, opened = self._registry_opens(service.sweep)
         self.assertEqual(1, len(preview["eligible"]))
         self.assertEqual([], preview["closed"])
         self.assertTrue(preview["unmanaged"])
         self.assertTrue(landed.exists())
-        applied = service.sweep(apply=True)
+        self.assertEqual([], opened, "warm sweep must select lane registrations without replaying history")
+        applied, opened = self._registry_opens(lambda: service.sweep(apply=True))
         self.assertEqual("degraded", applied["status"])
         self.assertEqual(1, len(applied["closed"]))
         self.assertEqual("operation:sweep", applied["closed"][0]["record"]["closed_by"])
         self.assertFalse(landed.exists())
         self.assertTrue(retained.exists())
         self.assertEqual(digest, hashlib.sha256(payload.read_bytes()).hexdigest())
+        self.assertEqual([], opened, "sweep apply must reuse selected registration and lease truth")
 
     def test_06_doctor_measures_open_lane_age_and_unmanaged_bytes(self):
         """Catches missing lane monitoring or silently inventing zero unmanaged bytes."""
@@ -200,6 +210,41 @@ class LaneWorkspaceTests(unittest.TestCase):
         self.assertIsInstance(node["oldest_open_age_seconds"], (int, float))
         self.assertGreaterEqual(node["oldest_open_age_seconds"], 0)
         self.assertEqual(9, observed["unmanaged_bytes"])
+
+    def _registry_opens(self, operation):
+        """Count real ledger descriptor opens while retaining its full reader."""
+        original = Path.open
+        registry = self.root.path / "registry" / "entries.jsonl"
+        opened = []
+
+        def observe(path, *arguments, **keywords):
+            mode = arguments[0] if arguments else keywords.get("mode", "r")
+            if path == registry and mode == "rb":
+                opened.append(path)
+            return original(path, *arguments, **keywords)
+
+        with patch.object(Path, "open", observe):
+            result = operation()
+        return result, opened
+
+    def test_lane_open_reads_registry_once_per_invocation(self):
+        """Catches replaying the complete registry for each actor/lease query."""
+        service = self._service()
+        with Registry(self.root).read_once(node_id="builder") as view:
+            view.require_active("builder")  # Cold rebuild is a separate ruled control.
+        result, opened = self._registry_opens(lambda: service.open(
+            actor="builder", row="one-registry-open", repo="fixture"))
+        self.assertEqual("open", result["record"]["state"])
+        self.assertEqual(0, len(opened), "warm lane open must not replay registry history")
+
+    def test_lane_close_reads_registry_once_per_invocation(self):
+        """Catches replaying the complete registry again during lane closure."""
+        service = self._service()
+        service.open(actor="builder", row="one-registry-close", repo="fixture")
+        result, opened = self._registry_opens(lambda: service.close(
+            actor="builder", row="one-registry-close"))
+        self.assertEqual("closed", result["record"]["state"])
+        self.assertEqual(0, len(opened), "warm lane close must not replay registry history")
 
 
 if __name__ == "__main__":

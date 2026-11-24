@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .bus_epoch import ledger_roll_policy
+from .bus_epoch import lifecycle_ledger_roll_policy
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .jsonl import (
     _epoch_writer_guard,
@@ -441,7 +441,7 @@ def ensure_rolled(
     status = _regular_or_absent(raw, lifecycle_relative(node_id))
     if status is None:
         return healed
-    policy = policy or ledger_roll_policy(root)
+    policy = policy or lifecycle_ledger_roll_policy(root)
     if not _raw(root, consent_relative(node_id)).exists():
         # The layout migration subsumes any threshold on a mixed root:
         # it is the roll that empties the consent read of lifecycle rows.

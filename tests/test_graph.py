@@ -41,6 +41,28 @@ class HarborGraphContractTests(unittest.TestCase):
         self.assertIsNotNone(HarborGraph, "Harbor Chart projector must exist")
         return HarborGraph(self.root)
 
+    def test_topology_reads_zero_unused_event_history_bytes(self) -> None:
+        from tests.bus_scale_io import IOProbe
+        EventLog(self.root).send(public_ids.builder('a'), public_ids.builder('b'),
+            "floati", "a" * 40, "note.md", "unused topology history",
+            idempotency_key="topology-history")
+        with IOProbe(self.root.path) as probe:
+            artifact = self.graph().artifact()
+        probe.assert_complete()
+        self.assertEqual(0, probe.read_bytes_by_path.get("events.jsonl", 0),
+            "topology decoded message history it does not project")
+        self.assertEqual(2, len(artifact["nodes"]))
+
+    def test_topology_reports_unrecognized_kinds_from_its_registry_reader(self) -> None:
+        from floati.framing import encode_frame
+        row = {"schema_version": 2, "kind": "future_registry_kind",
+            "id": "future-registry-" + uuid7_hex(), "tenant_id": self.root.tenant_id,
+            "timestamp": "2026-10-25T22:00:00.000Z", "payload": {"newer": True}}
+        with self.root.resolve_relative("registry/entries.jsonl").open("ab") as stream:
+            stream.write(encode_frame(row))
+        self.assertEqual([{"kind": row["kind"], "count": 1, "first_id": row["id"]}],
+            self.graph().artifact()["unrecognized_kinds"])
+
     def traffic(self):
         self.assertIsNotNone(HarborTraffic, "Harbor Chart traffic projector must exist")
         return HarborTraffic(self.root)
@@ -139,7 +161,7 @@ class HarborGraphContractTests(unittest.TestCase):
                 "docs/evidence/example.md",
                 "refused",
                 idempotency_key="traffic-denied",
-                reply_to="msg-" + "0" * 32,
+                reply_to="msg-" + uuid7_hex(),
             )
 
         first = self.traffic().artifact()

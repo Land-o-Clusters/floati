@@ -181,6 +181,32 @@ class WaiterArmTests(unittest.TestCase):
         self.assertEqual("armed", rows[-1]["state"])
         self.assertEqual(20, rows[-1]["wait_deadline_seconds"])
 
+    def test_retired_workspace_rearms_once_for_each_new_session_cycle(self) -> None:
+        from floati.codex_wait_contract import CodexWaitConsentLedger, resolve_participant
+        from floati.seat_waiter_lifecycle import retire_waiter
+
+        for harness in ("cursor", "codex", "zcode"):
+            with self.subTest(harness=harness):
+                node = public_ids.worker(harness)
+                fixture = WaiterConsentFixture(self.base, harness + "-rearm", node, harness)
+                code, first = fixture.run_arm(node=node, harness=harness)
+                self.assertEqual(0, code, first)
+                previous = first["evidence"]["consent_receipt_id"]
+                for cycle in range(2):
+                    retire_waiter(fixture.root, node, fixture.workspace,
+                        "rearm-fixture-retire-" + str(cycle))
+                    code, rearmed = fixture.run_arm(node=node, harness=harness)
+                    self.assertEqual(0, code, rearmed)
+                    participant = resolve_participant(fixture.bus_home, fixture.workspace)
+                    consent = CodexWaitConsentLedger(fixture.root).require_armed(participant.binding)
+                    self.assertNotEqual(previous, consent["id"])
+                    self.assertEqual(rearmed["evidence"]["consent_receipt_id"], consent["id"])
+                    code, repeated = fixture.run_arm(node=node, harness=harness)
+                    self.assertEqual(0, code, repeated)
+                    self.assertEqual(consent["id"], repeated["evidence"]["consent_receipt_id"])
+                    self.assertEqual(3 + cycle * 2, len(consent_ledger_rows(fixture.root, node)))
+                    previous = consent["id"]
+
     def test_waiter_arm_arms_a_codex_harness_too(self) -> None:
         """The verb is harness-typed, not zcode-only: Codex seats arm through it."""
 

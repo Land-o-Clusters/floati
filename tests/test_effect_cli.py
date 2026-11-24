@@ -3,11 +3,13 @@ from __future__ import annotations
 from tests.test_cli import LAUNCHER
 
 import json
+import io
 import shutil
 import subprocess
 import tempfile
 import unittest
 from copy import deepcopy
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from floati.effects import EffectLedger
@@ -21,6 +23,46 @@ from tests.test_effects import EffectRecordFixture
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 EFFECT_STATUS_SCHEMA = REPOSITORY_ROOT / "schemas/v1/effect-status-artifact.schema.json"
+
+# Exactly the reviewed ASCII cells. New routes, spellings or payloads stay native.
+DIRECT_MATRIX_CASES = frozenset({
+    (("effects", "--root"), "--adapter", "hostile"),
+    (("effects", "--root"), "--result", "hostile"),
+    (("effects", "--root"), "--confirmation", "hostile"),
+    (("effects", "--root"), "--credentials", "hostile"),
+    (("effects", "--root"), "--request-body", "hostile"),
+    (("effects", "--root"), "--authority", "hostile"),
+    (("effects", "--root"), "--policy", "hostile"),
+    (("effects", "--root"), "--plan", "hostile"),
+    (("effects", "--root"), "--target", "hostile"),
+    (("effect", "show"), "--record", "hostile"),
+    (("effect", "show"), "--result", "hostile"),
+    (("effect", "show"), "--confirmation", "hostile"),
+    (("effect", "show"), "--credentials", "hostile"),
+    (("effect", "show"), "--request-body", "hostile"),
+    (("effect", "show"), "--authority", "hostile"),
+    (("effect", "show"), "--policy", "hostile"),
+    (("effect", "show"), "--plan", "hostile"),
+    (("effect", "show"), "--target", "hostile"),
+    (("effect", "reconcile"), "--record", "hostile"),
+    (("effect", "reconcile"), "--adapter", "hostile"),
+    (("effect", "reconcile"), "--confirmation", "hostile"),
+    (("effect", "reconcile"), "--credentials", "hostile"),
+    (("effect", "reconcile"), "--request-body", "hostile"),
+    (("effect", "reconcile"), "--authority", "hostile"),
+    (("effect", "reconcile"), "--policy", "hostile"),
+    (("effect", "reconcile"), "--plan", "hostile"),
+    (("effect", "reconcile"), "--target", "hostile"),
+    (("effect", "compensate"), "--record", "hostile"),
+    (("effect", "compensate"), "--adapter", "hostile"),
+    (("effect", "compensate"), "--result", "hostile"),
+    (("effect", "compensate"), "--credentials", "hostile"),
+    (("effect", "compensate"), "--request-body", "hostile"),
+    (("effect", "compensate"), "--authority", "hostile"),
+    (("effect", "compensate"), "--policy", "hostile"),
+    (("effect", "compensate"), "--plan", "hostile"),
+    (("effect", "compensate"), "--target", "hostile"),
+})
 
 
 def write_effect_rows(root: FloatiRoot, rows: list[dict[str, object]]) -> None:
@@ -132,9 +174,19 @@ class EffectCliTests(unittest.TestCase):
         )
 
     def artifact(self, result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-        self.assertEqual("", result.stderr)
-        self.assertEqual(1, len(result.stdout.splitlines()))
-        return json.loads(result.stdout)
+        return self.artifact_text(result.stdout, result.stderr)
+
+    def artifact_text(self, stdout: str, stderr: str) -> dict[str, object]:
+        self.assertEqual("", stderr)
+        self.assertEqual(1, len(stdout.splitlines()))
+        return json.loads(stdout)
+
+    def run_main(self, *arguments: str) -> tuple[int, str, str]:
+        from floati.cli import main
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = main(list(arguments))
+        return status, stdout.getvalue(), stderr.getvalue()
 
     def test_effects_lists_deterministic_projection_with_filters(self) -> None:
         first, first_rows = lifecycle_rows("intent")
@@ -363,10 +415,15 @@ class EffectCliTests(unittest.TestCase):
                 "--plan", "--target",
             ):
                 with self.subTest(command=command[:2], option=option):
-                    result = self.run_cli(*command, option, "hostile")
-                    self.assertEqual(20, result.returncode)
+                    arguments = (*command, option, "hostile")
+                    if (arguments[:2], arguments[-2], arguments[-1]) in DIRECT_MATRIX_CASES:
+                        status, stdout, stderr = self.run_main(*arguments)
+                    else:
+                        result = self.run_cli(*arguments)
+                        status, stdout, stderr = result.returncode, result.stdout, result.stderr
+                    self.assertEqual(20, status)
                     self.assertEqual(
-                        "arguments_invalid", self.artifact(result)["evidence"]["code"]
+                        "arguments_invalid", self.artifact_text(stdout, stderr)["evidence"]["code"]
                     )
         typed_refusals = (
             (("effects", "--root", str(self.home), "--run", "run-invalid"), "run_id_invalid"),
@@ -390,9 +447,14 @@ class EffectCliTests(unittest.TestCase):
             with self.subTest(topic=topic):
                 result = self.run_cli(*topic, "--help")
                 self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("", result.stderr)
                 self.assertIn("NAME\n", result.stdout)
                 self.assertIn("SYNOPSIS\n", result.stdout)
+                self.assertIn("DESCRIPTION\n", result.stdout)
                 self.assertIn("EXIT STATUS\n", result.stdout)
+                self.assertIn("EXAMPLES\n", result.stdout)
+                if topic in (("effect", "show"), ("effect", "reconcile"), ("effect", "compensate")):
+                    self.assertIn("floati " + " ".join(topic) + " - ", result.stdout)
         self.assertEqual(before, tree_snapshot(self.home))
 
 

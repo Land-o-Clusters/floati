@@ -12,6 +12,7 @@ from typing import Dict, Sequence
 from .deploy import DeploymentWriter
 from .errors import IntegrityFailure, ProtocolRefusal
 from .fleet_update import _explicit_executable
+from .git_process import GIT_MAINTENANCE_OPTIONS
 from .ids import uuid7_hex
 from .manifest import verify_manifest
 from .update_check import (
@@ -140,7 +141,7 @@ def _git(
     executable_directory = str(Path(executable).resolve().parent)
     try:
         return subprocess.run(
-            [executable, *arguments],
+            [executable, *GIT_MAINTENANCE_OPTIONS, *arguments],
             cwd=cwd,
             env={
                 "GIT_ATTR_NOSYSTEM": "1",
@@ -246,6 +247,8 @@ def apply_update(
     """Apply or roll back through the same retained-index and bundle checks."""
 
     selected = canonical_destination(destination)
+    from .bridge_rebank import refuse_adopted_bridge_fleet_update
+    refuse_adopted_bridge_fleet_update(selected, "signed_update")
     selected_channel = validate_update_channel(channel)
     key = validate_idempotency_key(idempotency_key)
     if not isinstance(version, str) or not version or len(version) > 128:
@@ -449,6 +452,8 @@ def rollback_update(
     """Revert the last applied update through the same verified apply path."""
 
     selected = canonical_destination(destination)
+    from .bridge_rebank import refuse_adopted_bridge_fleet_update
+    refuse_adopted_bridge_fleet_update(selected, "signed_update_rollback")
     selected_channel = validate_update_channel(channel)
     key = validate_idempotency_key(idempotency_key)
     target = _validate_rollback_sha(to_sha)

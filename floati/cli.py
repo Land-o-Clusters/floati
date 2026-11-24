@@ -29,8 +29,9 @@ from .copy import (
 )
 from .command_scope import CommandScope, resolve_command_scope
 from .deploy import DeploymentWriter
-from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
+from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal, bind_send_refusal_remedy
 from .events import EventLog
+from .git_process import GIT_MAINTENANCE_OPTIONS
 from .installer_shadow import observe_installer_shadow
 from .projection import (
     EffectStatusProjection,
@@ -92,12 +93,29 @@ class _ArtifactParser(argparse.ArgumentParser):
         self.floati_mcp_required = tuple(kwargs.pop("floati_mcp_required", ()))
         self.floati_mcp_omit = tuple(kwargs.pop("floati_mcp_omit", ()))
         self.floati_public = kwargs.pop("floati_public", True)
+        self.floati_required_without_session = tuple(kwargs.pop("floati_required_without_session", ()))
+        self.floati_required_with_session = tuple(kwargs.pop("floati_required_with_session", ()))
         kwargs.setdefault("add_help", False)
         kwargs.setdefault("allow_abbrev", False)
         super().__init__(*args, **kwargs)
 
     def error(self, message: str) -> None:
         raise ProtocolRefusal("arguments_invalid", message)
+
+    def parse_known_args(
+        self, args: Optional[Sequence[str]] = None,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> Tuple[argparse.Namespace, List[str]]:
+        parsed, extras = super().parse_known_args(args, namespace)
+        # Check at the leaf parser, before its parent rejects unknown arguments,
+        # preserving argparse's required-flag refusal order for both lifecycle modes.
+        required = (self.floati_required_without_session
+            if getattr(parsed, "session", None) is None else self.floati_required_with_session)
+        missing = ["--" + name.replace("_", "-") for name in required
+            if getattr(parsed, name, None) is None]
+        if missing:
+            self.error("the following arguments are required: " + ", ".join(missing))
+        return parsed, extras
 
     def _check_value(self, action: argparse.Action, value: object) -> None:
         choices = action.choices
@@ -224,15 +242,21 @@ def _confluence_bundle(args: argparse.Namespace) -> HandlerResult:
     from .confluence import materialize_bundle
 
     out = materialize_bundle(
-        _root(args.root), consumer=args.consumer, out=Path(args.out))
+        _root(args.root), consumer=args.consumer, out=Path(args.out),
+        version=args.schema_version)
     document = json.loads(out.read_text(encoding="utf-8"))
-    return "ok", {
+    evidence = {
         "grant_id": document["grant_id"],
         "consumer": args.consumer,
         "out": str(out),
         "entries": len(document["entries"]),
         "snapshot_at": document["snapshot_at"],
-    }, OK
+    }
+    from .inbound_hold import held_item_marks
+    marks = held_item_marks(_root(args.root))
+    if marks:
+        evidence["inbound_holds"] = marks
+    return "ok", evidence, OK
 
 
 def _init(args: argparse.Namespace) -> HandlerResult:
@@ -295,6 +319,7 @@ def _init(args: argparse.Namespace) -> HandlerResult:
     # sandbox fact; it is an incomplete bootstrap shape.
     for relative in ("cursors", "receipts/deliveries"):
         root.resolve_relative(relative).mkdir(parents=True, exist_ok=True)
+    _ensure_epoch_turnstile(root)
     evidence: Dict[str, Any] = {"root": str(root.path), "tenant_id": root.tenant_id}
     if governance is not None:
         recorded = Registry(root).record_governance(
@@ -315,9 +340,29 @@ def _init(args: argparse.Namespace) -> HandlerResult:
     return "ok", evidence, OK
 
 
+def _ensure_epoch_turnstile(root: FloatiRoot) -> None:
+    """EPOCH-EX-STARVATION-1: a new tenant's first exclusive contention is fair."""
+    from .bus_epoch import ensure_epoch_turnstile
+
+    try:
+        ensure_epoch_turnstile(root)
+    except ProtocolRefusal as refusal:
+        # A re-init of a busy root never fails for this; the tenant's first
+        # contended exclusive acquisition creates the turnstile instead.
+        if refusal.code != "epoch_lock_timeout":
+            raise
+
+
 def _register(args: argparse.Namespace) -> HandlerResult:
     entry = Registry(_root(args.root)).register(args.node, args.harness)
     return "ok", entry, OK
+
+
+def _network_setup(args: argparse.Namespace) -> HandlerResult:
+    from .network_setup import setup
+
+    return 'ok', setup(args.root, seat=args.seat, session=args.session, executable=args.executable, hook=args.hook,
+                       confirmation=args.confirm, teardown=args.teardown), OK
 
 
 def _retire(args: argparse.Namespace) -> HandlerResult:
@@ -405,30 +450,43 @@ def _signature_verify(args: argparse.Namespace) -> HandlerResult:
     return "ok", evidence, OK
 
 
-def _require_banked_sha(sha: str) -> None:
-    """RB-1: refuse a sha committed here but reachable from no remote ref.
+def _require_banked_sha(sha: str, repository: str | None = None) -> None:
+    """RB-1 + SEND-SHA-RESOLVES-1: an envelope never points a seat at nothing.
 
     Same instrument and trust posture as the verify path (`verification.py:
     _require_banked`), on the send side: the incident is the sender reporting
-    work that was never pushed. A sha absent from this checkout is not this
-    fence's case — the verify path's `sha_absent` fence still owns it — so the
-    send passes it through; the checked ref set is named in the refusal.
+    work that does not resolve. SEND-SHA-RESOLVES-1 owns the checkout itself:
+    a well-formed sha that names no commit in the repository the check runs
+    against is refused (`sha_absent`), and a check against no repository at
+    all states, typed, that it could not check (`sha_unchecked`) instead of
+    passing the envelope through unchecked. The checked repository is named
+    in the refusal. ``repository=None`` checks the caller's checkout; a
+    gateway send or `prep_clear` passes the workspace it validated so the
+    tip is judged against the repo it was read from.
     """
-    hardened = ("/usr/bin/git", "--no-optional-locks", "--no-replace-objects",
+    hardened = ("/usr/bin/git", *GIT_MAINTENANCE_OPTIONS,
+                "--no-optional-locks", "--no-replace-objects",
                 "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false")
+    base = os.getcwd() if repository is None else repository
     try:
         toplevel = subprocess.run(
-            [*hardened, "-C", os.getcwd(), "rev-parse", "--show-toplevel"],
+            [*hardened, "-C", base, "rev-parse", "--show-toplevel"],
             capture_output=True, text=True, timeout=10,
         )
     except subprocess.TimeoutExpired:
         raise ProtocolRefusal(
             "repository_invalid",
-            f"git did not answer within 10s from {os.getcwd()}",
+            f"git did not answer within 10s from {base}",
             "retry once git is responsive, from the checkout that holds the commit",
         )
     if toplevel.returncode != 0:
-        return
+        raise ProtocolRefusal(
+            "sha_unchecked",
+            f"floati could not check the sha against a repository: {base} "
+            "is not inside a Git repository",
+            "run from a checkout of the repository the commit lives in, "
+            "or derive the sha there (S=$(git rev-parse HEAD))",
+        )
     repository = toplevel.stdout.strip()
     try:
         exists = subprocess.run(
@@ -436,7 +494,14 @@ def _require_banked_sha(sha: str) -> None:
             capture_output=True, text=True, timeout=10,
         )
         if exists.returncode != 0:
-            return
+            raise ProtocolRefusal(
+                "sha_absent",
+                f"{sha} names no commit in {repository} — the repository "
+                "the check ran against",
+                "derive --sha in the same command that sends "
+                "(S=$(git rev-parse HEAD)), or git fetch --all in "
+                f"{repository} and send again",
+            )
         checked = subprocess.run(
             [*hardened, "-C", repository, "for-each-ref",
              "--format=%(refname)", "refs/remotes"],
@@ -487,28 +552,181 @@ def _require_authored_note(note: object) -> None:
         )
 
 
-def _send(args: argparse.Namespace) -> HandlerResult:
-    _require_authored_note(args.note)
+def _ask(args: argparse.Namespace, *, timing=None) -> HandlerResult:
+    """Send one local question and wait, or record one reversed reply."""
+
+    from .ask import perform_ask, perform_reply
+    from .addressing import is_group, recipient_preview
+    from .bus_epoch import epoch_guard
+
     root = _root(args.root)
     require_declared_coordinate(Path.cwd(), args.sender, root)
-    _require_banked_sha(args.sha)
-    claim = None
-    if args.claim is not None:
-        from .verification import load_claim_document
-
-        claim = load_claim_document(args.claim)
-    message = EventLog(root).send(
-        args.sender,
-        args.recipient,
-        args.repo,
-        args.sha,
-        args.doc,
-        args.note,
-        reply_to=args.reply_to,
+    group = is_group(args.recipient)
+    if args.reply_to is not None and (group or getattr(args, "preview", False) or getattr(args, "recipient_preview", None) is not None):
+        raise ProtocolRefusal("address_reply_invalid", "a reply requires one exact node and no group preview",
+                              "reply to the original asker using its exact node id")
+    if not group and (getattr(args, "preview", False) or getattr(args, "recipient_preview", None) is not None):
+        raise ProtocolRefusal("address_invalid", "recipient preview options require a group address",
+                              "use everyone or repo:NAME with recipient preview options")
+    if group and getattr(args, "preview", False):
+        with epoch_guard(root, exclusive=True):
+            return "ok", recipient_preview(root, args.sender, args.recipient), OK
+    if args.reply_to is not None:
+        if args.wait_seconds is not None:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "DRAFT - reply mode does not accept --wait-seconds",
+                "DRAFT - omit --wait-seconds when recording a reply",
+            )
+        if args.disposition not in {"answer", "decline"}:
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "DRAFT - a reply requires --disposition answer or decline",
+                "DRAFT - pass --disposition answer or --disposition decline",
+            )
+        if not isinstance(args.session, str) or not args.session.strip():
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "DRAFT - a reply requires --session",
+                "DRAFT - pass --session as the acting session id",
+            )
+        if not isinstance(args.idempotency_key, str) or not args.idempotency_key.strip():
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "DRAFT - a reply requires --idempotency-key",
+                "DRAFT - pass one idempotency key of 1 to 128 characters",
+            )
+        if args.disposition == "answer":
+            _require_authored_note(args.note)
+            for name in ("repo", "sha", "doc"):
+                if not getattr(args, name):
+                    raise ProtocolRefusal(
+                        "arguments_invalid",
+                        "DRAFT - an answer requires --repo, --sha, and --doc",
+                        "DRAFT - pass the same Git coordinates the question used",
+                    )
+            _require_banked_sha(args.sha, repository=getattr(args, "repository", None))
+        else:
+            if not isinstance(args.reason, str) or not args.reason.strip():
+                raise ProtocolRefusal(
+                    "arguments_invalid",
+                    "DRAFT - a decline requires --reason",
+                    "DRAFT - pass --reason as one short explanation",
+                )
+        result = perform_reply(
+            root,
+            sender=args.sender,
+            recipient=args.recipient,
+            question_id=args.reply_to,
+            disposition=args.disposition,
+            session=args.session,
+            idempotency_key=args.idempotency_key,
+            note=args.note,
+            reason=args.reason,
+            repo=args.repo,
+            sha=args.sha,
+            doc=args.doc,
+        )
+        return "ok", result["evidence"], OK
+    if args.disposition is not None or args.reason is not None:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "DRAFT - a question does not accept --disposition or --reason",
+            "DRAFT - pass --reply-to when recording an answer or decline",
+        )
+    _require_authored_note(args.note)
+    if args.wait_seconds is None:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "DRAFT - ask requires --wait-seconds",
+            "DRAFT - pass --wait-seconds as a whole number from 0 through 86400",
+        )
+    if not isinstance(args.wait_seconds, int) or isinstance(args.wait_seconds, bool) or not 0 <= args.wait_seconds <= 86400:
+        raise ProtocolRefusal(
+            "arguments_invalid",
+            "DRAFT - wait must be a whole number of seconds from 0 through 86400",
+            "DRAFT - pass --wait-seconds as a whole number from 0 through 86400",
+        )
+    for name in ("repo", "sha", "doc", "session", "idempotency_key"):
+        if not getattr(args, name if name != "idempotency_key" else "idempotency_key"):
+            raise ProtocolRefusal(
+                "arguments_invalid",
+                "DRAFT - ask requires --repo, --sha, --doc, --session, and --idempotency-key",
+                "DRAFT - pass every question coordinate on the command line",
+            )
+    _require_banked_sha(args.sha, repository=getattr(args, "repository", None))
+    if group:
+        from .ask import perform_group_ask
+        return perform_group_ask(root, args)
+    result = perform_ask(
+        root,
+        sender=args.sender,
+        recipient=args.recipient,
+        repo=args.repo,
+        sha=args.sha,
+        doc=args.doc,
+        note=args.note,
+        session=args.session,
         idempotency_key=args.idempotency_key,
-        claim=claim,
+        wait_seconds=args.wait_seconds,
+        timing=timing,
     )
-    return "ok", message, OK
+    state = result["state"]
+    evidence = result["evidence"]
+    if state in {"answered", "declined"}:
+        return "ok", evidence, OK
+    if state == "timeout":
+        return "orchestration_deadline", evidence, 34
+    return "degraded", evidence, DEGRADED
+
+
+def _send(args: argparse.Namespace) -> HandlerResult:
+    try:
+        _require_authored_note(args.note)
+        root = _root(args.root)
+        require_declared_coordinate(Path.cwd(), args.sender, root)
+        from .addressing import is_group, recipient_preview, send_group
+        from .bus_epoch import epoch_guard
+        group = is_group(args.recipient)
+        if not group and (getattr(args, "preview", False) or getattr(args, "recipient_preview", None) is not None):
+            raise ProtocolRefusal("address_invalid", "recipient preview options require a group address",
+                                  "use everyone or repo:NAME with recipient preview options")
+        if group and args.reply_to is not None:
+            raise ProtocolRefusal("address_reply_invalid", "a reply requires one exact recipient",
+                                  "reply to the original sender using its exact node id")
+        if group and getattr(args, "preview", False):
+            with epoch_guard(root, exclusive=True):
+                return "ok", recipient_preview(root, args.sender, args.recipient), OK
+        _require_banked_sha(args.sha, repository=getattr(args, "repository", None))
+        claim = None
+        if args.claim is not None:
+            from .verification import load_claim_document
+
+            claim = load_claim_document(args.claim)
+        from .needs_inbox import admit_dispatch, with_attention
+        held, attention = admit_dispatch(root, args)
+        if held is not None:
+            return "refused", held, CONFIGURATION_REFUSED
+        if group:
+            return with_attention(send_group(root, args, claim), attention)
+        message = EventLog(root).send(
+            args.sender,
+            args.recipient,
+            args.repo,
+            args.sha,
+            args.doc,
+            args.note,
+            reply_to=args.reply_to,
+            message_class=getattr(args, "message_class", "normal"),
+            idempotency_key=args.idempotency_key,
+            claim=claim,
+        )
+        return with_attention(("ok", message, OK), attention)
+    except ProtocolRefusal as exc:
+        rebound = bind_send_refusal_remedy(exc)
+        if rebound is exc:
+            raise
+        raise rebound from exc
 
 
 def _verify(args: argparse.Namespace) -> HandlerResult:
@@ -539,7 +757,10 @@ def _inbox(args: argparse.Namespace) -> HandlerResult:
             )
         identity = require_declared_coordinate(Path.cwd(), args.recipient, root)
         if args.peek:
-            messages, receipt = EventLog(root).present(args.recipient)
+            if getattr(args, "_wake_only", False):
+                messages, receipt = EventLog(root).present(args.recipient, _wake_only=True)
+            else:
+                messages, receipt = EventLog(root).present(args.recipient)
             acknowledgment = None
         else:
             messages, receipt, acknowledgment = EventLog(root).drain(
@@ -553,10 +774,13 @@ def _inbox(args: argparse.Namespace) -> HandlerResult:
                 exc.remedy,
             )
         return _scoped_failure(scope, exc)
+    from .colleague_frame import framed_messages
+    from .fleet_presence import presence_line
+
     evidence = _with_scope(
         scope,
         {
-            "messages": messages,
+            "messages": framed_messages(messages, presence=presence_line(root, args.recipient)),
             "receipt": receipt,
             "acknowledgment": acknowledgment,
             **identity,
@@ -615,6 +839,21 @@ def _sent(args: argparse.Namespace) -> HandlerResult:
 
     evidence = SentProjection(_root(args.root)).artifact(args.sender)
     if not evidence["items"]:
+        return "no_result", evidence, NO_RESULT
+    return "ok", evidence, OK
+
+
+def _replay(args: argparse.Namespace) -> HandlerResult:
+    root = _root(args.root)
+    if args.question is not None:
+        from .ask_replay import replay_ask
+
+        evidence = replay_ask(root, args.question)
+    else:
+        from .work_replay import replay_work
+
+        evidence = replay_work(root, args.work_item)
+    if "code" in evidence:
         return "no_result", evidence, NO_RESULT
     return "ok", evidence, OK
 
@@ -691,6 +930,8 @@ def _status(args: argparse.Namespace) -> HandlerResult:
         )
     except (ProtocolRefusal, IntegrityFailure, DurabilityFailure) as exc:
         return _scoped_failure(scope, exc)
+    from .fleet_presence import presence_status
+    snapshot["fleet_presence"] = presence_status(root)
     shadow = observe_installer_shadow(getattr(args, "destination", None))
     snapshot["installer_shadow"] = shadow
     if args.json:
@@ -908,8 +1149,15 @@ def _doctor(args: argparse.Namespace) -> HandlerResult:
         )
         if probe_rc != 0 and return_code == 0:
             return_code = 35
-        artifact["state"] = {0: "healthy", 20: "refused", 33: "malformed_evidence",
-                             35: "degraded", 36: "sandbox_refused"}.get(return_code, "degraded")
+        artifact["state"] = {
+            0: "healthy",
+            1: "degraded",
+            2: "degraded",
+            20: "refused",
+            33: "malformed_evidence",
+            35: "degraded",
+            36: "sandbox_refused",
+        }.get(return_code, "degraded")
     return str(artifact["state"]), artifact, return_code
 
 
@@ -961,10 +1209,27 @@ def _presence_show(args: argparse.Namespace) -> HandlerResult:
 
 
 def _receipts(args: argparse.Namespace) -> HandlerResult:
+    since = _parse_time(args.since)
     history = FleetProjection(_root(args.root)).receipts(args.node)
-    if not any(history[key] for key in ("deliveries", "acks", "denials")):
+    kinds = ("deliveries", "acks", "consumptions", "denials")
+    if since is not None:
+        for kind in kinds:
+            history[kind] = [row for row in history[kind] if _parse_time(row["timestamp"]) >= since]
+    if not any(history[key] for key in kinds):
         return "no_result", history, NO_RESULT
     return "ok", history, OK
+
+
+def _consume(args: argparse.Namespace) -> HandlerResult:
+    from .message_consumption import MessageConsumption
+
+    root = _root(args.root)
+    require_declared_coordinate(Path.cwd(), args.recipient, root)
+    receipt = MessageConsumption(root).consume(
+        args.recipient, args.message_id, args.session,
+        idempotency_key=args.idempotency_key,
+    )
+    return "ok", receipt, OK
 
 
 WATCH_TRACE_VARIABLE = "FLOATI_WATCH_TRACE"
@@ -1111,6 +1376,16 @@ def _wait_for_fresh_work(args: argparse.Namespace, payload: Dict[str, Any]) -> i
 
     from .codex_wait import run_stop_waiter
 
+    if payload.get("_hook_input_incomplete") is True:
+        return 0
+    if payload.get("hook_event_name") == "PostToolUse":
+        from .codex_tool_hook import run_tool_hook
+        return run_tool_hook(bus_home=Path(args.root), hook_payload=payload)
+    if payload.get("hook_event_name") is not None and payload.get("hook_event_name") != "Stop":
+        from .host_observations import observe_codex_host
+        observe_codex_host(Path(args.root), payload)
+        return 0
+
     return run_stop_waiter(
         bus_home=Path(args.root),
         hook_payload=payload,
@@ -1126,16 +1401,48 @@ WAIT_CONDITIONS: Dict[str, Callable[[argparse.Namespace, Dict[str, Any]], int]] 
 }
 
 
+def _optional_wait_input(stream):
+    """Inspect mixed templated/piped input without an unbounded pipe read."""
+    import os
+    import select
+    import time
+
+    try:
+        descriptor = stream.fileno()
+    except (OSError, ValueError):
+        return None
+    data = b""
+    deadline = time.monotonic() + 0.2
+    while len(data) < 65536:
+        remaining = max(0.0, deadline - time.monotonic())
+        if not select.select([descriptor], [], [], remaining)[0]:
+            return None if not data else {"_hook_input_incomplete": True}
+        chunk = os.read(descriptor, min(8192, 65536 - len(data)))
+        if not chunk:
+            return None if not data else {"_hook_input_incomplete": True}
+        data += chunk
+        try:
+            decoded = json.loads(data)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            if time.monotonic() >= deadline:
+                break
+            continue
+        return decoded if isinstance(decoded, dict) else {"_hook_input_incomplete": True}
+    return {"_hook_input_incomplete": True}
+
+
 def _wait_payload(args: argparse.Namespace) -> Dict[str, Any]:
     """Read the harness stop payload, then let explicit options override it.
 
-    A harness that can template its values passes them as options; one that
-    pipes its stop payload pipes it. Standard input is read only when an
-    option is missing, so the templated form never blocks on a pipe that
-    nobody is going to write.
+    Templated values remain available for Stop. Mixed piped input is bounded;
+    Native host-event coordinates are never overwritten by those options.
     """
 
     payload: Dict[str, Any] = {}
+    if args.workspace is not None and args.session_id is not None and not sys.stdin.isatty():
+        decoded = _optional_wait_input(sys.stdin)
+        if decoded is not None:
+            payload = decoded
     if args.workspace is None or args.session_id is None:
         if sys.stdin.isatty():
             raise ProtocolRefusal(
@@ -1156,6 +1463,14 @@ def _wait_payload(args: argparse.Namespace) -> Dict[str, Any]:
                 "--workspace PATH and --session-id ID",
             )
         payload = dict(decoded)
+    if payload.get("_hook_input_incomplete") is True:
+        return payload
+    if payload.get("hook_event_name") is not None:
+        if ((args.workspace is not None and args.workspace != payload.get("cwd"))
+            or (args.session_id is not None and args.session_id != payload.get("session_id"))):
+            # Preserve host routing, but disqualify the rewritten context.
+            return {"hook_event_name": payload["hook_event_name"]}
+        return payload
     if args.workspace is not None:
         payload["cwd"] = args.workspace
     if args.session_id is not None:
@@ -1205,19 +1520,36 @@ def _work_add(args: argparse.Namespace) -> HandlerResult:
         from .solo import resolve_solo_node
 
         args.owner = resolve_solo_node(root)
+    findings: list[Dict[str, object]] = []
+    from .territory import TerritoryLedger
+
+    # Advisory: the preview is computed before the add and never refuses it.
+    territory = TerritoryLedger(root).advise_dispatch(args.owner, args.edits)
     item = WorkLog(root).add(
         args.title,
         args.owner,
         _binding(args),
+        dispatcher=args.dispatcher,
         needs=args.needs,
         provision_workspace=args.workspace,
+        adhoc_profile_id=args.adhoc_profile,
+        notification_findings=findings,
     )
-    return "ok", item, OK
+    if territory is not None:
+        item = {**item, "territory": territory}
+    return _work_result({**item, "findings": findings})
+
+
+def _work_result(evidence: dict) -> HandlerResult:
+    if any(f["code"] == "work_notification_refused" for f in evidence.get("findings", [])):
+        return "degraded", evidence, DEGRADED
+    return "ok", evidence, OK
 
 
 def _work_claim(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     current = _parse_time(args.now)
+    work = WorkLog(root)
     if any(
         value is None
         for value in (args.actor, args.authority_subject, args.authority_epoch)
@@ -1226,6 +1558,7 @@ def _work_claim(args: argparse.Namespace) -> HandlerResult:
 
         solo_node = resolve_solo_node(root)
         actor = solo_node if args.actor is None else args.actor
+        work.require_claimable(args.item_id, actor, now=current)
         authority = resolve_solo_authority(root, actor, current)
         authority_subject = (
             str(authority["authority_subject"])
@@ -1241,14 +1574,16 @@ def _work_claim(args: argparse.Namespace) -> HandlerResult:
         actor = args.actor
         authority_subject = args.authority_subject
         authority_epoch = args.authority_epoch
-    transition = WorkLog(root).claim(
+    findings: list[Dict[str, object]] = []
+    transition = work.claim(
         args.item_id,
         actor,
         authority_subject,
         authority_epoch,
         now=current,
+        notification_findings=findings,
     )
-    return "ok", transition, OK
+    return _work_result({**transition, "findings": findings})
 
 
 def _work_complete(args: argparse.Namespace) -> HandlerResult:
@@ -1257,21 +1592,51 @@ def _work_complete(args: argparse.Namespace) -> HandlerResult:
         from .solo import resolve_solo_node
 
         args.actor = resolve_solo_node(root)
+    if getattr(args, "consume_ids", None):
+        require_declared_coordinate(Path.cwd(), args.actor, root)
+    findings: list[Dict[str, object]] = []
     transition = WorkLog(root).complete(
         args.item_id,
         args.actor,
         _binding(args),
         now=_parse_time(args.now),
+        consume_ids=getattr(args, "consume_ids", None) or (),
+        session_id=getattr(args, "session", None),
+        notification_findings=findings,
     )
-    return "ok", transition, OK
+    return _work_result({**transition, "findings": findings})
+
+
+def _work_notify(args: argparse.Namespace) -> HandlerResult:
+    return _work_result(WorkLog(_root(args.root)).notify(args.item_id, args.actor))
 
 
 def _work_show(args: argparse.Namespace) -> HandlerResult:
-    items = WorkLog(_root(args.root)).show(args.item_id)
+    items = WorkLog(_root(args.root)).show(args.item_id, actor=args.actor)
     evidence = {"items": items}
     if not items:
         return "no_result", evidence, NO_RESULT
     return "ok", evidence, OK
+
+
+def _work_handoff_record(args: argparse.Namespace) -> HandlerResult:
+    from .work_handoff import WorkHandoffs
+
+    try:
+        commands = [json.loads(argv) for argv in args.run]
+    except (json.JSONDecodeError, RecursionError) as error:
+        raise ProtocolRefusal("handoff_command_invalid", "pass each command as a JSON array of arguments") from error
+    row = WorkHandoffs(_root(args.root)).record(
+        args.item_id, args.actor, args.repository, commands, args.unittest,
+        args.artifact, args.remaining, args.statement, args.idempotency_key, supersedes=args.supersedes,
+    )
+    return "ok", {"handoff": row}, OK
+
+
+def _work_handoff_show(args: argparse.Namespace) -> HandlerResult:
+    from .work_handoff import WorkHandoffs
+
+    return "ok", WorkHandoffs(_root(args.root)).show(args.item_id, args.handoff_id), OK
 
 
 def _intake_scan(args: argparse.Namespace) -> HandlerResult:
@@ -1426,6 +1791,49 @@ def _intake_dispatch(args: argparse.Namespace) -> HandlerResult:
     return "ok", intent, OK
 
 
+def _worker_adhoc_profile(args: argparse.Namespace) -> HandlerResult:
+    from .adhoc_profiles import AdhocProfiles
+    from .adhoc_launch import grant_adhoc_launch, preview_adhoc_launch
+
+    root = _root(args.root)
+    if args.grant_launch and (args.authority_subject is None or args.authority_epoch is None):
+        raise ProtocolRefusal("arguments_invalid", "human launch grants require exact authority subject and epoch")
+    profile = AdhocProfiles(root).create(args.actor, args.adapter,
+        args.lane_opening, args.repository, args.recipient,
+        idempotency_key=args.idempotency_key)
+    preview = preview_adhoc_launch(root, profile, authority_subject=args.authority_subject,
+        authority_epoch=args.authority_epoch)
+    result = {"profile": profile, "launch_preview": preview}
+    if args.grant_launch:
+        result.update(grant_adhoc_launch(root, profile, authority_subject=args.authority_subject,
+            authority_epoch=args.authority_epoch))
+    return "ok", result, OK
+
+
+def _worker_adhoc_run(args: argparse.Namespace) -> HandlerResult:
+    from .adhoc_threads import AdhocThreadController
+
+    result = AdhocThreadController(_root(args.root)).run(args.profile, args.envelope,
+        actor=args.actor, acting_session_id=args.session,
+        idempotency_key=args.idempotency_key)
+    return "ok", result, OK
+
+
+def _worker_adhoc_show(args: argparse.Namespace) -> HandlerResult:
+    from .adhoc_threads import AdhocThreadController
+
+    return "ok", AdhocThreadController(_root(args.root)).show(args.dispatch), OK
+
+
+def _worker_adhoc_teardown(args: argparse.Namespace) -> HandlerResult:
+    from .adhoc_threads import AdhocThreadController
+
+    result = AdhocThreadController(_root(args.root)).teardown(args.dispatch,
+        actor=args.actor, acting_session_id=args.session,
+        idempotency_key=args.idempotency_key)
+    return "ok", result, OK
+
+
 def _worker_run(args: argparse.Namespace) -> HandlerResult:
     from .fcd20_conformance import (
         ROWS,
@@ -1474,6 +1882,20 @@ def _deploy(args: argparse.Namespace) -> HandlerResult:
     from .profile_update import prepare_profile_update, finish_profile_update
     binding = prepare_profile_update(getattr(args, "profile_registry", None),
                                      getattr(args, "fleet_profile", None), args.destination)
+    bridge = None
+    if args.command == "install" and Path(args.destination).resolve() == (Path.home() / ".local/share/floati").resolve():
+        from .bridge_rebank import BridgeRebankUnavailable
+        store = Path.home() / ".local/share/floati-zcode-bridge"
+        if store.exists() or store.is_symlink():
+            raise BridgeRebankUnavailable("native install cannot replace the adopted fixed bridge runtime; use update --source --destination with --profile-registry and --fleet-profile for floati-installed-v0", "bridge_rebank_install_unsupported")
+    if args.command == "update" and Path(args.destination).resolve() == (Path.home() / ".local/share/floati").resolve():
+        from .bridge_rebank import BridgeRebankUnavailable, capture_bridge_update
+        store = Path.home() / ".local/share/floati-zcode-bridge"
+        if store.exists() or store.is_symlink():
+            if (binding is None or binding["path"] != Path.home() / ".codex/fleet-bus-profiles.json"
+                    or binding["transport"] != "floati-installed-v0"):
+                raise BridgeRebankUnavailable("the adopted fixed bridge requires an explicit governed update with --profile-registry and --fleet-profile for floati-installed-v0", "bridge_rebank_update_binding_required")
+        bridge = capture_bridge_update(Path.home())
     evidence = DeploymentWriter(
         args.source,
         args.destination,
@@ -1491,6 +1913,21 @@ def _deploy(args: argparse.Namespace) -> HandlerResult:
                 "remedy": "Rerun this update with the same --profile-registry and --fleet-profile after resolving the named registry failure.",
             }
             return "degraded", evidence, 35
+    if bridge is not None:
+        from .bridge_rebank import (BridgeRebankUnavailable, apply_bridge_rebank,
+                                   bridge_rebank_remedy, prepare_bridge_rebank, revalidate_bridge_rebank)
+        try:
+            revalidate_bridge_rebank(bridge)
+            prepared = prepare_bridge_rebank(Path.home())
+            evidence["bridge_rebank"] = apply_bridge_rebank(prepared, plan_digest=prepared.plan["plan_digest"])
+        except (BridgeRebankUnavailable, IntegrityFailure, DurabilityFailure, OSError, ValueError) as exc:
+            receipt = getattr(exc, "receipt", None)
+            remedy = bridge_rebank_remedy(plan_digest=receipt["plan"]["plan_digest"] if receipt else None)
+            evidence["bridge_rebank"] = {"status": "degraded", "code": "bridge_rebank_incomplete",
+                "detail": "The native install completed, but the adopted bridge refresh did not: " + str(exc),
+                "receipt": receipt,
+                "remedy": remedy + "; retain the completed native install and profile transport evidence."}
+            return "degraded", evidence, 35
     return "ok", evidence, OK
 
 
@@ -1502,6 +1939,11 @@ def _refuse_profile_update_subcommand(args):
 def _update(args: argparse.Namespace) -> HandlerResult:
     _refuse_profile_update_subcommand(args)
     action = args.update_action
+    if action == "prepare":
+        from .send_prepare import prepare
+        if args.source or args.destination or args.committed_tree or args.ref != "origin/main":
+            raise ProtocolRefusal("arguments_invalid", "Preparation uses the installed reader and one explicit root.")
+        return "ok", prepare(_root(args.root), status=args.status), OK
     if action is None:
         missing = [
             option
@@ -1542,6 +1984,9 @@ def _update(args: argparse.Namespace) -> HandlerResult:
     from .update_consent import UpdateConsentLedger
 
     destination = Path(args.destination)
+    if action in {"apply", "rollback"}:
+        from .bridge_rebank import refuse_adopted_bridge_fleet_update
+        refuse_adopted_bridge_fleet_update(destination, "signed_update")
     ledger = UpdateConsentLedger(destination)
     if action == "consent":
         if args.epoch is None or args.idempotency_key is None:
@@ -1877,6 +2322,14 @@ def _describe(args: argparse.Namespace) -> HandlerResult:
     return "ok", describe_parser(_parser()), OK
 
 
+def _overlap_observe(args: argparse.Namespace) -> HandlerResult:
+    """Advisory: worktree pairs that changed one path, with nothing registered."""
+
+    from .territory import observe_repository
+
+    return "ok", observe_repository(args.repository, args.base_ref), OK
+
+
 def _overlap_report(args: argparse.Namespace) -> HandlerResult:
     """Emit the existing local overlap fact through one read-only product verb."""
 
@@ -1943,6 +2396,29 @@ def _sweep(args: argparse.Namespace) -> HandlerResult:
     return status, evidence, DEGRADED if status == "degraded" else OK
 
 
+def _reclaim(args: argparse.Namespace) -> HandlerResult:
+    from .codex_wait_contract import live_claimed_trees
+    from .reclaim import host_process_cwds, reclaim
+
+    root = _root(args.root)
+    try:
+        claimed = live_claimed_trees(root)
+        cwds = host_process_cwds()
+    except OSError:
+        return "ok", reclaim(root, apply=False, derivation_failed=True), OK
+    evidence = reclaim(
+        root, apply=args.apply, claimed_trees=claimed, process_cwds=cwds
+    )
+    return "ok", evidence, OK
+
+
+def _checkout_liveness(args: argparse.Namespace) -> HandlerResult:
+    from .checkout_liveness import checkout_liveness
+
+    evidence = checkout_liveness(args.root, args.path)
+    return "ok", evidence, OK
+
+
 def _parser() -> _ArtifactParser:
     parser = _ArtifactParser(prog="floati")
     parser.floati_exit_codes = _EXIT_CODE_CONTRACT
@@ -1951,6 +2427,17 @@ def _parser() -> _ArtifactParser:
     describe = commands.add_parser("describe", floati_mcp_exposure="read")
     describe.add_argument("--json", action="store_true", required=True)
     describe.set_defaults(handler=_describe)
+
+    setup = commands.add_parser('setup', floati_mcp_exposure='never')
+    setup.add_argument('--root', required=True, metavar='PATH')
+    setup.add_argument('--seat', choices=('claude', 'codex', 'cursor', 'zcode'))
+    setup.add_argument('--session', metavar='SESSION')
+    setup.add_argument('--executable', metavar='PATH')
+    setup.add_argument('--hook', choices=('claude', 'codex', 'cursor', 'zcode'))
+    setup_action = setup.add_mutually_exclusive_group()
+    setup_action.add_argument('--confirm', metavar='TOKEN')
+    setup_action.add_argument('--teardown', action='store_true')
+    setup.set_defaults(handler=_network_setup)
 
     overlap = commands.add_parser("overlap")
     overlap_commands = overlap.add_subparsers(
@@ -1962,6 +2449,10 @@ def _parser() -> _ArtifactParser:
     overlap_report.add_argument("--left-ref", required=True, metavar='REF')
     overlap_report.add_argument("--right-ref", required=True, metavar='REF')
     overlap_report.set_defaults(handler=_overlap_report)
+    overlap_observe = overlap_commands.add_parser("observe")
+    overlap_observe.add_argument("--repository", required=True, metavar='PATH')
+    overlap_observe.add_argument("--base-ref", required=True, metavar='REF')
+    overlap_observe.set_defaults(handler=_overlap_observe)
 
     lane = commands.add_parser("lane", floati_mcp_exposure="never")
     lane_commands = lane.add_subparsers(dest="lane_command", required=True)
@@ -1983,6 +2474,16 @@ def _parser() -> _ArtifactParser:
     sweep.add_argument("--root", required=True)
     sweep.add_argument("--apply", action="store_true")
     sweep.set_defaults(handler=_sweep)
+    reclaim = commands.add_parser("reclaim", floati_mcp_exposure="never")
+    reclaim.add_argument("--root", required=True)
+    reclaim.add_argument("--apply", action="store_true")
+    reclaim.set_defaults(handler=_reclaim)
+    liveness = commands.add_parser("checkout-liveness", floati_mcp_exposure="read",
+                                   floati_mcp_omit=("json",))
+    liveness.add_argument("--root", required=True)
+    liveness.add_argument("--path", required=True, metavar="PATH")
+    liveness.add_argument("--json", action="store_true")
+    liveness.set_defaults(handler=_checkout_liveness)
 
     init = commands.add_parser("init")
     init.add_argument("--root")
@@ -2030,6 +2531,7 @@ def _parser() -> _ArtifactParser:
     confluence_bundle.add_argument("--root", required=True)
     confluence_bundle.add_argument("--consumer", required=True)
     confluence_bundle.add_argument("--out", required=True, metavar='PATH')
+    confluence_bundle.add_argument("--schema-version", type=int, choices=(1, 2), default=1)
     confluence_bundle.set_defaults(handler=_confluence_bundle)
 
     confluence_adopt = confluence_commands.add_parser("adopt")
@@ -2123,19 +2625,53 @@ def _parser() -> _ArtifactParser:
     signature_verify.add_argument("--json", action="store_true")
     signature_verify.set_defaults(handler=_signature_verify)
 
+    ask = commands.add_parser("ask", floati_mcp_exposure="never")
+    ask.add_argument("--root", required=True)
+    ask.add_argument("--from", dest="sender", required=True, metavar="NODE")
+    ask.add_argument("--to", dest="recipient", required=True, metavar="ADDRESS")
+    ask_preview = ask.add_mutually_exclusive_group()
+    ask_preview.add_argument("--preview", action="store_true")
+    ask_preview.add_argument("--recipient-preview", metavar="PATH")
+    ask.add_argument("--repo")
+    ask.add_argument("--sha")
+    ask.add_argument("--repository", metavar="PATH")
+    ask.add_argument("--doc")
+    ask.add_argument("--note")
+    ask.add_argument("--session")
+    ask.add_argument("--idempotency-key", metavar="KEY")
+    ask.add_argument("--wait-seconds", type=int, metavar="N")
+    ask.add_argument("--reply-to", metavar="ID")
+    ask.add_argument("--disposition", choices=("answer", "decline"))
+    ask.add_argument("--reason")
+    ask.set_defaults(handler=_ask)
+
+    replay = commands.add_parser("replay", floati_mcp_exposure="never")
+    replay.add_argument("--root", required=True)
+    replay_target = replay.add_mutually_exclusive_group(required=True)
+    replay_target.add_argument("--question", metavar="ID")
+    replay_target.add_argument("--work-item", metavar="ID")
+    replay.set_defaults(handler=_replay)
+
     send = commands.add_parser(
         "send",
         floati_mcp_exposure="governed",
         floati_mcp_required=("idempotency_key",),
+        floati_mcp_omit=("repository", "preview", "recipient_preview"),
     )
     send.add_argument("--root")
     send.add_argument("--from", dest="sender", required=True, metavar='NODE')
-    send.add_argument("--to", dest="recipient", required=True, metavar='NODE')
+    send.add_argument("--to", dest="recipient", required=True, metavar='ADDRESS')
+    send_preview = send.add_mutually_exclusive_group()
+    send_preview.add_argument("--preview", action="store_true")
+    send_preview.add_argument("--recipient-preview", metavar="PATH")
     send.add_argument("--repo", required=True)
     send.add_argument("--sha", required=True)
+    send.add_argument("--repository", metavar='PATH')
     send.add_argument("--doc", required=True)
     send.add_argument("--note", required=True)
     send.add_argument("--reply-to", metavar='ID')
+    send.add_argument("--message-class", choices=("normal", "fyi"), default="normal",
+        help="fyi waits for inbox or the next Stop without waking an idle seat")
     send.add_argument("--idempotency-key", metavar='KEY')
     send.add_argument("--claim", metavar='PATH')
     send.set_defaults(handler=_send)
@@ -2352,7 +2888,16 @@ def _parser() -> _ArtifactParser:
     receipts = commands.add_parser("receipts", floati_mcp_exposure="read")
     receipts.add_argument("node", metavar="NODE")
     receipts.add_argument("--root")
+    receipts.add_argument("--since", metavar="TIMESTAMP")
     receipts.set_defaults(handler=_receipts)
+
+    consume = commands.add_parser("consume", floati_mcp_exposure="governed")
+    consume.add_argument("message_id", metavar="ID")
+    consume.add_argument("--root", required=True)
+    consume.add_argument("--as", dest="recipient", required=True, metavar="NODE")
+    consume.add_argument("--session", required=True, metavar="SESSION")
+    consume.add_argument("--idempotency-key", required=True, metavar="KEY")
+    consume.set_defaults(handler=_consume)
 
     supervise = commands.add_parser("supervise")
     supervise.add_argument("--root")
@@ -2370,6 +2915,8 @@ def _parser() -> _ArtifactParser:
     presence_show = presence_commands.add_parser("show")
     presence_show.add_argument("--root")
     presence_show.set_defaults(handler=_presence_show)
+    from .fleet_presence import register_cli as register_fleet_presence
+    register_fleet_presence(presence_commands)
 
     board = commands.add_parser("board")
     board_root = board.add_mutually_exclusive_group()
@@ -2424,8 +2971,11 @@ def _parser() -> _ArtifactParser:
     work_add.add_argument("--root")
     work_add.add_argument("--title", required=True)
     work_add.add_argument("--owner", metavar='NODE')
+    work_add.add_argument("--as", dest="dispatcher", metavar='NODE')
     work_add.add_argument("--workspace", action="store_true")
+    work_add.add_argument("--adhoc-profile", metavar="ID")
     work_add.add_argument("--needs", action="append", default=[])
+    work_add.add_argument("--edits", action="append", default=[], metavar="PATH")
     _add_artifact_options(work_add)
     work_add.set_defaults(handler=_work_add)
 
@@ -2443,14 +2993,52 @@ def _parser() -> _ArtifactParser:
     work_complete.add_argument("--id", dest="item_id", required=True, metavar='ID')
     work_complete.add_argument("--as", dest="actor", metavar='NODE')
     work_complete.add_argument("--now")
+    work_complete.add_argument("--consume", dest="consume_ids", action="append", default=[], metavar="ID")
+    work_complete.add_argument("--session", metavar="SESSION")
     _add_artifact_options(work_complete)
     work_complete.set_defaults(handler=_work_complete)
 
     work_show = work_commands.add_parser("show")
     work_show.add_argument("--root")
     work_show.add_argument("--id", dest="item_id", metavar='ID')
+    work_show.add_argument("--as", dest="actor", metavar='NODE')
     work_show.set_defaults(handler=_work_show)
 
+    work_notify = work_commands.add_parser("notify")
+    work_notify.add_argument("--root", required=True)
+    notification_selection = work_notify.add_mutually_exclusive_group(required=True)
+    notification_selection.add_argument("--id", dest="item_id", metavar="ID")
+    notification_selection.add_argument("--all", action="store_true")
+    work_notify.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    work_notify.set_defaults(handler=_work_notify)
+
+    work_handoff = work_commands.add_parser("handoff")
+    handoff_commands = work_handoff.add_subparsers(dest="handoff_command", required=True)
+
+    handoff_record = handoff_commands.add_parser("record")
+    handoff_record.add_argument("--root", required=True)
+    handoff_record.add_argument("--id", dest="item_id", required=True, metavar="ID")
+    handoff_record.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    handoff_record.add_argument("--repository", required=True, metavar="PATH")
+    handoff_record.add_argument("--run", action="append", default=[], metavar="ARGV")
+    handoff_record.add_argument("--unittest", action="append", default=[], metavar="SELECTOR")
+    handoff_record.add_argument("--artifact", action="append", default=[], metavar="PATH")
+    handoff_record.add_argument("--remaining", action="append", default=[], metavar="TEXT")
+    handoff_record.add_argument("--statement", action="append", default=[], metavar="TEXT")
+    handoff_record.add_argument("--supersedes", metavar="ID")
+    handoff_record.add_argument("--idempotency-key", required=True, metavar="KEY")
+    handoff_record.set_defaults(handler=_work_handoff_record)
+
+    handoff_show = handoff_commands.add_parser("show", floati_mcp_exposure="read")
+    handoff_show.add_argument("--root", required=True)
+    handoff_show.add_argument("--id", dest="item_id", required=True, metavar="ID")
+    handoff_show.add_argument("--handoff-id", metavar="ID")
+    handoff_show.add_argument("--json", action="store_true")
+    handoff_show.set_defaults(handler=_work_handoff_show)
+
+    from .dispatch_cli import add_dispatch_parser
+
+    add_dispatch_parser(commands)
     intake = commands.add_parser("intake")
     intake_commands = intake.add_subparsers(dest="intake_command", required=True)
 
@@ -2512,6 +3100,39 @@ def _parser() -> _ArtifactParser:
 
     worker = commands.add_parser("worker")
     worker_commands = worker.add_subparsers(dest="worker_command", required=True)
+    adhoc = worker_commands.add_parser("adhoc")
+    adhoc_commands = adhoc.add_subparsers(dest="adhoc_command", required=True)
+    adhoc_profile = adhoc_commands.add_parser("profile")
+    adhoc_profile.add_argument("--root", required=True)
+    adhoc_profile.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    adhoc_profile.add_argument("--adapter", choices=("codex", "claude", "pi"), required=True)
+    adhoc_profile.add_argument("--lane-opening", required=True, metavar="ID")
+    adhoc_profile.add_argument("--repository", required=True, metavar="REPO")
+    adhoc_profile.add_argument("--to", dest="recipient", required=True, metavar="NODE")
+    adhoc_profile.add_argument("--idempotency-key", required=True, metavar="KEY")
+    adhoc_profile.add_argument("--authority-subject", metavar="SUBJECT")
+    adhoc_profile.add_argument("--authority-epoch", type=int, metavar="N")
+    adhoc_profile.add_argument("--grant-launch", action="store_true")
+    adhoc_profile.set_defaults(handler=_worker_adhoc_profile)
+    adhoc_run = adhoc_commands.add_parser("run")
+    adhoc_run.add_argument("--root", required=True)
+    adhoc_run.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    adhoc_run.add_argument("--session", required=True, metavar="SESSION")
+    adhoc_run.add_argument("--profile", required=True, metavar="ID")
+    adhoc_run.add_argument("--envelope", required=True, metavar="ID")
+    adhoc_run.add_argument("--idempotency-key", required=True, metavar="KEY")
+    adhoc_run.set_defaults(handler=_worker_adhoc_run)
+    adhoc_show = adhoc_commands.add_parser("show")
+    adhoc_show.add_argument("--root", required=True)
+    adhoc_show.add_argument("--dispatch", required=True, metavar="ID")
+    adhoc_show.set_defaults(handler=_worker_adhoc_show)
+    adhoc_teardown = adhoc_commands.add_parser("teardown")
+    adhoc_teardown.add_argument("--root", required=True)
+    adhoc_teardown.add_argument("--as", dest="actor", required=True, metavar="NODE")
+    adhoc_teardown.add_argument("--session", required=True, metavar="SESSION")
+    adhoc_teardown.add_argument("--dispatch", required=True, metavar="ID")
+    adhoc_teardown.add_argument("--idempotency-key", required=True, metavar="KEY")
+    adhoc_teardown.set_defaults(handler=_worker_adhoc_teardown)
     worker_run = worker_commands.add_parser("run")
     worker_run.add_argument("--root")
     worker_run.add_argument("--as", dest="actor", required=True, metavar='NODE')
@@ -2547,6 +3168,10 @@ def _parser() -> _ArtifactParser:
     update.add_argument("--fleet-profile", metavar="PROFILE")
     update.set_defaults(handler=_update, update_action=None)
     update_commands = update.add_subparsers(dest="update_command")
+    prepare = update_commands.add_parser("prepare")
+    prepare.add_argument("--root", required=True)
+    prepare.add_argument("--status", action="store_true")
+    prepare.set_defaults(handler=_update, update_action="prepare")
     for update_action in ("consent", "revoke", "status", "check", "apply", "rollback"):
         update_action_parser = update_commands.add_parser(
             update_action,
@@ -2578,6 +3203,16 @@ def _parser() -> _ArtifactParser:
 
     register_context(commands)
     register_purge(commands)
+    from .holds import register_cli as register_holds
+    register_holds(commands)
+    from .needs_inbox import register_cli as register_needs
+    register_needs(commands)
+    from .territory import register_cli as register_territory
+    register_territory(commands)
+    from .quiet_window import register_cli as register_quiet
+    register_quiet(commands)
+    from .archive_backup import register_cli as register_backup
+    register_backup(commands)
     return parser
 
 
@@ -2589,11 +3224,14 @@ def _emit(
     *,
     schema_version: Optional[int] = None,
 ) -> None:
+    from .inbound_hold import mask_held_envelopes
+    from .root import opened_roots
+
     artifact = {
         "artifact_version": 0,
         "command": command,
         "status": status,
-        "evidence": evidence,
+        "evidence": mask_held_envelopes(opened_roots, evidence),
     }
     if schema_version is not None:
         artifact["schema_version"] = schema_version
@@ -2616,6 +3254,9 @@ def _protocol_refusal_evidence(exc: ProtocolRefusal) -> Dict[str, object]:
         "detail": exc.detail,
         "remedy": exc.remedy,
     }
+    refusal_detail = getattr(exc, "refusal_detail", None)
+    if isinstance(refusal_detail, dict):
+        evidence["refusal_detail"] = dict(refusal_detail)
     context = getattr(exc, "artifact_context", None)
     if isinstance(context, dict) and set(context) == {"root", "tenant_id"}:
         evidence = {**context, **evidence}
@@ -2628,16 +3269,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from . import timings as timing_receipts
 
     timing_receipts.begin(arguments)
+    if "--help" in arguments:
+        from .helptext import help_for
+
+        static_help = help_for(arguments)
+        if static_help is not None:
+            print(static_help, end="")
+            return OK
     parser = _parser()
     from .command_contract import schema_version_for_arguments
 
     artifact_schema_version = schema_version_for_arguments(parser, arguments)
-    from .helptext import help_for
-
-    static_help = help_for(arguments)
-    if static_help is not None:
-        print(static_help, end="")
-        return OK
     try:
         parsed = parser.parse_args(arguments)
         timing_receipts.bind_parsed(parsed)

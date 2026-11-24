@@ -61,6 +61,32 @@ class SupportBundleTests(unittest.TestCase):
                 if member.isfile()
             }
 
+    def test_support_export_omits_private_dispatch_history(self) -> None:
+        from floati.dispatch_records import DispatchRecords
+        from floati.registry import Registry
+        from floati.support_bundle import derive_collectors
+
+        for node in ("sender-a", "recipient-b"):
+            Registry(self.root).register(node, "Codex")
+        brief = self.base / "brief.txt"
+        marker = b"Privately retained notes for the local review.\n"
+        brief.write_bytes(marker)
+        records = DispatchRecords(self.root)
+        row = records.record("review", "sender-a", "initial", "recipient-b",
+                             "review", brief, external="native task")
+        brief.unlink()
+        self.assertEqual(marker.decode(), records.brief("review", 1, "sender-a")["text"])
+
+        ledgers = tuple(collector for collector in derive_collectors(self.root, Path.cwd(), 240)
+                        if collector[0].startswith("ledger-"))
+        self.assertTrue(ledgers)
+        self.create(collectors=ledgers)
+        archive = self.members()
+        self.assertTrue(archive)
+        for payload in archive.values():
+            self.assertNotIn(marker, payload)
+            self.assertNotIn(row["id"].encode(), payload)
+
     def test_non_tty_without_yes_refuses_without_prompt_or_file(self) -> None:
         from floati.support_bundle import create_support_bundle
 
@@ -144,8 +170,8 @@ class SupportBundleTests(unittest.TestCase):
         self.assertNotEqual([], verify_support_bundle(self.out))
 
     def test_identity_gate_refuses_raw_governed_text_and_output_is_scrubbed(self) -> None:
-        from floati.identity_fence import HOME_PREFIX
-        from floati.support_bundle import identity_gate
+        from floati.identity_fence import GOVERNED_TEMP_PREFIXES, HOME_PREFIX
+        from floati.support_bundle import identity_gate, verify_support_bundle
 
         with self.assertRaises(ProtocolRefusal) as caught:
             identity_gate(f"path={HOME_PREFIX}operator/fleet".encode("utf-8"))
@@ -164,21 +190,40 @@ class SupportBundleTests(unittest.TestCase):
             bytes.fromhex("2f7661722f666f6c64657273").decode("ascii"),
             bytes.fromhex("2f746d70").decode("ascii"),
         )
+        temp_prefixes = tuple(dict.fromkeys((*temp_prefixes, *GOVERNED_TEMP_PREFIXES)))
         for index, prefix in enumerate(temp_prefixes):
-            with self.subTest(prefix=prefix):
-                with self.assertRaises(ProtocolRefusal) as caught_temp:
-                    identity_gate(f"path={prefix}/fleet".encode("utf-8"))
-                self.assertEqual(
-                    "snapshot_identity_fence_failed", caught_temp.exception.code
-                )
-                destination = self.base / f"temp-{index}.tar.gz"
-                self.create(
-                    out=destination,
-                    collectors=(("identity", lambda prefix=prefix: {"path": f"{prefix}/fleet"}),),
-                )
-                with tarfile.open(destination, "r:gz") as archive:
-                    scrubbed = archive.extractfile("collectors/identity.json").read()
-                self.assertEqual({"path": "<temp>/fleet"}, json.loads(scrubbed))
+            for case, suffix in (("ordinary", "/fleet"),
+                                 ("nested", "\x2ftmp-support-fixture/fleet")):
+                with self.subTest(prefix=prefix, case=case):
+                    value = prefix + suffix
+                    with self.assertRaises(ProtocolRefusal) as caught_temp:
+                        identity_gate(f"path={value}".encode("utf-8"))
+                    self.assertEqual(
+                        "snapshot_identity_fence_failed", caught_temp.exception.code
+                    )
+                    destination = self.base / f"temp-{index}-{case}.tar.gz"
+                    payload = {"path": value}
+                    if case == "nested":
+                        payload["status"] = "ok"
+                    self.create(
+                        out=destination,
+                        collectors=(("identity", lambda payload=payload: payload),),
+                    )
+                    with tarfile.open(destination, "r:gz") as archive:
+                        members = {member.name: archive.extractfile(member).read()
+                                   for member in archive.getmembers() if member.isfile()}
+                    section = json.loads(members["collectors/identity.json"])
+                    if case == "ordinary":
+                        self.assertEqual({"path": "<temp>/fleet"}, section)
+                    else:
+                        self.assertEqual("ok", section["status"])
+                        self.assertTrue(section["path"].endswith("/fleet"))
+                        self.assertEqual([], verify_support_bundle(destination))
+                        for member, data in members.items():
+                            with self.subTest(member=member):
+                                identity_gate(data)
+                                for governed in GOVERNED_TEMP_PREFIXES:
+                                    self.assertNotIn(governed.encode("ascii"), data)
 
     def test_finished_bundle_derives_every_member_into_identity_gate(self) -> None:
         """Catches an archive member bypassing the shared identity fence."""

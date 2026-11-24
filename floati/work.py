@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
-from .errors import IntegrityFailure, ProtocolRefusal
+from .errors import AUTHORITY_SUPERSEDED, IntegrityFailure, ProtocolRefusal
 from .host_paths import worker_workspace_root
 from .consumption import ConsumptionLedger
+from .car_fence import car_acceptance_guard
 from .ids import uuid7_hex
 from .jsonl import read_records, read_records_snapshot, transact
 from .records import validate_record
@@ -48,11 +49,19 @@ class WorkLog:
         owner: str,
         artifact_bindings: Sequence[Dict[str, str]],
         *,
+        dispatcher: Optional[str] = None,
+        refuse_duplicates: bool = True,
         needs: Sequence[str] = (),
         provision_workspace: bool = False,
+        car_binding: Optional[Dict[str, str]] = None,
+        adhoc_profile_id: Optional[str] = None,
         now: Optional[datetime] = None,
+        notification_findings: Optional[List[Dict[str, object]]] = None,
     ) -> Dict[str, object]:
+        """Return the stored item; collect command findings separately if requested."""
         self.registry.require_active(owner)
+        if dispatcher is not None:
+            self.registry.require_active(dispatcher)
         if not isinstance(provision_workspace, bool):
             raise ProtocolRefusal(
                 "workspace_invalid", "workspace provisioning must be explicitly enabled"
@@ -71,12 +80,39 @@ class WorkLog:
         }
         if needs:
             record["needs"] = list(needs)
+        if car_binding is not None:
+            record["schema_version"] = 1
+            record["car_binding"] = dict(car_binding)
+        if adhoc_profile_id is not None:
+            if car_binding is not None or provision_workspace:
+                raise ProtocolRefusal("adhoc_binding_changed", "borrowed work cannot also own a fresh workspace or car binding")
+            from .adhoc_profiles import AdhocProfiles
+            profile = AdhocProfiles(self.root).get(adhoc_profile_id)
+            if profile["node_id"] != owner:
+                raise ProtocolRefusal("work_owner_mismatch", "borrowed work belongs to the exact profile node")
+            record.update(schema_version=2, workspace=profile["workspace"],
+                adhoc_binding={"profile_id": profile["id"], "lane_opening_id": profile["lane_opening_id"],
+                    "node_lease_id": profile["node_lease_id"], "workspace": profile["workspace"]})
         if provision_workspace:
             record["workspace"] = str(worker_workspace_root() / item_id)
         validate_record(record, self.root.tenant_id, frozenset({"work_item"}), integrity=False)
 
         def decide(records: List[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
             states = self.consumption.project(records)
+            if refuse_duplicates:
+                for prior in records:
+                    if prior["kind"] != "work_item" or states[str(prior["id"])]["state"] != "open":
+                        continue
+                    keys = ("title", "owner", "artifact_bindings", "needs", "car_binding", "adhoc_binding")
+                    matches = all(
+                        prior.get(key, [] if key == "needs" else None)
+                        == record.get(key, [] if key == "needs" else None)
+                        for key in keys
+                    )
+                    if matches and ("workspace" in prior) == ("workspace" in record):
+                        raise ProtocolRefusal(
+                            "work_duplicate_open", "an identical open work item already exists"
+                        )
             for dependency in record.get("needs", []):
                 if dependency not in states:
                     raise ProtocolRefusal(
@@ -85,7 +121,33 @@ class WorkLog:
                     )
             return record, record
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
+        with car_acceptance_guard(self.root):
+            # Authoring input precedes the item; a raced duplicate leaves only
+            # an inert intent. Ordinary duplicates do not create journals.
+            decide(read_records_snapshot(self.root, self.relative_path, allowed_kinds=WORK_KINDS))
+            from .work_notification import WorkNotifications, _absence
+            journal = WorkNotifications(self.root)
+            if dispatcher is not None:
+                journal.intent(item_id, dispatcher)
+            result = transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
+        findings = _absence("add", dispatcher, artifact_bindings)
+        if dispatcher is not None and artifact_bindings:
+            findings.extend(journal.replay(self, item_id, dispatcher, now=current)["findings"])
+        if notification_findings is not None:
+            notification_findings.extend(findings)
+        return result
+
+    def require_claimable(
+        self, item_id: str, actor: str, *, now: Optional[datetime] = None,
+    ) -> None:
+        """Preflight work state before resolving CLI authority defaults.
+
+        Claim still rechecks work state and authority inside its transaction.
+        """
+        self.registry.require_active(actor)
+        self.registry.require_protocol_lease(actor, now=_now(now), act="work claim by actor")
+        item = self.show(item_id)[0]
+        self._require_claimable(item, actor)
 
     def claim(
         self,
@@ -95,7 +157,9 @@ class WorkLog:
         authority_epoch: int,
         *,
         now: Optional[datetime] = None,
+        notification_findings: Optional[List[Dict[str, object]]] = None,
     ) -> Dict[str, object]:
+        """Return the claim record, keeping notification findings out of its fields."""
         self.registry.require_active(actor)
         current = _now(now)
         self.registry.require_protocol_lease(
@@ -104,8 +168,8 @@ class WorkLog:
         subject = validate_identifier(authority_subject, "authority_subject")
         if not isinstance(authority_epoch, int) or isinstance(authority_epoch, bool) or authority_epoch < 1:
             raise ProtocolRefusal("authority_epoch_invalid", "authority epoch must be a positive integer")
-        self._require_authority(subject, actor, authority_epoch, current)
-        return self._transition(
+        pending = self._replay(item_id, actor, current)
+        result = self._transition(
             item_id,
             "claim",
             actor,
@@ -114,6 +178,9 @@ class WorkLog:
             [],
             current,
         )
+        if notification_findings is not None:
+            notification_findings.extend(pending["findings"])
+        return result
 
     def claim_owned_oldest(
         self,
@@ -170,6 +237,8 @@ class WorkLog:
                 raise ProtocolRefusal(
                     "work_owned_open_absent", "no owned open work item is available"
                 )
+            if item.get("adhoc_binding") is not None:
+                raise ProtocolRefusal("workspace_invalid", "borrowed work requires the exact native readiness path")
             record = self._transition_record(
                 str(item["id"]),
                 "claim",
@@ -189,12 +258,22 @@ class WorkLog:
                     "last_activity": record["timestamp"],
                 }
             )
+            if item.get("car_binding") is not None:
+                claimed["claim_id"] = record["id"]
             return claimed, record
 
         try:
-            return transact(
-                self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS
-            )
+            with car_acceptance_guard(self.root):
+                snapshot = self.consumption.project(read_records_snapshot(
+                    self.root, self.relative_path, allowed_kinds=WORK_KINDS))
+                candidate = next((item for item in snapshot.values()
+                                  if item["readiness"] == "ready" and item["owner"] == actor), None)
+                pending = ({"findings": []} if candidate is None else
+                           self._replay(str(candidate["id"]), actor, current, already_guarded=True))
+                result = transact(
+                    self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS
+                )
+            return {**result, "findings": pending["findings"]}
         except IntegrityFailure as failure:
             raise IntegrityFailure(
                 "consumption_state_unavailable",
@@ -208,7 +287,11 @@ class WorkLog:
         artifact_bindings: Sequence[Dict[str, str]],
         *,
         now: Optional[datetime] = None,
+        consume_ids: Sequence[str] = (),
+        session_id: Optional[str] = None,
+        notification_findings: Optional[List[Dict[str, object]]] = None,
     ) -> Dict[str, object]:
+        """Return the completion record and collect optional command findings beside it."""
         self.registry.require_active(actor)
         current = _now(now)
 
@@ -217,6 +300,13 @@ class WorkLog:
             item = states.get(item_id)
             if item is None:
                 raise ProtocolRefusal("work_unknown", "work item does not exist")
+            if item["state"] == "completed" and item["holder"] == actor:
+                from .work_notification import WorkNotifications
+                prior = next(r for r in reversed(records) if r["kind"] == "work_transition"
+                             and r["work_item_id"] == item_id and r["action"] == "complete")
+                if (prior["artifact_bindings"] == list(artifact_bindings)
+                        and WorkNotifications(self.root).records(item_id)):
+                    return prior, None
             if item["state"] != "claimed":
                 raise ProtocolRefusal("work_not_claimed", "work item must be claimed before completion")
             if item["holder"] != actor:
@@ -232,16 +322,115 @@ class WorkLog:
             )
             return record, record
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
+        with car_acceptance_guard(self.root):
+            if consume_ids:
+                if session_id is None:
+                    raise ProtocolRefusal("consume_session_required", "work complete --consume requires --session", remedy="pass --session naming the chat that acted on these envelopes")
+                # Validate the holder and completion payload before authoring
+                # any ACTED receipt. The car guard serializes work writers.
+                decide(read_records_snapshot(self.root, self.relative_path, allowed_kinds=WORK_KINDS))
+                from .message_consumption import MessageConsumption
+                MessageConsumption(self.root).consume_many(
+                    actor, consume_ids, session_id, work_item_id=item_id, now=current,
+                )
+            result = transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
+        from .work_notification import WorkNotifications, _absence
+        journal = WorkNotifications(self.root)
+        intent = next((r for r in journal.records(item_id) if r["phase"] == "intent"), None)
+        findings = _absence("complete", None if intent is None else intent["dispatcher"], artifact_bindings)
+        findings.extend(journal.replay(self, item_id, actor, now=current)["findings"])
+        if notification_findings is not None:
+            notification_findings.extend(findings)
+        return result
 
-    def show(self, item_id: Optional[str] = None) -> List[Dict[str, object]]:
-        states = self.consumption.project()
-        if item_id is None:
-            return list(states.values())
-        item = states.get(item_id)
-        if item is None:
+    def _replay(self, item_id, actor, current, *, already_guarded=False):
+        from .work_notification import WorkNotifications
+        return WorkNotifications(self.root).replay(self, item_id, actor, now=current, already_guarded=already_guarded)
+
+    def notify(self, item_id, actor, *, now=None):
+        self.registry.require_active(actor)
+        current = _now(now)
+        self.registry.require_protocol_lease(actor, now=current, act="work notify by sender")
+        items = self.consumption.project()
+        if item_id is not None and item_id not in items:
             raise ProtocolRefusal("work_unknown", "work item does not exist")
-        return [item]
+        notifications, findings = [], []
+        for selected in ([item_id] if item_id is not None else items):
+            if item_id is None:
+                from .work_notification import WorkNotifications
+                pending = WorkNotifications(self.root).plan(self, selected, now=current)[3]
+                if not any(n["sender"] == actor for n in pending):
+                    continue
+            result = self._replay(selected, actor, current)
+            notifications.extend(result["notifications"])
+            findings.extend(result["findings"])
+        return {"notifications": notifications, "findings": findings}
+
+    def show(self, item_id: Optional[str] = None, *, actor: Optional[str] = None,
+             now: Optional[datetime] = None) -> List[Dict[str, object]]:
+        states = self.consumption.project()
+        if item_id is not None and item_id not in states:
+            raise ProtocolRefusal("work_unknown", "work item does not exist")
+        items = list(states.values()) if item_id is None else [states[item_id]]
+        from .work_notification import WorkNotifications
+        journal = WorkNotifications(self.root)
+        for item in items:
+            item["notifications"] = journal.records(str(item["id"]))
+        if actor is None:
+            return items
+        self.registry.require_active(actor)
+        current = _now(now)
+        try:
+            self.registry.require_protocol_lease(actor, now=current, act="work claim by actor")
+            lease_code = None
+        except ProtocolRefusal as refusal:
+            lease_code = refusal.code
+        directory = self.root.resolve_relative(Path("authority-grants"))
+        grants = []
+        if directory.exists():
+            for path in sorted(directory.glob("*.jsonl")):
+                rows = read_records_snapshot(self.root, Path("authority-grants") / path.name,
+                                    allowed_kinds={"authority_grant"})
+                if rows:
+                    grants.append(rows)
+        authorities = [rows[-1] for rows in grants if rows[-1]["holder"] == actor
+                       and rows[-1]["state"] == "active"
+                       and current < _parse_time(str(rows[-1]["expires_at"]))]
+        superseded = []
+        for rows in grants:
+            earlier = next((row for row in reversed(rows[:-1]) if row["holder"] == actor), None)
+            if (earlier is not None and rows[-1]["holder"] != actor
+                    and earlier["state"] == "active"
+                    and current < _parse_time(str(earlier["expires_at"]))):
+                superseded.append(rows[-1])
+        for item in items:
+            code = lease_code
+            if code is None:
+                try:
+                    self._require_claimable(item, actor)
+                except ProtocolRefusal as refusal:
+                    code = refusal.code
+            if code is None and not authorities:
+                code = AUTHORITY_SUPERSEDED if superseded else "authority_missing"
+            item["eligibility"] = {
+                "eligible": code is None, "code": code,
+                "authorities": [{"subject": g["subject_id"], "epoch": g["epoch"]} for g in authorities],
+                "findings": [{"code": AUTHORITY_SUPERSEDED, "subject": g["subject_id"],
+                              "holder": g["holder"], "epoch": g["epoch"]} for g in superseded],
+            }
+        return items
+
+    @staticmethod
+    def _require_claimable(item: Dict[str, object], actor: str) -> None:
+        if item["state"] == "claimed":
+            raise ProtocolRefusal("work_already_claimed", "work item already has a claimant")
+        if item["state"] != "open":
+            raise ProtocolRefusal("work_not_open", "work item is not open")
+        if item["readiness"] != "ready":
+            raise ProtocolRefusal("work_dependencies_blocked", "work item dependencies are incomplete")
+        if (item.get("car_binding") is not None or item.get("adhoc_binding") is not None) and item["owner"] != actor:
+            raise ProtocolRefusal("work_owner_mismatch", "a car must be claimed by its exact owner",
+                remedy="claim as the recorded owner or request an explicit coordinator reassignment")
 
     def _transition(
         self,
@@ -258,13 +447,8 @@ class WorkLog:
             item = states.get(item_id)
             if item is None:
                 raise ProtocolRefusal("work_unknown", "work item does not exist")
-            if item["state"] != "open":
-                raise ProtocolRefusal("work_not_open", "work item is not open")
-            if item["readiness"] != "ready":
-                raise ProtocolRefusal(
-                    "work_dependencies_blocked",
-                    "work item dependencies are incomplete",
-                )
+            self._require_claimable(item, actor)
+            self._require_authority(authority_subject, actor, authority_epoch, current)
             record = self._transition_record(
                 item_id,
                 action,
@@ -276,7 +460,8 @@ class WorkLog:
             )
             return record, record
 
-        return transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
+        with car_acceptance_guard(self.root):
+            return transact(self.root, self.relative_path, decide, allowed_kinds=WORK_KINDS)
 
     def _transition_record(
         self,

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/provider-switch-receipt.schema.json",
+  "title": "Floati Provider Switch Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "node_id",
+    "previous_registry_entry_id",
+    "previous_harness",
+    "previous_model",
+    "harness",
+    "model",
+    "registry_entry_id"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {
+      "type": "string",
+      "pattern": "^provider-switch-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "provider_switch_receipt"},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "previous_registry_entry_id": {
+      "type": "string",
+      "pattern": "^registry-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "previous_harness": {"type": "string", "minLength": 1, "maxLength": 64},
+    "previous_model": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,126}[A-Za-z0-9])?$"
+    },
+    "harness": {"type": "string", "minLength": 1, "maxLength": 64},
+    "model": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,126}[A-Za-z0-9])?$"
+    },
+    "registry_entry_id": {
+      "type": "string",
+      "pattern": "^registry-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    }
+  }
+}

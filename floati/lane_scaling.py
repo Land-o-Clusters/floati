@@ -17,6 +17,7 @@ from .admin_registry import RegistryAdminBackend
 from .bus_epoch import shared_epoch_operation
 from .errors import ProtocolRefusal
 from .events import EventLog
+from .git_process import GIT_MAINTENANCE_OPTIONS
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact, transact_records
 from .worktree_safety import require_worktree_commits_referenced
@@ -580,7 +581,8 @@ class LaneScalingService:
         try:
             completed = subprocess.run(
                 [
-                    "/usr/bin/git", "--no-optional-locks", "--no-replace-objects",
+                    "/usr/bin/git", *GIT_MAINTENANCE_OPTIONS,
+                    "--no-optional-locks", "--no-replace-objects",
                     "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
                     "-C", str(workspace), "status", "--porcelain=v1",
                 ],

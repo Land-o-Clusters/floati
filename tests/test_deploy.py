@@ -17,6 +17,7 @@ from floati.identity_fence import (
     RETIRED_PRODUCT_SHORT_NAME,
 )
 from floati.uninstall import UninstallWriter
+from tests.git_fixture_cache import cached_tree, fixture_git
 
 # The dot-prefixed workspace name the pre-rename product wrote, built from
 # the fence's own governed token rather than spelled: these fixtures drive a
@@ -38,18 +39,28 @@ class DeploymentWriterTests(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.source = self.base / "source"
         self.source.mkdir()
-        self._git("init", "--quiet", "--initial-branch=lane/hm0")
-        self._git("config", "user.name", "Floati Test")
-        self._git("config", "user.email", "floati-test@example.invalid")
-        self._write_source("floati/__init__.py", "VERSION = 'one'\n")
-        self._write_source("schemas/v0/example.json", '{"schema_version":0}\n')
-        self._write_source("scripts/floati", "#!/bin/sh\nexit 0\n")
-        (self.source / "scripts/floati").chmod(0o755)
-        self._write_source("scripts/floati-codex-wait", "#!/bin/sh\nexit 0\n")
-        (self.source / "scripts/floati-codex-wait").chmod(0o755)
-        self._write_manifest()
-        self._git("add", ".")
-        self._git("commit", "--quiet", "-m", "source one")
+
+        def build(template: Path) -> None:
+            # The fixture's own writers, pointed at the template for the build.
+            source, self.source = self.source, template
+            try:
+                self._git("init", "--quiet", "--initial-branch=lane/hm0")
+                self._git("config", "user.name", "Floati Test")
+                self._git("config", "user.email", "floati-test@example.invalid")
+                self._write_source("floati/__init__.py", "VERSION = 'one'\n")
+                self._write_source("schemas/v0/example.json", '{"schema_version":0}\n')
+                self._write_source("scripts/floati", "#!/bin/sh\nexit 0\n")
+                (self.source / "scripts/floati").chmod(0o755)
+                self._write_source("scripts/floati-codex-wait", "#!/bin/sh\nexit 0\n")
+                (self.source / "scripts/floati-codex-wait").chmod(0o755)
+                self._write_manifest()
+                self._git("add", ".")
+                self._git("commit", "--quiet", "-m", "source one")
+            finally:
+                self.source = source
+
+        # Built once per process; every test owns an independent copy.
+        cached_tree(self.source, ("test_deploy.DeploymentWriterTests.source",), build)
         self.git_directory = Path(shutil.which("git") or "").parent
         self.assertTrue((self.git_directory / "git").is_file())
         self._path_patch = patch.dict(
@@ -67,7 +78,7 @@ class DeploymentWriterTests(unittest.TestCase):
 
     def _git(self, *args: str) -> str:
         result = subprocess.run(
-            ["git", *args],
+            [fixture_git("git"), *args],
             cwd=self.source,
             check=True,
             capture_output=True,
@@ -760,8 +771,11 @@ class DeploymentWriterTests(unittest.TestCase):
         invalid = self.base / "not-a-directory"
         invalid.write_bytes(b"file\n")
         before = self._tree_bytes(destination)
-        for path in (str(shadow), os.pathsep.join((str(shadow), str(invalid)))):
-            with self.subTest(path=path):
+        for case_index, path in enumerate((str(shadow), os.pathsep.join((str(shadow), str(invalid))))):
+            with self.subTest(case=(
+                "shadow-only",
+                "shadow-then-nondirectory-path-entry",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as raised:
                     DeploymentWriter(self.source, destination, "update", ref="HEAD",
                                      committed_tree=True, installer_path=path).run()

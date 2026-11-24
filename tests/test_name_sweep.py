@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from tests.temp_roots import REAL_TEMP_ROOT
 
 from floati.identity_fence import HOME_PREFIX, OWNER_USERNAME
 from tests.export_inventory import (
@@ -524,35 +525,36 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
     def test_full_capability_grid_is_generated_not_hand_written(self) -> None:
         """The full-grid page must equal the renderer's full mode, same law as the README block."""
         import subprocess
-        page = (REPOSITORY_ROOT / "docs" / "capability-matrix.md").read_text(encoding="utf-8")
-        with tempfile.NamedTemporaryFile(dir=REPOSITORY_ROOT / "docs", suffix=".md") as output:
+        page_path = REPOSITORY_ROOT / "docs" / "capability-matrix.md"
+        page = page_path.read_text(encoding="utf-8")
+
+        def repository_links(markdown, parent):
+            def rewrite(match):
+                href = match.group(1)
+                if href.startswith(("#", "//")) or re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", href):
+                    return match.group(0)
+                path, separator, fragment = href.partition("#")
+                self.assertFalse(Path(path).is_absolute(), href)
+                target = (parent / path).resolve()
+                relative = target.relative_to(REPOSITORY_ROOT.resolve()).as_posix()
+                return "](" + relative + separator + fragment + ")"
+            return re.sub(r"\]\(([^)]+)\)", rewrite, markdown)
+
+        with tempfile.NamedTemporaryFile(dir=REAL_TEMP_ROOT, suffix=".md") as output:
             subprocess.run(
                 ["python3", "scripts/capability-matrix-render.py", "--mode", "full",
                  "--output", output.name],
                 cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=True,
             )
             rendered = Path(output.name).read_text(encoding="utf-8").strip()
-        self.assertIn(rendered, page)
+            rendered = repository_links(rendered, Path(output.name).parent)
+        self.assertIn(rendered, repository_links(page, page_path.parent))
 
     def test_readme_local_references_resolve(self) -> None:
         """Catches a README link or image that points at an absent repository file."""
-        readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
-        references = re.findall(r"\]\(([^)]+)\)", readme)
-        references.extend(re.findall(r'\b(?:src|srcset)="([^"]+)"', readme))
+        from floati.release import readme_claim_receipt_findings
 
-        local_paths = {
-            reference.split("#", 1)[0]
-            for reference in references
-            if not re.match(r"^[a-z][a-z0-9+.-]*:", reference, re.IGNORECASE)
-            and not reference.startswith("#")
-        }
-        missing = sorted(
-            relative
-            for relative in local_paths
-            if not (REPOSITORY_ROOT / relative).is_file()
-        )
-
-        self.assertEqual([], missing)
+        self.assertEqual([], readme_claim_receipt_findings(REPOSITORY_ROOT))
 
     def assert_docs_teach_floati_not_the_retired_name(
         self, relatives: tuple[str, ...]
@@ -736,8 +738,11 @@ class NameSweepLivingDocumentationTests(unittest.TestCase):
     ) -> None:
         for relative in relatives:
             text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
-            for pattern in PRIVATE_ACCOUNT_PATTERNS:
-                with self.subTest(relative=relative, pattern=pattern.pattern):
+            for pattern_index, pattern in enumerate(PRIVATE_ACCOUNT_PATTERNS):
+                with self.subTest(
+                    relative=relative,
+                    account_pattern=("home-prefix-account-component", "exact-operator-home", "operator-username")[pattern_index],
+                ):
                     self.assertIsNone(pattern.search(text))
 
     def test_public_capture_evidence_does_not_expose_an_operator_account(self) -> None:

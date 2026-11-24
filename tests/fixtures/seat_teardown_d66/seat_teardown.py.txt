@@ -1,0 +1,430 @@
+"""Perform one exact-session teardown; native receipts remain authoritative.
+
+The initial event and acknowledgment prefixes are a named observation cutoff.
+Send does not acquire the recipient's wake guard: later arrivals belong to the
+next boot and never cause this transaction to drain or acknowledge again.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+from pathlib import Path, PurePosixPath
+
+from .bus_epoch import shared_epoch_operation
+from .codex_wait_contract import CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant
+from .cursor import SparseCursor
+from .errors import IntegrityFailure, ProtocolRefusal
+from .events import EventLog
+from .ids import uuid7_hex
+from .jsonl import read_records_snapshot, transact
+from .prep_clear import PrepClear, _select_git_executable, _banked_sha_predicate
+from .registry import Registry, utc_now
+from .seat_declaration import FleetGovernance, SeatDeclaration, require_declared_coordinate
+from .wake_control import WakeController, validate_session_id
+from .wake_hold import wake_coordination_guard, _validate_wake_key
+
+KIND = 'seat_teardown_receipt'
+STEPS = ('started', 'paused', 'reported', 'completed')
+_IMMUTABLE = ('node_id', 'acting_session_id', 'home', 'workspace', 'repo', 'doc',
+    'coordinate_digest', 'idempotency_key', 'started_receipt_id', 'workspace_map_digest',
+    'claim_receipt_id', 'consent_receipt_id', 'pushed_tip', 'envelope_recipient',
+    'report_note', 'event_cutoff_ids', 'ack_receipt_ids', 'ack_cutoff_refs', 'wake_cutoff_ids', 'activity', 'work_evidence')
+
+
+def _inspect_activity(home, repository, *, root, node):
+    # An unavailable observer fails import; it never manufactures absence.
+    from .seat_teardown_activity import inspect_seat_activity
+    return inspect_seat_activity(home, repository, root=root, node=node)
+
+
+def _scope_uid(activity):
+    scope=activity.get('native_scope') if isinstance(activity,dict) else None
+    if (not isinstance(scope,dict) or set(scope)!={'population','uid'} or
+            scope['population']!='invoking_uid' or type(scope['uid']) is not int or
+            not 0<=scope['uid']<=4294967295):
+        raise ProtocolRefusal('seat_teardown_activity_unknown','native scope must name invoking_uid and one canonical unsigned 32-bit UID',
+            remedy='restore the invoking-UID native observer and readable scoped activity testimony before retrying teardown')
+    return scope['uid']
+
+
+def _report_note(row):
+    return ('TORN DOWN '+row['node_id']+' session '+row['acting_session_id']+
+        '; receipt '+row['started_receipt_id']+'; event cutoff '+str(len(row['event_cutoff_ids']))+
+        '; native scope invoking uid '+str(_scope_uid(row['activity']))+
+        '; unnamed native UNKNOWN '+str(len(row['activity']['native_unknown']))+' (reasons in receipt)'+
+        '; other UIDs out of scope; later mail belongs to next boot')
+
+
+def _require_native_cutoff(activity):
+    unknown=activity.get('native_unknown') if isinstance(activity,dict) else None
+    if not isinstance(unknown,list) or len(unknown)>100000:
+        raise ProtocolRefusal('seat_teardown_activity_unknown','native UNKNOWN cutoff is absent or exceeds its bound',
+            remedy='restore the scoped native observer with explicit PID and closed reason testimony before teardown')
+    for row in unknown:
+        if (not isinstance(row,dict) or set(row)!={'pid','reason','receipt_ids'} or
+                type(row['pid']) is not int or not 0<row['pid']<=2147483647 or
+                not isinstance(row['reason'],str) or row['reason'] not in {'cwd_missing','cwd_unreadable','cwd_unresolvable'} or
+                not isinstance(row['receipt_ids'],list)):
+            raise ProtocolRefusal('seat_teardown_activity_unknown','native UNKNOWN row lacks bounded PID and reason testimony',
+                remedy='restore the scoped native observer and explicit unreadable-cwd testimony before teardown')
+        if row['receipt_ids']:
+            raise ProtocolRefusal('seat_teardown_activity_unknown','receipt-named PID '+str(row['pid'])+' has UNKNOWN cwd',
+                remedy='finish the receipt-named process or restore its OS cwd evidence before teardown')
+
+
+def _relative(node):
+    return Path('receipts/seat-teardown') / (node + '.jsonl')
+
+
+def _marker_path(root, node, session):
+    """Inspect the lexical marker coordinate before any resolving native API."""
+    path=root.tenant_home/'state'/'wake-control'/node/(hashlib.sha256(session.encode()).hexdigest()+'.json')
+    current=root.tenant_home
+    try:
+        for part in path.relative_to(root.tenant_home).parts:
+            current=current/part
+            try:
+                metadata=current.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(metadata.st_mode) or (current!=path and not stat.S_ISDIR(metadata.st_mode)):
+                raise IntegrityFailure('wake_marker_invalid','exact pause marker or ancestor is a symlink or non-directory')
+            if current==path and (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid!=os.getuid() or stat.S_IMODE(metadata.st_mode)!=0o600):
+                raise IntegrityFailure('wake_marker_invalid','exact pause marker is not an owned regular private file')
+    except OSError as exc:
+        raise IntegrityFailure('wake_marker_invalid','exact pause marker coordinate is unreadable') from exc
+    return path
+
+
+def _coordinate(root, node, home, session, repo, doc):
+    return hashlib.sha256(json.dumps([str(root.path),root.tenant_id,node,str(home),session,repo,doc],
+        ensure_ascii=True,separators=(',',':')).encode()).hexdigest()
+
+
+def _native_key(row):
+    return 'teardown-' + hashlib.sha256((row['idempotency_key']+'\0'+row['coordinate_digest']).encode()).hexdigest()
+
+
+def _validate_progress(rows):
+    seen = []
+    for row in rows:
+        if not seen or row['step'] != seen[-1]:
+            seen.append(row['step'])
+        elif row['step'] != 'started':
+            raise IntegrityFailure('seat_teardown_progress_invalid','duplicate teardown phase')
+    if seen != list(STEPS[:len(seen)]):
+        raise IntegrityFailure('seat_teardown_progress_invalid','teardown phases are out of order')
+    for previous,row in zip(rows, rows[1:]):
+        if any(previous[field] != row[field] for field in _IMMUTABLE):
+            raise IntegrityFailure('seat_teardown_progress_invalid','teardown coordinates or cutoff changed')
+        if previous['pause_intent'] != row['pause_intent']:
+            if previous['step'] != 'started' or row['step'] != 'started' or row['abandoned_pause_intents'] != [*previous['abandoned_pause_intents'],
+                    {'pause_intent_id':previous['pause_intent']['id'],'marker_absent':True,'receipt_absent':True,'native_key_absent':True}]:
+                raise IntegrityFailure('seat_teardown_progress_invalid','native pause reservation changed without no-effect evidence')
+        elif previous['abandoned_pause_intents'] != row['abandoned_pause_intents']:
+            raise IntegrityFailure('seat_teardown_progress_invalid','abandoned intent testimony changed')
+        for field in ('pause_receipt_id','envelope_id'):
+            if previous[field] is not None and previous[field] != row[field]:
+                raise IntegrityFailure('seat_teardown_progress_invalid','native effect reference changed')
+    if rows and rows[0]['id'] != rows[0]['started_receipt_id']:
+        raise IntegrityFailure('seat_teardown_progress_invalid','initial receipt reference is not the started receipt')
+
+
+def _exact(rows, identity, label):
+    matches = [r for r in rows if r['id']==identity]
+    if len(matches)!=1:
+        raise IntegrityFailure('seat_teardown_native_invalid',label+' reference is missing or duplicated')
+    return matches[0]
+
+
+def _mail_cutoff(root, node, events):
+    envelopes=[r for r in events if r['kind']=='message_envelope']
+    retracted={r['retracted_message_id'] for r in events if r['kind']=='message_retracted'}
+    scopes={None, *[r.get('worker_session_id') for r in envelopes if r['recipient']==node]}
+    refs=[]; pending=[]; cursor=SparseCursor(root)
+    for scope in sorted(scopes,key=lambda value: '' if value is None else value):
+        _delivered,acked=cursor.state_for(node,envelopes,worker_session_id=scope,retracted_ids=retracted)
+        pending.extend(r['id'] for r in envelopes if r['recipient']==node and r.get('worker_session_id')==scope and r['id'] not in retracted and r['id'] not in acked)
+        acks=read_records_snapshot(root,cursor._relative_path_for(node,worker_session_id=scope),allowed_kinds={'ack_receipt'})
+        refs.append({'worker_session_id':scope,'receipt_ids':[r['id'] for r in acks]})
+    return refs,pending
+
+
+def _validate_work_refs(root, node, evidence):
+    from .work import WorkLog
+    from .workers import WorkerReceipts
+    from .thread_observations import ThreadObservationLedger
+    work={row['id']:row for row in WorkLog(root).show()}
+    workers={row['session_id']:row for row in WorkerReceipts(root).sessions()}
+    threads={row['attachment']['id']:row for row in ThreadObservationLedger(root).project().attachments()}
+    for identity in evidence['work_item_ids']:
+        row=work.get(identity)
+        if row is None or node not in {row.get('owner'),row.get('holder')} or row['state']!='completed':
+            raise IntegrityFailure('seat_teardown_native_invalid','governed work reference lacks exact completed ownership')
+    for identity in evidence['worker_session_ids']:
+        row=workers.get(identity)
+        if row is None or row['node_id']!=node or row['state'] not in {'complete','degraded'}:
+            raise IntegrityFailure('seat_teardown_native_invalid','worker reference lacks exact terminal ownership')
+    for identity in evidence['thread_attachment_ids']:
+        row=threads.get(identity)
+        if row is None or row['attachment']['registered_by']!=node or row['detachment'] is None:
+            raise IntegrityFailure('seat_teardown_native_invalid','provider thread reference lacks exact detached ownership')
+
+
+def _validate_native(root, row, *, complete=False):
+    """Read-only verification usable beneath the Cursor publication locks."""
+    node,session = row['node_id'],row['acting_session_id']
+    if row['coordinate_digest'] != _coordinate(root,node,Path(row['home']),session,row['repo'],row['doc']):
+        raise IntegrityFailure('seat_teardown_native_invalid','coordinate digest differs from receipt')
+    _validate_work_refs(root,node,row['work_evidence'])
+    claims=read_records_snapshot(root,CodexWaitSessionLedger._relative(node),allowed_kinds={'codex_wait_session_receipt'})
+    claim=_exact(claims,row['claim_receipt_id'],'claim')
+    if any(claim.get(k)!=v for k,v in {'node_id':node,'acting_session_id':session,'workspace':row['workspace'],
+            'workspace_map_digest':row['workspace_map_digest'],'consent_receipt_id':row['consent_receipt_id']}.items()):
+        raise IntegrityFailure('seat_teardown_native_invalid','claim reference has different ownership')
+    consent=_exact(read_records_snapshot(root,CodexWaitConsentLedger._relative(node),allowed_kinds={'codex_wait_consent_receipt'}),row['consent_receipt_id'],'consent')
+    if consent['node_id']!=node or consent['workspace']!=row['workspace'] or consent['state']!='armed':
+        raise IntegrityFailure('seat_teardown_native_invalid','consent reference has different ownership')
+    controller=WakeController(root)
+    intent=row['pause_intent']
+    if intent['node_id']!=node or intent['session_digest']!=controller._identity(node,session)[2] or intent['operation']!='pause' or intent['state']!='paused' or intent['predecessor_receipt_id'] is not None or intent['idempotency_key']!=_native_key(row)+'-pause-'+str(len(row['abandoned_pause_intents'])):
+        raise IntegrityFailure('seat_teardown_native_invalid','reserved pause has different ownership')
+    wake=read_records_snapshot(root,controller._ledger(node),allowed_kinds={'wake_control_receipt'})
+    if row['pause_receipt_id'] is not None:
+        pause=_exact(wake,row['pause_receipt_id'],'pause')
+        if pause!=intent:
+            raise IntegrityFailure('seat_teardown_native_invalid','pause differs from exact reserved receipt')
+    events=EventLog(root).event_records()
+    cutoff=row['event_cutoff_ids']
+    if [r['id'] for r in events[:len(cutoff)]]!=cutoff:
+        raise IntegrityFailure('seat_teardown_native_invalid','event cutoff is not the preserved native prefix')
+    envelopes=[r for r in events[:len(cutoff)] if r['kind']=='message_envelope']
+    retracted={r['retracted_message_id'] for r in events[:len(cutoff)] if r['kind']=='message_retracted'}
+    cursor=SparseCursor(root)
+    full_envelopes=[r for r in events if r['kind']=='message_envelope']
+    all_refs=[]; seen_scopes=set()
+    for ref in row['ack_cutoff_refs']:
+        scope=ref['worker_session_id']; seen_scopes.add(scope)
+        cursor.state_for(node,full_envelopes,worker_session_id=scope)
+        acks=read_records_snapshot(root,cursor._relative_path_for(node,worker_session_id=scope),allowed_kinds={'ack_receipt'})
+        if [r['id'] for r in acks[:len(ref['receipt_ids'])]]!=ref['receipt_ids']:
+            raise IntegrityFailure('seat_teardown_native_invalid','ack cutoff is not the preserved native prefix')
+        all_refs.extend(ref['receipt_ids'])
+        acked={item for ack in acks[:len(ref['receipt_ids'])] for item in ack['item_ids']}
+        if any(r['recipient']==node and r.get('worker_session_id')==scope and r['id'] not in retracted and r['id'] not in acked for r in envelopes):
+            raise IntegrityFailure('seat_teardown_native_invalid','saved cutoff has unacted mail')
+    scopes=[ref['worker_session_id'] for ref in row['ack_cutoff_refs']]
+    if scopes!=sorted(seen_scopes,key=lambda value: '' if value is None else value) or row['ack_receipt_ids']!=all_refs or not {None,*[r.get('worker_session_id') for r in envelopes if r['recipient']==node]} <= seen_scopes:
+        raise IntegrityFailure('seat_teardown_native_invalid','saved cutoff omits native mail scope')
+    try:
+        expected_note=_report_note(row)
+    except ProtocolRefusal as exc:
+        raise IntegrityFailure('seat_teardown_native_invalid','saved native scope is malformed') from exc
+    if row['report_note']!=expected_note:
+        raise IntegrityFailure('seat_teardown_native_invalid','report note differs from saved native coordinate/cutoff')
+    if row['envelope_id'] is not None:
+        envelope=_exact(events,row['envelope_id'],'report')
+        expected={'kind':'message_envelope','sender':node,'recipient':row['envelope_recipient'],
+            'repo':row['repo'],'doc':row['doc'],'sha':row['pushed_tip'],'note':row['report_note'],
+            'idempotency_key':_native_key(row)+'-report'}
+        if any(envelope.get(k)!=v for k,v in expected.items()) or envelope.get('worker_session_id') is not None or envelope.get('reply_to') is not None:
+            raise IntegrityFailure('seat_teardown_native_invalid','report has different native parties or payload')
+    if complete and (row['step']!='completed' or row['pause_receipt_id'] is None or row['envelope_id'] is None):
+        raise IntegrityFailure('seat_teardown_native_invalid','completion lacks native effects')
+
+
+def completed_teardown_for_session(root, node, session):
+    """Verify the exact native pause; callers retain publication guards.
+
+    Historical native readers may acquire bounded ledger read locks.
+    """
+    node=Registry(root).resolve_node_id(node)
+    session=validate_session_id(session)
+    rows=read_records_snapshot(root,_relative(node),allowed_kinds={KIND})
+    for key in {r['idempotency_key'] for r in rows}:
+        _validate_progress([r for r in rows if r['idempotency_key']==key])
+    controller=WakeController(root)
+    digest=controller._identity(node,session)[2]
+    marker=controller._read_marker(_marker_path(root,node,session),node,digest)
+    if marker is None:
+        return None
+    for row in reversed(rows):
+        if row['step']=='completed' and row['acting_session_id']==session:
+            _validate_native(root,row,complete=True)
+            if marker['receipt_id']==row['pause_receipt_id'] and marker['paused_at']==row['pause_intent']['timestamp']:
+                return dict(row)
+    return None
+
+
+class SeatTeardown:
+    def __init__(self, root):
+        self.root=root
+
+    def _append(self, relative, row):
+        def decide(prior):
+            matching=[r for r in prior if r['idempotency_key']==row['idempotency_key']]
+            _validate_progress([*matching,row])
+            return row,row
+        return transact(self.root,relative,decide,allowed_kinds={KIND})
+
+    def _work(self, node):
+        from .work import WorkLog
+        from .workers import WorkerReceipts
+        from .thread_observations import ThreadObservationLedger
+        work=WorkLog(self.root).show()
+        sessions=WorkerReceipts(self.root).sessions()
+        threads=ThreadObservationLedger(self.root).project().attachments()
+        pending=[r['id'] for r in work if (r.get('owner')==node or r.get('holder')==node) and r['state']!='completed']
+        active=[r['session_id'] for r in sessions if r['node_id']==node and r['state'] not in {'complete','degraded'}]
+        attached=[r['attachment']['id'] for r in threads if r['attachment']['registered_by']==node and r['detachment'] is None]
+        if pending or active or attached:
+            raise ProtocolRefusal('seat_teardown_work_pending','outstanding work/activity: '+', '.join(pending+active+attached),
+                remedy='complete or explicitly detach the named native work before teardown')
+        return {'work_item_ids':[r['id'] for r in work if r.get('owner')==node or r.get('holder')==node],
+            'worker_session_ids':[r['session_id'] for r in sessions if r['node_id']==node],
+            'thread_attachment_ids':[r['attachment']['id'] for r in threads if r['attachment']['registered_by']==node]}
+
+    def _require_no_pause_effect(self, state, controller):
+        intent=state['pause_intent']
+        digest=controller._identity(state['node_id'],state['acting_session_id'])[2]
+        marker=_marker_path(self.root,state['node_id'],state['acting_session_id'])
+        quarantine=controller._resume_quarantine(marker,intent['id'])
+        if marker.exists() or marker.is_symlink() or quarantine.exists() or quarantine.is_symlink() or list(marker.parent.glob('.'+marker.name+'.*.tmp')):
+            raise ProtocolRefusal('seat_teardown_pause_superseded','reserved pause has current or incomplete marker evidence; preserve it',
+                remedy='preserve the native markers and receipts; inspect the superseding or incomplete pause before using a new teardown key')
+        wake=read_records_snapshot(self.root,controller._ledger(state['node_id']),allowed_kinds={'wake_control_receipt'})
+        if [r['id'] for r in wake]!=state['wake_cutoff_ids'] or any(r['id']==intent['id'] or r['idempotency_key']==intent['idempotency_key'] for r in wake):
+            raise ProtocolRefusal('seat_teardown_pause_superseded','reserved pause has native or superseding effects; preserve them',
+                remedy='preserve the native receipt ledger; inspect the superseding pause or resume before using a new teardown key')
+
+    @shared_epoch_operation
+    def teardown(self, node, home, session, *, repo, doc, idempotency_key):
+        from .records import _repository, _repository_document
+        def refuse(code, detail, remedy=None):
+            raise ProtocolRefusal(code, detail, remedy=remedy)
+        _repository(repo,refuse)
+        _repository_document(doc,refuse)
+        node=Registry(self.root).resolve_node_id(node)
+        session=validate_session_id(session)
+        key=_validate_wake_key(idempotency_key)
+        try:
+            home=Path(home)
+            valid_home=home.is_absolute() and not home.is_symlink() and home.resolve()==home and home.is_dir()
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise ProtocolRefusal('seat_teardown_home_invalid','home coordinate is unreadable, malformed or looped',
+                remedy='pass --home as the exact existing absolute seat home with readable ordinary ancestors and no symlink loops') from exc
+        if not valid_home:
+            raise ProtocolRefusal('seat_teardown_home_invalid','home must be an explicit canonical existing directory',
+                remedy='pass --home as the exact existing absolute seat home with no symlink or traversal components')
+        workspace=home/'repo'
+        coordinate=_coordinate(self.root,node,home,session,repo,doc)
+        relative=_relative(node)
+        with wake_coordination_guard(self.root,node):
+            rows=[r for r in read_records_snapshot(self.root,relative,allowed_kinds={KIND}) if r['idempotency_key']==key]
+            _validate_progress(rows)
+            if rows and rows[0]['coordinate_digest']!=coordinate:
+                raise ProtocolRefusal('seat_teardown_idempotency_conflict','teardown key has different coordinates',remedy='use a new key for different coordinates')
+            if rows and rows[-1]['step']=='completed':
+                _validate_native(self.root,rows[-1],complete=True)
+                return dict(rows[-1])
+            participant=resolve_participant(self.root.tenant_home,workspace)
+            if participant is None or participant.binding.node_id!=node:
+                raise ProtocolRefusal('seat_teardown_workspace_unbound','HOME/repo must be mapped to the exact node on this fleet',
+                    remedy='map and arm HOME/repo through the governed waiter flow for this exact node and fleet, then retry')
+            binding=participant.binding
+            if workspace.is_symlink() or not (workspace/'.git').is_dir() or (workspace/'.git').is_symlink():
+                raise ProtocolRefusal('seat_teardown_primary_invalid','HOME/repo must be a primary Git clone, not a linked worktree',
+                    remedy='pass the declared seat home whose HOME/repo is its own primary clone')
+            require_declared_coordinate(workspace,node,self.root)
+            declaration=SeatDeclaration.load(workspace)
+            governance=FleetGovernance.load(self.root)
+            if declaration is None or governance is None or {k:v for k,v in declaration.artifact().items() if k!='node_id'}!=governance.artifact():
+                raise ProtocolRefusal('seat_teardown_declaration_invalid','seat declaration must match fleet governance',
+                    remedy='restore the matching SEAT.json and fleet governance through the governed seat declaration flow')
+            coordinator=Registry(self.root).require_active(governance.coordinator)
+            if coordinator.get('role')!='architect' or governance.coordinator==node:
+                raise ProtocolRefusal('seat_teardown_coordinator_invalid','declared coordinator must be a distinct active architect',
+                    remedy='restore matching fleet governance naming the distinct active architect; teardown accepts no recipient override')
+            consent=CodexWaitConsentLedger(self.root).require_armed(binding)
+            claim=PrepClear(self.root)._held_claim(binding,session)
+            controller=WakeController(self.root)
+            _marker_path(self.root,node,session)
+            state=dict(rows[-1]) if rows else None
+            if state is not None:
+                _validate_native(self.root,state)
+                if state['claim_receipt_id']!=claim['id'] or state['consent_receipt_id']!=consent['id'] or state['workspace_map_digest']!=binding.map_digest or state['envelope_recipient']!=governance.coordinator:
+                    raise ProtocolRefusal('seat_teardown_authority_superseded','teardown native coordinate or authority changed',
+                        remedy='inspect the changed declaration, binding, consent and held claim; use a new teardown key only for an authorized current coordinate')
+            else:
+                activity=_inspect_activity(home,workspace,root=self.root,node=node)
+                if _scope_uid(activity)!=os.getuid():
+                    raise ProtocolRefusal('seat_teardown_activity_unknown','native scope UID differs from the invoking UID',
+                        remedy='observe the invoking UID population through the fixed native observer before retrying teardown')
+                _require_native_cutoff(activity)
+                work=self._work(node)
+                events=EventLog(self.root).event_records()
+                ack_refs,pending=_mail_cutoff(self.root,node,events)
+                if pending:
+                    raise ProtocolRefusal('seat_teardown_mail_pending','unacted mail at cutoff: '+', '.join(pending),remedy='act on and explicitly acknowledge each named message, then retry')
+                executable=_select_git_executable()
+                prep=PrepClear(self.root)
+                measured=prep._workspace_state(executable,workspace)
+                if measured['dirty'] or measured['unpushed_commit_count']:
+                    raise ProtocolRefusal('seat_teardown_work_pending','primary checkout has uncommitted or unpushed work',
+                        remedy='finish, commit and push the primary checkout work, then retry teardown')
+                pushed=measured['pushed_tip']; _banked_sha_predicate()(pushed, str(workspace))
+                if not isinstance(repo,str) or not repo or len(repo)>256 or not isinstance(doc,str) or not doc or len(doc)>1024 or PurePosixPath(doc).is_absolute() or any(p in {'','..','.'} for p in doc.split('/')):
+                    raise ProtocolRefusal('seat_teardown_report_invalid','repo and doc must be bounded ordinary Git evidence selectors',
+                        remedy='pass --repo as a repository label and --doc as an ordinary repository-relative report file')
+                if prep._git(executable,workspace,('cat-file','-t',pushed+':'+doc)).strip()!='blob' or prep._git(executable,workspace,('ls-tree',pushed,'--',doc)).split()[0] not in {'100644','100755'}:
+                    raise ProtocolRefusal('seat_teardown_report_invalid','doc must be an ordinary file at the banked report tip',
+                        remedy='commit and push the ordinary report file, then pass its repository-relative --doc path')
+                started='seat-teardown-'+uuid7_hex()
+                state={'schema_version':1,'kind':KIND,'tenant_id':self.root.tenant_id,'node_id':node,
+                    'acting_session_id':session,'home':str(home),'workspace':str(workspace),'repo':repo,'doc':doc,
+                    'coordinate_digest':coordinate,'idempotency_key':key,'started_receipt_id':started,
+                    'workspace_map_digest':binding.map_digest,'claim_receipt_id':claim['id'],'consent_receipt_id':consent['id'],
+                    'pushed_tip':pushed,'envelope_recipient':governance.coordinator,'pause_receipt_id':None,'envelope_id':None,
+                    'event_cutoff_ids':[r['id'] for r in events],
+                    'ack_receipt_ids':[identity for ref in ack_refs for identity in ref['receipt_ids']],
+                    'ack_cutoff_refs':ack_refs,
+                    'wake_cutoff_ids':[r['id'] for r in read_records_snapshot(self.root,controller._ledger(node),allowed_kinds={'wake_control_receipt'})],
+                    'activity':activity,'work_evidence':work,'abandoned_pause_intents':[]}
+                state['report_note']=_report_note(state)
+            def record(step, *, initial=False):
+                state.update(id=state['started_receipt_id'] if initial else 'seat-teardown-'+uuid7_hex(),timestamp=utc_now(),step=step)
+                self._append(relative,dict(state))
+            if not rows or state['step']=='started':
+                pause=None
+                if rows:
+                    pause=controller.reconcile_pause(node,session,expected_receipt=state['pause_intent'])
+                if pause is None:
+                    def reserve(intent):
+                        _marker_path(self.root,node,session)
+                        if rows:
+                            self._require_no_pause_effect(state,controller)
+                            state['abandoned_pause_intents']=[*state['abandoned_pause_intents'],
+                                {'pause_intent_id':state['pause_intent']['id'],'marker_absent':True,'receipt_absent':True,'native_key_absent':True}]
+                        state['pause_intent']=intent
+                        record('started',initial=not rows)
+                    pause=controller.pause(node,session,idempotency_key=_native_key(state)+'-pause-'+str(len(state['abandoned_pause_intents'])+(1 if rows else 0)),reserve_receipt=reserve)['receipt']
+                state['pause_receipt_id']=pause['id']
+                record('paused')
+            # Native pause/resume use this exact lock. Keep it through report and
+            # completion so supersession cannot turn a report into false absence.
+            with controller._lock(node):
+                marker=controller._read_marker(_marker_path(self.root,node,session),node,controller._identity(node,session)[2])
+                if marker is None or marker['receipt_id']!=state['pause_receipt_id'] or marker['paused_at']!=state['pause_intent']['timestamp']:
+                    raise ProtocolRefusal('seat_teardown_pause_superseded','current pause differs from teardown native evidence; preserve it',
+                        remedy='preserve the current marker and native receipts; inspect superseding pause or resume evidence before a new teardown')
+                _validate_native(self.root,state)
+                if state['step']=='paused':
+                    envelope=EventLog(self.root).send(node,state['envelope_recipient'],state['repo'],state['pushed_tip'],state['doc'],state['report_note'],idempotency_key=_native_key(state)+'-report')['message']
+                    state['envelope_id']=envelope['id']; record('reported')
+                if state['step']=='reported':
+                    _validate_native(self.root,state)
+                    record('completed')
+            _validate_native(self.root,state,complete=True)
+            return dict(state)

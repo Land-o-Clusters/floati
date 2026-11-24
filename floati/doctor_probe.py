@@ -22,11 +22,9 @@ from pathlib import Path
 from typing import Callable, Dict, List
 
 from .bus_epoch import shared_epoch_operation
-from .events import EVENT_KINDS, EventLog
-from .jsonl import read_records_snapshot
+from .events import EventLog
 from .registry import Registry
 from .root import FloatiRoot
-from .snapshot import _owned_epoch_archives
 
 POLL_INTERVAL_SECONDS = 1.0
 PROBE_NOTE_MARKER = "doctor-probe"
@@ -130,19 +128,10 @@ class DoctorProbe:
 
     @shared_epoch_operation
     def _probe_was_archived(self, probe_id: str) -> bool:
-        """Recognize only receipt-owned archives, without locking or mutating them."""
+        """Admit native membership; carried LIVE probes keep precedence."""
+        from .epoch_history import envelope_membership
 
-        for archive in _owned_epoch_archives(self.root):
-            relative = archive.relative_to(self.root.tenant_home) / "events.jsonl"
-            records = read_records_snapshot(
-                self.root, relative, allowed_kinds=set(EVENT_KINDS)
-            )
-            if any(
-                row.get("kind") == "message_envelope" and row.get("id") == probe_id
-                for row in records
-            ):
-                return True
-        return False
+        return envelope_membership(self.root, probe_id) == "archive"
 
     @shared_epoch_operation
     def _drained(self, node: str, probe_id: str) -> bool:
@@ -162,6 +151,7 @@ class DoctorProbe:
                         continue
                     row = json.loads(line)
                     item_ids = row.get("item_ids")
-                    if isinstance(item_ids, list) and probe_id in item_ids:
+                    if (row.get("kind") == "delivery_receipt"
+                            and isinstance(item_ids, list) and probe_id in item_ids):
                         return True
         return False

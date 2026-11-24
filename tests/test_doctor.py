@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -19,13 +20,14 @@ from pathlib import Path
 from unittest import mock
 from unittest.mock import patch
 
-from floati.errors import ProtocolRefusal
+from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.jsonl import append_record
 from floati.planes import LivenessPresenceStore
 from floati.registry import REGISTRY_KINDS, Registry
 from floati.root import FloatiRoot
 from tests.schema_validation import validate_json_schema
+from tests.git_fixture_cache import cached_tree, fixture_git
 
 from floati.doctor import (
     LAUNCHER_INTERPRETER_CANDIDATES,
@@ -43,6 +45,79 @@ except (ImportError, ModuleNotFoundError):
 NOW = datetime(2026, 8, 1, 14, 0, 0, tzinfo=timezone.utc)
 
 
+class WorkNotificationDoctorTests(unittest.TestCase):
+    def test_one_bad_journal_does_not_hide_pending_or_conflicting_items(self):
+        from floati.events import EventLog
+        from floati.planes import AuthorityGrantStore
+        from floati.work import WorkLog
+        from floati.work_notification import WorkNotifications, project_notification_findings
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = FloatiRoot.open_direct_home(Path(temp) / "fleet", create=True)
+            for node in ("dispatcher", "holder"):
+                Registry(root).register(node, "Codex")
+            AuthorityGrantStore(root).grant_exact("notification-work", "holder", 1, NOW)
+            work = WorkLog(root)
+            binding = [{"repo": "floati", "sha": "a" * 40, "doc": "AGENTS.md"}]
+            sent_item = work.add("sent", "holder", binding, dispatcher="dispatcher", now=NOW)
+            # A legacy/copied root need not already carry lock companions.
+            for path in (root.path / "events.jsonl.lock", root.path / "authority-grants/notification-work.jsonl.lock"):
+                path.unlink(missing_ok=True)
+            before_reads = root_entries(root.path)
+            project_notification_findings(root, now=NOW)
+            self.assertEqual(before_reads, root_entries(root.path))
+            with patch.object(EventLog, "send", side_effect=RuntimeError("crash")):
+                with self.assertRaisesRegex(RuntimeError, "crash"):
+                    work.add("pending", "holder", binding, dispatcher="dispatcher", now=NOW)
+            pending_item = next(i for i in work.show() if i["title"] == "pending")
+            directory = root.path / "receipts/work-notifications"
+            bad = directory / ("work-" + uuid7_hex() + ".jsonl")
+            bad.write_bytes(b"malformed\n")
+            before = {p: p.read_bytes() for p in directory.iterdir()}
+            findings = project_notification_findings(root, now=NOW)
+            pending = [f for f in findings if f["code"] == "work_notification_pending"]
+            self.assertEqual([pending_item["id"]], [f["subject"] for f in pending])
+            self.assertEqual("warning", pending[0]["severity"])
+            self.assertIn("--as dispatcher", pending[0]["remedy"])
+            unreadable = [f for f in findings if f["code"] == "work_notification_unreadable"]
+            self.assertEqual([str(bad)], [f["subject"] for f in unreadable])
+            self.assertEqual(before, {p: p.read_bytes() for p in directory.iterdir()})
+            # Both missing evidence and a valid but mismatched recipient/key are
+            # integrity findings, rather than a successful or pending notice.
+            path = directory / (sent_item["id"] + ".jsonl")
+            original = path.read_bytes()
+            rows = WorkNotifications(root).records(sent_item["id"])
+            for change in ({"envelope_id": "msg-" + uuid7_hex()},
+                           {"recipient": "dispatcher"}, {"idempotency_key": "wrong-key"}):
+                with self.subTest(change=change):
+                    altered = [dict(r) for r in rows]
+                    altered[-1].update(change)
+                    path.write_text("".join(json.dumps(r) + "\n" for r in altered))
+                    conflicts = [f for f in project_notification_findings(root, now=NOW)
+                                 if f["code"] == "work_notification_conflict"]
+                    self.assertEqual([sent_item["id"]], [f["subject"] for f in conflicts])
+                    self.assertEqual("error", conflicts[0]["severity"])
+                    with self.assertRaises(ProtocolRefusal) as caught:
+                        work.notify(sent_item["id"], "dispatcher", now=NOW)
+                    self.assertEqual("idempotency_conflict", caught.exception.code)
+                    path.write_bytes(original)
+            # An unavailable archive stays unknown for every journal. A failed
+            # first lookup must not become cached absence for the next item.
+            from floati.bus_epoch import ROLL_AUTHORITY_SUBJECT, roll_bus_epoch
+            from floati.cursor import SparseCursor
+            work.add("another sent", "holder", binding, dispatcher="dispatcher", now=NOW)
+            EventLog(root).present("holder")
+            ids = [r["id"] for r in EventLog(root).event_records() if r["kind"] == "message_envelope"]
+            SparseCursor(root).ack("holder", ids, acting_session_id="archive-observation")
+            AuthorityGrantStore(root).grant_exact(ROLL_AUTHORITY_SUBJECT, "holder", 1, datetime.now(timezone.utc))
+            roll_bus_epoch(root, actor="holder", idempotency_key="doctor-notification-history")
+            bad.unlink()
+            with patch("floati.epoch_history.read_history", side_effect=IntegrityFailure("epoch_receipt_archive_invalid", "unavailable retained history")):
+                observed = project_notification_findings(root, now=NOW)
+            self.assertEqual(2, len([f for f in observed if f["code"] == "work_notification_unreadable"]))
+            self.assertFalse(any(f["code"] == "work_notification_conflict" for f in observed))
+
+
 def root_entries(root: Path) -> dict[Path, tuple[str, bytes]]:
     return {
         path.relative_to(root): (
@@ -53,6 +128,54 @@ def root_entries(root: Path) -> dict[Path, tuple[str, bytes]]:
     }
 
 
+def _write_doctor_manifest(source: Path) -> None:
+    paths = [
+        "floati/core.py",
+        "schemas/v0/example.json",
+        "scripts/floati",
+    ]
+    payload = {
+        "schema_version": 0,
+        "protocol_version": "0",
+        "canonical_ref": "refs/heads/lane/hm0",
+        "files": [
+            {
+                "path": relative,
+                "sha256": hashlib.sha256((source / relative).read_bytes()).hexdigest(),
+            }
+            for relative in paths
+        ],
+    }
+    (source / "bundle-manifest.v0.json").write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _build_doctor_source(source: Path) -> None:
+    """The committed source tree every DoctorContractTests case starts from."""
+    for relative, content in (
+        ("floati/core.py", "VALUE = 1\n"),
+        ("schemas/v0/example.json", '{"schema_version":0}\n'),
+        ("scripts/floati", "#!/bin/sh\nexit 0\n"),
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    (source / "scripts/floati").chmod(0o755)
+    _write_doctor_manifest(source)
+
+    def git(*args: str) -> None:
+        subprocess.run([fixture_git("git"), *args], cwd=source, check=True,
+                       capture_output=True, text=True)
+
+    git("init", "--quiet", "--initial-branch=lane/hm0")
+    git("config", "user.name", "Floati Test")
+    git("config", "user.email", "floati-test@example.invalid")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "source")
+    git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+
+
 class DoctorContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -60,22 +183,9 @@ class DoctorContractTests(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.source = self.base / "source"
         self.source.mkdir()
-        for relative, content in (
-            ("floati/core.py", "VALUE = 1\n"),
-            ("schemas/v0/example.json", '{"schema_version":0}\n'),
-            ("scripts/floati", "#!/bin/sh\nexit 0\n"),
-        ):
-            path = self.source / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
-        (self.source / "scripts/floati").chmod(0o755)
-        self._write_manifest()
-        self._git("init", "--quiet", "--initial-branch=lane/hm0")
-        self._git("config", "user.name", "Floati Test")
-        self._git("config", "user.email", "floati-test@example.invalid")
-        self._git("add", ".")
-        self._git("commit", "--quiet", "-m", "source")
-        self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
+        # Built once per process; every test owns an independent copy.
+        cached_tree(self.source, ("test_doctor.DoctorContractTests.source",),
+                    _build_doctor_source)
 
         self.home = self.base / "alpha"
         self.root = FloatiRoot.open_direct_home(self.home, create=True)
@@ -130,31 +240,12 @@ class DoctorContractTests(unittest.TestCase):
 
     def _git(self, *args: str) -> str:
         return subprocess.run(
-            ["git", *args], cwd=self.source, check=True,
+            [fixture_git("git"), *args], cwd=self.source, check=True,
             capture_output=True, text=True,
         ).stdout.strip()
 
     def _write_manifest(self) -> None:
-        paths = [
-            "floati/core.py",
-            "schemas/v0/example.json",
-            "scripts/floati",
-        ]
-        payload = {
-            "schema_version": 0,
-            "protocol_version": "0",
-            "canonical_ref": "refs/heads/lane/hm0",
-            "files": [
-                {
-                    "path": relative,
-                    "sha256": hashlib.sha256((self.source / relative).read_bytes()).hexdigest(),
-                }
-                for relative in paths
-            ],
-        }
-        (self.source / "bundle-manifest.v0.json").write_text(
-            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
-        )
+        _write_doctor_manifest(self.source)
 
     def doctor(
         self,
@@ -378,7 +469,18 @@ class DoctorContractTests(unittest.TestCase):
                 ("floati/doctor.py", "_finding", True),
                 ("floati/doctor_probe.py", "run", False),
                 ("floati/doctor_probe.py", "run", False),
+                ("floati/holds.py", "_finding", False),
+                # NET-HOLD-INBOUND-1: like HOLD-1, inbound hold findings name a
+                # node identifier (or the fixed ledger name), never a path.
+                ("floati/inbound_hold.py", "_finding", False),
+                # F2-STOP-SKIP-1: the stop-skip findings write subjects only
+                # through artifact_subject (both dicts), so the fence holds.
+                ("floati/stop_skip.py", "project_stop_skip_findings", True),
+                ("floati/stop_skip.py", "project_stop_skip_findings", True),
                 ("floati/update_status.py", "_finding", True),
+                # WORK-ELIGIBILITY-1: authority subject ids in the read-only show --as projection (ruling 2026-10-28 §1.4), not artifact paths.
+                ("floati/work.py", "show", False),
+                ("floati/work.py", "show", False),
             ],
             sorted(writers),
         )
@@ -636,15 +738,19 @@ class DoctorContractTests(unittest.TestCase):
             row = next(row for row in artifact['findings'] if row['code'] == code)
             self.assertEqual('info', row['severity'])
             self.assertTrue(row['subject'].startswith('host:'))
+        gateway_drift = next(row for row in artifact['findings']
+                             if row['code'] == 'host_codex_gateway_vendored_source_drift')
+        self.assertEqual(shlex.quote(str(self.source / 'scripts/install-codex-gateway.sh')),
+                         gateway_drift['remediation'])
 
-    def test_missing_bridge_remedy_precedes_unproven_hook_turn(self) -> None:
+    def test_missing_bridge_registration_names_reapply_without_legacy_install_advice(self) -> None:
         self._write_zcode_binding()
         with patch('floati.doctor.installed_bridge_paths', return_value=None):
             artifact, rc = self.doctor(no_sandbox=True).artifact()
-        row = next(row for row in artifact['findings'] if row['code'] == 'hook_unproven')
+        row = next(row for row in artifact['findings'] if row['code'] == 'bridge_registration_unnameable')
         self.assertEqual(35, rc)
-        self.assertIn('install', row['remediation'].split(';')[0])
-        self.assertIn('bridge', row['remediation'].split(';')[0])
+        self.assertIn('re-apply', row['remediation'])
+        self.assertNotIn('reinstall', row['remediation'])
 
     def test_malformed_default_hooks_are_host_info_but_explicit_config_is_weighted(self) -> None:
         hooks = Path(os.environ['HOME']) / '.codex' / 'hooks.json'
@@ -705,7 +811,10 @@ class DoctorContractTests(unittest.TestCase):
         )
         self.assertEqual("warning", finding["severity"])
         self.assertIn("gateway drifted from vendored source", finding["detail"])
-        self.assertIn("complete source tree", finding["remediation"])
+        for path in (host, self.source / "tools/codex/codex-fleet-bus.py"):
+            self.assertIn(hashlib.sha256(path.read_bytes()).hexdigest(), finding["detail"])
+        self.assertEqual([str(self.source / "scripts/install-codex-gateway.sh")],
+                         shlex.split(finding["remediation"]))
 
     def test_absent_optional_codex_gateway_is_a_typed_ok_absence(self) -> None:
         """A clean host has not installed an optional harness integration yet."""
@@ -1233,29 +1342,24 @@ class DoctorContractTests(unittest.TestCase):
         self.assertIn("resume_state=resume_proven", finding["detail"])
         self.assertEqual(0, rc)
 
-    def test_installed_bridge_drift_is_reported_with_both_coordinates(self) -> None:
-        """HT-R6: a deployed copy carries the coordinate it was deployed
-        from - drift is stated with both SHAs, never a refusal."""
-        import floati.doctor as doctor_module
-
-        hooks = self.base / "installed-hooks"
-        hooks.mkdir()
+    def test_retired_foreign_bridge_is_not_read_or_modified(self) -> None:
+        """The retired foreign bridge is never a Doctor input or cleanup target."""
+        hooks = Path(os.environ["HOME"]) / ".local/share/floati/hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
         bridge = hooks / "stop-hook-bridge.py"
         bridge.write_bytes(b"installed bytes\n")
         sidecar = hooks / "stop-hook-bridge.sha256"
         sidecar.write_text(hashlib.sha256(b"installed bytes\n").hexdigest() + "\n")
-        (self.source / "hooks").mkdir()
-        (self.source / "hooks" / "stop-hook-bridge.py").write_bytes(b"repository bytes\n")
-
-        with mock.patch.object(
-            doctor_module, "installed_bridge_paths", return_value=(bridge, sidecar)
-        ):
+        real_read = Path.read_bytes
+        def prohibit_retired_read(path):
+            if path in (bridge, sidecar):
+                raise AssertionError("Doctor read the retired foreign bridge")
+            return real_read(path)
+        with mock.patch.object(Path, "read_bytes", prohibit_retired_read):
             artifact, rc = self.doctor().artifact()
-
-        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_drift")
-        self.assertEqual("info", finding["severity"])
-        self.assertIn("installed wake bridge from", finding["detail"])
-        self.assertIn("repository at", finding["detail"])
+        self.assertFalse(any(row["code"] == "host_wake_bridge_drift" for row in artifact["findings"]))
+        self.assertTrue(any(row["code"] == "host_wake_bridge_uninstalled" for row in artifact["findings"]))
+        self.assertEqual(b"installed bytes\n", bridge.read_bytes())
 
     def test_ambient_hook_drift_is_a_host_fact_not_scratch_root_health(self) -> None:
         """External bridge/watch bytes cannot change the declared root verdict."""
@@ -1269,8 +1373,6 @@ class DoctorContractTests(unittest.TestCase):
         before, before_rc = self.doctor(no_sandbox=True).artifact()
         fixture_home = Path(os.environ["HOME"])
         installed = (
-            (fixture_home / ".local/share/floati/hooks/stop-hook-bridge.py",
-             "stop-hook-bridge.sha256", "host_wake_bridge_drift"),
             (fixture_home / ".config/opencode/plugins/floati-bus-watch.ts",
              "floati-bus-watch.sha256", "host_bus_watch_drift"),
         )
@@ -1345,29 +1447,21 @@ class DoctorContractTests(unittest.TestCase):
                 self.assertEqual("info", finding["severity"])
                 self.assertTrue(finding["subject"].startswith("host:"))
 
-    def test_installed_bridge_in_sync_is_an_ok_fact(self) -> None:
-        import floati.doctor as doctor_module
-
-        hooks = self.base / "installed-hooks"
-        hooks.mkdir()
-        bridge = hooks / "stop-hook-bridge.py"
-        bridge.write_bytes(b"same bytes\n")
-        sidecar = hooks / "stop-hook-bridge.sha256"  # pre-HT-R6 install: no sidecar yet
-        (self.source / "hooks").mkdir()
-        (self.source / "hooks" / "stop-hook-bridge.py").write_bytes(b"same bytes\n")
-        # keep the fixture source clean and current: a dirty tree reads as a
-        # currency warning and would mask the ok row under test
-        self._git("add", "hooks/stop-hook-bridge.py")
-        self._git("commit", "--quiet", "-m", "hooks fixture")
-        self._git("update-ref", "refs/remotes/origin/lane/hm0", "HEAD")
-
-        with mock.patch.object(
-            doctor_module, "installed_bridge_paths", return_value=(bridge, sidecar)
-        ):
+    def test_unknown_portable_launcher_is_not_a_current_fact(self) -> None:
+        """Unknown bytes in the expected portable store cannot claim current."""
+        home = Path(os.environ["HOME"]).resolve()
+        store = home / ".local/share/floati-zcode-bridge"
+        store.mkdir(parents=True, exist_ok=True)
+        launcher = store / "launcher.py"
+        launcher.write_bytes(b"unreviewed launcher\n")
+        launcher.chmod(0o600)
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
             artifact, rc = self.doctor().artifact()
-
-        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_current")
+        finding = next(row for row in artifact["findings"] if row["code"] == "host_wake_bridge_unavailable")
         self.assertEqual("info", finding["severity"])
+        self.assertIn(str(launcher), finding["detail"])
+        self.assertIn("expected=", finding["detail"])
+        self.assertIn("observed=", finding["detail"])
         self.assertEqual(0, rc)
 
     def test_absent_installed_bridge_is_a_typed_absence(self) -> None:
@@ -1380,38 +1474,21 @@ class DoctorContractTests(unittest.TestCase):
         self.assertEqual("info", finding["severity"])
         self.assertIn("typed", finding["detail"].lower() + finding["subject"].lower() + "typed absence")
 
-    def test_installed_bridge_without_repository_source_is_unnameable(self) -> None:
-        """A present bridge must not be mislabeled as uninstalled or healthy."""
-
-        import floati.doctor as doctor_module
-
-        hooks = self.base / "installed-hooks-without-source"
-        hooks.mkdir()
-        bridge = hooks / "stop-hook-bridge.py"
-        bridge.write_bytes(b"installed bridge\n")
-        sidecar = hooks / "stop-hook-bridge.sha256"
-        sidecar.write_text(
-            hashlib.sha256(bridge.read_bytes()).hexdigest() + "\n",
-            encoding="utf-8",
-        )
-
-        with mock.patch.object(
-            doctor_module,
-            "installed_bridge_paths",
-            return_value=(bridge, sidecar),
-        ):
+    def test_partial_portable_store_is_unavailable(self) -> None:
+        """A partial portable store is unavailable, never uninstalled or current."""
+        home = Path(os.environ["HOME"]).resolve()
+        store = home / ".local/share/floati-zcode-bridge"
+        store.mkdir(parents=True, exist_ok=True)
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
             artifact, rc = self.doctor().artifact()
-
         self.assertEqual(0, rc)
         finding = next(
             row
             for row in artifact["findings"]
-            if row["code"] == "host_wake_bridge_repository_source_unnameable"
+            if row["code"] == "host_wake_bridge_unavailable"
         )
         self.assertEqual("info", finding["severity"])
-        self.assertIn(
-            "complete Floati source", str(finding["remediation"])
-        )
+        self.assertIn(str(store / "launcher.py"), finding["detail"])
 
     def _write_zcode_binding(self, session_id: str = "worker-zcode-session") -> None:
         """A zcode binding cannot pass DaemonCoordinate at this tree (the
@@ -1702,6 +1779,8 @@ class DoctorContractTests(unittest.TestCase):
             [
                 "root_valid",
                 "root_layout_managed",
+                "seat_execution_no_car",
+                "host_disk_watch",
                 "ledger_roll_policy",
                 "launcher_interpreter",
                 "effect_reconciliation_interpreter_trust",
@@ -2095,8 +2174,12 @@ class LauncherInterpreterProvenanceTests(unittest.TestCase):
     ) -> None:
         """Being unable to start is a safe state; starting the wrong Python is not."""
 
-        for declaration in (str(self.base / "absent-python3"), "python3", str(self.base)):
-            with self.subTest(declaration=declaration):
+        for case_index, declaration in enumerate((str(self.base / "absent-python3"), "python3", str(self.base))):
+            with self.subTest(case=(
+                "missing-absolute-interpreter",
+                "relative-interpreter",
+                "directory-interpreter",
+            )[case_index]):
                 result = self._launch(
                     "doctor", **{LAUNCHER_INTERPRETER_DECLARATION: declaration}
                 )

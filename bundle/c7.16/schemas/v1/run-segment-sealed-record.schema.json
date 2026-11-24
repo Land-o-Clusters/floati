@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/run-segment-sealed-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "segment_number", "opening_record_id", "last_global_ordinal", "record_count", "byte_length", "segment_sha256", "seal_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^run-segment-sealed-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "segment_sealed"},
+    "segment_number": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "opening_record_id": {"type": "string", "pattern": "^run-segment-opened-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "last_global_ordinal": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "record_count": {"type": "integer", "minimum": 1, "maximum": 100000},
+    "byte_length": {"type": "integer", "minimum": 1, "maximum": 67108864},
+    "segment_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "seal_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

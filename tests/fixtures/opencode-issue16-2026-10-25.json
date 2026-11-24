@@ -1,0 +1,490 @@
+{
+  "artifact_version": 0,
+  "binary": "/opt/homebrew/bin/opencode",
+  "version": "2.1.4",
+  "non_model_run_help_invocations": 1,
+  "run_invocations": [
+    {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--",
+        "Reply exactly OK. Do not use tools."
+      ],
+      "started_at": "2026-10-25T16:28:37.616+00:00",
+      "home": "owner",
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a173e481707181b408bd93ca5fd863",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "\u001b[0m\n> build \u00b7 z-ai/glm-5.3-flash\n\u001b[91m\u001b[1mError: \u001b[0mProvider returned error\n",
+      "adapter_validation": "process_failed",
+      "ended_at": "2026-10-25T16:28:40.997+00:00",
+      "owned_child_reaped": true
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--",
+        "Reply OK."
+      ],
+      "home": "owner",
+      "started_at": "2026-10-25T16:30:15.924+00:00",
+      "via": "WorkerRunner",
+      "ended_at": "2026-10-25T16:30:15.965+00:00"
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--model",
+        "opencode/glm-5.3-flash-free",
+        "--format",
+        "json",
+        "--",
+        "Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools."
+      ],
+      "started_at": "2026-10-25T16:30:15.994+00:00",
+      "home": "owner",
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a173e601737d4daaef39cc87aa8d21",
+      "owned_child_reaped": true,
+      "exit_code": 0,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1792945817357,\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"part\":{\"id\":\"prt_173e6070d001sHnDiZs69PSr1M\",\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"messageID\":\"msg_173e602070016l8Nlo4xjutUqr\",\"type\":\"step-start\",\"snapshot\":\"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\"}}\n{\"type\":\"text\",\"timestamp\":1792945817456,\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"part\":{\"id\":\"prt_173e6076c001vr9LKxcdUhR6ng\",\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"messageID\":\"msg_173e602070016l8Nlo4xjutUqr\",\"type\":\"text\",\"text\":\"OK\",\"time\":{\"start\":1792945817452,\"end\":1792945817456}}}\n",
+      "stderr": "",
+      "ended_at": "2026-10-25T16:30:17.476+00:00"
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--model",
+        "opencode/glm-5.3-flash-free",
+        "--format",
+        "json",
+        "--session",
+        "ses_e8c19fe22ffeUuOj7jLWdwftMc",
+        "--",
+        "Reply OK. No tools."
+      ],
+      "started_at": "2026-10-25T16:30:17.513+00:00",
+      "home": "owner",
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a173e601737d4daaef39cc87aa8d21",
+      "running_before_interrupt": true,
+      "signal": "SIGTERM",
+      "owned_child_reaped": true,
+      "exit_code": 130,
+      "stdout": "",
+      "stderr": "",
+      "ended_at": "2026-10-25T16:30:18.023+00:00"
+    },
+    {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--model",
+        "opencode/glm-5.3-flash-free",
+        "--format",
+        "json",
+        "--session",
+        "ses_e8c19fe22ffeUuOj7jLWdwftMc",
+        "--",
+        "What nonce did I ask you to remember? No tools."
+      ],
+      "started_at": "2026-10-25T16:31:16.572+00:00",
+      "home": "owner",
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a173e601737d4daaef39cc87aa8d21",
+      "owned_child_reaped": true,
+      "exit_code": 0,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1792945880016,\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"part\":{\"id\":\"prt_173e6fbd0001KwTO3VpVTQ2Psr\",\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"messageID\":\"msg_173e6ee880014lvNZuhVhWNi11\",\"type\":\"step-start\",\"snapshot\":\"aabfb3be08723b4a582dfe810a4f85e4093fdaad\"}}\n{\"type\":\"text\",\"timestamp\":1792945898237,\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"part\":{\"id\":\"prt_173e6ffeb001vu1IPSpQaNx3sx\",\"sessionID\":\"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\"messageID\":\"msg_173e6ee880014lvNZuhVhWNi11\",\"type\":\"text\",\"text\":\"issue16-01a173e601ba7ef4bca053d38f2cc06f\",\"time\":{\"start\":1792945881067,\"end\":1792945898237}}}\n",
+      "stderr": "",
+      "ended_at": "2026-10-25T16:31:38.262+00:00"
+    }
+  ],
+  "dynamics": {
+    "scratch": "\u002fprivate/tmp/floati-issue16-kl4wfk8b",
+    "model_override": "opencode/glm-5.3-flash-free",
+    "node_add": {
+      "records": [
+        {
+          "schema_version": 0,
+          "id": "registry-01a173e601707fb28cbb99ccd05df9f2",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T16:30:15.920Z",
+          "kind": "registry_entry",
+          "node_id": "oc-temp",
+          "role": "OpenCode",
+          "state": "active"
+        },
+        {
+          "schema_version": 0,
+          "id": "lease-01a173e601707dca954cfce164b81f2c",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T16:30:15.920Z",
+          "kind": "node_lease",
+          "node_id": "oc-temp",
+          "workspace": "\u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet/nodes/oc-temp",
+          "expires_at": "2026-10-25T16:31:15.920Z",
+          "state": "active"
+        }
+      ],
+      "workspace": "\u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet/nodes/oc-temp",
+      "lifetime": "temporary",
+      "boot_command": "floati node boot --root \u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet --node oc-temp --declared-roots '<declared-roots-file>' --managed-executable '<managed-bus-executable>' --profile '<managed-profile>'",
+      "teardown_command": "floati node retire --root \u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet --node oc-temp",
+      "tide_metrics": []
+    },
+    "lease_before": {
+      "node_lease_id": "lease-01a173e601707dca954cfce164b81f2c",
+      "state": "active",
+      "expires_at": "2026-10-25T16:31:15.920Z"
+    },
+    "work_item": {
+      "schema_version": 0,
+      "id": "work-01a173e601737d4daaef39cc87aa8d21",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-25T16:30:15.923Z",
+      "kind": "work_item",
+      "title": "Reply OK.",
+      "owner": "oc-temp",
+      "artifact_bindings": [],
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a173e601737d4daaef39cc87aa8d21"
+    },
+    "worker_result": {
+      "schema_version": 0,
+      "id": "worker-receipt-01a173e6019d7c8b896740c6ce7d70f9",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-25T16:30:15.964Z",
+      "kind": "worker_receipt",
+      "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+      "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21",
+      "node_id": "oc-temp",
+      "adapter": "opencode",
+      "transition": "degrade",
+      "outcome_code": "adapter_error",
+      "authority_subject": "oc-claims",
+      "authority_epoch": 1,
+      "artifact_bindings": []
+    },
+    "worker_process_audit": {
+      "adapter_pid": 71952,
+      "registered_process_groups": [
+        71954
+      ],
+      "alive_after_cleanup": [],
+      "isolation_backend": null
+    },
+    "worker_receipts_before_restart": [
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6017679dcb439d1de3429bd98",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.926Z",
+        "transition": "claim",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6018c7cfab5c187472e9d4798",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.948Z",
+        "transition": "spawn",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6018d7c03b35c296ebc319ef2",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.949Z",
+        "transition": "drive",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6019d7c8b896740c6ce7d70f9",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": "adapter_error",
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.964Z",
+        "transition": "degrade",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      }
+    ],
+    "message": {
+      "message": {
+        "schema_version": 0,
+        "id": "msg-01a173e601a677ffb43e14169c1a5eeb",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.978Z",
+        "kind": "message_envelope",
+        "sender": "oc-temp",
+        "recipient": "oc-temp",
+        "repo": "floati",
+        "sha": "ee4254bbab36d36b0f4766f19b06060c4ffc596f",
+        "doc": "README.md",
+        "note": "issue 16 scratch lease",
+        "idempotency_key": "issue16-before-expiry",
+        "attempt_binding": "absent_legacy"
+      },
+      "recipient_readiness": {
+        "state": "recipient_wake_arranged",
+        "reason": "active_lease",
+        "observed_at": "2026-10-25T16:30:15.978Z",
+        "checked_mechanisms": [
+          "lease",
+          "stop_hook",
+          "seat_board"
+        ],
+        "mechanism_evidence": [
+          {
+            "mechanism": "lease",
+            "state": "arranged",
+            "reason": "active_lease",
+            "sources": [
+              {
+                "path": "\u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet/registry/entries.jsonl",
+                "record_id": "lease-01a173e601707dca954cfce164b81f2c"
+              }
+            ]
+          },
+          {
+            "mechanism": "stop_hook",
+            "state": "unknown",
+            "reason": "hook_provenance_unavailable",
+            "sources": []
+          },
+          {
+            "mechanism": "seat_board",
+            "state": "absent",
+            "reason": "no_board_or_claim",
+            "sources": [
+              {
+                "path": "\u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet/receipts/seat-board/oc-temp.jsonl",
+                "record_id": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "delivery": {
+      "schema_version": 0,
+      "id": "delivery-01a173e601b97ee4954a28278a5f28fa",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-25T16:30:15.992Z",
+      "kind": "delivered_unpresented",
+      "recipient": "oc-temp",
+      "item_ids": [
+        "msg-01a173e601a677ffb43e14169c1a5eeb"
+      ],
+      "presentation_count": 1,
+      "presenter_evidence": {
+        "shown": false,
+        "reason": "no_live_presenter_evidence",
+        "sources": [
+          {
+            "path": "receipts/stop-holds/oc-temp.jsonl",
+            "record_id": null
+          }
+        ]
+      }
+    },
+    "nonce": "issue16-01a173e601ba7ef4bca053d38f2cc06f",
+    "seed_sessions": [
+      "ses_e8c19fe22ffeUuOj7jLWdwftMc"
+    ],
+    "session_before_interrupt": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "session",
+        "export",
+        "ses_e8c19fe22ffeUuOj7jLWdwftMc"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n  \"info\": {\n    \"id\": \"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\n    \"projectID\": \"c7f3d1983da9f0850da1f90fa6da7c8b8b03fc04\",\n    \"model\": {\n      \"id\": \"glm-5.3-flash-free\",\n      \"providerID\": \"opencode\",\n      \"variant\": \"default\"\n    },\n    \"cost\": 0,\n    \"tokens\": {\n      \"input\": 16932,\n      \"output\": 3,\n      \"reasoning\": 3,\n      \"cache\": {\n        \"read\": 0,\n        \"write\": 0\n      }\n    },\n    \"outcome\": \"succeeded\",\n    \"time\": {\n      \"created\": 1792945816061,\n      \"updated\": 1792945817471,\n      \"idle\": 1792945817472\n    },\n    \"location\": {\n      \"directory\": \"\u002fUsers/penguinspecz/Projects/floati-hw-issues-16\"\n    }\n  },\n  \"messages\": [\n    {\n      \"id\": \"msg_173e601ff001nCKqWjpIhnpz0y\",\n      \"time\": {\n        \"created\": 1792945816068\n      },\n      \"text\": \"\\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\" \\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    },\n    {\n      \"id\": \"msg_173e602070016l8Nlo4xjutUqr\",\n      \"time\": {\n        \"created\": 1792945816074,\n        \"streamed\": 1792945817456,\n        \"completed\": 1792945817471\n      },\n      \"type\": \"assistant\",\n      \"agent\": \"build\",\n      \"model\": {\n        \"id\": \"glm-5.3-flash-free\",\n        \"providerID\": \"opencode\",\n        \"variant\": \"default\"\n      },\n      \"content\": [\n        {\n          \"type\": \"reasoning\",\n          \"text\": \"Simple reply.\",\n          \"native\": {\n            \"reasoningField\": \"reasoning_content\"\n          },\n          \"time\": {\n            \"created\": 1792945817358,\n            \"completed\": 1792945817455\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"OK\"\n        }\n      ],\n      \"snapshot\": {\n        \"start\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"end\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"files\": []\n      },\n      \"finish\": \"stop\",\n      \"rawFinish\": \"stop\",\n      \"cost\": 0,\n      \"tokens\": {\n        \"input\": 16932,\n        \"output\": 3,\n        \"reasoning\": 3,\n        \"cache\": {\n          \"read\": 0,\n          \"write\": 0\n        }\n      }\n    },\n    {\n      \"id\": \"msg_173e60780002o94I0EyRZwGS8P\",\n      \"time\": {\n        \"created\": 1792945817472\n      },\n      \"type\": \"idle\",\n      \"outcome\": \"succeeded\"\n    }\n  ]\n}\n",
+      "stderr": ""
+    },
+    "interrupted_session": "ses_e8c19fe22ffeUuOj7jLWdwftMc",
+    "session_after_interrupt": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "session",
+        "export",
+        "ses_e8c19fe22ffeUuOj7jLWdwftMc"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n  \"info\": {\n    \"id\": \"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\n    \"projectID\": \"c7f3d1983da9f0850da1f90fa6da7c8b8b03fc04\",\n    \"model\": {\n      \"id\": \"glm-5.3-flash-free\",\n      \"providerID\": \"opencode\",\n      \"variant\": \"default\"\n    },\n    \"cost\": 0,\n    \"tokens\": {\n      \"input\": 16932,\n      \"output\": 3,\n      \"reasoning\": 3,\n      \"cache\": {\n        \"read\": 0,\n        \"write\": 0\n      }\n    },\n    \"outcome\": \"succeeded\",\n    \"time\": {\n      \"created\": 1792945816061,\n      \"updated\": 1792945817551,\n      \"idle\": 1792945817472\n    },\n    \"location\": {\n      \"directory\": \"\u002fUsers/penguinspecz/Projects/floati-hw-issues-16\"\n    }\n  },\n  \"messages\": [\n    {\n      \"id\": \"msg_173e601ff001nCKqWjpIhnpz0y\",\n      \"time\": {\n        \"created\": 1792945816068\n      },\n      \"text\": \"\\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\" \\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    },\n    {\n      \"id\": \"msg_173e602070016l8Nlo4xjutUqr\",\n      \"time\": {\n        \"created\": 1792945816074,\n        \"streamed\": 1792945817456,\n        \"completed\": 1792945817471\n      },\n      \"type\": \"assistant\",\n      \"agent\": \"build\",\n      \"model\": {\n        \"id\": \"glm-5.3-flash-free\",\n        \"providerID\": \"opencode\",\n        \"variant\": \"default\"\n      },\n      \"content\": [\n        {\n          \"type\": \"reasoning\",\n          \"text\": \"Simple reply.\",\n          \"native\": {\n            \"reasoningField\": \"reasoning_content\"\n          },\n          \"time\": {\n            \"created\": 1792945817358,\n            \"completed\": 1792945817455\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"OK\"\n        }\n      ],\n      \"snapshot\": {\n        \"start\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"end\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"files\": []\n      },\n      \"finish\": \"stop\",\n      \"rawFinish\": \"stop\",\n      \"cost\": 0,\n      \"tokens\": {\n        \"input\": 16932,\n        \"output\": 3,\n        \"reasoning\": 3,\n        \"cache\": {\n          \"read\": 0,\n          \"write\": 0\n        }\n      }\n    },\n    {\n      \"id\": \"msg_173e60780002o94I0EyRZwGS8P\",\n      \"time\": {\n        \"created\": 1792945817472\n      },\n      \"type\": \"idle\",\n      \"outcome\": \"succeeded\"\n    },\n    {\n      \"id\": \"msg_173e607ce001xNlCY3ZFCkoNEz\",\n      \"time\": {\n        \"created\": 1792945817553\n      },\n      \"text\": \"\\\"Reply OK. No tools.\\\" \\\"Reply OK. No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    }\n  ]\n}\n",
+      "stderr": ""
+    },
+    "lease_after": {
+      "node_lease_id": "lease-01a173e601707dca954cfce164b81f2c",
+      "state": "expired",
+      "expires_at": "2026-10-25T16:31:15.920Z"
+    },
+    "fresh_delivery_after_expiry": {
+      "code": "node_lease_expired",
+      "detail": "fresh delivery to recipient refused: node oc-temp lease lease-01a173e601707dca954cfce164b81f2c expired at 2026-10-25T16:31:15.920Z"
+    },
+    "late_ack": {
+      "schema_version": 1,
+      "id": "ack-01a173e6ee5b7af981fadb3a8676931e",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-25T16:31:16.571Z",
+      "kind": "ack_receipt",
+      "recipient": "oc-temp",
+      "acting_session_id": "issue16-after-expiry",
+      "node_lease_id": "lease-01a173e601707dca954cfce164b81f2c",
+      "node_lease_state_at_ack": "expired",
+      "node_lease_expires_at": "2026-10-25T16:31:15.920Z",
+      "item_ids": [
+        "msg-01a173e601a677ffb43e14169c1a5eeb"
+      ]
+    },
+    "session_after_resume": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "session",
+        "export",
+        "ses_e8c19fe22ffeUuOj7jLWdwftMc"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n  \"info\": {\n    \"id\": \"ses_e8c19fe22ffeUuOj7jLWdwftMc\",\n    \"projectID\": \"c7f3d1983da9f0850da1f90fa6da7c8b8b03fc04\",\n    \"model\": {\n      \"id\": \"glm-5.3-flash-free\",\n      \"providerID\": \"opencode\",\n      \"variant\": \"default\"\n    },\n    \"cost\": 0.000033119999999999995,\n    \"tokens\": {\n      \"input\": 26674,\n      \"output\": 38,\n      \"reasoning\": 10,\n      \"cache\": {\n        \"read\": 24704,\n        \"write\": 0\n      }\n    },\n    \"outcome\": \"succeeded\",\n    \"time\": {\n      \"created\": 1792945816061,\n      \"updated\": 1792945898257,\n      \"idle\": 1792945898258\n    },\n    \"title\": \"Remember issue16 key\",\n    \"location\": {\n      \"directory\": \"\u002fUsers/penguinspecz/Projects/floati-hw-issues-16\"\n    }\n  },\n  \"messages\": [\n    {\n      \"id\": \"msg_173e601ff001nCKqWjpIhnpz0y\",\n      \"time\": {\n        \"created\": 1792945816068\n      },\n      \"text\": \"\\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\" \\\"Remember issue16-01a173e601ba7ef4bca053d38f2cc06f. Reply OK. No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    },\n    {\n      \"id\": \"msg_173e602070016l8Nlo4xjutUqr\",\n      \"time\": {\n        \"created\": 1792945816074,\n        \"streamed\": 1792945817456,\n        \"completed\": 1792945817471\n      },\n      \"type\": \"assistant\",\n      \"agent\": \"build\",\n      \"model\": {\n        \"id\": \"glm-5.3-flash-free\",\n        \"providerID\": \"opencode\",\n        \"variant\": \"default\"\n      },\n      \"content\": [\n        {\n          \"type\": \"reasoning\",\n          \"text\": \"Simple reply.\",\n          \"native\": {\n            \"reasoningField\": \"reasoning_content\"\n          },\n          \"time\": {\n            \"created\": 1792945817358,\n            \"completed\": 1792945817455\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"OK\"\n        }\n      ],\n      \"snapshot\": {\n        \"start\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"end\": \"b47fadbf0dcc5d3bb3f8c2bd10fb00df041968d1\",\n        \"files\": []\n      },\n      \"finish\": \"stop\",\n      \"rawFinish\": \"stop\",\n      \"cost\": 0,\n      \"tokens\": {\n        \"input\": 16932,\n        \"output\": 3,\n        \"reasoning\": 3,\n        \"cache\": {\n          \"read\": 0,\n          \"write\": 0\n        }\n      }\n    },\n    {\n      \"id\": \"msg_173e60780002o94I0EyRZwGS8P\",\n      \"time\": {\n        \"created\": 1792945817472\n      },\n      \"type\": \"idle\",\n      \"outcome\": \"succeeded\"\n    },\n    {\n      \"id\": \"msg_173e607ce001xNlCY3ZFCkoNEz\",\n      \"time\": {\n        \"created\": 1792945817553\n      },\n      \"text\": \"\\\"Reply OK. No tools.\\\" \\\"Reply OK. No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    },\n    {\n      \"id\": \"msg_173e607d30017L8C0wY35x2Ob4\",\n      \"time\": {\n        \"created\": 1792945817558,\n        \"streamed\": 1792945818672,\n        \"completed\": 1792945818726\n      },\n      \"type\": \"assistant\",\n      \"agent\": \"build\",\n      \"model\": {\n        \"id\": \"glm-5.3-flash-free\",\n        \"providerID\": \"opencode\",\n        \"variant\": \"default\"\n      },\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"OK\"\n        }\n      ],\n      \"snapshot\": {\n        \"start\": \"0fa025d3a577799ecf7b4ad1d83c1751a348359b\",\n        \"end\": \"011bf1496f18e3de114b452799aa2c1402866c94\",\n        \"files\": [\n          \"tests/fixtures/opencode-issue16-2026-10-25.json\"\n        ]\n      },\n      \"finish\": \"stop\",\n      \"rawFinish\": \"stop\",\n      \"cost\": 0,\n      \"tokens\": {\n        \"input\": 4794,\n        \"output\": 3,\n        \"reasoning\": 0,\n        \"cache\": {\n          \"read\": 12160,\n          \"write\": 0\n        }\n      }\n    },\n    {\n      \"id\": \"msg_173e60c68001wgtl2PD1YwpkG7\",\n      \"time\": {\n        \"created\": 1792945818728\n      },\n      \"type\": \"idle\",\n      \"outcome\": \"succeeded\"\n    },\n    {\n      \"id\": \"msg_173e6ee810014BXrx16Hk9ShOd\",\n      \"time\": {\n        \"created\": 1792945876614\n      },\n      \"text\": \"\\\"What nonce did I ask you to remember? No tools.\\\" \\\"What nonce did I ask you to remember? No tools.\\\"\",\n      \"files\": [],\n      \"type\": \"user\"\n    },\n    {\n      \"id\": \"msg_173e6ee880014lvNZuhVhWNi11\",\n      \"time\": {\n        \"created\": 1792945876618,\n        \"streamed\": 1792945898238,\n        \"completed\": 1792945898257\n      },\n      \"type\": \"assistant\",\n      \"agent\": \"build\",\n      \"model\": {\n        \"id\": \"glm-5.3-flash-free\",\n        \"providerID\": \"opencode\",\n        \"variant\": \"default\"\n      },\n      \"content\": [\n        {\n          \"type\": \"reasoning\",\n          \"text\": \"Recall the token from earlier.\",\n          \"native\": {\n            \"reasoningField\": \"reasoning_content\"\n          },\n          \"time\": {\n            \"created\": 1792945880017,\n            \"completed\": 1792945898236\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"issue16-01a173e601ba7ef4bca053d38f2cc06f\"\n        }\n      ],\n      \"snapshot\": {\n        \"start\": \"aabfb3be08723b4a582dfe810a4f85e4093fdaad\",\n        \"end\": \"aabfb3be08723b4a582dfe810a4f85e4093fdaad\",\n        \"files\": []\n      },\n      \"finish\": \"stop\",\n      \"rawFinish\": \"stop\",\n      \"cost\": 0,\n      \"tokens\": {\n        \"input\": 4824,\n        \"output\": 26,\n        \"reasoning\": 7,\n        \"cache\": {\n          \"read\": 12160,\n          \"write\": 0\n        }\n      }\n    },\n    {\n      \"id\": \"msg_173e74312002DG5Dt0zo5QtYd0\",\n      \"time\": {\n        \"created\": 1792945898258\n      },\n      \"type\": \"idle\",\n      \"outcome\": \"succeeded\"\n    }\n  ]\n}\n",
+      "stderr": ""
+    },
+    "worker_receipts_after_restart": [
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6017679dcb439d1de3429bd98",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.926Z",
+        "transition": "claim",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6018c7cfab5c187472e9d4798",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.948Z",
+        "transition": "spawn",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6018d7c03b35c296ebc319ef2",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.949Z",
+        "transition": "drive",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      },
+      {
+        "adapter": "opencode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "oc-claims",
+        "id": "worker-receipt-01a173e6019d7c8b896740c6ce7d70f9",
+        "kind": "worker_receipt",
+        "node_id": "oc-temp",
+        "outcome_code": "adapter_error",
+        "schema_version": 0,
+        "session_id": "worker-01a173e601767feab9723b088dcce1ae",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.964Z",
+        "transition": "degrade",
+        "work_item_id": "work-01a173e601737d4daaef39cc87aa8d21"
+      }
+    ],
+    "registry_records": [
+      {
+        "id": "registry-01a173e601707fb28cbb99ccd05df9f2",
+        "kind": "registry_entry",
+        "node_id": "oc-temp",
+        "role": "OpenCode",
+        "schema_version": 0,
+        "state": "active",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.920Z"
+      },
+      {
+        "expires_at": "2026-10-25T16:31:15.920Z",
+        "id": "lease-01a173e601707dca954cfce164b81f2c",
+        "kind": "node_lease",
+        "node_id": "oc-temp",
+        "schema_version": 0,
+        "state": "active",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T16:30:15.920Z",
+        "workspace": "\u002fprivate/tmp/floati-issue16-kl4wfk8b/fleet/nodes/oc-temp"
+      }
+    ],
+    "public_worker": {
+      "status": "cannot-measure",
+      "reason": "opencode_not_in_worker_cli_adapter_choices"
+    },
+    "scratch_removed": true,
+    "work_workspace_removed": true
+  },
+  "classification": {
+    "surface_verified": false,
+    "default_entrypoint": "cannot-measure:default_provider_error",
+    "lease": "expired_delivery_refused_late_ack_retained",
+    "restart": "conversation_survived_client_restart",
+    "native_resume_after_lease_expiry": true,
+    "governed_worker_lease": "cannot-measure:worker_adapter_error",
+    "floati_native_session_binding": "cannot-measure:opencode_not_in_worker_cli_adapter_choices",
+    "worker_receipts_unchanged_by_native_resume": true,
+    "run_invocations_including_help": 6
+  }
+}

@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 import sys
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -19,19 +20,26 @@ from .copy import (
     DOCTOR_LIVE_DIRS_EXPECTED_ABSENT_DETAIL,
     DOCTOR_PROFILE_INVALID_DETAIL,
 )
+from .cursor_workers import project_remote_control_worker_findings
 from .delivery_health import DeliveryHealthAnalyzer
+from .doctor_disk_watch import project_disk_watch
+from .doctor_wake_receipt_legacy_read import project_wake_receipt_legacy_read
 from .errors import DOCTOR_CURRENCY_REMEDY, IntegrityFailure, ProtocolRefusal
 from .gateway import GatewayConfig
+from .holds import project_hold_findings
+from .inbound_hold import project_inbound_hold_findings
 from .jsonl import read_records_compatible_snapshot, read_records_snapshot
 from .installer_shadow import observe_installer_shadow, observation_exit_code
 from .manifest import verify_manifest
+from .proxy_awareness import project_model_proxy_findings
 from .registry import read_registry_compatible
 from .root import FloatiRoot
-from .git_process import fixed_git_command, fixed_git_environment
+from .git_process import GIT_MAINTENANCE_OPTIONS, fixed_git_command, fixed_git_environment
 from .git_process import is_shallow_repository
 from .sandbox_probe import probe_write_set
 from .sandbox_remedy import remedy_for
 from .storage_identity import INSTALL_METADATA_DIRECTORY
+from . import doctor_wd_4
 from .update_status import project_update_findings
 from .version_skew import older_readers, vocabulary_skew_fact
 
@@ -107,6 +115,14 @@ _MANAGED_ROOT_FILE_PREFIXES = ("archive-", "quarantine-")
 _MANAGED_ROOT_FILES = frozenset({"events.jsonl", "events.jsonl.lock"})
 
 
+def _managed_prefix_directories() -> frozenset[str]:
+    from .inbox_prefix import CACHE_NAME as inbox
+    from .registry_prefix import CACHE_NAME as registry
+    from .send_prefix import CACHE_NAME as send
+
+    return frozenset({inbox, registry, send})
+
+
 def _managed_root_families() -> frozenset[str]:
     """LEDGER-1 (c) Am.1: DERIVE the families from the constants that own
     them, so the list cannot drift from the writers. Only entries no
@@ -115,8 +131,16 @@ def _managed_root_families() -> frozenset[str]:
     from .intake import _INTAKE_PAYLOAD_DIRECTORY
     from .solo import SOLO_CONFIG
     from .storage_identity import SNAPSHOT_DIRECTORY
+    from .adhoc_records import ADHOC_DIRECTORY, PROVIDER_STATE_DIRECTORY
+    from .bus_epoch import EPOCH_TURNSTILE_NAME
 
     derived = {
+        # floati/bus_epoch.py: the empty epoch turnstile, made by init or by a
+        # tenant's first contended exclusive acquisition, which may be a
+        # contended pristine policy observation; managed, never unmanaged bytes.
+        EPOCH_TURNSTILE_NAME,
+        ADHOC_DIRECTORY.parts[0],
+        PROVIDER_STATE_DIRECTORY.parts[0],
         SNAPSHOT_DIRECTORY,  # floati/snapshot.py writes <root>/.floati-snapshots/v0
         _INTAKE_PAYLOAD_DIRECTORY.parts[0],  # floati/intake.py writes <root>/intake/v0
         SOLO_CONFIG.parts[0],  # floati/solo.py writes <root>/solo.json on the first run
@@ -136,15 +160,15 @@ def _managed_root_families() -> frozenset[str]:
         "runs",  # floati/orchestrate.py run records
         "sequencer",  # floati/sequencer.py
     }
-    return frozenset(derived | hand_listed)
+    return frozenset(derived | hand_listed | _managed_prefix_directories())
 
 
 def project_ledger_roll_policy_finding(root: FloatiRoot) -> Dict[str, object]:
     """LEDGER-1 (b): the live ledger's size and age against the roll policy.
 
-    Doctor never rolls: the governed ``epoch roll`` verb (authority-
-    gated, idempotent by key) is named as the remedy when a threshold
-    is past. Numbers floati did not measure are never filled in — an
+    Doctor reports thresholds without initiating a new roll. Ordinary native
+    activity maintains the epoch; the explicit ``epoch roll`` remains grant-
+    gated and idempotent. Numbers floati did not measure are never filled in — an
     unreadable first entry reports the age as unknown.
     """
 
@@ -184,8 +208,8 @@ def project_ledger_roll_policy_finding(root: FloatiRoot) -> Dict[str, object]:
     age_text = (
         f"{age_days:.1f} days old" if age_days is not None else "age unknown (first entry unreadable)"
     )
-    over_size = size > int(policy["max_bytes"])
-    over_age = age_days is not None and age_days > float(policy["max_age_days"])
+    over_size = size >= int(policy["max_bytes"])
+    over_age = age_days is not None and age_days >= float(policy["max_age_days"])
     detail = (
         f"live ledger is {size} bytes (policy {policy['max_bytes']}, "
         f"{policy_source}); oldest entry {age_text} "
@@ -202,6 +226,8 @@ def project_ledger_roll_policy_finding(root: FloatiRoot) -> Dict[str, object]:
         "warning",
         str(root.path),
         detail,
+        "ordinary activity by an active registered node maintains due epochs; "
+        "carried nonreclaimable work stays live; explicit manual remedy: "
         "floati epoch roll --root ROOT --as NODE --idempotency-key KEY",
     )
 
@@ -220,8 +246,202 @@ def _entry_bytes(entry: Path) -> int:
     return entry.stat().st_size
 
 
+def project_seat_declaration_findings(root: FloatiRoot) -> list[Dict[str, object]]:
+    """BL-10: a registered, mapped workspace with no SEAT.json names its migration.
+
+    The remediation IS the migration command for that exact root/node/workspace —
+    an instrument that prints its own remedy.
+    """
+    from .codex_wait_contract import mapped_workspaces
+    from .registry import Registry
+    from .seat_declaration import SEAT_MARKER
+    from .seat_migration import remedy_for
+
+    try:
+        active = set(Registry(root).active_node_ids())
+        mapped = mapped_workspaces(root.tenant_home)
+    except ProtocolRefusal as exc:
+        return [_exception_finding(exc, "warning", str(root.path))]
+    except Exception:
+        return []
+    findings: list[Dict[str, object]] = []
+    for workspace, node_id in mapped:
+        if node_id not in active:
+            continue
+        try:
+            if (workspace / SEAT_MARKER).exists():
+                continue
+        except OSError:
+            continue
+        findings.append(
+            _finding(
+                "seat_declaration_absent",
+                "warning",
+                str(workspace),
+                "registered workspace has no seat declaration; boarding refuses "
+                "until the seat is migrated once",
+                remedy_for(root, node_id, workspace),
+            )
+        )
+    return findings
+
+
+def project_codex_wait_window_findings(root, hooks_path, trust_rows, *, host_scoped=False):
+    """Observe exact mapped consent and installed hook windows without arming.
+
+    Defaults are never observations. A hook for another bus cannot supply
+    this root's timeout, and multiple matching hooks have no unique source.
+    Doctor does not run the harness or promote a fixture bound to a ceiling.
+    """
+    from .codex_hook_install import parse_waiter_stop_argv
+    from .codex_hook_trust import codex_hook_current_hash
+    from .codex_wait_contract import (
+        CodexWaitConsentLedger, consent_ledger_relative, mapped_workspaces,
+        resolve_participant,
+    )
+    from .registry import Registry
+
+    try:
+        active = set(Registry(root).active_node_ids())
+    except (ProtocolRefusal, IntegrityFailure) as exc:
+        return [_exception_finding(exc, "error", str(root.path))]
+    except OSError:
+        return [_finding("codex_wait_window_unavailable", "warning", str(root.path),
+                         "The registry could not be read; no window values are inferred.",
+                         "Inspect this root's registry before rerunning doctor.")]
+    try:
+        document = json.loads(Path(hooks_path).read_bytes())
+        groups = document["hooks"]["Stop"]
+    except (OSError, ValueError, KeyError, TypeError):
+        groups = []  # Preserve readable consent when hook evidence is absent.
+    candidates = []
+    for trust in trust_rows:
+        try:
+            block = groups[trust["hook_group_index"]]
+            # Do not combine a newly edited hook with the old trust snapshot.
+            if codex_hook_current_hash(block) != trust["hook_trust_current_hash"]:
+                continue
+            handler = block["hooks"][0]
+            parsed = parse_waiter_stop_argv(shlex.split(handler["command"]))
+            if parsed is None or parsed[0].name != "floati-codex-wait" or parsed[1] != root.tenant_home:
+                continue
+            candidates.append((max(1, handler.get("timeout", 600)), trust))
+        except (ProtocolRefusal, ValueError, KeyError, IndexError, TypeError):
+            continue
+    findings = []
+    for workspace, node in mapped_workspaces(root.tenant_home):
+        if node not in active:
+            continue
+        consent = None
+        consent_error = None
+        try:
+            participant = resolve_participant(root.tenant_home, workspace)
+            if participant is None or participant.binding.node_id != node:
+                state = "workspace_unresolved"
+            else:
+                consent = CodexWaitConsentLedger(root).require_armed(participant.binding)
+                state = "matched"
+        except (ProtocolRefusal, IntegrityFailure, OSError) as exc:
+            state = "consent_unavailable"
+            consent_error = getattr(exc, "code", "consent_read_unavailable")
+            if isinstance(exc, IntegrityFailure):
+                findings.append(_exception_finding(exc, "error", str(workspace)))
+        hook = candidates[0] if len(candidates) == 1 else None
+        if consent is not None:
+            if not candidates:
+                state = "hook_unavailable"
+            elif hook is None:
+                state = "hook_ambiguous"
+            elif (consent["hook_timeout_seconds"] != hook[0]
+                  or not 0 < consent["wait_deadline_seconds"] < hook[0]):
+                state = "mismatch"
+        observation = {
+            "node_id": node,
+            "window_state": state,
+            "hook_timeout_seconds": None if hook is None else hook[0],
+            "consent_hook_timeout_seconds": None if consent is None else consent["hook_timeout_seconds"],
+            "wait_deadline_seconds": None if consent is None else consent["wait_deadline_seconds"],
+            "consent_receipt_id": None if consent is None else consent["id"],
+            "consent_error_code": consent_error,
+            "hook_timeout_source": None if hook is None else hook[1]["hook_trust_key"],
+            # Name the lexical source even when its reader refused a symlink.
+            # Resolving again here could repeat that refusal outside the catch.
+            "wait_deadline_source": str(root.tenant_home / consent_ledger_relative(node)),
+            "hook_armed": None if hook is None else hook[1]["hook_armed"],
+            "harness_ceiling_seconds": None,
+        }
+        hook_text = "unknown" if hook is None else f"{hook[0]} s"
+        deadline_text = "unknown" if consent is None else f"{consent['wait_deadline_seconds']} s"
+        detail = (f"Codex idle window: {state}; installed hook timeout "
+                  f"{hook_text}; consent deadline {deadline_text}. "
+                  "Harness ceiling is not observed by doctor; matching values do not prove a live waiter.")
+        remediation = (None if state == "matched" else
+                       "Inspect this workspace's exact hook and consent sources; use the governed installer and operator re-trust for a definition change.")
+        # Ambient host configuration must not change this root's health.
+        # Explicit hook selection retains root-scoped warning semantics;
+        # genuine native consent-integrity findings above stay errors.
+        finding = (_host_finding("codex_wait_window", str(workspace), detail, remediation)
+                   if host_scoped else
+                   _finding("codex_wait_window", "ok" if state == "matched" else "warning",
+                            str(workspace), detail, remediation))
+        finding["wait_window"] = observation
+        findings.append(finding)
+    return findings
+
+
+def project_seat_execution_findings(root: FloatiRoot) -> list[Dict[str, object]]:
+    """Native car execution is independent of mail, ACK and elapsed silence."""
+    from .seat_execution import SeatExecutionController
+    from .registry import Registry
+    try:
+        controller = SeatExecutionController(root)
+        nodes = Registry(root).active_node_ids()
+    except (IntegrityFailure, ProtocolRefusal, OSError) as exc:
+        return [_finding('seat_execution_unknown', 'warning', str(root.path),
+            json.dumps({'state': 'UNKNOWN', 'reason': getattr(exc, 'code', 'execution_read_unavailable')},
+                       sort_keys=True, ensure_ascii=True))]
+    findings = []
+    for node in nodes:
+        projection = controller.project(node)
+        state = projection["state"]
+        findings.append(_finding("seat_execution_" + state.lower(),
+            "warning" if state in {"STALLED", "UNKNOWN"} else "ok", node,
+            _seat_execution_detail(projection)))
+    return findings
+
+
+def _seat_execution_detail(projection: Dict[str, object]) -> str:
+    """Keep Doctor's v0 detail bound while identifying the full durable row."""
+    rendered = json.dumps(projection, sort_keys=True, ensure_ascii=True)
+    if len(rendered) <= 8192:
+        return rendered
+    latest = projection.get('latest_execution')
+    summary = {key: value for key, value in projection.items()
+               if key != 'latest_execution'}
+    summary['projection_preview'] = True
+    if isinstance(latest, dict):
+        retained = {key: latest[key] for key in
+            ('id', 'timestamp', 'source_kind', 'event', 'code', 'command', 'detail')}
+        for field in ('command', 'detail'):
+            original = retained[field]
+            while len(json.dumps(retained[field], ensure_ascii=True)) > 2000:
+                retained[field] = retained[field][:len(retained[field]) // 2]
+            retained[field + '_truncated'] = retained[field] != original
+        summary['latest_execution'] = retained
+    rendered = json.dumps(summary, sort_keys=True, ensure_ascii=True)
+    while len(rendered) > 8192 and isinstance(latest, dict):
+        field = max(('command', 'detail'),
+                    key=lambda key: len(json.dumps(retained[key], ensure_ascii=True)))
+        retained[field] = retained[field][:len(retained[field]) // 2]
+        retained[field + '_truncated'] = True
+        rendered = json.dumps(summary, sort_keys=True, ensure_ascii=True)
+    return rendered
+
+
 def project_root_layout_findings(root: FloatiRoot) -> list[Dict[str, object]]:
     """Report unmanaged bytes inside the fleet root: path + size, never touched."""
+
+    from .cursor_prefix import CACHE_NAME_PREFIX
 
     findings: list[Dict[str, object]] = []
     try:
@@ -237,8 +457,19 @@ def project_root_layout_findings(root: FloatiRoot) -> list[Dict[str, object]]:
         ]
     unmanaged: list[tuple[str, int]] = []
     managed_families = _managed_root_families()
+    prefix_directories = _managed_prefix_directories()
     for entry in entries:
-        if (
+        from .cut_prefix import CACHE_NAME_PREFIX as CUT_PREFIX
+        cursor_bank = (
+            entry.name.startswith(CACHE_NAME_PREFIX)
+            and _SHA256.fullmatch(entry.name[len(CACHE_NAME_PREFIX):]) is not None
+        )
+        cut_bank = (entry.name.startswith(CUT_PREFIX)
+            and _SHA256.fullmatch(entry.name[len(CUT_PREFIX):]) is not None)
+        if entry.name in prefix_directories or cursor_bank or cut_bank:
+            if not entry.is_symlink() and entry.is_dir():
+                continue
+        elif (
             entry.name in _MANAGED_ROOT_FILES
             or entry.name in managed_families
             or entry.name.startswith(_MANAGED_ROOT_FILE_PREFIXES)
@@ -283,6 +514,38 @@ def _finding(
         "detail": detail,
         "remediation": remediation,
     }
+
+
+def _captured_refusal(exc: BaseException) -> Optional[ProtocolRefusal]:
+    """Recover a refusal through deliberate diagnostic wrappers, without cycles."""
+    seen: set[int] = set()
+    while id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, ProtocolRefusal):
+            return exc
+        if exc.__cause__ is None:
+            break
+        exc = exc.__cause__
+    return None
+
+
+def _exception_finding(
+    exc: IntegrityFailure | ProtocolRefusal,
+    severity: str,
+    subject: str,
+    remediation: Optional[str] = None,
+    *,
+    code: Optional[str] = None,
+    detail: Optional[str] = None,
+) -> Dict[str, object]:
+    finding = _finding(code or exc.code, severity, subject,
+                       exc.detail if detail is None else detail, remediation)
+    refusal = _captured_refusal(exc)
+    if refusal is not None:
+        finding["remedy"] = deepcopy(refusal.remedy)
+        if finding["code"] != refusal.code:
+            finding["refusal_code"] = refusal.code
+    return finding
 
 
 def project_harness_binary_inventory(
@@ -427,14 +690,69 @@ def _workspace_layout_finding(row: Dict[str, str]) -> Dict[str, object]:
     )
 
 
+# The six shipped v1 pins preceding e2e1863's version/SLA migration. Both
+# endpoints are fixed: an arbitrary modified or custom template is not proof
+# of a historical assignment, even if stripping its SLA yields a matching pin.
+_LEGACY_ROLE_PINS = {
+    "architect": (
+        "7ac392ebe9f68676e117282d81e65cccfb7d19cf249e1159f012bfa89b689d24",
+        "28131d93807d83a8f42f7ce5fb89507f1ddd3579c617cad28941a9f0ba36bc10",
+    ),
+    "builder": (
+        "ae6ccfa31c8ef96b2f378830333c45ea5390ba3d70924f6d0b56319a7c97573b",
+        "12a1177a569f629e44795e1b1538f735cc9ad0ca93ce62901ca8093a5d699846",
+    ),
+    "github-manager": (
+        "43b55bbdafc21a5b93d803673e3f656ba29888aa066e779c0ddd34d862af2bdf",
+        "eea7a59ff550efd817a5ca12add836533c7e4fbee6ee535c8b99a18953bf1929",
+    ),
+    "researcher": (
+        "cf3e039f7a6b14ee3eea1edf3cca859ea131638c50c05a974db9822e413a8e82",
+        "2f2b5905e6e1ac7d8df23e426c8e4410956033d3aa7f0f5ba4f53a2870197a24",
+    ),
+    "reviewer": (
+        "477135125e53df3a5820d347577b011453c0bf0ed87e04ba09075179f58cd9a1",
+        "a5599b1881daecf2fbd8987d4ed27da7857ebce9104ac62beb905e0ba99f8c46",
+    ),
+    "sre": (
+        "3fed4d1e92b21a4a12bff60f7e574e32afc19e0c6d702fca34406c42ed7fc516",
+        "802f929e75099ee1b15a5f3e7a02ca675dda7572c0d16045f976accbfaa63448",
+    ),
+}
+
+
+def _legacy_role_binding(template: object, record: Dict[str, object]) -> Optional[object]:
+    from .role_templates import parse_role_template
+
+    pins = _LEGACY_ROLE_PINS.get(str(record.get("template_role")))
+    if (
+        pins is None
+        or type(record.get("template_version")) is not int
+        or record["template_version"] != 1
+        or record.get("template_sha256") != pins[0]
+        or template.template_version != 2
+        or template.digest != pins[1]
+    ):
+        return None
+    historical = template.record
+    historical["template_version"] = 1
+    historical.pop("ack_sla_minutes", None)
+    try:
+        parsed = parse_role_template(historical)
+    except ProtocolRefusal:
+        return None
+    return parsed if parsed.digest == pins[0] else None
+
+
 def _role_bindings(
     source: Path,
     nodes: list[str],
     registry_rows: list[Dict[str, object]],
     *,
     root: Optional[FloatiRoot] = None,
+    legacy_findings: Optional[list[Dict[str, object]]] = None,
 ) -> Dict[str, object]:
-    """Resolve only digest-bound declared role templates for active nodes."""
+    """Resolve declared templates or exactly proved shipped historical pins."""
 
     from .role_templates import load_shipped_role_templates
 
@@ -468,10 +786,36 @@ def _role_bindings(
             or record.get("template_sha256") != template.digest
             or record.get("template_version") != template.template_version
         ):
-            raise IntegrityFailure(
-                "role_cadence_invalid",
-                f"active role evidence for {node} does not match a declared template",
+            historical = (
+                _legacy_role_binding(template, record) if template is not None else None
             )
+            if historical is None:
+                raise IntegrityFailure(
+                    "role_cadence_invalid",
+                    f"active role evidence for {node} does not match a declared template",
+                )
+            template = historical
+            if legacy_findings is not None:
+                migration_command = [
+                    "floati", "node", "role", "--root",
+                    str(root.path) if root is not None else "ROOT",
+                    "--node", node, "--template", template.role,
+                    "--expected-predecessor", str(record["id"]),
+                ]
+                for key in sorted(record["answers"]):
+                    migration_command.extend(
+                        ["--answer", key + "=" + str(record["answers"][key])]
+                    )
+                legacy_findings.append(_finding(
+                    "role_evidence_legacy", "info", node,
+                    "active role evidence matches a proved shipped v1 template; "
+                    "historical cadence is retained and acknowledgment SLA is undeclared",
+                    f"`{shlex.join(migration_command)}`. "
+                    "This command re-supplies every recorded v1 answer and "
+                    f"migrates role {template.role} version 1 to the same "
+                    "role version 2, preserving every recorded answer; the "
+                    "writer compare-and-swaps the current row",
+                ))
         bindings[node] = template
     return bindings
 
@@ -510,7 +854,7 @@ def _role_ack_slas(
 def _git(source: Path, *args: str) -> str:
     try:
         result = subprocess.run(
-            ["git", *args],
+            ["git", *GIT_MAINTENANCE_OPTIONS, *args],
             cwd=source,
             env={**os.environ, "GIT_ATTR_NOSYSTEM": "1"},
             check=False,
@@ -662,16 +1006,11 @@ def project_effect_reconciliation_interpreter_trust() -> Dict[str, object]:
 
 
 def installed_bridge_paths() -> Optional[tuple[Path, Path]]:
-    """HT-R6: the Am.2-ruled installed bridge path and its source-SHA sidecar.
-    A deployed copy must carry the coordinate it was deployed from, or its
-    staleness is unobservable."""
-
-    root = Path.home() / ".local" / "share" / "floati" / "hooks"
-    bridge = root / "stop-hook-bridge.py"
-    sidecar = root / "stop-hook-bridge.sha256"
-    if not bridge.is_file():
+    """The portable bridge store; never inspect the historical foreign copy."""
+    root = Path.home() / ".local/share/floati-zcode-bridge"
+    if not root.exists() and not root.is_symlink():
         return None
-    return bridge, sidecar
+    return root / "launcher.py", root / "active.json"
 
 
 def project_installed_bridge_currency(
@@ -681,65 +1020,30 @@ def project_installed_bridge_currency(
 
     try:
         return _installed_bridge_currency(source_root, currency_current=currency_current)
-    except (OSError, UnicodeError) as exc:
+    except (OSError, UnicodeError, ValueError) as exc:
         return _host_finding(
             "wake_bridge_unavailable",
             "wake_bridge",
-            f"host wake-bridge currency is unobserved: {type(exc).__name__}",
+            f"host wake-bridge currency is unobserved: {exc}",
         )
 
 
 def _installed_bridge_currency(
     source_root: Path, *, currency_current: bool
 ) -> Dict[str, object]:
-    """Report installed-wake-bridge drift: installed bridge from <sha>,
-    repository at <sha>. Informational, never a refusal - a stale bridge
-    still runs; the user is simply told."""
-
+    """Read the selected portable bank without importing or executing it."""
     paths = installed_bridge_paths()
     if paths is None:
         return _host_finding(
             "wake_bridge_uninstalled",
-            "no installed wake bridge found",
-            "no stop-hook bridge at the ruled install path; the seat wakes by its registration alone",
+            str(Path.home() / ".local/share/floati-zcode-bridge"),
+            "typed absence: the portable bridge store is absent; bound registrations are audited separately",
         )
-    bridge, sidecar = paths
-    installed_sha = hashlib.sha256(bridge.read_bytes()).hexdigest()
-    try:
-        recorded_sha = sidecar.read_text(encoding="utf-8").strip() if sidecar.is_file() else None
-    except OSError:
-        recorded_sha = None
-    repository_bridge = source_root / "hooks" / "stop-hook-bridge.py"
-    repository_sha = (
-        hashlib.sha256(repository_bridge.read_bytes()).hexdigest()
-        if repository_bridge.is_file() else None
-    )
-    if repository_sha is None:
-        return _host_finding(
-            "wake_bridge_repository_source_unnameable",
-            str(repository_bridge),
-            "repository wake-bridge source cannot be named for comparison",
-            (
-            "rerun Doctor with a complete Floati source before claiming deployed-source currency"
-            ),
-        )
-    if installed_sha == repository_sha:
-        return _host_finding(
-            "wake_bridge_current",
-            str(bridge),
-            f"installed wake bridge matches the repository (from {installed_sha[:12]})",
-        )
-    drift_note = (
-        f"installed wake bridge from {installed_sha[:12]}"
-        + (f" (sidecar {recorded_sha[:12]})" if recorded_sha else " (no source-SHA sidecar)")
-        + f", repository at {repository_sha[:12]}"
-    )
+    from .bridge_bank import verify_bridge_store
+    observation = verify_bridge_store(Path.home())
     return _host_finding(
-        "wake_bridge_drift",
-        str(bridge),
-        drift_note,
-        "reinstall the installed bridge from the repository copy so the hook runs current code"
-        if currency_current else None,
+        "wake_bridge_current", str(paths[0]),
+        f"portable bridge bank {observation['bank'].name} is verified; runtime source {observation['source_sha']}",
     )
 
 
@@ -752,10 +1056,35 @@ def parse_bridge_command(command: str) -> Optional[Dict[str, str]]:
     it execs and any HOOK_REPO pin the registration carries. None when the
     command does not name the stop-hook bridge."""
 
-    if not isinstance(command, str) or _BRIDGE_SCRIPT_NAME not in command:
+    if not isinstance(command, str):
+        return None
+    # Recognize only a canonical fixed-launcher candidate. The projection must
+    # still verify the bank and compare its provider's exact identity before
+    # calling this registration current; parsing grants no runtime authority.
+    try:
+        portable_words = shlex.split(command)
+    except ValueError:
+        portable_words = []
+    if len(portable_words) == 3 and portable_words[:2] == ["/bin/sh", "-c"]:
+        body = portable_words[2]
+        matched = re.fullmatch(
+            r'HOOK_ROOT="\$HOME/([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)" '
+            r'HOOK_NODE=[A-Za-z0-9_-]+ HOOK_SESSION=[A-Za-z0-9_-]+ '
+            r'HOOK_REPO="\$HOME/Projects/floati-zcode" '
+            r'exec /usr/bin/python3 -I -B "\$HOME/\.local/share/floati-zcode-bridge/launcher\.py"',
+            body)
+        if (matched and not any(part in {".", ".."} for part in matched[1].split("/"))
+                and command == "/bin/sh -c " + shlex.quote(body)):
+            return {"script": str(Path.home() / ".local/share/floati-zcode-bridge/launcher.py"),
+                    "hook_repo": str(Path.home() / "Projects/floati-zcode"), "adopted": "portable"}
+    if _BRIDGE_SCRIPT_NAME not in command:
         return None
     tokens: list[str] = []
-    for token in shlex.split(command):
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    for token in words:
         # The zcode registration wraps its payload in `/bin/sh -c '...'`,
         # so the script path and the HOOK_* pins can arrive inside one
         # quoted token; split that payload open before scanning it.
@@ -837,15 +1166,16 @@ def project_zcode_bridge_registrations(
     merged_versions: Dict[str, int],
     *,
     currency_current: bool,
+    source_root: Optional[Path] = None,
 ) -> list[Dict[str, object]]:
     """BRIDGE-1: name every bound zcode seat's bridge checkout and flag a
     reader older than the ledger's newest kind beside `older_readers`.
 
     The measured deafness ran the bridge from a stale seat checkout whose
     reader died on newer ledger vocabulary while doctor could not see the
-    skew. Read-only: one git rev-parse and one child interpreter read per
-    checkout; a registration that cannot be named is a typed finding,
-    never silence.
+    skew. Adopted banks are verified completely before reading a literal
+    reader version without execution. Legacy checkouts retain their Git and
+    child-interpreter observations alongside an adoption-required finding.
     """
 
     adapters_root = root.resolve_relative("state/wake-daemon/adapters")
@@ -870,6 +1200,13 @@ def project_zcode_bridge_registrations(
         )]
 
     findings: list[Dict[str, object]] = []
+    source_root = source_root or Path(__file__).resolve().parents[1]
+    installer = shlex.quote(str(source_root / "scripts/install-zcode-bridge.sh"))
+    adoption_remedy = (f"re-apply the private bridge adoption: sh {installer} --dry-run; "
+                       f"then sh {installer} --apply PLAN_DIGEST from that dry-run")
+    from .bridge_rebank import bridge_rebank_remedy
+    rebank_remedy = (bridge_rebank_remedy(source_root) + ". Future fixed-install updates require "
+                    "--profile-registry and --fleet-profile so the adopted bank refresh is receipted.")
     for node_name, binding_path in bindings:
         try:
             record = json.loads(binding_path.read_text(encoding="utf-8"))
@@ -878,8 +1215,8 @@ def project_zcode_bridge_registrations(
         workspace = record.get("workspace") if isinstance(record, dict) else None
         commands: list[tuple[Path, str]] = []
         if isinstance(workspace, str) and workspace:
-            for name in ("settings.json", "hooks.json"):
-                candidate = Path(workspace) / ".zcode" / name
+            for relative in (".zcode/settings.json", ".zcode/hooks.json", "hooks/hooks.json"):
+                candidate = Path(workspace) / relative
                 if candidate.is_symlink() or not candidate.is_file():
                     continue
                 try:
@@ -908,23 +1245,66 @@ def project_zcode_bridge_registrations(
                 f"{node_name}/zcode",
                 "the bound zcode seat carries no readable Stop-hook bridge "
                 "registration; the checkout its wake path runs cannot be audited",
-                "reinstall the governed bridge registration with HOOK_REPO pinned "
-                "to the seat checkout" if currency_current else None,
+                adoption_remedy,
             ))
             continue
         for source, command in unique:
             parsed = parse_bridge_command(command)
             if parsed is None:
                 findings.append(_finding(
-                    "bridge_registration_unnameable",
+                    "bridge_adoption_required",
                     "warning",
                     f"{node_name}/zcode",
-                    f"the Stop registration in {source} does not name the "
-                    f"stop-hook bridge; the seat's wake path cannot be audited",
-                    "reinstall the governed bridge registration with HOOK_REPO "
-                    "pinned to the seat checkout" if currency_current else None,
+                    f"the Stop registration in {source} does not select the verified portable bank; "
+                    f"seat {node_name} at {workspace} requires adoption",
+                    adoption_remedy,
                 ))
                 continue
+            if parsed.get("adopted") == "portable":
+                from .bridge_bank import BridgeBankUnavailable, _verify_store
+                from .bridge_rebank import BridgeRebankUnavailable, _portable_command
+                try:
+                    verified = _verify_store(Path.home())
+                    expected_command = _portable_command(Path.home(),
+                        bridge_payload=verified["files"]["hooks/stop-hook-bridge.py"])
+                except (BridgeBankUnavailable, BridgeRebankUnavailable, OSError, ValueError) as exc:
+                    findings.append(_finding(
+                        "bridge_bank_unavailable", "warning", f"{node_name}/zcode",
+                        f"registration {source}: {exc}", rebank_remedy))
+                    continue
+                if command != expected_command:
+                    findings.append(_finding(
+                        "bridge_adoption_required", "warning", f"{node_name}/zcode",
+                        f"registration {source} differs from the verified private provider identity",
+                        adoption_remedy))
+                    continue
+                repo = verified["runtime"]
+                commit = verified["source_sha"]
+                reader = verified["reader_schema_version"]
+                observation = {"repo": str(repo), "commit": commit,
+                    "runtime_source_sha": commit, "runtime_bank": str(verified["bank"]),
+                    "authority_repo": parsed["hook_repo"], "reader_schema_version": reader,
+                    "hook_repo_pinned": True, "registration": str(source)}
+                newest_version = max((int(value) for value in merged_versions.values()), default=None)
+                if newest_version is not None and newest_version > int(reader):
+                    newest_kind = sorted(kind for kind, value in merged_versions.items()
+                                         if int(value) == newest_version)[0]
+                    finding = _finding("bridge_older_reader", "warning", f"{node_name}/zcode",
+                        f"verified bridge runtime {repo} at source {commit} has reader version {reader}; "
+                        f"ledger kind {newest_kind} needs version {newest_version}", adoption_remedy)
+                    finding["older_readers"] = [{"reader_schema_version": reader,
+                                                  "ledger_newest_kind": newest_kind}]
+                else:
+                    finding = _finding("bridge_reader_current", "ok", f"{node_name}/zcode",
+                        f"verified bridge runtime {repo} at source {commit} (reader version {reader}); "
+                        f"authority checkout {parsed['hook_repo']}")
+                finding["bridge"] = observation
+                findings.append(finding)
+                continue
+            findings.append(_finding(
+                "bridge_adoption_required", "warning", f"{node_name}/zcode",
+                f"legacy bridge registration {source} for seat {node_name} at {workspace} "
+                "does not select the verified portable bank", adoption_remedy))
             pin = parsed["hook_repo"]
             script = parsed["script"]
             repo = Path(pin) if pin else Path(script).parent.parent
@@ -935,8 +1315,7 @@ def project_zcode_bridge_registrations(
                     "warning",
                     f"{node_name}/zcode",
                     f"the bridge checkout {repo} does not answer git rev-parse HEAD",
-                    "point HOOK_REPO at the servable checkout the seat runs"
-                    if currency_current else None,
+                    adoption_remedy,
                 ))
                 continue
             reader = _bridge_reader_version(repo)
@@ -947,8 +1326,7 @@ def project_zcode_bridge_registrations(
                     f"{node_name}/zcode",
                     f"the bridge checkout {repo} (commit {commit[:12]}) does not "
                     "expose a numeric floati.records.READER_VERSION",
-                    "point HOOK_REPO at a checkout containing the floati package"
-                    if currency_current else None,
+                    adoption_remedy,
                 ))
                 continue
             observation = {
@@ -975,9 +1353,7 @@ def project_zcode_bridge_registrations(
                     f"{commit[:12]} (reader version {reader}); the ledger carries "
                     f"kind {newest_kind} at version {newest_version}, above this "
                     "reader's vocabulary - the measured BRIDGE-1 deafness",
-                    "fast-forward the seat checkout or reinstall the bridge from a "
-                    "durable checkout so its reader matches the ledger"
-                    if currency_current else None,
+                    adoption_remedy,
                 )
                 finding["older_readers"] = [{
                     "reader_schema_version": reader,
@@ -985,11 +1361,12 @@ def project_zcode_bridge_registrations(
                 }]
             else:
                 finding = _finding(
-                    "bridge_reader_current",
-                    "ok",
+                    "bridge_legacy_reader",
+                    "warning",
                     f"{node_name}/zcode",
                     f"the zcode bridge runs floati from {repo} at commit "
-                    f"{commit[:12]} (reader version {reader})",
+                    f"{commit[:12]} (reader version {reader}); private adoption is required",
+                    adoption_remedy,
                 )
             finding["bridge"] = observation
             findings.append(finding)
@@ -1016,7 +1393,15 @@ def _wake_daemon_undelivered_count(root: FloatiRoot, node_id: str) -> int:
 
     from .delivery_health import _receipt_item_times
     from .events import EventLog
+    from .mail_summary import observe
+    from .send_prefix import _CACHE_ERRORS
 
+    mail = observe(root)
+    if mail is not None:
+        try:
+            return int(mail.node(node_id)["undelivered_count"])
+        except _CACHE_ERRORS:
+            pass
     delivered = set(_receipt_item_times(root, "deliveries", node_id))
     count = 0
     for record in EventLog(root).event_records():
@@ -1039,7 +1424,7 @@ def project_wake_daemon_health(
     stated as a typed absence, never as silence.
     """
 
-    from .wake_daemon import _BREAKER_THRESHOLD, WAKE_BREAKER_REMEDY
+    from .wake_daemon import _BREAKER_THRESHOLD, WAKE_BREAKER_REMEDY, wake_breaker_remedy
 
     _WAKE_UNRESUMABLE_REMEDY_W = WAKE_BREAKER_REMEDY
 
@@ -1076,13 +1461,14 @@ def project_wake_daemon_health(
             from .wake_daemon_contract import DaemonCoordinate
 
             coordinate = DaemonCoordinate(root, node_name, harness)
-        except ProtocolRefusal:
-            findings.append(_finding(
-                "wake_daemon_health",
+        except ProtocolRefusal as exc:
+            findings.append(_exception_finding(
+                exc,
                 "warning",
                 subject,
-                "binding present but its coordinate no longer resolves (retired node or unsupported harness)",
                 WAKE_BREAKER_REMEDY if currency_current else None,
+                code="wake_daemon_health",
+                detail="binding present but its coordinate no longer resolves (retired node or unsupported harness)",
             ))
             continue
         runtime_path = runtime_dir / f"{coordinate.digest}.json"  # type: ignore[union-attr]
@@ -1165,6 +1551,8 @@ def project_wake_daemon_health(
             extra_lines.append(
                 f"wake daemon {node_label} is paused and polls every {backoff} s."
             )
+        # WD-4 registration: the idle-retire finding lives in doctor_wd_4.
+        extra_lines.extend(doctor_wd_4.idle_retire_lines(node_label, runtime))
         # WD-5: dormant seat holding undelivered mail, from WD-3 holder
         # testimony. Live holder or no undelivered mail: nothing new.
         undelivered = _wake_daemon_undelivered_count(root, node_name)
@@ -1187,12 +1575,16 @@ def project_wake_daemon_health(
         if extra_lines:
             detail = detail + "".join("\n" + line for line in extra_lines)
         if resume_state == "resume_suspect" or circuit_state == "open" or refusals >= _BREAKER_THRESHOLD:
+            # F2-TAKEOVER-DAEMON-1: the same act the daemon's own notice names
+            # - a Codex seat cannot perform `wake daemon bind`.
             findings.append(_finding(
                 "wake_daemon_health",
                 "warning",
                 subject,
                 detail,
-                WAKE_BREAKER_REMEDY if currency_current else None,
+                wake_breaker_remedy(harness, last_reason, runtime_path)
+                if currency_current
+                else None,
             ))
         else:
             findings.append(_finding(
@@ -1242,6 +1634,74 @@ def project_wake_daemon_health(
                 f"zcode hook observed firing (last dispatch {last.get('timestamp')}, "
                 f"injected={last.get('injected')})",
             ))
+    return findings
+
+
+def project_zcode_installed_hook_findings(root: FloatiRoot) -> list[Dict[str, object]]:
+    """Name each zcode Stop hook recorded by hook install, with its hold."""
+
+    wait_root = root.path / "state" / "zcode-wait"
+    if not wait_root.is_dir() or wait_root.is_symlink():
+        return []
+    findings: list[Dict[str, object]] = []
+    for node_dir in sorted(path for path in wait_root.iterdir() if not path.is_symlink()):
+        if not node_dir.is_dir():
+            continue
+        installed_path = node_dir / "installed-hook.json"
+        if not installed_path.is_file() or installed_path.is_symlink():
+            continue
+        try:
+            installed = json.loads(installed_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(installed, dict):
+            continue
+        raw_hooks = installed.get("hooks_path")
+        if not isinstance(raw_hooks, str) or not raw_hooks:
+            continue
+        hooks_path = Path(raw_hooks)
+        if not hooks_path.is_absolute() or hooks_path.is_symlink() or not hooks_path.is_file():
+            continue
+        try:
+            document = json.loads(hooks_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(document, dict):
+            continue
+        stops = document.get("hooks", {}).get("Stop") if isinstance(document.get("hooks"), dict) else None
+        if not isinstance(stops, list):
+            continue
+        for entry in stops:
+            if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+                continue
+            for hook in entry["hooks"]:
+                if not isinstance(hook, dict) or type(hook.get("timeout")) is not int:
+                    continue
+                command = hook.get("command")
+                if not isinstance(command, str):
+                    continue
+                try:
+                    argv = shlex.split(command)
+                except ValueError:
+                    continue
+                if argv[1:5] != ["wake", "wait", "--harness", "zcode"]:
+                    continue
+                flags = dict(zip(argv[5::2], argv[6::2]))
+                try:
+                    deadline = int(flags["--deadline-seconds"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                timeout = hook["timeout"]
+                finding = _finding(
+                    "zcode_hook_installed",
+                    "ok",
+                    f"{node_dir.name}/zcode",
+                    f"zcode Stop hook {hooks_path} timeout {timeout} s, waiter deadline {deadline} s",
+                )
+                finding["hook_timeout_seconds"] = timeout
+                finding["wait_deadline_seconds"] = deadline
+                finding["hooks_path"] = str(hooks_path)
+                findings.append(finding)
     return findings
 
 
@@ -1414,6 +1874,51 @@ def _installed_bus_watch_currency(
     )
 
 
+def retention_census(root: FloatiRoot) -> Dict[str, int]:
+    """Count retained, expired, and keep-forever epochs and measure survivor chunks.
+
+    Expired means removal testimony or a decision that the payload is due for
+    removal. Survivor bytes are the regular files in the history chunk directory.
+    """
+    from .archive_catalog import CHUNK_DIRECTORY
+    from .archive_retention import iter_roll_receipts, removed_epoch_ids
+    from .archive_retention_policy import read_archive_policy, retention_decision
+
+    policy = read_archive_policy(root)
+    removed = removed_epoch_ids(root)
+    observed = datetime.now(timezone.utc)
+    retained = expired = forever = 0
+    seen = set()
+    for receipt in iter_roll_receipts(root):
+        epoch_id = receipt.get("epoch_id")
+        if epoch_id in seen:
+            continue
+        seen.add(epoch_id)
+        decision = retention_decision(receipt, policy, observed)
+        if epoch_id in removed or decision["expired"]:
+            expired += 1
+            continue
+        retained += 1
+        if decision["keep_forever"]:
+            forever += 1
+    for epoch_id in removed:
+        if epoch_id not in seen:
+            expired += 1
+    directory = root.tenant_home / CHUNK_DIRECTORY
+    measured = 0
+    if directory.is_dir() and not directory.is_symlink():
+        for path in directory.rglob("*"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            measured += path.stat().st_size
+    return {
+        "retained": retained,
+        "expired": expired,
+        "keep_forever": forever,
+        "survivor_checkpoint_bytes": measured,
+    }
+
+
 def project_fleet_update(root: FloatiRoot) -> Dict[str, object]:
     """Read one root's complete fleet-update history without opening a lock.
 
@@ -1525,9 +2030,7 @@ def _codex_gateway_finding(
     digest_path = source_root / CODEX_GATEWAY_DIGEST
     if not vendored.exists() and not digest_path.exists():
         return None
-    remediation = (
-        "install the Codex gateway from a complete source tree, then rerun doctor"
-    )
+    remediation = shlex.quote(str(source_root / "scripts/install-codex-gateway.sh"))
     if (
         vendored.is_symlink()
         or digest_path.is_symlink()
@@ -1614,6 +2117,34 @@ def _codex_gateway_finding(
     )
 
 
+def project_node_lease_findings(
+    root: FloatiRoot, now: datetime
+) -> list[Dict[str, object]]:
+    """Name each active node whose lease is already past `now`."""
+
+    from .registry import expired_node_leases, read_registry_compatible
+
+    try:
+        records, _unrecognized, _versions = read_registry_compatible(root)
+        leases = expired_node_leases(root, records, now)
+    except (IntegrityFailure, ProtocolRefusal):
+        return []
+    findings: list[Dict[str, object]] = []
+    for lease in leases:
+        node_id = str(lease["node_id"])
+        expires_at = str(lease["expires_at"])
+        findings.append(
+            _finding(
+                "node_lease_expired",
+                "warning",
+                node_id,
+                f"node {node_id} lease expired at {expires_at}",
+                str(lease["retire_command"]),
+            )
+        )
+    return findings
+
+
 class Doctor:
     """Inspect without creating roots, locks, receipts, or repair writes."""
 
@@ -1681,13 +2212,13 @@ class Doctor:
                     False,
                 )
         except ProtocolRefusal as exc:
-            return _finding(exc.code, "warning", str(source), exc.detail), False
+            return _exception_finding(exc, "warning", str(source)), False
         try:
             status = _git(source, "status", "--porcelain=v1", "--untracked-files=all")
             head = _git(source, "rev-parse", "--verify", "HEAD^{commit}")
             target = _git(source, "rev-parse", "--verify", f"{self.ref}^{{commit}}")
         except ProtocolRefusal as exc:
-            return _finding(exc.code, "warning", str(source), exc.detail), False
+            return _exception_finding(exc, "warning", str(source)), False
         if status:
             return (
                 _finding(
@@ -1718,10 +2249,18 @@ class Doctor:
             True,
         )
 
-    def artifact(self) -> tuple[Dict[str, object], int]:
+    def artifact(self, now: Optional[datetime] = None) -> tuple[Dict[str, object], int]:
         findings: list[Dict[str, object]] = []
         unrecognized_kinds: list[Dict[str, object]] = []
         rc = 0
+        if now is None:
+            observed = datetime.now(timezone.utc)
+        elif now.tzinfo is None or now.utcoffset() is None:
+            raise ProtocolRefusal(
+                "time_invalid", "lease evaluation requires an aware datetime"
+            )
+        else:
+            observed = now.astimezone(timezone.utc)
 
         root: Optional[FloatiRoot] = None
         if not self.root_arg.is_absolute():
@@ -1734,20 +2273,37 @@ class Doctor:
             try:
                 root = FloatiRoot.open_direct_home(self.root_arg, create=False)
             except ProtocolRefusal as exc:
-                findings.append(_finding(exc.code, "error", str(self.root_arg), exc.detail))
+                findings.append(_exception_finding(exc, "error", str(self.root_arg)))
                 rc = 20
             else:
                 findings.append(_finding("root_valid", "ok", str(self.root_arg), "direct-home root is valid"))
 
         if root is not None:
             findings.extend(project_root_layout_findings(root))
+            findings.extend(project_seat_declaration_findings(root))
+            findings.extend(project_seat_execution_findings(root))
+            try:
+                from .projection import AdhocThreadStatusProjection
+                adhoc = AdhocThreadStatusProjection(root).artifact(_utc_now())
+                if adhoc["profiles"]:
+                    rendered = json.dumps(adhoc, sort_keys=True, ensure_ascii=True)
+                    if len(rendered) > 8192:
+                        rendered = json.dumps({"state": "UNKNOWN", "reason": "adhoc_projection_limit"})
+                    findings.append(_finding("adhoc_threads", "warning", str(root.path), rendered))
+            except (IntegrityFailure, ProtocolRefusal, OSError) as exc:
+                findings.append(_finding("adhoc_threads", "warning", str(root.path),
+                    json.dumps({"state": "UNKNOWN", "reason": getattr(exc, "code", "adhoc_read_unavailable")})))
+            rc = project_disk_watch(root, findings, rc)
+            findings.extend(project_hold_findings(root))
+            findings.extend(project_inbound_hold_findings(root))
+            findings.extend(project_node_lease_findings(root, observed))
             findings.append(project_ledger_roll_policy_finding(root))
             try:
                 from .bus_epoch import reconcile_epoch_roll
 
                 epoch_roll = reconcile_epoch_roll(root)
             except (IntegrityFailure, ProtocolRefusal) as exc:
-                findings.append(_finding(exc.code, "error", str(root.path), exc.detail))
+                findings.append(_exception_finding(exc, "error", str(root.path)))
                 rc = 33
                 # A surviving epoch marker owns the selected-plane truth until
                 # reconciliation succeeds.  Do not let later health readers
@@ -1775,13 +2331,13 @@ class Doctor:
                 ]
             except IntegrityFailure as exc:
                 findings.append(
-                    _finding(exc.code, "error", str(root.path), exc.detail)
+                    _exception_finding(exc, "error", str(root.path))
                 )
                 if rc != 20:
                     rc = 33
             except ProtocolRefusal as exc:
                 findings.append(
-                    _finding(exc.code, "error", str(root.path), exc.detail)
+                    _exception_finding(exc, "error", str(root.path))
                 )
                 if rc not in (20, 33):
                     rc = 35
@@ -1813,11 +2369,10 @@ class Doctor:
                 config = GatewayConfig.load(self.gateway_config_arg)
             except ProtocolRefusal as exc:
                 findings.append(
-                    _finding(
-                        exc.code,
+                    _exception_finding(
+                        exc,
                         "error",
                         str(self.gateway_config_arg),
-                        exc.detail,
                         "provide an exact local stdio gateway v0 config, then rerun doctor"
                         if currency_current
                         else None,
@@ -1903,6 +2458,14 @@ class Doctor:
                         rc = 35
 
                 registry_lineage = set(latest)
+                from .cursor_presentations import CursorPresentationLedger
+                for node in sorted(registered):
+                    try:
+                        CursorPresentationLedger(root).read(node)
+                    except (IntegrityFailure, ProtocolRefusal) as exc:
+                        findings.append(_exception_finding(exc, "error", str(CursorPresentationLedger.relative(node))))
+                        if rc != 20:
+                            rc = 33
                 wake_root = root.resolve_relative("receipts/wake-coordination")
                 wake_entries = (
                     list(wake_root.iterdir())
@@ -1933,8 +2496,12 @@ class Doctor:
                         str(wake_root),
                         f"wake identities are a subset of registry lineage ({len(wake_names)}/{len(registry_lineage)})",
                     ))
+            except ProtocolRefusal as exc:
+                findings.append(_exception_finding(exc, "error", str(root.path)))
+                if rc not in {33, 36}:
+                    rc = 20
             except IntegrityFailure as exc:
-                findings.append(_finding(exc.code, "error", str(root.path), exc.detail))
+                findings.append(_exception_finding(exc, "error", str(root.path)))
                 rc = 33 if rc != 20 else rc
 
             # WD-2 wake-doctor health: the daemon's own runtime already knows
@@ -1945,18 +2512,18 @@ class Doctor:
             findings.extend(wake_findings)
             cursor_hook_findings = project_cursor_hook_workspace_findings(root)
             findings.extend(cursor_hook_findings)
+            findings.extend(project_zcode_installed_hook_findings(root))
+            from .claude_hook_install import project_claude_installed_hook_findings
+            claude_hook_findings = project_claude_installed_hook_findings(root)
+            findings.extend(claude_hook_findings)
+            if any(row["severity"] == "warning" for row in claude_hook_findings) and rc == 0:
+                rc = 35
             if any(row["severity"] == "warning" for row in cursor_hook_findings) and rc == 0:
                 rc = 35
             bridge_finding = project_installed_bridge_currency(
                 self.source_arg, currency_current=currency_current
             )
             findings.append(bridge_finding)
-            if bridge_finding['code'] == 'host_wake_bridge_uninstalled' and currency_current:
-                for row in wake_findings:
-                    if row['code'] == 'hook_unproven':
-                        row['remediation'] = (
-                            'install the governed wake bridge first; ' + str(row['remediation'])
-                        )
             if any(row["severity"] == "warning" for row in wake_findings) and rc == 0:
                 rc = 35
             if any(row["severity"] == "error" for row in wake_findings) and rc not in (20, 33):
@@ -1968,12 +2535,19 @@ class Doctor:
             # fact are stated; aged pending is RED.
             try:
                 from .events import EventLog
+                from .mail_summary import observe
+                from .send_prefix import _CACHE_ERRORS
 
-                events_snapshot, unrecognized_kinds, skew = EventLog(
-                    root
-                )._compatible_event_records_with_skew(
-                    snapshot=True
-                )
+                mail_observation = observe(root)
+                receipt_facts = None
+                if mail_observation is None:
+                    events_snapshot, unrecognized_kinds, skew = EventLog(
+                        root
+                    )._compatible_event_records_with_skew(snapshot=True)
+                else:
+                    # Admission proves every physical event is understood.
+                    # Unknown vocabulary and imported epochs use native history.
+                    events_snapshot, unrecognized_kinds, skew = [], [], None
                 registry_rows, registry_unrecognized, registry_versions = (
                     read_registry_compatible(root)
                 )
@@ -1985,26 +2559,58 @@ class Doctor:
                     node for node, row in latest_registry.items()
                     if row.get("state") == "active"
                 )
-                cadences = _role_cadences(
-                    self.source_arg, active_nodes, registry_rows, root=root
+                if mail_observation is not None:
+                    try:
+                        events_snapshot, receipt_facts = mail_observation.health_projection(active_nodes)
+                    except _CACHE_ERRORS:
+                        mail_observation = None
+                        events_snapshot, unrecognized_kinds, skew = EventLog(
+                            root
+                        )._compatible_event_records_with_skew(snapshot=True)
+                legacy_findings: list[Dict[str, object]] = []
+                role_bindings = _role_bindings(
+                    self.source_arg, active_nodes, registry_rows, root=root,
+                    legacy_findings=legacy_findings,
                 )
-                ack_slas = _role_ack_slas(
-                    self.source_arg, active_nodes, registry_rows, root=root
-                )
+                observation_now = _utc_now()
+                cadences = {
+                    node: template.cadence for node, template in role_bindings.items()
+                }
+                ack_slas = {
+                    node: int(template.ack_sla_minutes)
+                    for node, template in role_bindings.items()
+                    if template.ack_sla_minutes is not None
+                }
+                findings.extend(legacy_findings)
                 report = DeliveryHealthAnalyzer.analyze(
                     events=events_snapshot,
                     root=root,
                     nodes=active_nodes,
-                    now=_utc_now(),
+                    now=observation_now,
                     cadences=cadences,
                     ack_slas=ack_slas,
+                    receipt_facts=receipt_facts,
                 )
                 findings.extend(report.findings)
+                from .stop_skip import project_stop_skip_findings
+
+                stop_skip_findings = project_stop_skip_findings(
+                    events_snapshot, root, active_nodes, observation_now,
+                    delivery_times=None if receipt_facts is None else {
+                        node: facts["delivery_times"] for node, facts in receipt_facts.items()})
+                findings.extend(stop_skip_findings)
+                if any(
+                    row["severity"] == "warning" for row in stop_skip_findings
+                ) and rc == 0:
+                    rc = 35
                 from .wake_health import WakeHealthProjection
 
                 wake_health = WakeHealthProjection(root)
                 for node in active_nodes:
-                    fact = wake_health.fact(node, _utc_now())
+                    try:
+                        fact = wake_health.fact(node, observation_now, mail=mail_observation)
+                    except _CACHE_ERRORS:
+                        fact = wake_health.fact(node, observation_now, mail=False)
                     state = str(fact["state"])
                     severity = (
                         "error"
@@ -2018,10 +2624,22 @@ class Doctor:
                         f"wake path projects {state}",
                         str(fact["remedy"]) if severity != "ok" else None,
                     )
+                    severity, finding = project_wake_receipt_legacy_read(fact, severity, finding, finding_factory=_finding)
                     finding["wake_health"] = fact
                     findings.append(finding)
                     if severity == "error" and rc == 0:
                         rc = 35
+                    try:
+                        attention = wake_health.seat_attention(node, observation_now, mail=mail_observation)
+                    except _CACHE_ERRORS:
+                        attention = wake_health.seat_attention(node, observation_now, mail=False)
+                    if attention["state"] == "unknown":
+                        finding = _finding("seat_attention_unknown", "warning", node,
+                            str(attention["detail"]), str(attention["remedy"]))
+                        finding["seat_attention"] = attention
+                        findings.append(finding)
+                        if rc == 0:
+                            rc = 35
                 merged_versions = dict(registry_versions)
                 if skew is not None:
                     for kind in skew.unknown_kinds:
@@ -2061,7 +2679,8 @@ class Doctor:
                 # must speak; the bound zcode seats' bridges are the readers
                 # doctor can audit, so they are listed beside older_readers.
                 bridge_findings = project_zcode_bridge_registrations(
-                    root, merged_versions, currency_current=currency_current
+                    root, merged_versions, currency_current=currency_current,
+                    source_root=self.source_arg,
                 )
                 findings.extend(bridge_findings)
                 if any(
@@ -2080,10 +2699,16 @@ class Doctor:
                     row["severity"] == "warning" for row in harness_findings
                 ) and rc == 0:
                     rc = 35
+                findings.extend(project_remote_control_worker_findings(root=root))
+                findings.extend(project_model_proxy_findings(home=Path.home(), env=dict(os.environ)))
                 if report.any_red and rc == 0:
                     rc = 35
+            except ProtocolRefusal as exc:
+                findings.append(_exception_finding(exc, "error", "events.jsonl"))
+                if rc not in {33, 36}:
+                    rc = 20
             except IntegrityFailure as exc:
-                findings.append(_finding("delivery_health_unavailable", "error", "events.jsonl", exc.detail))
+                findings.append(_exception_finding(exc, "error", "events.jsonl", code="delivery_health_unavailable"))
                 if rc != 20:
                     rc = 33
 
@@ -2127,8 +2752,12 @@ class Doctor:
                         )
                         if fact["verdict"] == "refused" and rc not in (20, 33):
                             rc = 36
+            except ProtocolRefusal as exc:
+                findings.append(_exception_finding(exc, "error", "registry/entries.jsonl"))
+                if rc not in {33, 36}:
+                    rc = 20
             except IntegrityFailure as exc:
-                findings.append(_finding(exc.code, "error", "registry/entries.jsonl", exc.detail))
+                findings.append(_exception_finding(exc, "error", "registry/entries.jsonl"))
                 if rc != 20:
                     rc = 33
 
@@ -2209,14 +2838,26 @@ class Doctor:
                         allowed_kinds={"work_item", "work_transition"},
                     )
                     ConsumptionLedger(root).project(records)
+                except ProtocolRefusal as exc:
+                    findings.append(_exception_finding(exc, "error", "work/items.jsonl"))
+                    if rc not in {33, 36}:
+                        rc = 20
                 except IntegrityFailure as exc:
-                    findings.append(_finding("consumption_state_unavailable", "error", "work/items.jsonl", exc.detail))
+                    findings.append(_exception_finding(exc, "error", "work/items.jsonl", code="consumption_state_unavailable"))
                     if rc != 20:
                         rc = 33
                 else:
                     findings.append(_finding("consumption_coordinate_valid", "ok", "work/items.jsonl", "sole consumption coordinate is structurally valid"))
 
         if root is not None:
+            from .work_notification import project_notification_findings
+            notification_findings = project_notification_findings(root, now=now)
+            findings.extend(notification_findings)
+            if any(f["severity"] == "error" for f in notification_findings):
+                if rc != 20:
+                    rc = 33
+            elif any(f["severity"] == "warning" for f in notification_findings) and rc == 0:
+                rc = 35
             lanes_declaration = root.tenant_home / "state" / "lanes-root.json"
             if lanes_declaration.exists() or lanes_declaration.is_symlink():
                 from .lane_workspaces import LaneWorkspaces
@@ -2224,15 +2865,15 @@ class Doctor:
                 try:
                     lane_inventory = LaneWorkspaces(root).doctor()
                 except ProtocolRefusal as exc:
-                    findings.append(_finding(
-                        exc.code, "error", str(lanes_declaration), exc.detail,
+                    findings.append(_exception_finding(
+                        exc, "error", str(lanes_declaration),
                         exc.remedy if isinstance(exc.remedy, str) else None,
                     ))
                     if rc not in {33, 36}:
                         rc = 20
                 except IntegrityFailure as exc:
-                    findings.append(_finding(
-                        exc.code, "error", str(lanes_declaration), exc.detail,
+                    findings.append(_exception_finding(
+                        exc, "error", str(lanes_declaration),
                         "Inspect the named lane ledger before retrying doctor.",
                     ))
                     rc = 33
@@ -2296,22 +2937,20 @@ class Doctor:
                     )
                 except IntegrityFailure as exc:
                     findings.append(
-                        _finding(
-                            exc.code,
+                        _exception_finding(
+                            exc,
                             "error",
                             str(update_destination),
-                            exc.detail,
                         )
                     )
                     if rc != 20:
                         rc = 33
                 except ProtocolRefusal as exc:
                     findings.append(
-                        _finding(
-                            exc.code,
+                        _exception_finding(
+                            exc,
                             "error",
                             str(update_destination),
-                            exc.detail,
                         )
                     )
                     if rc == 0:
@@ -2336,6 +2975,7 @@ class Doctor:
                 return _host_finding(code, subject, detail, remediation)
             return _finding(code, severity, subject, detail, remediation)
 
+        trust_rows = []
         if self.codex_hooks_defaulted and not self.codex_hooks_arg.exists():
             findings.append(hook_finding(
                 "codex_wait_hook_trust",
@@ -2349,13 +2989,17 @@ class Doctor:
                     self.codex_hooks_arg, self.codex_config_arg
                 )
             except ProtocolRefusal as exc:
-                findings.append(hook_finding(
+                finding = hook_finding(
                     exc.code,
                     "warning",
                     str(self.codex_hooks_arg),
                     exc.detail,
                     "Provide the exact Codex hooks and trust config paths, then rerun doctor.",
-                ))
+                )
+                finding["remedy"] = deepcopy(exc.remedy)
+                if finding["code"] != exc.code:
+                    finding["refusal_code"] = exc.code
+                findings.append(finding)
                 if not self.codex_hooks_defaulted and rc == 0:
                     rc = 35
             else:
@@ -2385,6 +3029,15 @@ class Doctor:
                     findings.append(finding)
                     if not self.codex_hooks_defaulted and not trust["hook_armed"] and rc == 0:
                         rc = 35
+        if root is not None:
+            window_findings = project_codex_wait_window_findings(
+                root, self.codex_hooks_arg, trust_rows,
+                host_scoped=self.codex_hooks_defaulted)
+            findings.extend(window_findings)
+            if any(row["severity"] == "error" for row in window_findings) and rc not in (20, 33):
+                rc = 33
+            elif any(row["severity"] == "warning" for row in window_findings) and rc == 0:
+                rc = 35
         if root is None:
             fleet_update = {"state": "unavailable"}
         else:
@@ -2395,9 +3048,16 @@ class Doctor:
                     "state": "integrity_failure",
                     "code": exc.code,
                 }
+                refusal = _captured_refusal(exc)
+                if refusal is not None:
+                    fleet_update["refusal_code"] = refusal.code
+                    fleet_update["remedy"] = deepcopy(refusal.remedy)
+                findings.append(_exception_finding(exc, "error", "receipts/fleet-update"))
                 rc = 33
         state = {
             0: "healthy",
+            1: "degraded",
+            2: "degraded",
             20: "refused",
             21: "unknown",
             22: "cannot_speak",
@@ -2405,20 +3065,22 @@ class Doctor:
             35: "degraded",
             36: "sandbox_refused",
         }.get(rc, "degraded")
-        return (
-            {
-                "schema_version": 1,
-                "diagnostic_version": "0",
-                "state": state,
-                "root": str(self.root_arg),
-                "source": str(self.source_arg),
-                "ref": self.ref,
-                "findings": findings,
-                "unrecognized_kinds": unrecognized_kinds,
-                "fleet_update": fleet_update,
-            },
-            rc,
-        )
+        report = {
+            "schema_version": 1,
+            "diagnostic_version": "0",
+            "state": state,
+            "root": str(self.root_arg),
+            "source": str(self.source_arg),
+            "ref": self.ref,
+            "findings": findings,
+            "unrecognized_kinds": unrecognized_kinds,
+            "fleet_update": fleet_update,
+        }
+        if root is not None:
+            report["archive_retention"] = retention_census(root)
+            from .fleet_presence import presence_status
+            report["fleet_presence"] = presence_status(root)
+        return report, rc
 
     def probe(self, budget_seconds: float = 60.0) -> tuple[Dict[str, object], int]:
         """H3 `--probe`: loopback envelope per registered node, drain
@@ -2440,6 +3102,9 @@ class Doctor:
                     "state": "refused",
                     "root": str(self.root_arg),
                     "detail": exc.detail,
+                    "code": exc.code,
+                    "remedy": deepcopy(exc.remedy),
+                    "findings": [_exception_finding(exc, "error", str(self.root_arg))],
                 },
                 20,
             )

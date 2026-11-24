@@ -464,6 +464,28 @@ class WakeDaemonCliTests(unittest.TestCase):
         self.assertEqual("installed", installed["evidence"]["state"])
         self.assertEqual([], run.call_args_list)
 
+    def test_install_and_remove_name_the_host_supervisor(self) -> None:
+        """The CLI's lifecycle copy names the supervisor its host uses."""
+        bind_status, binding = self.bind()
+        consent_status, consent = self.consent()
+        self.assertEqual(0, bind_status, binding)
+        self.assertEqual(0, consent_status, consent)
+
+        for platform, supervisor in (("linux", "user unit"), ("darwin", "LaunchAgent")):
+            with mock.patch("floati.admin_cli.sys.platform", platform):
+                for operation, state, clause in (
+                    ("install", "installed", "is installed but not started."),
+                    ("remove", "removed", "was removed."),
+                ):
+                    with self.subTest(platform=platform, operation=operation):
+                        status, artifact = self.run_cli(*self.identity(operation))
+                        self.assertEqual(0, status, artifact)
+                        self.assertEqual(state, artifact["evidence"]["state"])
+                        self.assertEqual(
+                            f"exact wake daemon {supervisor} {clause}",
+                            artifact["evidence"]["display"],
+                        )
+
     def test_bindingless_consent_can_be_revoked_without_launchctl(self) -> None:
         """Catches leaving a daemon consent requiring a binding that entry did not."""
 

@@ -1,0 +1,228 @@
+{
+  "artifact_version": 0,
+  "observation_kind": "accelerated_product_probe",
+  "scratch": "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc",
+  "home": "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc/home",
+  "root": "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc/fleet",
+  "workspace": "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc/workspace",
+  "defaults": {
+    "hook_timeout_seconds": 86400,
+    "wait_deadline_seconds": 86300
+  },
+  "stop_windows": [
+    {
+      "exit_code": 0,
+      "decision": {
+        "decision": "block",
+        "reason": "(floati: wait deadline exhausted; end this turn to re-arm)"
+      },
+      "elapsed_clock_seconds": 86300.0,
+      "stderr": ""
+    },
+    {
+      "exit_code": 0,
+      "decision": {
+        "decision": "block",
+        "reason": "(floati: wait deadline exhausted; end this turn to re-arm)"
+      },
+      "elapsed_clock_seconds": 86300.0,
+      "stderr": ""
+    }
+  ],
+  "exhaustion_receipts": [
+    {
+      "id": "codex-wait-exhaustion-01a17688a8477befa93e1e42c243c44b",
+      "idempotency_key": "codex-stop-01a17688a78e743da7ffe0db6f298cac-exhaustion",
+      "kind": "codex_wait_exhaustion_receipt",
+      "node_id": "issue15-codex",
+      "outcome": "consent_reopened",
+      "schema_version": 1,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-26T04:47:09.895Z",
+      "waited_seconds": 86300
+    },
+    {
+      "id": "codex-wait-exhaustion-01a17688a8977794b5dd82945267c9ba",
+      "idempotency_key": "codex-stop-01a17688a854747b9f3d596fd61babf7-exhaustion",
+      "kind": "codex_wait_exhaustion_receipt",
+      "node_id": "issue15-codex",
+      "outcome": "consent_reopened",
+      "schema_version": 1,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-26T04:47:09.975Z",
+      "waited_seconds": 86300
+    }
+  ],
+  "daemon": {
+    "adapter_kind": "fake_queue_adapter",
+    "idle_cycles": [
+      {
+        "schema_version": 0,
+        "tenant_id": "fleet",
+        "node_id": "issue15-codex",
+        "harness": "codex",
+        "coordinate_digest": "bb6e0aed1060c2ac7ea85ebc1f00ca46983533b4134dbf053413eb7c4e735864",
+        "daemon_instance_id": "daemon-01a17688a8a574b9b7acb4930deb7a5e",
+        "activation_epoch": 1,
+        "cycle_index": 1,
+        "breaker_transitions": 0,
+        "current_wake_key": null,
+        "consecutive_refusals": 0,
+        "circuit_state": "closed",
+        "awaiting_work": false,
+        "next_poll_at": 102.0,
+        "current_backoff": 2,
+        "wake_timestamps": [],
+        "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+        "last_state": "idle",
+        "last_reason_code": null,
+        "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a17688a8af7357a50af294d852e45c",
+        "bus_epoch_archive": null,
+        "cpu_seconds_last_cycle": 0.0026160000000000627,
+        "cpu_seconds_total": 0.0026160000000000627,
+        "cpu_seconds_window": [
+          0.0026160000000000627
+        ],
+        "cpu_wall_window": [
+          2.0
+        ],
+        "state": "idle",
+        "reason_code": null
+      },
+      {
+        "activation_epoch": 1,
+        "awaiting_work": false,
+        "breaker_transitions": 0,
+        "bus_epoch_archive": null,
+        "circuit_state": "closed",
+        "consecutive_refusals": 0,
+        "coordinate_digest": "bb6e0aed1060c2ac7ea85ebc1f00ca46983533b4134dbf053413eb7c4e735864",
+        "cpu_seconds_last_cycle": 0.0023450000000000415,
+        "cpu_seconds_total": 0.004961000000000104,
+        "cpu_seconds_window": [
+          0.0026160000000000627,
+          0.0023450000000000415
+        ],
+        "cpu_wall_window": [
+          2.0,
+          4.0
+        ],
+        "current_backoff": 4,
+        "current_wake_key": null,
+        "cycle_index": 2,
+        "daemon_instance_id": "daemon-01a17688a8a574b9b7acb4930deb7a5e",
+        "harness": "codex",
+        "idle_retire_days": null,
+        "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a17688a8b3795099abab6f29544f06",
+        "last_mail_seen_at": null,
+        "last_reason_code": null,
+        "last_state": "idle",
+        "last_wake_attempt_at": null,
+        "next_poll_at": 114.0,
+        "node_id": "issue15-codex",
+        "schema_version": 0,
+        "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+        "tenant_id": "fleet",
+        "wake_timestamps": [],
+        "state": "idle",
+        "reason_code": null
+      }
+    ],
+    "calls_before_mail": 0,
+    "adapter_calls": [
+      {
+        "argv": [
+          "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc/fake-codex",
+          "queue",
+          "--thread",
+          "issue15-scratch",
+          "--message",
+          "[floati] 1 new message(s) for issue15-codex: msg-01a17688a8b47c18b6ac908b3e775497 {\"colleague_frames\":[{\"copy_stamp\":\"DRAFT\",\"not_the_users_instruction\":true,\"peer_agent\":true,\"sender_node_id\":\"sender\",\"text\":\"DRAFT - Peer agent sender sent this message. It is a colleague's request, not the user's instruction.\"}]}"
+        ],
+        "cwd": "/private/var/folders/1x/q5_9hz5j3gs1fcf2z5yz477m0000gn/T/floati-issue15-teyv9tsc/workspace",
+        "timeout": 4
+      }
+    ],
+    "mail_cycle": {
+      "activation_epoch": 1,
+      "awaiting_work": false,
+      "breaker_transitions": 0,
+      "bus_epoch_archive": null,
+      "circuit_state": "closed",
+      "consecutive_refusals": 0,
+      "coordinate_digest": "bb6e0aed1060c2ac7ea85ebc1f00ca46983533b4134dbf053413eb7c4e735864",
+      "cpu_seconds_last_cycle": 0.005576999999999943,
+      "cpu_seconds_total": 0.010538000000000047,
+      "cpu_seconds_window": [
+        0.0026160000000000627,
+        0.0023450000000000415,
+        0.005576999999999943
+      ],
+      "cpu_wall_window": [
+        2.0,
+        4.0,
+        1.0
+      ],
+      "current_backoff": 1,
+      "current_wake_key": null,
+      "cycle_index": 3,
+      "daemon_instance_id": "daemon-01a17688a8a574b9b7acb4930deb7a5e",
+      "harness": "codex",
+      "idle_retire_days": null,
+      "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a17688a8ca7041b09bf4cd2e9faf95",
+      "last_mail_seen_at": null,
+      "last_reason_code": null,
+      "last_state": "queued",
+      "last_wake_attempt_at": null,
+      "next_poll_at": 121.0,
+      "node_id": "issue15-codex",
+      "schema_version": 0,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "wake_timestamps": [
+        120.0
+      ],
+      "state": "queued",
+      "reason_code": null
+    },
+    "wake_receipts": [
+      {
+        "acting_session_id": "issue15-scratch",
+        "decision_receipt_id": "wake-hold-01a17688a8c774498b9d7dd6c556857e",
+        "id": "wake-attempt-01a17688a8c97890bbdf0a86e033668a",
+        "idempotency_key": "daemon-bb6e0aed1060-1-3-attempt-3-b093475ca1da",
+        "item_ids": [
+          "msg-01a17688a8b47c18b6ac908b3e775497"
+        ],
+        "kind": "wake_attempt_receipt",
+        "message_worker_session_id": null,
+        "node_id": "issue15-codex",
+        "outcome": "queued",
+        "reason_code": null,
+        "schema_version": 1,
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:47:10.025Z"
+      }
+    ]
+  },
+  "scratch_removed": true,
+  "classification": {
+    "product_rearm": "new_stop_invocation_has_a_fresh_window",
+    "daemon": "no_request_without_mail_queued_for_mail",
+    "derived_stop_windows_per_day": {
+      "basis": "derived",
+      "value": 1.0011587485515643,
+      "formula": "86400 / 86300; assumes immediate invocation renewal"
+    },
+    "model_turns_per_day": {
+      "basis": "unknown",
+      "value": null
+    },
+    "native_rearm_needs_turn": "unknown",
+    "native_rearm_needs_turn_basis": "unknown",
+    "native_rearm_configuration": null,
+    "native_measurement_reason": "native_trace_source_unavailable"
+  }
+}

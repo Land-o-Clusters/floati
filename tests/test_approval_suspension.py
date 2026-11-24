@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_barrier, wait_event, wait_join
 from floati import fixture_ids as public_ids
 
 import errno
@@ -729,8 +730,23 @@ class ApprovalSuspensionProjectionTests(unittest.TestCase):
             dict(consumed, approval_decision_id="approval-decision-bad"),
             dict(consumed, extra=True),
         )
-        for record in hostile:
-            with self.subTest(hostile=record):
+        for case_index, record in enumerate(hostile):
+            with self.subTest(case=(
+                "schema-version-zero",
+                "malformed-suspension-id",
+                "uppercase-action-digest",
+                "scope-newline",
+                "boolean-authority-epoch",
+                "workspace-without-work-id",
+                "checkpoint-sha-length-39",
+                "native-resume-without-provider-session",
+                "suspension-extra-field",
+                "missing-approval-expiry",
+                "fractional-resume-epoch",
+                "noncanonical-consumed-timestamp",
+                "malformed-approval-decision-id",
+                "consumption-extra-field",
+            )[case_index], kind=record["kind"]):
                 self.assertEqual((False, False), accepted(record))
 
         for record, field in (
@@ -1523,7 +1539,7 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
                 first = fsync_calls == 1
             if first:
                 write_visible.set()
-                if not permit_fsync_failure.wait(5):
+                if not wait_event(permit_fsync_failure, "test_approval_suspension permit_fsync_failure"):
                     raise AssertionError("test did not release the blocked fsync")
                 raise OSError(errno.EIO, "injected authority fsync failure")
             real_fsync(descriptor)
@@ -1553,15 +1569,15 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
         ):
             writer_thread = threading.Thread(target=retry_writer, name="suspension-writer")
             writer_thread.start()
-            self.assertTrue(write_visible.wait(5), "release frame never reached pre-fsync seam")
+            self.assertTrue(wait_event(write_visible, "test_approval_suspension write_visible"), "release frame never reached pre-fsync seam")
             observer_thread = threading.Thread(
                 target=retry_observer, name="suspension-observer"
             )
             observer_thread.start()
             transient_tail_returned = observer_tail_returned.wait(0.25)
             permit_fsync_failure.set()
-            writer_thread.join(5)
-            observer_thread.join(5)
+            wait_join(writer_thread, "test_approval_suspension writer_thread")
+            wait_join(observer_thread, "test_approval_suspension observer_thread")
 
         self.assertFalse(writer_thread.is_alive())
         self.assertFalse(observer_thread.is_alive())
@@ -1644,7 +1660,7 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
         def pause_before_append(record: dict, *args: object, **kwargs: object) -> dict:
             validated = validate_record(record, *args, **kwargs)
             if record.get("kind") == "attempt_suspended_for_approval":
-                ready_to_append.wait(5)
+                wait_barrier(ready_to_append, "test_approval_suspension ready_to_append")
             return validated
 
         def suspend(controller: ApprovalSuspensionController) -> None:
@@ -1661,7 +1677,7 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
             for contender in contenders:
                 contender.start()
             for contender in contenders:
-                contender.join(5)
+                wait_join(contender, "test_approval_suspension contender")
 
         self.assertTrue(all(not contender.is_alive() for contender in contenders))
         self.assertEqual([], errors)
@@ -1686,7 +1702,7 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
         def pause_before_append(record: dict, *args: object, **kwargs: object) -> dict:
             validated = validate_record(record, *args, **kwargs)
             if record.get("kind") == "approval_consumed_for_resume":
-                ready_to_append.wait(5)
+                wait_barrier(ready_to_append, "test_approval_suspension ready_to_append")
             return validated
 
         def consume(controller: ApprovalSuspensionController) -> None:
@@ -1703,7 +1719,7 @@ class ApprovalSuspensionControllerTests(unittest.TestCase):
             for contender in contenders:
                 contender.start()
             for contender in contenders:
-                contender.join(5)
+                wait_join(contender, "test_approval_suspension contender")
 
         self.assertTrue(all(not contender.is_alive() for contender in contenders))
         self.assertEqual([], errors)

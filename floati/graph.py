@@ -8,7 +8,7 @@ from typing import Dict
 from .events import EventLog
 from .consumption import ConsumptionLedger
 from .jsonl import read_records_snapshot
-from .registry import read_registry_compatible
+from .registry import node_lifetime, read_registry_compatible
 from .root import FloatiRoot
 from .workers import WorkerReceipts
 from .runtruth import RunLedger
@@ -19,10 +19,10 @@ class HarborGraph:
         self.root = root
 
     def artifact(self) -> Dict[str, object]:
-        _events, unrecognized = EventLog(self.root).compatible_event_records(
-            snapshot=True
-        )
-        registry, _unrecognized, _versions = read_registry_compatible(self.root)
+        # Topology uses registry, work and run readers. The latter two are
+        # strict; the compatible registry reader supplies its unknown kinds.
+        # Message history belongs to the traffic projection below.
+        registry, unrecognized, _versions = read_registry_compatible(self.root)
         latest_nodes: Dict[str, Dict[str, object]] = {}
         for record in registry:
             if record.get("kind") != "registry_entry":
@@ -34,6 +34,7 @@ class HarborGraph:
                 "kind": "node",
                 "role": str(record["role"]),
                 "state": str(record["state"]),
+                "lifetime": node_lifetime(registry, node_id),
             }
             for node_id, record in sorted(latest_nodes.items())
         ]

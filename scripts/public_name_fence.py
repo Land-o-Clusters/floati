@@ -39,6 +39,9 @@ TEMP_FENCE_CODES = frozenset(code for code, _prefix in GOVERNED_TEMP_FENCES)
 EXCLUDED_PARTS = frozenset((".git", "__pycache__"))
 MAX_GIT_OUTPUT = 16 * 1024 * 1024
 PATH_LITERAL_CONTRACT_PREFIXES = ("bundle/c7.1/", "bundle/c7.2/", "schemas/")
+JSON_STRING_TOKEN = re.compile(
+    r'"(?:\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|[^"\\\x00-\x1f])*"'
+)
 _VERIFICATION_SEAT = bytes.fromhex("67726f6b").decode("ascii")
 _VERIFICATION_SEAT_EXPLICIT = bytes.fromhex(
     "67726f6b2d7468652d73656174"
@@ -567,17 +570,21 @@ def allowlist_measurements(root: Path) -> dict[str, int]:
     }
 
 
-def _entries(root: Path) -> Iterable[Path]:
+def _entries(
+    root: Path, *, excluded_parts: frozenset[str] = EXCLUDED_PARTS
+) -> Iterable[Path]:
     tracked = _tracked_paths(root)
     if tracked is not None:
         for relative in tracked:
+            if excluded_parts.intersection(relative.parts):
+                continue
             path = root / relative
             if path.is_symlink() or path.is_file():
                 yield path
         return
     for path in sorted(root.rglob("*"), key=lambda candidate: os.fsencode(candidate)):
         relative = path.relative_to(root)
-        if any(part in EXCLUDED_PARTS for part in relative.parts):
+        if excluded_parts.intersection(relative.parts):
             continue
         if path.is_symlink() or path.is_file():
             yield path
@@ -590,7 +597,7 @@ def _tracked_paths(root: Path) -> list[Path] | None:
     environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_PAGER": "cat"})
     try:
         probe = subprocess.run(
-            ["/usr/bin/git", "rev-parse", "--is-inside-work-tree"],
+            ["/usr/bin/git", "rev-parse", "--show-toplevel"],
             cwd=root,
             env=environment,
             check=False,
@@ -599,8 +606,10 @@ def _tracked_paths(root: Path) -> list[Path] | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if probe.returncode != 0 or probe.stdout.strip() != b"true":
+    if probe.returncode != 0:
         return None
+    if Path(os.fsdecode(probe.stdout.rstrip(b"\n"))).resolve() != root:
+        raise RuntimeError("public name fence tracked inventory belongs to another checkout")
     try:
         listing = subprocess.run(
             ["/usr/bin/git", "ls-files", "-z", "--cached"],
@@ -621,8 +630,6 @@ def _tracked_paths(root: Path) -> list[Path] | None:
         relative = Path(os.fsdecode(raw))
         if relative.is_absolute() or ".." in relative.parts:
             raise RuntimeError("public name fence tracked path is invalid")
-        if any(part in EXCLUDED_PARTS for part in relative.parts):
-            continue
         paths.append(relative)
     return sorted(paths, key=lambda path: os.fsencode(path))
 
@@ -643,11 +650,89 @@ def _scannable_data(path: Path, data: bytes) -> bytes:
     return "\n".join(surfaces).encode("utf-8")
 
 
+def _private_coordinate_rules(
+    document: dict[str, object],
+) -> dict[str, tuple[re.Pattern[str], tuple[bytes, ...]]]:
+    tokens_by_code: dict[str, list[str]] = {}
+    for entry in document["forbidden_tokens"]:
+        tokens_by_code.setdefault(entry["code"], []).append(entry["token"])
+    rules = {}
+    for code, tokens in tokens_by_code.items():
+        alternatives = "|".join(re.escape(token) for token in tokens)
+        if code in {"fleet_host_name", "host_model"}:
+            left, right = r"[a-z0-9-]", r"[a-z0-9]"
+        else:
+            left = right = r"[\w.-]"
+        pattern = re.compile(
+            rf"(?<!{left})(?:{alternatives})(?!{right})",
+            re.ASCII | re.IGNORECASE,
+        )
+        spellings = tuple(
+            token.lower().encode(encoding) for token in tokens for encoding in ENCODINGS
+        )
+        rules[code] = pattern, spellings
+    return rules
+
+
+def _private_coordinate_hits(
+    rules: dict[str, tuple[re.Pattern[str], tuple[bytes, ...]]],
+    relative: str,
+    data: bytes,
+) -> Iterable[str]:
+    hits = set()
+    folded = data.lower()
+    for code, (pattern, spellings) in rules.items():
+        if pattern.search(relative):
+            hits.add(code)
+        elif any(spelling in folded for spelling in spellings) and any(
+            pattern.search(data.decode(encoding, errors="replace"))
+            for encoding in ENCODINGS
+        ):
+            hits.add(code)
+
+    if rules and relative.lower().endswith((".json", ".jsonl")) and b"\\" in data:
+        try:
+            text, _, _ = _decode_json_text(data)
+        except UnicodeDecodeError:
+            text = ""
+        # Inspect each escaped key and value independently, including duplicate keys.
+        for match in JSON_STRING_TOKEN.finditer(text):
+            literal = match.group()
+            if "\\" in literal:
+                value = json.loads(literal)
+                hits.update(code for code, (pattern, _) in rules.items()
+                            if code not in hits and pattern.search(value))
+    yield from sorted(hits)
+
+
 def scan_tree(root: Path) -> list[dict[str, object]]:
-    """Return stable path/code findings without decoding staged files."""
+    """Return stable path/code findings for the staged tree's own inventory."""
 
     base = Path(root).resolve()
     findings: list[dict[str, object]] = []
+    coordinate_rules = {}
+    # The exporter runs from harbor, even while scanning a policy-free
+    # projection. The public checkout carries neither the tokens nor the key.
+    if (REPOSITORY_ROOT / ".github/public-export-policy.v0.json").is_file():
+        from floati.tenant_fence import DECLARATION_RELATIVE, load_pinned_operator_declaration
+
+        try:
+            document = load_pinned_operator_declaration(REPOSITORY_ROOT)
+        except (OSError, ValueError, RuntimeError):
+            return [{
+                "code": "private_coordinate_declaration_invalid",
+                "path": DECLARATION_RELATIVE,
+            }]
+        coordinate_rules = _private_coordinate_rules(document)
+
+    # An explicitly exported cache-named path still ships its bytes.
+    excluded_parts = frozenset((".git",)) if coordinate_rules else EXCLUDED_PARTS
+    try:
+        entries = list(_entries(base, excluded_parts=excluded_parts))
+    except RuntimeError:
+        entries = []
+    if not entries:
+        return [{"code": "public_name_fence_inventory_invalid", "path": "."}]
     # Two names, two codes. They are not interchangeable: the private project
     # name is scrubbed, while every shipped use of the retired product name is
     # a frozen salt or an on-disk coordinate that must keep its bytes and be
@@ -661,9 +746,11 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
         code: encoded_variants(token) for code, token in FENCE_TOKENS
     }
 
-    for path in _entries(base):
-        relative = path.relative_to(base).as_posix()
-        if _SEAT_PATH_PATTERN.search(relative):
+    for path in entries:
+        relative_path = path.relative_to(base)
+        relative = relative_path.as_posix()
+        legacy_scope = "__pycache__" not in relative_path.parts
+        if legacy_scope and _SEAT_PATH_PATTERN.search(relative):
             findings.append({"code": "seat_name_path", "path": relative})
         if path.is_symlink():
             findings.append({"code": "symlink_path", "path": relative})
@@ -672,6 +759,10 @@ def scan_tree(root: Path) -> list[dict[str, object]]:
             data = path.read_bytes()
         except OSError:
             findings.append({"code": "file_unreadable", "path": relative})
+            continue
+        for code in _private_coordinate_hits(coordinate_rules, relative, data):
+            findings.append({"code": code, "path": relative})
+        if not legacy_scope:
             continue
         scannable = _scannable_data(path, data)
         temp_found = False

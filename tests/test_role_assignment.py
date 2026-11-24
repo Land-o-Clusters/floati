@@ -46,6 +46,7 @@ class RecordingRoleBackend:
         self.node_reads = 0
         self.architect_reads = 0
         self.committed: Optional[RoleAssignmentPlan] = None
+        self.role_record: Optional[dict[str, Any]] = None
 
     def active_node(self, node_id: str) -> dict[str, Any]:
         self.node_reads += 1
@@ -56,6 +57,11 @@ class RecordingRoleBackend:
     def current_architect(self) -> dict[str, Any]:
         self.architect_reads += 1
         return dict(self.architect)
+
+    def current_role(self, node_id: str) -> Optional[dict[str, Any]]:
+        if self.role_record is None or node_id != self.node["node_id"]:
+            return None
+        return dict(self.role_record)
 
     def commit_role(self, plan: RoleAssignmentPlan) -> dict[str, Any]:
         previews = [
@@ -118,6 +124,24 @@ class RoleStepWizardTests(unittest.TestCase):
         validate_json_schema(
             result["record"], Path("schemas/v0/registry-role-record.schema.json")
         )
+
+    def test_existing_non_legacy_row_still_refuses_like_a_stale_predecessor(self) -> None:
+        """R3: derive predecessor only for a proved legacy v1 row."""
+        self.backend.role_record = {
+            "schema_version": 0,
+            "id": "registry-role-" + ID_NODE,
+            "tenant_id": "fleet",
+            "kind": "registry_role_record",
+            "node_id": "alpha",
+            "state": "active",
+        }
+        with self.assertRaises(ProtocolRefusal) as caught:
+            self.wizard.assign_from_keys(
+                ["alpha", "builder", "floati", "shared-core", "architect-a"],
+                self.output,
+            )
+        self.assertEqual("role_preview_invalid", caught.exception.code)
+        self.assertEqual("role predecessor is stale", caught.exception.detail)
 
     def test_architect_default_is_resolved_from_live_registry_evidence(self) -> None:
         """Catches a wizard reusing a cached architect from a stale fleet map."""

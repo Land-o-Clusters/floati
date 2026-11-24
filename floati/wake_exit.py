@@ -17,7 +17,9 @@ from .root import FloatiRoot
 WAKE_EXIT_REASONS = frozenset(
     {
         "exhausted", "paused", "not_claimant", "consent_withdrawn",
-        "breaker", "integrity_failure",
+        "breaker", "integrity_failure", "superseded_session",
+        # NEEDS-YOU-OBSERVED-1: a declared seat woken for an observed needs-you item.
+        "observed_item",
     }
 )
 
@@ -38,6 +40,8 @@ class WakeExitLedger:
         reason_code: str,
         waited_seconds: int,
         idempotency_key: str,
+        integrity_failure: Optional[Dict[str, object]] = None,
+        timestamp: Optional[str] = None,
     ) -> Dict[str, object]:
         node = Registry(self.root).resolve_node_id(node_id, field="node")
         if reason_code not in WAKE_EXIT_REASONS:
@@ -63,7 +67,7 @@ class WakeExitLedger:
             "schema_version": 1,
             "id": "wake-waiter-exit-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
-            "timestamp": utc_now(),
+            "timestamp": utc_now() if timestamp is None else timestamp,
             "kind": "wake_waiter_exit_receipt",
             "node_id": node,
             "session_digest": session_digest,
@@ -71,6 +75,8 @@ class WakeExitLedger:
             "waited_seconds": waited_seconds,
             "idempotency_key": idempotency_key,
         }
+        if integrity_failure is not None:
+            row["integrity_failure"] = integrity_failure
         row = validate_record(row, self.root.tenant_id, self._KINDS, integrity=False)
         relative = Path("receipts/wake-waiter-exit") / f"{node}.jsonl"
 
@@ -81,9 +87,10 @@ class WakeExitLedger:
                 if existing.get("idempotency_key") != idempotency_key:
                     continue
                 fields = (
-                    "node_id", "session_digest", "reason_code", "waited_seconds"
+                    "node_id", "session_digest", "reason_code", "waited_seconds",
+                    "integrity_failure",
                 )
-                if all(existing.get(field) == row[field] for field in fields):
+                if all(existing.get(field) == row.get(field) for field in fields):
                     return existing, None
                 raise ProtocolRefusal(
                     "wake_waiter_exit_idempotency_conflict",

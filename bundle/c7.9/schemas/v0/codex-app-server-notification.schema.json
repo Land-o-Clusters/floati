@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/codex-app-server-notification.schema.json",
+  "title": "Codex app-server recorded notification envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["method"],
+  "properties": {
+    "method": {"type": "string", "minLength": 1, "maxLength": 256},
+    "params": {"type": ["object", "null"]}
+  }
+}

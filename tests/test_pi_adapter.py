@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import shutil
 import stat
 import subprocess
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
@@ -84,8 +86,23 @@ class PiRpcSessionTests(unittest.TestCase):
                 workspace = self.workspace / mode
                 workspace.mkdir()
                 session = PiRpcSession(self.command(mode), workspace)
-                with self.assertRaises(WorkerAdapterFailure) as caught:
-                    session.run("Create PI-PROOF.txt", deadline_seconds=0.1)
+                if mode == "malformed":
+                    native_write = session._write
+
+                    def write_when_ready(message):
+                        native_write(message)
+                        # Keep the actual request, child, pipe and parser.
+                        # Interpreter startup is not malformed-frame parsing:
+                        # begin that observation with actual bytes/EOF ready.
+                        select.select([session.process.stdout], [], [])
+
+                    with mock.patch.object(session, "_write", write_when_ready),\
+                            mock.patch.object(pi, "time", SimpleNamespace(monotonic=lambda: 0.0)):
+                        with self.assertRaises(WorkerAdapterFailure) as caught:
+                            session.run("Create PI-PROOF.txt", deadline_seconds=0.1)
+                else:
+                    with self.assertRaises(WorkerAdapterFailure) as caught:
+                        session.run("Create PI-PROOF.txt", deadline_seconds=0.1)
                 self.assertEqual(expected, caught.exception.code)
 
 

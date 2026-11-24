@@ -22,6 +22,7 @@ from .codex_wait_contract import (
     write_workspace_map,
 )
 from .errors import ProtocolRefusal
+from .jsonl import read_records_snapshot
 from .registry import Registry
 from .root import FloatiRoot
 
@@ -81,19 +82,30 @@ def arm_waiter_consent(
         raise ProtocolRefusal(
             "codex_wait_participant_unresolved", "armed workspace did not resolve"
         )
+    key_coordinates = {
+        "harness": harness.casefold(),
+        "node_id": node,
+        "workspace": participant.binding.workspace.as_posix(),
+        "hook_timeout_seconds": hook_timeout_seconds,
+        "wait_deadline_seconds": wait_deadline_seconds,
+    }
+    ledger = CodexWaitConsentLedger(participant.root)
+    rows = read_records_snapshot(participant.root, ledger._relative(node),
+        allowed_kinds=ledger._KINDS)
+    disarmed = [row for row in rows if row["workspace"] == key_coordinates["workspace"]
+        and row["state"] == "disarmed"]
+    if disarmed:
+        # Repeated arms within a lifecycle still replay one receipt. A new
+        # explicit retirement names the next lifecycle, so it cannot replay
+        # consent that the retirement already withdrew.
+        key_coordinates["after_disarm"] = disarmed[-1]["id"]
     key_material = json.dumps(
-        {
-            "harness": harness.casefold(),
-            "node_id": node,
-            "workspace": participant.binding.workspace.as_posix(),
-            "hook_timeout_seconds": hook_timeout_seconds,
-            "wait_deadline_seconds": wait_deadline_seconds,
-        },
+        key_coordinates,
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
     idempotency_key = "waiter-consent-arm-" + hashlib.sha256(key_material).hexdigest()[:32]
-    receipt = CodexWaitConsentLedger(participant.root).arm(
+    receipt = ledger.arm(
         participant.binding,
         hook_timeout_seconds=hook_timeout_seconds,
         wait_deadline_seconds=wait_deadline_seconds,

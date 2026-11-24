@@ -8,8 +8,13 @@ worth reporting.
 ## Nothing leaves this machine
 
 Floati sends no telemetry and phones no home. Measured (re-measured
-2026-09-02, source audit of `floati/`): every socket in the product is a
-local AF_UNIX pipe between floati's own processes. There are exactly four
+2026-09-02, source audit of `floati/`): sockets are local AF_UNIX pipes,
+including the Claude session inbox doorbell added on 2026-10-28
+([transport and native receipt confirmation](../floati/claude_inbox.py)).
+That client sends only a fixed mail-free line, opens no listener and receives
+no credentials. Its session coordinates require existing waiter consent and
+the current unpaused seat claim; a native presentation receipt confirms mail.
+There are exactly four
 counted outbound paths:
 
 - the herdr adapter's loopback connection and the t3 adapter's loopback

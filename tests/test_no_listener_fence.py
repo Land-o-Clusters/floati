@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import collections
+from contextlib import contextmanager
+from functools import lru_cache
 import hashlib
 import os
 import re
@@ -10,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +27,91 @@ from tests.temp_roots import REAL_TEMP_ROOT
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
+PROJECTED_FENCE_IDS = tuple(
+    "tests.test_no_listener_fence.WholeProductNoListenerFenceTests." + name
+    for name in (
+        "test_network_capable_imports_and_subprocesses_are_fully_counted",
+        "test_subprocess_population_is_pinned",
+        "test_built_argv_egress_is_enumerated_not_blind",
+        "test_built_argv_egress_sites_are_pinned",
+        "test_bind_and_listen_calls_exist_only_in_the_ruled_af_unix_supervisor",
+        "test_mcp_module_imports_only_local_code_and_non_network_stdlib",
+    )
+)
+
+
+@contextmanager
+def _adapted_fence_projection(*, prepare_git=True):
+    """Own one strict adapted tree; native sensitivity callers also need Git."""
+    with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+        projection = Path(temporary) / "projection"
+        projection.mkdir()
+        materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
+        if prepare_git:
+            environment = {key: value for key, value in os.environ.items()
+                           if not key.startswith("GIT_")}
+            for arguments in (
+                ("init", "-q", "--initial-branch=main"),
+                ("config", "user.name", "fixture"),
+                ("config", "user.email", "fixture@example.invalid"),
+                ("add", "."),
+                ("commit", "-q", "-m", "projection fixture"),
+            ):
+                # FL-1: no detached maintenance may outlive the owned tree.
+                subprocess.run(
+                    ["/usr/bin/git", "-c", "gc.auto=0", "-c", "gc.autoDetach=false", *arguments],
+                    cwd=projection, env=environment, check=True, capture_output=True)
+        yield projection
+
+
+def _run_projected_fences(projection, selectors=PROJECTED_FENCE_IDS):
+    return subprocess.run(
+        [sys.executable, "-m", "unittest", "-v", *selectors],
+        cwd=projection, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True, text=True)
+
+
+def _assert_projected_fences(case, completed):
+    """A loader error, missing method or skip cannot masquerade as six passes."""
+    evidence = completed.stdout + completed.stderr
+    case.assertEqual(0, completed.returncode, "projected product fences failed:\n" + evidence)
+    observed = []
+    for method, owner in re.findall(r"^(test_\w+) \(([^)]+)\)", completed.stderr, re.MULTILINE):
+        if owner.endswith("." + method):
+            owner = owner[:-(len(method) + 1)]
+        observed.append(owner + "." + method)
+    case.assertEqual(list(PROJECTED_FENCE_IDS), observed,
+                     "projected fence selection differs:\n" + evidence)
+    case.assertRegex(completed.stderr, r"(?m)^Ran 6 tests in ", evidence)
+    case.assertNotIn("skipped", completed.stderr.lower(), evidence)
+    case.assertRegex(completed.stderr, r"(?m)^OK$", evidence)
+
+
+def _rooted_fence(projection, selector):
+    fence = WholeProductNoListenerFenceTests(selector.rsplit(".", 1)[1])
+    fence.repository_root = projection
+    return fence
+
+
+def _assert_in_process_fences(case, projection, selectors=PROJECTED_FENCE_IDS):
+    fences = [_rooted_fence(projection, selector) for selector in selectors]
+    case.assertEqual(list(selectors), [fence.id() for fence in fences])
+    result = unittest.TestResult()
+    unittest.TestSuite(fences).run(result)
+    case.assertEqual(len(selectors), result.testsRun)
+    case.assertEqual([], result.skipped)
+    case.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+
+
+@lru_cache(maxsize=1024)
+def _parsed_source(path: Path, source: str) -> ast.AST:
+    """Share read-only ASTs, keyed by path AND the freshly read content."""
+    return ast.parse(source, filename=path.as_posix())
+
+
+def _parse_file(path: Path) -> ast.AST:
+    return _parsed_source(path, path.read_text(encoding="utf-8"))
+
 
 _NETWORK_SUBPROCESS_METHODS = frozenset(
     {"Popen", "call", "check_call", "check_output", "run"}
@@ -31,8 +119,8 @@ _NETWORK_SUBPROCESS_METHODS = frozenset(
 _OS_EGRESS_FUNCS = frozenset(
     {
         "system", "popen",
-        "exec", "execv", "execve", "execvp", "execvpe",
-        "spawn", "spawnv", "spawnve", "spawnvp", "spawnvpe", "posix_spawn",
+        "exec", "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe",
+        "spawn", "spawnv", "spawnve", "spawnvp", "spawnvpe", "posix_spawn", "posix_spawnp",
     }
 )
 _NETWORK_TOOL_BASENAMES = frozenset(
@@ -128,7 +216,11 @@ def _argv_string_literals(
                 expanded.add(name)
                 for candidate in ast.walk(definition):
                     if isinstance(candidate, ast.Return) and candidate.value is not None:
-                        visit(candidate.value)
+                        literals.update(_argv_string_literals(
+                            candidate.value,
+                            {key: value for key, value in definitions.items() if key != name},
+                            {**assignments, **_scope_assignments(definition)},
+                        ))
         for child in ast.iter_child_nodes(node):
             visit(child)
 
@@ -164,8 +256,65 @@ def _argv_expression(node: ast.Call) -> ast.AST | None:
     )
 
 
+def _egress_call_resolver(tree: ast.AST):
+    """Resolve native calls and imported owned-child wrappers from source.
+
+    Imports are evidence only: nothing imports or executes the named module.
+    Aliased helper imports share one canonical identity, so renaming a local
+    binding cannot hide an egress call or fabricate a different site digest.
+    """
+    modules = {}
+    functions = {}
+    helpers = {"owned_child", "run_child"}
+    origins = {"fixture_finalizer", "scripts.fixture_finalizer"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in origins:
+                    modules[alias.asname or alias.name] = "fixture_finalizer"
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            if node.module in origins:
+                for alias in node.names:
+                    if alias.name in helpers:
+                        functions[alias.asname or alias.name] = "fixture_finalizer." + alias.name
+                    elif alias.name == "*":
+                        functions.update({name: "fixture_finalizer." + name for name in helpers})
+            elif node.module == "scripts":
+                for alias in node.names:
+                    if alias.name == "fixture_finalizer":
+                        modules[alias.asname or alias.name] = "fixture_finalizer"
+
+    def resolve(node):
+        if not isinstance(node, ast.Call):
+            return None
+        parts = []
+        expression = node.func
+        while isinstance(expression, ast.Attribute):
+            parts.append(expression.attr)
+            expression = expression.value
+        if not isinstance(expression, ast.Name):
+            return None
+        parts.append(expression.id)
+        name = ".".join(reversed(parts))
+        canonical = functions.get(name)
+        if canonical is None and "." in name:
+            module, method = name.rsplit(".", 1)
+            if module == "subprocess" and method in _NETWORK_SUBPROCESS_METHODS:
+                canonical = name
+            elif module == "os" and method in _OS_EGRESS_FUNCS:
+                return name, list(node.args)
+            elif module in modules and method in helpers:
+                canonical = modules[module] + "." + method
+        if canonical is None:
+            return None
+        argv = _argv_expression(node)
+        return canonical, [] if argv is None else [argv]
+
+    return resolve
+
+
 def _scope_assignments(scope: ast.AST) -> dict[str, ast.AST]:
-    """Single-target name assignments inside one scope (one level deep)."""
+    """Scope names; conservatively follow tuple-return argv producers too."""
 
     assignments: dict[str, ast.AST] = {}
     for node in ast.walk(scope):
@@ -175,6 +324,14 @@ def _scope_assignments(scope: ast.AST) -> dict[str, ast.AST]:
             and isinstance(node.targets[0], ast.Name)
         ):
             assignments.setdefault(node.targets[0].id, node.value)
+        elif (isinstance(node, ast.Assign) and len(node.targets) == 1
+              and isinstance(node.targets[0], (ast.Tuple, ast.List))):
+            for index, target in enumerate(node.targets[0].elts):
+                if isinstance(target, ast.Name):
+                    value = (node.value.elts[index]
+                             if isinstance(node.value, (ast.Tuple, ast.List))
+                             and index < len(node.value.elts) else node.value)
+                    assignments.setdefault(target.id, value)
         elif (
             isinstance(node, ast.AnnAssign)
             and isinstance(node.target, ast.Name)
@@ -202,6 +359,53 @@ def _top_level_assignments(body: list[ast.stmt]) -> dict[str, ast.AST]:
         ):
             assignments.setdefault(stmt.target.id, stmt.value)
     return assignments
+
+
+def _literal_python_programs(tree: ast.AST) -> dict[str, str]:
+    """Read closed -c programs reached through real egress argv builders.
+
+    Parsing a literal does not execute it. Keep these execution surfaces
+    separate from the enclosing file's direct subprocess population.
+    """
+    definitions = {node.name: node for node in tree.body
+                   if isinstance(node, ast.FunctionDef)}
+    globals_ = _top_level_assignments(tree.body)
+    parents = {child: parent for parent in ast.walk(tree)
+               for child in ast.iter_child_nodes(parent)}
+    programs = {}
+    resolve = _egress_call_resolver(tree)
+    for node in ast.walk(tree):
+        call = resolve(node)
+        if call is None:
+            continue
+        _identity, expressions = call
+        scopes = []
+        parent = parents.get(node)
+        while parent is not None:
+            if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                scopes.append(parent)
+            parent = parents.get(parent)
+        assignments = dict(globals_)
+        for scope in reversed(scopes):
+            assignments.update(_scope_assignments(scope))
+        literals = set()
+        for expression in expressions:
+            literals |= _argv_string_literals(expression, definitions, assignments)
+        if "-c" not in literals:
+            continue
+        for literal in sorted(literals):
+            try:
+                program = ast.parse(literal)
+            except (SyntaxError, ValueError):
+                continue
+            if not any(isinstance(part, (ast.Import, ast.ImportFrom, ast.Call))
+                       for part in ast.walk(program)):
+                continue
+            names = sorted(name for name, value in globals_.items()
+                           if _literal_string(value) == literal)
+            label = names[0] if names else "literal-" + hashlib.sha256(literal.encode()).hexdigest()[:16]
+            programs[label] = literal
+    return programs
 
 
 _BUILT_ARGV_NODES = (ast.BinOp, ast.JoinedStr)
@@ -233,7 +437,26 @@ def _is_built_argv_node(node: ast.AST) -> bool:
     )
 
 
-def _built_argv_egress_sites(roots: list[Path]) -> set[tuple[str, str]]:
+def _built_argv_tree_egress_sites(tree: ast.AST) -> set[str]:
+    """Derive the built-argv site identities in one source-only AST."""
+    sites = set()
+    resolve = _egress_call_resolver(tree)
+    for node in ast.walk(tree):
+        call = resolve(node)
+        if call is None:
+            continue
+        identity, argvs = call
+        if argvs and any(_is_built_argv_node(piece)
+                         for argv in argvs for piece in ast.walk(argv)):
+            payload = ast.dump(ast.Module(body=list(argvs), type_ignores=[]),
+                               annotate_fields=False)
+            sites.add(hashlib.sha256(f"{identity}|{payload}".encode("utf-8")).hexdigest()[:16])
+    return sites
+
+
+def _built_argv_egress_sites(
+    roots: list[Path], *, relative_to: Path | None = None,
+) -> set[tuple[str, str]]:
     """NET-FENCE-1-F3: every egress call site whose argv is BUILT, per site.
 
     Identity is (file, site digest); the digest hashes the call's
@@ -248,44 +471,16 @@ def _built_argv_egress_sites(roots: list[Path]) -> set[tuple[str, str]]:
     sites: set[tuple[str, str]] = set()
     for root in roots:
         for path in sorted(root.rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                argvs: list[ast.AST] = []
-                if (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                ):
-                    if (
-                        node.func.value.id == "subprocess"
-                        and node.func.attr in _NETWORK_SUBPROCESS_METHODS
-                    ):
-                        argv = _argv_expression(node)
-                        if argv is not None:
-                            argvs = [argv]
-                    elif (
-                        node.func.value.id == "os"
-                        and node.func.attr in _OS_EGRESS_FUNCS
-                    ):
-                        argvs = list(node.args)
-                if argvs and any(
-                    _is_built_argv_node(piece)
-                    for argv in argvs
-                    for piece in ast.walk(argv)
-                ):
-                    call = f"{node.func.value.id}.{node.func.attr}"
-                    payload = ast.dump(
-                        ast.Module(body=list(argvs), type_ignores=[]),
-                        annotate_fields=False,
-                    )
-                    digest = hashlib.sha256(
-                        f"{call}|{payload}".encode("utf-8")
-                    ).hexdigest()[:16]
-                    sites.add((path.as_posix(), digest))
+            tree = _parse_file(path)
+            relative = path if relative_to is None else path.relative_to(relative_to)
+            sites.update((relative.as_posix(), digest)
+                         for digest in _built_argv_tree_egress_sites(tree))
     return sites
 
 
-def _built_argv_egress_files(roots: list[Path]) -> set[str]:
+def _built_argv_egress_files(
+    roots: list[Path], *, relative_to: Path | None = None,
+) -> set[str]:
     """Files holding an egress call site whose argv is a BUILT expression.
 
     A projection of the site census: file granularity is the blind spot
@@ -293,7 +488,7 @@ def _built_argv_egress_files(roots: list[Path]) -> set[str]:
     documentation.
     """
 
-    return {path for path, _ in _built_argv_egress_sites(roots)}
+    return {path for path, _ in _built_argv_egress_sites(roots, relative_to=relative_to)}
 
 
 def _network_subprocess_findings(tree: ast.AST) -> set[tuple[str, str]]:
@@ -328,25 +523,10 @@ def _network_subprocess_findings(tree: ast.AST) -> set[tuple[str, str]]:
         assignments_by_scope[id(function_node)] = _scope_assignments(function_node)
 
     findings: set[tuple[str, str]] = set()
+    resolve = _egress_call_resolver(tree)
     for node in ast.walk(tree):
-        egress_args: list[ast.AST] = []
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-        ):
-            if (
-                node.func.value.id == "subprocess"
-                and node.func.attr in _NETWORK_SUBPROCESS_METHODS
-            ):
-                argv = _argv_expression(node)
-                if argv is not None:
-                    egress_args = [argv]
-            elif (
-                node.func.value.id == "os"
-                and node.func.attr in _OS_EGRESS_FUNCS
-            ):
-                egress_args = list(node.args)
+        call = resolve(node)
+        egress_args = [] if call is None else call[1]
         if not egress_args:
             continue
         functions: list[ast.AST] = []
@@ -375,25 +555,12 @@ def _subprocess_population(tree: ast.AST) -> tuple[dict[str, int], dict[str, int
 
     kinds: dict[str, int] = collections.Counter()
     argv_classes: dict[str, int] = collections.Counter()
+    resolve = _egress_call_resolver(tree)
     for node in ast.walk(tree):
-        kind = None
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-        ):
-            if (
-                node.func.value.id == "subprocess"
-                and node.func.attr in _NETWORK_SUBPROCESS_METHODS
-            ):
-                kind = "subprocess." + node.func.attr
-            elif (
-                node.func.value.id == "os"
-                and node.func.attr in _OS_EGRESS_FUNCS
-            ):
-                kind = "os." + node.func.attr
-        if kind is None:
+        call = resolve(node)
+        if call is None:
             continue
+        kind, _expressions = call
         shell = any(
             kw.arg == "shell"
             and isinstance(kw.value, ast.Constant)
@@ -431,13 +598,94 @@ _FORBIDDEN_NETWORK_MODULES = {
 }
 
 
+# HARBOR-SPEED-R-C: the per-file census is a pure function of a file's
+# bytes and of this module's analysis, so it is memoised per process under
+# a CONTENT key: (relative path, sha256 of the bytes read on THIS call, the
+# identity of every analysis callable, the forbidden-module vocabulary). A
+# file edited, planted or removed between two walks is re-read every walk,
+# so a changed byte is a new key and can never be served a stale census; a
+# re-bound analysis function is a new key too. Entries are frozen, and each
+# walk builds fresh containers, so no caller can mutate the memo. Measured
+# at harbor main 1fa68e48: test_truth_pin walked floati/ eight times per
+# module run (~2 s each, all ast.parse + ast.walk), 25.6 s in the module.
+_FILE_CENSUS_MEMO: dict[
+    tuple[object, ...], tuple[bool, frozenset[str], frozenset[tuple[str, str]]]
+] = {}
+
+
+def _census_analysis_identity() -> tuple[object, ...]:
+    return (
+        _network_subprocess_findings,
+        _egress_call_resolver,
+        _argv_string_literals,
+        _network_subprocess_signature,
+        _argv_expression,
+        _scope_assignments,
+        _top_level_assignments,
+        _literal_python_programs,
+        _literal_string,
+        _TOKEN_PATTERN,
+        frozenset(_NETWORK_SUBPROCESS_METHODS),
+        frozenset(_OS_EGRESS_FUNCS),
+        frozenset(_NETWORK_TOOL_BASENAMES),
+        frozenset(_NETWORK_GIT_VERBS),
+        frozenset(_FORBIDDEN_NETWORK_MODULES),
+    )
+
+
+def _file_census(
+    relative: str, source: bytes
+) -> tuple[bool, frozenset[str], frozenset[tuple[str, str]]]:
+    """(imports socket, forbidden modules imported, network subprocess sites)."""
+
+    key = (
+        relative,
+        hashlib.sha256(source).hexdigest(),
+        _census_analysis_identity(),
+    )
+    cached = _FILE_CENSUS_MEMO.get(key)
+    if cached is not None:
+        return cached
+    # Path.read_text decodes with universal newlines; do exactly that here.
+    text = source.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    tree = _parsed_source(Path(relative), text)
+    imports_socket = False
+    network_imports: set[str] = set()
+    programs = {"": tree, **{label: ast.parse(source) for label, source
+                             in _literal_python_programs(tree).items()}}
+    findings = set()
+    for label, program in programs.items():
+        for node in ast.walk(program):
+            names: list[str] = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for name in names:
+                if name == "socket":
+                    imports_socket = True
+                if name in _FORBIDDEN_NETWORK_MODULES:
+                    network_imports.add(name)
+        for owner, signature in _network_subprocess_findings(program):
+            findings.add((f"{label}:{owner}" if label else owner, signature))
+    census = (
+        imports_socket,
+        frozenset(network_imports),
+        frozenset(findings),
+    )
+    _FILE_CENSUS_MEMO[key] = census
+    return census
+
+
 def measure_network_surface(
     floati_root: Path,
 ) -> tuple[set[str], dict[str, set[str]], set[tuple[str, str, str]]]:
     """The census test_network_capable_imports_and_subprocesses_are_fully_counted walks.
 
     One walker. TRUTH-PIN-1 classifies this population; it does not walk again.
-    Paths are repo-relative from floati_root's parent.
+    Paths are repo-relative from floati_root's parent. Every call re-walks
+    the tree and re-reads every file; only the per-file analysis of bytes
+    already analysed is reused (see ``_FILE_CENSUS_MEMO``).
     """
 
     base = floati_root.resolve().parent
@@ -446,19 +694,13 @@ def measure_network_surface(
     seen_network_subprocesses: set[tuple[str, str, str]] = set()
     for path in sorted(floati_root.rglob("*.py")):
         relative = path.resolve().relative_to(base).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
-        file_findings = _network_subprocess_findings(tree)
-        for node in ast.walk(tree):
-            names: list[str] = []
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                names = [node.module]
-            for name in names:
-                if name == "socket":
-                    seen_socket_imports.add(relative)
-                if name in _FORBIDDEN_NETWORK_MODULES:
-                    seen_network_imports.setdefault(relative, set()).add(name)
+        imports_socket, network_imports, file_findings = _file_census(
+            relative, path.read_bytes()
+        )
+        if imports_socket:
+            seen_socket_imports.add(relative)
+        if network_imports:
+            seen_network_imports[relative] = set(network_imports)
         for function, signature in file_findings:
             seen_network_subprocesses.add((relative, function, signature))
     return seen_socket_imports, seen_network_imports, seen_network_subprocesses
@@ -490,11 +732,14 @@ def counted_outbound_paths(
 class WholeProductNoListenerFenceTests(unittest.TestCase):
     """Pin the audited local-only surface named by docs/TRUTH-GUARANTEES.md."""
 
+    repository_root = Path(".")
+
     def test_network_capable_imports_and_subprocesses_are_fully_counted(self) -> None:
         allowed_socket_imports = {
             "floati/adapters/herdr.py",
             "floati/adapters/herdr_host.py",
             "floati/adapters/t3.py",
+            "floati/claude_inbox.py",
             "floati/effect_reconciliation_exec.py",
             "floati/sequencer.py",
             "floati/sequencer_scale.py",
@@ -510,7 +755,7 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             ("floati/gh_process.py", "read_github_issue", "gh issue view"),
         }
         seen_socket_imports, seen_network_imports, seen_network_subprocesses = (
-            measure_network_surface(Path("floati"))
+            measure_network_surface(self.repository_root / "floati")
         )
         violations: list[str] = []
         for relative in sorted(seen_socket_imports):
@@ -543,8 +788,8 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
 
         kinds: dict[str, int] = collections.Counter()
         argv_classes: dict[str, int] = collections.Counter()
-        for path in sorted(Path("floati").rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted((self.repository_root / "floati").rglob("*.py")):
+            tree = _parse_file(path)
             path_kinds, path_argv = _subprocess_population(tree)
             kinds.update(path_kinds)
             argv_classes.update(path_argv)
@@ -552,16 +797,97 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             # WD-2 Am.2 (landing F2, 2026-09-11): floati/uninstall.py gained one
             # subprocess.run site — the proven-stopped supervisor removal talks to
             # launchctl before it unlinks; measured 41 at the composition.
-            {"run": 41, "Popen": 10, "os-family": 3},
+            # SEAT-ONBOARD-1 (2026-10-01): three seat_onboarding.run sites
+            # invoke fixed local Git, a declared build script, and the explicit
+            # Codex child harness. See the population doc's classified AST cut.
+            # ROLLBACK-HOOK-1 (2026-10-04): floati/deploy.py
+            # _is_reverse_transition gained one subprocess.run — local Git
+            # merge-base --is-ancestor classifies a reverse install. Measured
+            # run 44. Network allowlists unchanged: the argv is fixed Git.
+            # Harbor train 14 (seat 25): floati/cursor_workers.py runs fixed /bin/ps
+            # -eo pid=,ppid=,command= (F2-REMOTE-CONTROL-COEXIST-1) and
+            # floati/row_tree_retire.py runs fixed /usr/bin/git with a fixed git
+            # environment (F2-ROW-TREE-RETIRE-1); both local, measured run 46.
+            # Network allowlists unchanged.
+            # F2-SEAT-TEARDOWN-1 adds one bounded owned metadata child:
+            # fixed local Git, ps and lsof; no outbound route is added.
+            # ADHOC-STAGE1 Task1: adhoc_journal._git adds one fixed local
+            # Git inspection site (branch/ls-tree/cat-file), through the
+            # hardened fixed_git_command/environment. No network allowlist moves.
+            # Task2: BorrowedWorkspace._git adds one parent-only fixed Git
+            # site; source-derived count, awaiting the registered full.
+            # Task2 fix1 adds a fixed parent-owned Git transaction Popen;
+            # preparation/identity/commit are held by that exact child.
+            # Runtime repair: these two owners now launch isolated Python,
+            # then Git by exec. Direct kinds/shapes do not change; the nested
+            # execution surface has its own pin below.
+            # Native persistent Codex/Claude/Pi add three Popen owners;
+            # ad-hoc parent finalization adds one fixed local Git run owner.
+            # Parallel selftest: floati/selftest.py runs the local parallel
+            # runner (scripts/test-parallel.py) when a worker count is set.
+            # The argv is the interpreter, that script, and the worker/output
+            # paths. No outbound route. Measured run 47.
+            # User-level Cursor stop hook: floati/cursor_user_hook.py runs the
+            # seat launcher named by the workspace marker. The argv is that
+            # local launcher plus wake wait. No outbound route. Measured run 48.
+            # FLEET-ADHOC-THREADS-1: measured merged AST census, both owners kept.
+            # Claude inbox: one installed-client --version child, closed env.
+            # Train 1122b: bound records add one local Git run, work handoffs one
+            # observed local command, checkout liveness one Git run and the quiet
+            # window two local process probes (ps, sysctl); run 56 -> 61.
+            # NEEDS-YOU-OBSERVED-1: floati/needs_observed.py starts the explicitly
+            # configured orchestrator CLI for one bounded read; Popen 16 -> 17.
+            {"Popen": 18, "os-family": 3, "run": 60, "run_child": 1},
             dict(kinds),
             "the subprocess-family population moved; re-measure and re-pin",
         )
         self.assertEqual(
             # WD-2 Am.2 (landing F2): floati/uninstall.py, one dynamic argv site
-            {"all-literal-list": 2, "mixed": 30, "dynamic": 22},
+            # SEAT-ONBOARD-1: fixed Git and Codex argv are mixed; the declared
+            # build script's argv is dynamic. Network allowlists stay unchanged.
+            # ROLLBACK-HOOK-1: the reverse-transition Git argv is mixed
+            # (literal merge-base flags plus name nodes); measured mixed 32.
+            # Harbor train 14: the two local sites above are mixed (measured 34).
+            # FL-2: scrub's two literal Git argv lists now expand the
+            # transient maintenance tuple. Measured mixed36/dynamic25;
+            # process kinds and network allowlists are unchanged.
+            # Static composition: main's mixed36 plus Task1's one mixed
+            # fixed_git_command site gives37; dynamic25 is unchanged.
+            # This expectation awaits the registered full's measured census.
+            # Task2's subprocess.run(command) has a Name argv, so this
+            # unchanged classifier adds one dynamic site, not one mixed site.
+            # Its assignment resolves to hardened fixed_git_command; no
+            # network allowlist or classification predicate changes.
+            # Fix1's transaction also passes the Name command as argv:
+            # one more dynamic site, still fixed local Git, pending full proof.
+            # Parallel selftest: the local runner argv is mixed (literal
+            # mode flags plus the script and output paths). Measured mixed 37.
+            # User-level Cursor stop hook: the launcher argv is a function
+            # result, so the new site is dynamic. Measured dynamic 26.
+            # FLEET-ADHOC-THREADS-1: measured merged AST census, no new egress.
+            # Train 1122b: the work handoff argv is dynamic (31); bound
+            # records, checkout liveness and the quiet window add one mixed
+            # each (49); the quiet window's other argv is one literal list.
+            # NEEDS-YOU-OBSERVED-1: the configured orchestrator argv is dynamic (32).
+            {"all-literal-list": 1, "dynamic": 32, "mixed": 49},
             dict(argv_classes),
             "the argv-shape distribution moved; re-measure and re-pin",
         )
+
+    def test_literal_python_execution_population_is_pinned_separately(self) -> None:
+        observed = {}
+        for path in sorted((self.repository_root / "floati").rglob("*.py")):
+            tree = _parse_file(path)
+            for label, source in _literal_python_programs(tree).items():
+                kinds, shapes = _subprocess_population(ast.parse(source))
+                if kinds:
+                    observed[(path.relative_to(self.repository_root).as_posix(), label)] = (kinds, shapes)
+        # The enclosing run/Popen sites are Python, already in the unchanged
+        # direct population. This is the real Git exec inside their prelude.
+        self.assertEqual({
+            ("floati/adhoc_workspace.py", "_BORROWED_GIT_PRELUDE"):
+                ({"os-family": 1}, {"string-const": 1}),
+        }, observed)
 
     def test_built_argv_egress_is_enumerated_not_blind(self) -> None:
         """NET-FENCE-1 Am.1: built argv is a NAMED, counted class.
@@ -586,15 +912,24 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         included file, so the same comparison holds there.
         """
 
-        measured = _built_argv_egress_files([Path("floati"), Path("scripts")])
+        measured = _built_argv_egress_files(
+            [self.repository_root / "floati", self.repository_root / "scripts"],
+            relative_to=self.repository_root,
+        )
         pinned = {
             "floati/cli.py",
             "scripts/capture-demo-assets.py",
             "scripts/capture-shot1-locf1.py",
             "scripts/capture-tui-moments.py",
+            # Exact local Git artifact readback in the bounded issue-16 drill.
+            "scripts/measure_opencode_issue16_worker.py",
+            "scripts/loaded-wallclock-abrupt-diagnostic.py",
+            "scripts/loaded-wallclock-proof.py",
+            'scripts/measure_zcode_conformance.py',
+            'floati/release.py',
         }
         included = frozenset(
-            classify_inventory(sorted(measured | pinned), root=REPOSITORY_ROOT)
+            classify_inventory(sorted(measured | pinned), root=self.repository_root)
         )
 
         self.assertEqual(
@@ -604,77 +939,30 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             "surface; name it in this pin",
         )
 
-    def test_the_file_pin_predicts_a_real_projection(self) -> None:
-        """PROJ-LEG-2: the per-file pin is a census a projection can run.
+    def test_exported_product_fences_run_in_a_real_adapted_projection(self) -> None:
+        """PROJ-LEG-3/PROJ-PIN-1: both pins must work without export policy.
 
-        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection`` and
-        the site pin's leg beside this one: build one real projection of
-        the included set, ``git init`` it, and run this module's census
-        inside it. The per-file pin predates the per-site one and names
-        whole files, so one entry naming a ``private_only_exact`` path is
-        the same blindness the site pin carried — silent in the harbor,
-        where the classifier filters the entry from both sides, and RED
-        in the only tree that actually ships.
-
-        PROJ-LEG-3: the projection is built through the exporter's own
-        adaptation, not raw copies — this pin names whole files, which
-        adaptation does not move, but the census inside must run on the
-        bytes a reader actually gets.
+        Keep the six actual product fences on strictly adapted bytes. Raw
+        source classification, the private twin and constructed controls
+        remain ordinary tests; the unadapted policy-less tree is retired.
         """
-
         if not export_policy_is_present():
             self.skipTest("no export policy in this tree; classification is identity")
-
-        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
-            projection = Path(temporary) / "projection"
-            projection.mkdir()
-            materialise_adapted_tree(projection, root=REPOSITORY_ROOT)
-
-            def git(*arguments: str) -> None:
-                environment = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if not key.startswith("GIT_")
-                }
-                # FL-1: nothing this test spawns may outlive the with-block.
-                # commit/add can detach a background `gc --auto` that keeps
-                # writing .git after subprocess.run returns, and under load it
-                # races TemporaryDirectory cleanup ("Directory not empty").
-                # gc.auto=0 means gc --auto never fires; autoDetach=false is
-                # the same property enforced one layer deeper.
-                subprocess.run(
-                    [
-                        "/usr/bin/git",
-                        "-c", "gc.auto=0",
-                        "-c", "gc.autoDetach=false",
-                        *arguments,
-                    ],
-                    cwd=projection,
-                    env=environment,
-                    check=True,
-                    capture_output=True,
-                )
-
-            git("init", "-q", "--initial-branch=main")
-            git("config", "user.name", "fixture")
-            git("config", "user.email", "fixture@example.invalid")
-            git("add", ".")
-            git("commit", "-q", "-m", "projection fixture")
-
-            completed = subprocess.run(
-                [sys.executable, "-m", "unittest", "tests.test_no_listener_fence"],
-                cwd=projection,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-                capture_output=True,
-                text=True,
-            )
-
-        self.assertEqual(
-            0,
-            completed.returncode,
-            "the projected file census failed against the pin:\n"
-            + completed.stderr[-4000:],
-        )
+        with _adapted_fence_projection(prepare_git=False) as projection:
+            relative = "tests/test_no_listener_fence.py"
+            if (projection / relative).read_bytes() != (REPOSITORY_ROOT / relative).read_bytes():
+                _assert_projected_fences(self, _run_projected_fences(projection))
+                return
+            _assert_in_process_fences(self, projection)
+            # A clean source tree must not hide an unexpected import planted
+            # only in the supplied projection, including after a warm census.
+            planted = projection / "floati/projection_probe.py"
+            planted.write_text("import socket\n", encoding="utf-8")
+            try:
+                with self.assertRaisesRegex(AssertionError, "projection_probe"):
+                    _rooted_fence(projection, PROJECTED_FENCE_IDS[0]).debug()
+            finally:
+                planted.unlink()
 
     def test_planted_join_and_percent_sites_are_enumerated(self) -> None:
         """NET-FENCE-1-F1: a `.join`-built egress cannot land silently.
@@ -771,19 +1059,28 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         half.
         """
 
-        measured = _built_argv_egress_sites([Path("floati"), Path("scripts")])
+        measured = _built_argv_egress_sites(
+            [self.repository_root / "floati", self.repository_root / "scripts"],
+            relative_to=self.repository_root,
+        )
         pinned = {
             ("floati/cli.py", "4a4ea4b2f1ec4f5b"),
             ("scripts/capture-demo-assets.py", "4053d11281a3c0e1"),
             ("scripts/capture-demo-assets.py", "70cb7fa74220ea0a"),
-            ("scripts/capture-shot1-locf1.py", "b2f1e1598e2214e8"),
             ("scripts/capture-shot1-locf1.py", "ebeffdefb0d69c7d"),
             ("scripts/capture-tui-moments.py", "70cb7fa74220ea0a"),
+            ("scripts/measure_opencode_issue16_worker.py", "9c2c277f2661cf9c"),
+            ("scripts/loaded-wallclock-abrupt-diagnostic.py", "7ab765f2a64b7158"),
+            ('scripts/measure_zcode_conformance.py', '9c2c277f2661cf9c'),
+            ("scripts/capture-shot1-locf1.py", "a5fc987bd4c0c4d3"),
+            ('floati/release.py', '2cb46aaf07917675'),
+            ('floati/release.py', '7d52939abef7e52c'),
+            ("scripts/loaded-wallclock-proof.py", "c5ae537075da4343"),
         }
         included_paths = frozenset(
             classify_inventory(
                 sorted({path for path, _ in measured} | {path for path, _ in pinned}),
-                root=REPOSITORY_ROOT,
+                root=self.repository_root,
             )
         )
 
@@ -794,16 +1091,12 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             "name it in this pin",
         )
 
-    def test_the_site_pin_predicts_a_real_projection(self) -> None:
-        """PROJ-PIN-1: the site pin is the census a projection can actually run.
+    def test_site_pin_predicts_a_raw_copy_classified_projection(self) -> None:
+        """The site pin must pass on classified raw bytes, not only adapted ones.
 
-        Mirrors ``test_h1_f1.test_the_pin_predicts_a_real_projection``: build
-        one real projection of the included set, ``git init`` it, and run
-        the built-argv site census inside it. Classification through the
-        exporter is not projection-aware once the projection deletes the
-        policy — the pin must not name a ``private_only_exact`` path.
+        Classify the tracked inventory, copy those files unchanged, and
+        compute the site census there. Classification reads no Git state.
         """
-
         if not export_policy_is_present():
             self.skipTest("no export policy in this tree; classification is identity")
 
@@ -816,72 +1109,97 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(REPOSITORY_ROOT / relative, target)
 
-            def git(*arguments: str) -> None:
-                environment = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if not key.startswith("GIT_")
-                }
-                # FL-1: nothing this test spawns may outlive the with-block.
-                # commit/add can detach a background `gc --auto` that keeps
-                # writing .git after subprocess.run returns, and under load it
-                # races TemporaryDirectory cleanup ("Directory not empty").
-                # gc.auto=0 means gc --auto never fires; autoDetach=false is
-                # the same property enforced one layer deeper.
-                subprocess.run(
-                    [
-                        "/usr/bin/git",
-                        "-c", "gc.auto=0",
-                        "-c", "gc.autoDetach=false",
-                        *arguments,
-                    ],
-                    cwd=projection,
-                    env=environment,
-                    check=True,
-                    capture_output=True,
-                )
-
-            git("init", "-q", "--initial-branch=main")
-            git("config", "user.name", "fixture")
-            git("config", "user.email", "fixture@example.invalid")
-            git("add", ".")
-            git("commit", "-q", "-m", "projection fixture")
-
-            completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "unittest",
-                    "tests.test_no_listener_fence.WholeProductNoListenerFenceTests.test_built_argv_egress_sites_are_pinned",
-                ],
-                cwd=projection,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-                capture_output=True,
-                text=True,
+            _assert_in_process_fences(
+                self, projection,
+                ("tests.test_no_listener_fence.WholeProductNoListenerFenceTests."
+                 "test_built_argv_egress_sites_are_pinned",),
             )
-
-        self.assertEqual(
-            0,
-            completed.returncode,
-            "the projected site census failed against the pin:\n"
-            + completed.stderr[-4000:],
-        )
 
     def test_bind_and_listen_calls_exist_only_in_the_ruled_af_unix_supervisor(self) -> None:
         calls: list[str] = []
         pattern = re.compile(r"\.(?:bind|listen)\s*\(")
-        for path in sorted(Path("floati").rglob("*.py")):
-            if pattern.search(path.read_text(encoding="utf-8")):
-                calls.append(path.as_posix())
+        for path in sorted((self.repository_root / "floati").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            relative = path.relative_to(self.repository_root).as_posix()
+            if relative == "floati/adhoc_execution.py":
+                # These two binds are admission/capability ledger owners,
+                # not sockets. Verify the exact imports, receiver construction
+                # and owning function before removing only those call sites.
+                tree = _parsed_source(path, source)
+                imports = {(node.module, alias.name, alias.asname)
+                           for node in tree.body if isinstance(node, ast.ImportFrom)
+                           for alias in node.names}
+                self.assertIn(("admission", "AdmissionBinder", None), imports)
+                self.assertIn(("capability_binding", "CapabilityBinder", None), imports)
+                owner = next(node for node in tree.body
+                             if isinstance(node, ast.FunctionDef) and node.name == "_prepare_binding")
+                assignments = [node for node in ast.walk(owner)
+                               if isinstance(node, ast.Assign)
+                               and any(isinstance(target, ast.Name) and target.id == "binder"
+                                       for target in node.targets)]
+                self.assertEqual(1, len(assignments))
+                self.assertIsInstance(assignments[0].value, ast.Call)
+                self.assertEqual("CapabilityBinder", ast.unparse(assignments[0].value.func))
+                receiver_names = {"binder", "AdmissionBinder", "CapabilityBinder"}
+                receiver_stores = [node for node in ast.walk(tree)
+                                   if isinstance(node, ast.Name)
+                                   and node.id in receiver_names
+                                   and isinstance(node.ctx, (ast.Store, ast.Del))]
+                self.assertEqual(assignments[0].targets, receiver_stores,
+                                 "ledger receiver must retain its reviewed owner")
+                mutations = [node for node in ast.walk(tree)
+                             if isinstance(node, (ast.Attribute, ast.Subscript))
+                             and isinstance(node.ctx, (ast.Store, ast.Del))
+                             and any(isinstance(child, ast.Name) and child.id in receiver_names
+                                     for child in ast.walk(node))]
+                self.assertEqual([], mutations, "ledger receiver must not be mutated")
+                ledger_binds = [node for node in ast.walk(owner)
+                                if isinstance(node, ast.Call)
+                                and ast.unparse(node.func) in {"AdmissionBinder.bind", "binder.bind"}]
+                self.assertEqual({"AdmissionBinder.bind", "binder.bind"},
+                                 {ast.unparse(node.func) for node in ledger_binds})
+                self.assertEqual(2, len(ledger_binds))
+                lines = source.splitlines(keepends=True)
+                for node in ledger_binds:
+                    # Remove the method token only; any additional bind/listen
+                    # anywhere in this file remains covered by the fence.
+                    line = lines[node.func.end_lineno - 1]
+                    lines[node.func.end_lineno - 1] = (
+                        line[:node.func.end_col_offset - 4] + "LEDGER_BIND"
+                        + line[node.func.end_col_offset:])
+                source = "".join(lines)
+            if pattern.search(source):
+                calls.append(relative)
         self.assertEqual(["floati/sequencer.py"], calls)
-        source = Path("floati/sequencer.py").read_text(encoding="utf-8")
+        source = (self.repository_root / "floati/sequencer.py").read_text(encoding="utf-8")
         self.assertIn("socket.AF_UNIX", source)
+
+    def test_ledger_bind_exception_rejects_receiver_substitution(self) -> None:
+        original = Path.read_text
+        for substitution in (
+            "AdmissionBinder = socket_object",
+            "CapabilityBinder = socket_object",
+            "binder: object = socket_object",
+            "(binder := socket_object)",
+            "binder.bind = socket_object.bind",
+        ):
+            def changed(path, *args, **kwargs):
+                source = original(path, *args, **kwargs)
+                if path.as_posix() == "floati/adhoc_execution.py":
+                    source = source.replace(
+                        "    run = ledger.project().run(run_id)\n    snapshot =",
+                        "    " + substitution + "\n    run = ledger.project().run(run_id)\n    snapshot =")
+                return source
+            with self.subTest(substitution=substitution):
+                with mock.patch.object(Path, "read_text", changed):
+                    with self.assertRaises(AssertionError):
+                        self.test_bind_and_listen_calls_exist_only_in_the_ruled_af_unix_supervisor()
 
     def test_mcp_module_imports_only_local_code_and_non_network_stdlib(self) -> None:
         """Catches an stdio server acquiring a listener, URL client, or dependency."""
 
-        path = Path("floati/mcp.py")
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.as_posix())
+        path = self.repository_root / "floati/mcp.py"
+        tree = _parse_file(path)
         allowed_stdlib = {
             "__future__",
             "argparse",
@@ -905,6 +1223,46 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         self.assertEqual([], violations)
 
 
+class LiteralPythonEgressTests(unittest.TestCase):
+    @staticmethod
+    def source(program):
+        # This is the tuple-return producer shape used by the real launcher.
+        return ("import subprocess,sys\nCHILD = " + repr(program) + "\n"
+                "def command_for_child():\n"
+                "    command = [sys.executable, '-I', '-S', '-B', '-c', CHILD]\n"
+                "    return command, {}\n"
+                "def launch():\n"
+                "    command, environment = command_for_child()\n"
+                "    subprocess.run(command, env=environment)\n")
+
+    def test_nested_import_and_network_exec_cannot_hide_in_literal(self):
+        program = ("import os,socket,urllib.request\n"
+                   "os.execve('/usr/bin/git', ['git', 'fetch'], {})\n")
+        source = self.source(program)
+        self.assertEqual({"CHILD": program}, _literal_python_programs(ast.parse(source)))
+        socket, imports, findings = _file_census("floati/planted_child.py", source.encode())
+        self.assertTrue(socket)
+        self.assertEqual({"urllib.request"}, set(imports))
+        self.assertEqual({"launch", "CHILD:<module>"},
+                         {owner for owner, _signature in findings})
+        self.assertEqual({"git fetch"}, {signature for _owner, signature in findings})
+
+    def test_second_nested_exec_moves_population_without_relabeling_parent(self):
+        program = "import os\nos.execve('/usr/bin/git', ['git', 'status'], {})\n"
+        parent = ast.parse(self.source(program))
+        self.assertEqual(({"run": 1}, {"dynamic": 1}), _subprocess_population(parent))
+        first = _literal_python_programs(parent)["CHILD"]
+        self.assertEqual(({"os-family": 1}, {"string-const": 1}),
+                         _subprocess_population(ast.parse(first)))
+        second = _literal_python_programs(ast.parse(self.source(program + program)))["CHILD"]
+        self.assertEqual(({"os-family": 2}, {"string-const": 2}),
+                         _subprocess_population(ast.parse(second)))
+
+    def test_unused_literal_does_not_fabricate_an_execution_site(self):
+        source = "CHILD = \"import os; os.execve('/usr/bin/git', ['git'], {})\"\n"
+        self.assertEqual({}, _literal_python_programs(ast.parse(source)))
+
+
 class ConstructedSubprocessEgressTests(unittest.TestCase):
     """NET-FENCE-1 (issue #25): constructed egress cannot pass the fence.
 
@@ -916,6 +1274,31 @@ class ConstructedSubprocessEgressTests(unittest.TestCase):
 
     def _findings(self, source: str) -> set[tuple[str, str]]:
         return _network_subprocess_findings(ast.parse(source))
+
+    def test_owned_child_imports_cannot_hide_network_argv_or_nested_programs(self) -> None:
+        program = "import socket\n"
+        for helper in ("owned_child", "run_child"):
+            forms = []
+            for module in ("fixture_finalizer", "scripts.fixture_finalizer"):
+                forms.extend((
+                    (f"from {module} import {helper}", helper),
+                    (f"from {module} import {helper} as launch", "launch"),
+                    (f"import {module}", module + "." + helper),
+                    (f"import {module} as owner", "owner." + helper),
+                ))
+            forms.append(("from scripts import fixture_finalizer as owner", "owner." + helper))
+            for imported, call in forms:
+                with self.subTest(imported=imported):
+                    tree = ast.parse(
+                        imported + "\nimport sys\nCHILD = " + repr(program) + "\n"
+                        "def sync(url):\n"
+                        f"    {call}(['cu' + 'rl', url])\n"
+                        f"    {call}([sys.executable, '-c', CHILD])\n"
+                    )
+                    self.assertEqual({("sync", "curl")}, _network_subprocess_findings(tree))
+                    self.assertEqual({"CHILD": program}, _literal_python_programs(tree))
+                    self.assertTrue(_built_argv_tree_egress_sites(tree))
+                    self.assertEqual(({helper: 2}, {"mixed": 2}), _subprocess_population(tree))
 
     def test_shell_string_curl_is_caught(self) -> None:
         findings = self._findings(
@@ -1063,6 +1446,61 @@ class ExcludedHalfPrivateTwinTests(unittest.TestCase):
             "a built-argv egress site appeared or vanished in the EXCLUDED "
             "half; name the file in " + pin_relative,
         )
+
+
+class CensusMemoIsContentKeyedTests(unittest.TestCase):
+    """HARBOR-SPEED-R-C: the census memo can never serve a changed file stale."""
+
+    def test_rewritten_planted_and_removed_files_are_re_censused(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary) / "floati"
+            root.mkdir()
+            module = root / "module.py"
+            module.write_text("import string\n", encoding="utf-8")
+            self.assertEqual((set(), {}, set()), measure_network_surface(root))
+
+            # The memo is live: an unchanged re-walk adds no entry.
+            entries = len(_FILE_CENSUS_MEMO)
+            self.assertEqual((set(), {}, set()), measure_network_surface(root))
+            self.assertEqual(entries, len(_FILE_CENSUS_MEMO))
+
+            # Same path, same byte length, same mtime, different bytes: a
+            # stat-keyed memo would serve the old census; this one may not.
+            before = module.stat()
+            module.write_text("import ftplib\n", encoding="utf-8")
+            os.utime(module, ns=(before.st_atime_ns, before.st_mtime_ns))
+            self.assertEqual(before.st_size, module.stat().st_size)
+            self.assertEqual(before.st_mtime_ns, module.stat().st_mtime_ns)
+            self.assertEqual(
+                (set(), {"floati/module.py": {"ftplib"}}, set()),
+                measure_network_surface(root),
+            )
+
+            # A planted file is walked; a removed file leaves the census.
+            planted = root / "planted.py"
+            planted.write_text("import socket\n", encoding="utf-8")
+            self.assertEqual(
+                {"floati/planted.py"}, measure_network_surface(root)[0]
+            )
+            planted.unlink()
+            self.assertEqual(set(), measure_network_surface(root)[0])
+
+            # Reverting the bytes is served the original census again.
+            module.write_text("import string\n", encoding="utf-8")
+            self.assertEqual((set(), {}, set()), measure_network_surface(root))
+
+    def test_callers_cannot_mutate_the_memo(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary) / "floati"
+            root.mkdir()
+            (root / "client.py").write_text("import http.client\n", encoding="utf-8")
+            first = measure_network_surface(root)
+            first[1]["floati/client.py"].add("requests")
+            first[0].add("floati/forged.py")
+            self.assertEqual(
+                (set(), {"floati/client.py": {"http.client"}}, set()),
+                measure_network_surface(root),
+            )
 
 
 if __name__ == "__main__":

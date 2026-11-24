@@ -78,6 +78,8 @@ _LANDLOCK_ACCESS_FS_MAKE_SYM = 1 << 12
 _LANDLOCK_ACCESS_FS_REFER = 1 << 13
 _LANDLOCK_ACCESS_FS_TRUNCATE = 1 << 14
 
+_LANDLOCK_FILE_WRITE_RIGHTS = _LANDLOCK_ACCESS_FS_WRITE_FILE | _LANDLOCK_ACCESS_FS_TRUNCATE
+
 WRITE_RIGHTS = (
     _LANDLOCK_ACCESS_FS_WRITE_FILE
     | _LANDLOCK_ACCESS_FS_REMOVE_DIR
@@ -108,6 +110,10 @@ class WorkerIsolationPolicy:
     # and never cleans up -- keeps its existing seven-field shape.  Cleanup refuses a
     # policy that reaches it without one.
     scratch_parent_identity: Optional[tuple[int, int]] = None
+    workspace_mode: str = "fresh"
+    provider_state: Optional[Path] = None
+    provider_state_identity: Optional[tuple[int, int]] = None
+    gitfile_identity: Optional[tuple[int, int]] = None
 
 
 class _LandlockRulesetAttr(ctypes.Structure):
@@ -214,6 +220,11 @@ def _validated_probe(policy: WorkerIsolationPolicy) -> None:
         raise PermissionError("probe mode changed")
 
 
+def _borrowed_backend_host() -> bool:
+    """The hosts whose kernel backend can keep a borrowed row's .git pointer out of reach."""
+    return sys.platform == "darwin" or sys.platform.startswith("linux")
+
+
 def _validate_policy(policy: WorkerIsolationPolicy) -> None:
     if not isinstance(policy, WorkerIsolationPolicy):
         raise TypeError("invalid isolation policy")
@@ -228,7 +239,12 @@ def _validate_policy(policy: WorkerIsolationPolicy) -> None:
     else:
         if policy.workspace_identity is None:
             raise ValueError("workspace identity is missing")
-        _validated_directory(policy.workspace, policy.workspace_identity, exact_mode=0o700)
+        if policy.workspace_mode == "borrowed":
+            _validated_directory(policy.workspace, policy.workspace_identity)
+            if _identity(os.lstat(policy.workspace / ".git")) != policy.gitfile_identity:
+                raise ValueError("borrowed Git pointer changed")
+        else:
+            _validated_directory(policy.workspace, policy.workspace_identity, exact_mode=0o700)
         if _is_beneath(policy.workspace, tenant_home):
             raise ValueError("workspace overlaps tenant truth")
 
@@ -241,8 +257,47 @@ def _validate_policy(policy: WorkerIsolationPolicy) -> None:
     ):
         raise ValueError("workspace and scratch overlap")
     _validated_probe(policy)
+    if policy.workspace_mode == "borrowed":
+        if not _borrowed_backend_host():
+            raise OSError(errno.ENOTSUP, "borrowed policy requires the macOS sandbox or Linux Landlock")
+        if policy.workspace is None or policy.provider_state is None or policy.provider_state_identity is None:
+            raise ValueError("borrowed policy requires exact project and provider slot")
+        _validated_directory(policy.provider_state, policy.provider_state_identity, exact_mode=0o700)
+        if policy.provider_state.parent != tenant_home / "provider-state":
+            raise ValueError("provider slot is outside its exact managed family")
+        _validate_borrowed_tree(policy.workspace)
+        _validate_borrowed_tree(policy.provider_state)
+    elif policy.workspace_mode != "fresh" or any(value is not None for value in
+            (policy.provider_state, policy.provider_state_identity, policy.gitfile_identity)):
+        raise ValueError("fresh policy cannot carry borrowed capabilities")
     if tenant_metadata.st_uid != os.getuid():
         raise PermissionError("tenant owner changed")
+
+
+def _validate_borrowed_entry(metadata):
+    if metadata.st_uid != os.getuid() or metadata.st_mode & 0o022:
+        raise ValueError("borrowed layout is foreign or permits other-user replacement")
+    if not (stat.S_ISDIR(metadata.st_mode)
+            or (stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1)):
+        raise ValueError("borrowed layout contains an alias or unsupported file type")
+
+
+def _validate_borrowed_tree(workspace):
+    # A pre-existing hardlink could alias foreign bytes under an allowed path.
+    # Refuse such layouts before activation rather than claiming confinement.
+    root_metadata = _owned_metadata(workspace, "directory")
+    if root_metadata.st_mode & 0o022:
+        raise ValueError("borrowed layout root permits other-user replacement")
+    visited = 0
+    def unavailable(error):
+        raise error
+
+    for directory, children, files in os.walk(workspace, followlinks=False, onerror=unavailable):
+        for name in children + files:
+            visited += 1
+            if visited > 10000:
+                raise ValueError("borrowed layout exceeds the bounded identity inspection")
+            _validate_borrowed_entry(os.lstat(Path(directory) / name))
 
 
 def _remove_matching_probe(policy: WorkerIsolationPolicy) -> None:
@@ -482,6 +537,44 @@ def cleanup_worker_isolation(policy: WorkerIsolationPolicy) -> None:
         raise _failure(exc)
 
 
+def prepare_borrowed_worker_isolation(root, binding, session_id):
+    """Parent-only explicit mode; never creates/chmods/removes the borrowed row."""
+    # macOS subtracts the row's .git pointer from a whole-row grant; Linux
+    # Landlock grants the row's existing entries except .git (see
+    # _linux_rule_targets). Every other host keeps the UNSUPPORTED cell.
+    if not _borrowed_backend_host():
+        raise WorkerAdapterFailure(_FAILURE_CODE,
+            detail="W1 UNSUPPORTED: borrowed write confinement requires the macOS sandbox or Linux Landlock")
+    from dataclasses import replace
+    from .adhoc_profiles import AdhocProfiles
+    from .adhoc_workspace import BorrowedWorkspace
+    from .errors import ProtocolRefusal
+    borrower = BorrowedWorkspace(root, binding)
+    try:
+        borrower.pin()
+        profile = AdhocProfiles(root).get(binding["profile_id"])
+        slot = root.tenant_home / profile["provider_state"]
+        policy = prepare_worker_isolation(root.tenant_home, None, session_id)
+        try:
+            policy = replace(policy, workspace=Path(profile["workspace"]),
+                workspace_identity=(profile["filesystem_bindings"]["workspace"]["dev"],
+                                    profile["filesystem_bindings"]["workspace"]["ino"]),
+                workspace_mode="borrowed", provider_state=slot,
+                provider_state_identity=(profile["filesystem_bindings"]["provider_state"]["dev"],
+                                         profile["filesystem_bindings"]["provider_state"]["ino"]),
+                gitfile_identity=_identity(os.lstat(Path(profile["workspace"]) / ".git")))
+            _validate_policy(policy)
+            return policy
+        except BaseException:
+            cleanup_worker_isolation(policy)
+            raise
+    except (ProtocolRefusal, OSError, ValueError, WorkerAdapterFailure) as exc:
+        raise WorkerAdapterFailure(_FAILURE_CODE,
+            detail="W1 UNSUPPORTED: borrowed binding cannot express exact write confinement") from exc
+    finally:
+        borrower.close()
+
+
 def _resolved_linux_descriptors() -> dict[int, Path]:
     resolved: dict[int, Path] = {}
     for name in os.listdir("/proc/self/fd"):
@@ -505,10 +598,13 @@ def _resolved_macos_descriptors() -> dict[int, Path]:
     if _fcntl is None or _resource is None:
         raise OSError(errno.ENOTSUP, "macOS descriptor facilities are unavailable")
     resolved: dict[int, Path] = {}
-    soft_limit = _resource.getrlimit(_resource.RLIMIT_NOFILE)[0]
-    if soft_limit == _resource.RLIM_INFINITY:
-        soft_limit = os.sysconf("SC_OPEN_MAX")
-    for descriptor in range(int(soft_limit)):
+    # Enumerate live descriptors, as the exec bootstrap already does. RLIMIT
+    # can be much larger than the actual inventory, or lower than a descriptor
+    # inherited before the limit changed. A failed enumeration must refuse.
+    for name in os.listdir("/dev/fd"):
+        if not name.isascii() or not name.isdigit():
+            continue
+        descriptor = int(name)
         try:
             path_buffer = _fcntl.fcntl(descriptor, _F_GETPATH, b"\0" * 1024)
             raw_path = path_buffer.split(b"\0", 1)[0]
@@ -570,7 +666,10 @@ def _macos_profile(policy: WorkerIsolationPolicy) -> bytes:
         exclusions.append(
             f'    (require-not (subpath "{_profile_path(policy.workspace)}"))'
         )
-    exclusions.append(f'    (require-not (subpath "{_profile_path(policy.scratch)}"))')
+    if policy.workspace_mode != "borrowed":
+        exclusions.append(f'    (require-not (subpath "{_profile_path(policy.scratch)}"))')
+    if policy.workspace_mode == "borrowed":
+        exclusions.append(f'    (require-not (subpath "{_profile_path(policy.provider_state)}"))')
     exclusions.append('    (require-not (literal "/dev/null"))')
     profile = (
         "(version 1)\n"
@@ -580,6 +679,9 @@ def _macos_profile(policy: WorkerIsolationPolicy) -> bytes:
         + "\n".join(exclusions)
         + "))\n"
     )
+    if policy.workspace_mode == "borrowed":
+        profile += ('(deny file-write* (literal "' + _profile_path(policy.workspace / ".git") + '"))\n'
+            + '(deny file-write* (literal "' + _profile_path(policy.provider_state / "floati-adhoc-owner.json") + '"))\n')
     return profile.encode("utf-8", "strict")
 
 
@@ -610,6 +712,85 @@ def _linux_syscall(library: ctypes.CDLL, number: int, *arguments: object) -> int
     return result
 
 
+def _close_rule_targets(targets: list[tuple[int, int]]) -> None:
+    for descriptor, _rights in targets:
+        os.close(descriptor)
+
+
+def _rule_path(name: object, *, dir_fd: Optional[int] = None, follow: bool = True) -> int:
+    flags = os.O_PATH | getattr(os, "O_CLOEXEC", 0) | (0 if follow else os.O_NOFOLLOW)
+    return os.open(name, flags, dir_fd=dir_fd)
+
+
+def _linux_rule_targets(policy: WorkerIsolationPolicy) -> list[tuple[int, int]]:
+    """Open every path the Linux boundary grants, with the rights it grants there.
+
+    Landlock only adds rights: a grant on a directory reaches every entry beneath
+    it, so a whole-row grant would also reach the borrowed row's .git pointer. The
+    macOS profile subtracts that one literal. Linux reaches the same exclusion by
+    granting each existing entry of the row root except .git, and nothing on the
+    root itself: the pointer can be neither written nor replaced, and the root's
+    own entry set stays fixed for the dispatch (no entry is created, removed or
+    renamed there; everything beneath an existing entry stays writable). The
+    provider slot is granted whole; its owner marker is guarded by its content,
+    which every profile pin rereads. Bootstrap scratch is not granted, as on macOS.
+    """
+    targets: list[tuple[int, int]] = []
+    try:
+        if policy.workspace_mode == "borrowed":
+            row = os.open(policy.workspace,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+            try:
+                metadata = os.fstat(row)
+                _validate_borrowed_entry(metadata)
+                if _identity(metadata) != policy.workspace_identity:
+                    raise ValueError("borrowed row identity changed")
+                pointer_seen = False
+                for name in sorted(os.listdir(row)):
+                    descriptor = _rule_path(name, dir_fd=row, follow=False)
+                    try:
+                        metadata = os.fstat(descriptor)
+                        _validate_borrowed_entry(metadata)
+                        if name == ".git":
+                            if not stat.S_ISREG(metadata.st_mode) or _identity(metadata) != policy.gitfile_identity:
+                                raise ValueError("borrowed Git pointer changed")
+                            pointer_seen = True
+                            continue
+                        rights = WRITE_RIGHTS if stat.S_ISDIR(metadata.st_mode) else _LANDLOCK_FILE_WRITE_RIGHTS
+                        targets.append((descriptor, rights))
+                        descriptor = None
+                    finally:
+                        if descriptor is not None:
+                            os.close(descriptor)
+                if not pointer_seen:
+                    raise ValueError("borrowed Git pointer changed")
+            finally:
+                os.close(row)
+            slot = _rule_path(policy.provider_state, follow=False)
+            targets.append((slot, WRITE_RIGHTS))
+            metadata = os.fstat(slot)
+            _validate_borrowed_entry(metadata)
+            if not stat.S_ISDIR(metadata.st_mode) or _identity(metadata) != policy.provider_state_identity:
+                raise ValueError("provider slot identity changed")
+        else:
+            for allowed_path in (policy.workspace, policy.scratch):
+                if allowed_path is not None:
+                    targets.append((_rule_path(allowed_path), WRITE_RIGHTS))
+
+        # Every git process opens /dev/null O_RDWR at startup (git's sanitize_stdfds),
+        # so without this rule the first git inside an activated boundary dies rc 128
+        # and the receipt reads git_finalize_failed.  The macOS profile has carved the
+        # same device out of its write-deny since 2026-08-14; this is that fix's Linux
+        # half, not a new authority -- /dev/null is writable to this uid on any host and
+        # discards everything written to it.  Landlock refuses directory-only rights on
+        # a non-directory, so the device takes only the file rights.
+        targets.append((_rule_path(os.devnull), _LANDLOCK_FILE_WRITE_RIGHTS))
+    except BaseException:
+        _close_rule_targets(targets)
+        raise
+    return targets
+
+
 def _apply_linux(policy: WorkerIsolationPolicy) -> str:
     create_ruleset_number, add_rule_number, restrict_self_number = (
         _landlock_syscall_numbers(platform.machine())
@@ -628,6 +809,7 @@ def _apply_linux(policy: WorkerIsolationPolicy) -> str:
 
     ruleset_attr = _LandlockRulesetAttr(handled_access_fs=WRITE_RIGHTS)
     ruleset_descriptor = -1
+    rule_targets = _linux_rule_targets(policy)
     try:
         ruleset_descriptor = _linux_syscall(
             library,
@@ -636,62 +818,19 @@ def _apply_linux(policy: WorkerIsolationPolicy) -> str:
             ctypes.sizeof(ruleset_attr),
             ctypes.c_uint(0),
         )
-        for allowed_path in (policy.workspace, policy.scratch):
-            if allowed_path is None:
-                continue
-            path_descriptor = -1
-            try:
-                path_descriptor = os.open(
-                    allowed_path,
-                    os.O_PATH | getattr(os, "O_CLOEXEC", 0),
-                )
-                path_attr = _LandlockPathBeneathAttr(
-                    allowed_access=WRITE_RIGHTS,
-                    parent_fd=path_descriptor,
-                )
-                _linux_syscall(
-                    library,
-                    add_rule_number,
-                    ctypes.c_int(ruleset_descriptor),
-                    ctypes.c_int(_LANDLOCK_RULE_PATH_BENEATH),
-                    ctypes.byref(path_attr),
-                    ctypes.c_uint(0),
-                )
-            finally:
-                if path_descriptor >= 0:
-                    os.close(path_descriptor)
-
-        # Every git process opens /dev/null O_RDWR at startup (git's sanitize_stdfds),
-        # so without this rule the first git inside an activated boundary dies rc 128
-        # and the receipt reads git_finalize_failed.  The macOS profile has carved the
-        # same device out of its write-deny since 2026-08-14; this is that fix's Linux
-        # half, not a new authority -- /dev/null is writable to this uid on any host and
-        # discards everything written to it.  It cannot join the loop above: that passes
-        # allowed_access=WRITE_RIGHTS, and Landlock refuses directory-only rights on a
-        # non-directory.
-        device_descriptor = -1
-        try:
-            device_descriptor = os.open(
-                os.devnull,
-                os.O_PATH | getattr(os, "O_CLOEXEC", 0),
-            )
-            device_attr = _LandlockPathBeneathAttr(
-                allowed_access=(
-                    _LANDLOCK_ACCESS_FS_WRITE_FILE | _LANDLOCK_ACCESS_FS_TRUNCATE
-                ),
-                parent_fd=device_descriptor,
+        for path_descriptor, rights in rule_targets:
+            path_attr = _LandlockPathBeneathAttr(
+                allowed_access=rights,
+                parent_fd=path_descriptor,
             )
             _linux_syscall(
                 library,
                 add_rule_number,
                 ctypes.c_int(ruleset_descriptor),
                 ctypes.c_int(_LANDLOCK_RULE_PATH_BENEATH),
-                ctypes.byref(device_attr),
+                ctypes.byref(path_attr),
                 ctypes.c_uint(0),
             )
-        finally:
-            if device_descriptor >= 0:
-                os.close(device_descriptor)
 
         library.prctl.argtypes = [
             ctypes.c_int,
@@ -712,6 +851,7 @@ def _apply_linux(policy: WorkerIsolationPolicy) -> str:
             ctypes.c_uint(0),
         )
     finally:
+        _close_rule_targets(rule_targets)
         if ruleset_descriptor >= 0:
             os.close(ruleset_descriptor)
     return f"linux-landlock-v{abi}"
@@ -730,7 +870,8 @@ def _post_activation_probes(policy: WorkerIsolationPolicy) -> None:
         os.close(descriptor)
         raise PermissionError("tenant write probe unexpectedly opened")
 
-    ready_path = policy.scratch / ".isolation-ready"
+    ready_root = policy.provider_state if policy.workspace_mode == "borrowed" else policy.scratch
+    ready_path = ready_root / ".isolation-ready"
     descriptor = os.open(
         ready_path,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow,

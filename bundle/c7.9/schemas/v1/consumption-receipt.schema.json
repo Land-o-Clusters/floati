@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/consumption-receipt.schema.json",
+  "title": "Floati Explicit Message Consumption Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "recipient", "message_id", "worker_session_id", "acting_session_id", "ack_receipt_id", "source", "work_item_id", "idempotency_key"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^consume-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "consumption_receipt"},
+    "recipient": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "message_id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "ack_receipt_id": {"type": "string", "pattern": "^ack-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "acting_session_id": {"$ref": "#/$defs/session"},
+    "worker_session_id": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/session"}]},
+    "source": {"enum": ["explicit", "work_complete"]},
+    "work_item_id": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}]},
+    "idempotency_key": {"type":"string","minLength":1,"maxLength":128,"pattern":"^[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u00ad\\u180e\\u200b-\\u200d\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u206f\\ufeff𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]+$"}
+  },
+  "$defs": {"session": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$", "not": {"pattern": "^(?:[Aa][Ll][Ll]|[Gg][Ll][Oo][Bb][Aa][Ll])$"}}},
+  "allOf": [{"if": {"properties": {"source": {"const": "explicit"}}}, "then": {"properties": {"work_item_id": {"type": "null"}}}, "else": {"properties": {"work_item_id": {"type": "string"}}}}]
+}

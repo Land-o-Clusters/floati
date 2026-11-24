@@ -8,6 +8,7 @@ import math
 import re
 import unicodedata
 from copy import deepcopy
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Mapping, Optional
@@ -15,6 +16,10 @@ from typing import Any, Dict, FrozenSet, Mapping, Optional
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .root import IDENTIFIER_PATTERN
+from .adhoc_records import ADHOC_KINDS, ADHOC_SPECS, validate_adhoc_record
+from .needs_records import NEEDS_KINDS, NEEDS_SPECS, validate_needs_record
+from .territory_records import TERRITORY_KINDS, TERRITORY_SPECS, validate_territory_record
+from .inbound_hold_records import INBOUND_HOLD_KINDS, INBOUND_HOLD_SPECS, validate_inbound_hold_record
 
 
 _TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$")
@@ -48,6 +53,8 @@ _DECISION_AUTHOR_AUTHORITIES = frozenset({"operator", "architect", "worker"})
 _BIDI_CONTROLS = frozenset(
     {"LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI", "BN"}
 )
+_ASCII_TERMINAL_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_NON_VISIBLE_ASCII = re.compile(r"[^\x20-\x7e]")
 _RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
 # The wake-hold decision domain, hoisted to module scope in the shape
 # floati/jsonl.py already ships: the token from hex, the domain from the token,
@@ -60,8 +67,102 @@ _RETIRED_NAME = bytes.fromhex("736c6970776179").decode("ascii")
 WAKE_HOLD_DECISION_DOMAIN = _RETIRED_NAME + "-wake-hold-decision-v1"
 _WAKE_HOLD_DECISION_PREIMAGE = WAKE_HOLD_DECISION_DOMAIN.encode("ascii") + b"\0"
 READER_VERSION = "0"
+
+
+@dataclass(frozen=True)
+class HoldReceipt:
+    """Version-one authoring shape; historical projection lives in holds.py."""
+
+    id: str
+    tenant_id: str
+    timestamp: str
+    node_id: str
+    reason: Optional[str]
+    started_at: Optional[str]
+    expected_release: Optional[str]
+    phase: str
+    released_at: Optional[str]
+    predecessor_receipt_id: Optional[str]
+    idempotency_key: str
+    schema_version: int = 1
+    kind: str = "hold_receipt"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return validate_record(asdict(self), self.tenant_id,
+                               frozenset({"hold_receipt"}), integrity=False)
+
+    @staticmethod
+    def validate_authoring(record, refuse):
+        if type(record['schema_version']) is not int or record['schema_version'] != 1:
+            refuse('schema_version_invalid', 'new hold records require version one')
+        if not _identifier(record['node_id']):
+            refuse('hold_node_invalid', 'hold needs one bounded node identifier')
+        if not _identifier(record['idempotency_key']):
+            refuse('hold_key_invalid', 'hold needs one bounded idempotency key')
+        if record['phase'] not in {'held', 'released'}:
+            refuse('hold_phase_invalid', 'hold phase must be held or released')
+        reason = record['reason']
+        if not (reason is None and record['phase'] == 'released'):
+            if (not isinstance(reason, str) or not reason.strip()
+                    or any(unicodedata.category(c).startswith('C') for c in reason)
+                    or len(reason.encode('utf-8')) > 1024):
+                refuse('hold_reason_invalid', 'reason must be visible text within 1024 UTF-8 bytes')
+        for field in ('started_at', 'expected_release', 'released_at'):
+            if record[field] is not None:
+                _timestamp_value(record[field], field, refuse)
+        if record['phase'] == 'held':
+            if record['started_at'] is None or record['released_at'] is not None or record['predecessor_receipt_id'] is not None:
+                refuse('hold_phase_invalid', 'a new hold needs start time and no terminal predecessor')
+        else:
+            _record_ref(record['predecessor_receipt_id'], 'hold-', 'predecessor_receipt_id', refuse)
+            if record['released_at'] is None:
+                refuse('hold_phase_invalid', 'release needs its terminal timestamp')
+
+
+QUIET_KINDS = frozenset({"quiet_window_receipt", "quiet_exposure_receipt"})
+QUIET_PHASES = frozenset({"settling", "not_opened", "opened", "pause_intent", "paused",
+                          "pause_cancelled", "resume_intent", "resume_refused", "pause_resolved", "release_pending", "released"})
+
+
+def _validate_quiet(record, refuse):
+    """NET-QUIET-1 authoring shape; projection lives in quiet_window.py."""
+    _record_ref(record["window_id"], "quiet-window-", "window_id", refuse)
+    for field in ("interval", "cpu", "facts"):
+        if field in record and not isinstance(record[field], dict):
+            refuse(field + "_invalid", field + " must be an object")
+    if record["kind"] == "quiet_window_receipt":
+        if not _identifier(record["node_id"]):
+            refuse("node_id_invalid", "a quiet window names one bounded operator node")
+        if not _identifier(record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "a quiet window needs one bounded idempotency key")
+        _enum(record["phase"], set(QUIET_PHASES), "phase", refuse)
+        load = record["load"]
+        if load is not None and (not isinstance(load, list) or len(load) != 3 or any(
+                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in load)):
+            refuse("load_invalid", "load is null or three finite load averages")
+        return
+    _enum(record["scope"], {"seat", "outside_reach"}, "scope", refuse)
+    if record["scope"] == "seat" and not _identifier(record["node_id"]):
+        refuse("node_id_invalid", "a seat exposure names one bounded node")
+    if record["scope"] == "outside_reach" and record["node_id"] is not None:
+        refuse("node_id_invalid", "work outside every seat names no node")
+    _enum(record["observation"], {"observed", "no_workspace"}, "observation", refuse)
+    _enum(record["hold_reason"], {"building_or_testing", "writing_only", "actor", "exempt",
+                                  "no_workspace", "not_enrolled"}, "hold_reason", refuse)
+    if not isinstance(record["held"], bool):
+        refuse("held_invalid", "held must be a boolean")
+    if not isinstance(record["processes"], list) or len(record["processes"]) > 64:
+        refuse("processes_invalid", "processes must be a list of at most 64 rows")
+    truncated = record["processes_truncated"]
+    if isinstance(truncated, bool) or not isinstance(truncated, int) or truncated < 0:
+        refuse("processes_truncated_invalid", "processes_truncated must be a non-negative integer")
+
+
 _COMMON = frozenset(("schema_version", "id", "tenant_id", "timestamp", "kind"))
-WAKE_HOLD_KINDS = frozenset({"delivery_receipt", "wake_hold_receipt"})
+ASK_RECORD_KINDS = frozenset({
+    "ask_question", "ask_answer", "ask_decline", "ask_timeout",
+})
+WAKE_HOLD_KINDS = frozenset({"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"})
 HOOK_BURN_EFFECT_CLASSES = frozenset(
     {
         "bus_path_created",
@@ -162,6 +263,23 @@ def _kind_prefix(kind: str) -> str:
 
 
 _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
+    "hold_receipt": ("hold-", _COMMON | {"node_id", "reason", "started_at", "expected_release", "phase", "released_at", "predecessor_receipt_id", "idempotency_key"}),
+    "quiet_window_receipt": ("quiet-window-", _COMMON | {"window_id", "node_id", "phase", "idempotency_key", "load", "facts"}),
+    "quiet_exposure_receipt": ("quiet-exposure-", _COMMON | {"window_id", "node_id", "scope", "observation", "held", "hold_reason", "interval", "cpu", "processes", "processes_truncated"}),
+    "fleet_presence_receipt": ("fleet-presence-", _COMMON | {"actor", "mode", "since", "away_since", "predecessor_receipt_id", "idempotency_key"}),
+    "cursor_presentation_receipt": ("cursor-presentation-", _COMMON | {
+        "batch_id", "node_id", "acting_session_id", "workspace",
+        "consent_receipt_id", "claim_receipt_id", "harness", "epoch_anchor",
+        "phase", "item_ids", "event_prefix_digest", "delivery_prefix_digest",
+        "acknowledgment_prefix_digest", "output_digest", "delivery_receipt_id",
+    }),
+    "stop_hold_receipt": ("stop-hold-", _COMMON | {
+        "invocation_id", "node_id", "acting_session_id", "consent_receipt_id",
+        "workspace", "harness", "started_at", "deadline_seconds", "phase",
+    }),
+    "send_readiness_observation": ("send-readiness-", _COMMON | {
+        "envelope_id", "sender", "recipient", "observed_at", "readiness", "idempotency_key",
+    }),
     "quota_receipt_record": (
         "quota-receipt-",
         _COMMON | {
@@ -196,11 +314,44 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
         },
     ),
     "ack_receipt": ("ack-", _COMMON | {"recipient", "item_ids"}),
+    "consumption_receipt": ("consume-", _COMMON | {"recipient", "message_id", "worker_session_id", "acting_session_id", "ack_receipt_id", "source", "work_item_id", "idempotency_key"}),
     "authority_grant": ("authority-", _COMMON | {"subject_id", "holder", "epoch", "claimed_at", "renewed_at", "expires_at", "released_at", "ttl_seconds", "deadline_seconds", "state"}),
     "delivery_receipt": ("delivery-", _COMMON | {"recipient", "item_ids", "presentation_count"}),
+    "delivered_unpresented": ("delivery-", _COMMON | {"recipient", "item_ids", "presentation_count", "presenter_evidence"}),
     "wake_hold_receipt": ("wake-hold-", _COMMON | {"recipient", "worker_session_id", "idempotency_key", "limit", "item_ids", "event_prefix_digest", "delivery_prefix_digest", "acknowledgment_prefix_digest", "decision_digest"}),
+    "seat_teardown_receipt": ("seat-teardown-", _COMMON | {"node_id", "acting_session_id", "home", "workspace", "repo", "doc", "coordinate_digest", "idempotency_key", "started_receipt_id", "workspace_map_digest", "claim_receipt_id", "consent_receipt_id", "pushed_tip", "envelope_recipient", "report_note", "event_cutoff_ids", "ack_receipt_ids", "ack_cutoff_refs", "wake_cutoff_ids", "activity", "work_evidence", "abandoned_pause_intents", "pause_intent", "pause_receipt_id", "envelope_id", "step"}),
     "seat_board_receipt": ("seat-board-", _COMMON | {"node_id", "acting_session_id", "coordinate_digest", "idempotency_key", "step", "arm_receipt_id", "predecessor_receipt_id", "resume_receipt_id", "resume_outcome", "delivery_receipt_id", "ack_receipt_id", "item_ids"}),
+    "seat_migration_receipt": ("seat-migration-", _COMMON | {"node_id", "workspace", "coordinator", "coordinate_digest", "idempotency_key", "declaration_created", "governance_created"}),
+    "retired_home_disarm_receipt": ("retired-home-disarm-", _COMMON | {"node_id", "new_home", "homes_examined", "disarmed", "idempotency_key"}),
     "wake_attempt_receipt": ("wake-attempt-", _COMMON | {"node_id", "acting_session_id", "message_worker_session_id", "idempotency_key", "item_ids", "decision_receipt_id", "outcome", "reason_code"}),
+    "bus_epoch_recovery_receipt": (
+        "bus-epoch-recovery-",
+        _COMMON | {
+            "actor", "idempotency_key", "request_id", "roll_receipt_id",
+            "direction", "reason_code", "archive_path", "archive_sha256",
+            "observed_live_sha256",
+        },
+    ),
+    "seat_teardown_epoch_verification": (
+        "seat-teardown-epoch-verification-",
+        _COMMON | {"teardown_receipt_id", "teardown_context_sha256",
+            "outgoing_epoch_id", "roll_receipt_id", "roll_receipt_sha256",
+            "report_envelope_id", "report_envelope_sha256", "verification"},
+    ),
+    "epoch_carry_verification": (
+        "epoch-carry-verification-",
+        _COMMON | {"roll_receipt_id", "roll_receipt_sha256", "carried_envelopes", "digest"},
+    ),
+    "epoch_history_commit": (
+        "epoch-history-commit-",
+        _COMMON | {"actor", "trigger", "verifier_version", "policy", "live_anchor",
+            "previous_generation", "generation", "source_commitment", "chunks"},
+    ),
+    "epoch_archive_removal": (
+        "epoch-archive-removal-",
+        _COMMON | {"actor", "epoch_id", "archive_path", "archive_sha256",
+            "object_sha256", "trigger"},
+    ),
     "bus_epoch_roll_receipt": (
         "bus-epoch-roll-receipt-",
         _COMMON | {
@@ -216,9 +367,38 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "wake_control_receipt": ("wake-control-", _COMMON | {"node_id", "session_digest", "operation", "state", "predecessor_receipt_id", "idempotency_key"}),
     "wake_daemon_consent_receipt": ("wake-daemon-consent-", _COMMON | {"node_id", "harness", "coordinate_digest", "adapter_version", "adapter_digest", "min_poll_seconds", "max_poll_seconds", "max_backoff_seconds", "activation_epoch", "operation", "state", "predecessor_receipt_id", "idempotency_key"}),
     "wake_daemon_lifecycle_receipt": ("wake-daemon-lifecycle-", _COMMON | {"node_id", "harness", "coordinate_digest", "daemon_instance_id", "activation_epoch", "event", "state", "reason_code", "adapter_digest", "plist_digest", "session_digest", "predecessor_receipt_id", "idempotency_key"}),
+    "wake_daemon_directory_ownership_record": (
+        "wake-daemon-directory-ownership-",
+        _COMMON | {"node_id", "harness", "coordinate_digest", "lifecycle_receipt_id",
+                   "unit_path", "unit_digest", "created_directories", "idempotency_key"},
+    ),
+    "codex_binding_repair_receipt": (
+        "codex-binding-repair-",
+        _COMMON | {"node_id", "coordinate_digest", "acting_session_id", "workspace",
+                   "arm_receipt_id", "declared_executable", "old_executable",
+                   "old_executable_digest", "new_executable", "new_executable_digest",
+                   "provider_banner", "reason", "idempotency_key"},
+    ),
     "denial_receipt": ("denial-", _COMMON | {"attempt_id", "claimed_sender", "claimed_recipient", "reason_code"}),
     "liveness_presence": ("presence-", _COMMON | {"node_id", "observed_at", "expires_at", "state"}),
     "message_envelope": ("msg-", _COMMON | {"sender", "recipient", "repo", "sha", "doc", "note", "idempotency_key"}),
+    "native_dispatch_launcher_record": ("native-dispatch-launcher-", _COMMON | {
+        "message_id", "sender_node_id", "sender_provider", "sender_native_session_id", "session_claim_id"}),
+    "ask_question": ("ask-question-", _COMMON | {
+        "sender", "recipient", "repo", "sha", "doc", "note",
+        "idempotency_key", "acting_session_id",
+    }),
+    "ask_answer": ("ask-answer-", _COMMON | {
+        "sender", "recipient", "repo", "sha", "doc", "note", "reply_to",
+        "idempotency_key", "acting_session_id",
+    }),
+    "ask_decline": ("ask-decline-", _COMMON | {
+        "sender", "recipient", "reply_to", "reason",
+        "idempotency_key", "acting_session_id",
+    }),
+    "ask_timeout": ("ask-timeout-", _COMMON | {
+        "reply_to", "observer", "elapsed_ms", "prefix_sha256", "idempotency_key",
+    }),
     "delivery_claim": (
         "delivery-claim-",
         _COMMON
@@ -257,6 +437,7 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "message_retracted": ("ret-", _COMMON | {"retracted_message_id", "worker_session_id", "reason", "author"}),
     "mutual_exclusion_hold": ("hold-", _COMMON | {"resource_id", "holder", "epoch", "acquired_at", "renewed_at", "expires_at", "released_at", "ttl_seconds", "deadline_seconds", "state"}),
     "registry_entry": ("registry-", _COMMON | {"node_id", "role", "state"}),
+    "registry_person_record": ("registry-person-", _COMMON | {"node_id", "person"}),
     "node_lease": ("lease-", _COMMON | {"node_id", "workspace", "state"}),
     "provider_switch_receipt": (
         "provider-switch-receipt-",
@@ -325,6 +506,7 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
         },
     ),
     "wake_cause": ("wake-", _COMMON | {"node_id", "cause", "context_bytes", "wake_count"}),
+    "seat_execution": ("seat-execution-", _COMMON | {"node_id", "acting_session_id", "work_item_id", "work_claim_id", "invocation_id", "source_kind", "source_receipt_id", "source_pin", "source_binding", "workspace", "event", "code", "command", "detail", "envelope_id", "idempotency_key"}),
     "work_item": ("work-", _COMMON | {"title", "owner", "artifact_bindings"}),
     "intake_snapshot": (
         "intake-snapshot-",
@@ -336,6 +518,18 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
         },
     ),
     "work_transition": ("transition-", _COMMON | {"work_item_id", "action", "actor", "authority_subject", "authority_epoch", "artifact_bindings"}),
+    "work_handoff_record": ("work-handoff-", _COMMON | {"work_item_id", "actor", "work_receipts", "coordinates",
+        "supersedes", "runs", "remaining", "statements", "idempotency_key", "request_digest"}),
+    "dispatch_revision": ("dispatch-revision-", _COMMON | {"actor", "dispatch_id", "coordinates",
+        "supersedes", "idempotency_key", "request_digest", "revision", "recipient", "branch", "brief", "carrier"}),
+    "dispatch_return": ("dispatch-return-", _COMMON | {"actor", "dispatch_id", "coordinates",
+        "supersedes", "idempotency_key", "request_digest", "artifact", "statement"}),
+    "dispatch_close": ("dispatch-close-", _COMMON | {"actor", "dispatch_id", "coordinates",
+        "supersedes", "idempotency_key", "request_digest", "closes", "reason"}),
+    "work_notification_record": ("work-notification-", _COMMON | {
+        "work_item_id", "phase", "transition", "dispatcher", "recipient",
+        "transition_id", "envelope_id", "idempotency_key",
+    }),
     "capability": ("capability-", _COMMON | {"node_id", "capability", "mode", "scope", "observed_at", "expires_at"}),
     "capability_grant": ("capability-grant-", _COMMON | {"worker_id", "capability_name", "policy_digest", "approval_request_id", "approval_decision_id", "authority_subject", "authority_epoch", "expires_at", "grant_digest"}),
     "capability_revoked": ("capability-revoked-", _COMMON | {"grant_id", "reason_code", "replacement_policy_digest"}),
@@ -467,13 +661,44 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     "thread_attachment_detached": ("thread-attachment-detached-", _COMMON | {"attachment_id", "provider", "provider_thread_id", "detached_by", "detached_at_testimony"}),
     "timing_receipt": ("timing-", _COMMON | {"command", "argv_digest", "node_id", "started_at", "wall_seconds", "cpu_seconds", "outcome", "refusal_code"}),
     **_EFFECT_SPECS,
+    **ADHOC_SPECS,
+    **NEEDS_SPECS,
+    **TERRITORY_SPECS,
+    **INBOUND_HOLD_SPECS,
 }
+
+
+def _message_envelope_field_shapes(fields: FrozenSet[str]) -> tuple[FrozenSet[str], ...]:
+    legacy = (
+        fields,
+        fields | {"reply_to"},
+        fields | {"attempt_binding"},
+        fields | {"worker_session_id"},
+        fields | {"reply_to", "attempt_binding"},
+        fields | {"reply_to", "worker_session_id"},
+        fields | {"attempt_binding", "worker_session_id"},
+        fields | {"reply_to", "attempt_binding", "worker_session_id"},
+    )
+    addressed = legacy + tuple(shape | {"address_preview"} for shape in legacy)
+    return addressed + tuple(shape | {"message_class"} for shape in addressed)
+
+
+# Reuse the original ordered alternatives only while the native field object
+# is unchanged. A rebound spec retains the original per-call construction.
+_MESSAGE_ENVELOPE_FIELDS = _SPECS["message_envelope"][1]
+_MESSAGE_ENVELOPE_FIELD_SHAPES = _message_envelope_field_shapes(_MESSAGE_ENVELOPE_FIELDS)
+
+
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
+    "epoch_carry_verification": (_SPECS["epoch_carry_verification"][1] - {"carried_envelopes"})
+    | {"envelope_count"},
+    "delivery_receipt": _SPECS["delivery_receipt"][1] | {"claude_inbox"},
     "timing_receipt": _SPECS["timing_receipt"][1],
     "run_manifest_fact": _SPECS["run_manifest_fact"][1],
     "hook_burn_record": _SPECS["hook_burn_record"][1],
     "mcp_integration_pin": _SPECS["mcp_integration_pin"][1],
     "bus_epoch_roll_receipt": _SPECS["bus_epoch_roll_receipt"][1],
+    "bus_epoch_recovery_receipt": _SPECS["bus_epoch_recovery_receipt"][1],
     "tide_policy_record": _SPECS["tide_policy_record"][1],
     "tide_receipt": _SPECS["tide_receipt"][1],
     "ack_receipt": _SPECS["ack_receipt"][1]
@@ -599,6 +824,10 @@ def wake_hold_decision_digest(record: Mapping[str, object]) -> str:
         "event_prefix_digest", "delivery_prefix_digest", "acknowledgment_prefix_digest",
     )
     payload = {field: record[field] for field in fields}
+    if record.get("schema_version") in {2, 4} and "selection_reason" in record:
+        payload["selection_reason"] = record["selection_reason"]
+    if record.get("schema_version") == 4:
+        payload["inbound_hold_mask"] = record["inbound_hold_mask"]
     limit = _json_integer(payload["limit"])
     if limit is not None:
         payload["limit"] = limit
@@ -607,6 +836,40 @@ def wake_hold_decision_digest(record: Mapping[str, object]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(_WAKE_HOLD_DECISION_PREIMAGE + encoded).hexdigest()
+
+
+def epoch_carry_verification_digest(carried_envelopes: object) -> str:
+    """Commit the canonical sorted carried-envelope inventory, including emptiness."""
+    encoded = json.dumps(carried_envelopes, ensure_ascii=False, allow_nan=False,
+        sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(b"floati-epoch-carry-verification-v0\0" + encoded).hexdigest()
+
+
+def _validate_ask_record(record: Mapping[str, Any], refuse: Any, ident: Any, integer: Any) -> None:
+    """Closed field contract for one local ask record."""
+
+    kind = record["kind"]
+    if kind in {"ask_question", "ask_answer", "ask_decline"}:
+        ident("sender")
+        ident("recipient")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        _bounded_string(record["acting_session_id"], 1, 128, "acting_session_id", refuse)
+    if kind in {"ask_question", "ask_answer"}:
+        _repository(record["repo"], refuse)
+        _git_sha(record["sha"], refuse)
+        _repository_document(record["doc"], refuse)
+        _bounded_note(record["note"], refuse)
+        if not str(record["note"]).strip():
+            refuse("note_empty", "note is empty")
+    if kind in {"ask_answer", "ask_decline", "ask_timeout"}:
+        _record_ref(record["reply_to"], "ask-question-", "reply_to", refuse)
+    if kind == "ask_decline":
+        _bounded_string(record["reason"], 1, 1024, "reason", refuse)
+    if kind == "ask_timeout":
+        ident("observer")
+        integer("elapsed_ms", 0, 2**31 - 1)
+        _sha256(record["prefix_sha256"], "prefix_sha256", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
 
 
 def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[str], *, integrity: bool) -> Dict[str, Any]:
@@ -641,27 +904,80 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     kind = record.get("kind")
     if not isinstance(kind, str) or kind not in allowed_kinds or kind not in _SPECS:
         refuse("record_kind_invalid", "record kind is not permitted by this ledger")
+    if kind in ADHOC_KINDS:
+        validated = validate_adhoc_record(record, expected_tenant, refuse)
+        if chain is not None:
+            validated.update(chain)
+        return validated
+    if kind in NEEDS_KINDS:
+        validated = validate_needs_record(record, expected_tenant, refuse)
+        if chain is not None:
+            validated.update(chain)
+        return validated
+    if kind in TERRITORY_KINDS:
+        return validate_territory_record(record, expected_tenant, refuse)
+    if kind in INBOUND_HOLD_KINDS:
+        return validate_inbound_hold_record(record, expected_tenant, refuse)
     prefix, fields = _SPECS[kind]
+    # A later dispatch version can change its fields. The compatible reader
+    # checks the stable envelope before projecting an unsupported-version row.
+    version = record.get("schema_version")
+    if (kind in {"dispatch_revision", "dispatch_return", "dispatch_close"}
+            and type(version) is int and version > 1):
+        refuse("schema_version_invalid", "dispatch records require integer version one")
     normalized_version = _json_integer(record.get("schema_version"))
     if kind in _V1_FIELDS and normalized_version == 1:
         fields = _V1_FIELDS[kind]
     actual_fields = frozenset(record)
     valid_fields = actual_fields == fields
+    if kind == "seat_teardown_receipt" and normalized_version in {2, 3}:
+        expected = (
+            fields - {"event_cutoff_ids", "ack_receipt_ids", "wake_cutoff_ids"}
+            | {"event_cutoff", "wake_cutoff", "ack_scope_count"}
+        )
+        if normalized_version == 3:
+            expected |= {"inbound_hold_cutoff"}
+        valid_fields = actual_fields == expected
     if kind == "message_envelope":
         valid_fields = actual_fields in (
-            fields,
-            fields | {"reply_to"},
-            fields | {"attempt_binding"},
-            fields | {"worker_session_id"},
-            fields | {"reply_to", "attempt_binding"},
-            fields | {"reply_to", "worker_session_id"},
-            fields | {"attempt_binding", "worker_session_id"},
-            fields | {"reply_to", "attempt_binding", "worker_session_id"},
+            _MESSAGE_ENVELOPE_FIELD_SHAPES if fields is _MESSAGE_ENVELOPE_FIELDS
+            else _message_envelope_field_shapes(fields)
         )
+    if kind == "ask_question":
+        valid_fields = actual_fields in (fields, fields | {"address_preview"})
+    if kind in {"message_envelope", "ask_question"} and "address_preview" in record:
+        from .addressing import validate_preview
+        preview = record["address_preview"]
+        validate_preview(preview, refuse)
+        if (preview["tenant_id"] != expected_tenant or preview["sender"] != record.get("sender")
+                or record.get("recipient") not in preview["recipients"]):
+            refuse("address_preview_invalid", "envelope parties differ from the recipient preview")
+    if kind == "denial_receipt":
+        valid_fields = actual_fields in (fields, fields | {"detail"})
+    if kind == "seat_board_receipt":
+        valid_fields = actual_fields in (fields, fields | {"message_progress"})
+    if kind == "delivery_receipt":
+        valid_fields = actual_fields in (fields, fields | {"bridge_publication"})
+    if kind == "wake_hold_receipt" and normalized_version == 2:
+        valid_fields = actual_fields == fields | {"selection_reason"}
+    if kind == "wake_hold_receipt" and normalized_version == 3:
+        valid_fields = actual_fields in (
+            fields | {"carried_from"}, fields | {"carried_from", "selection_reason"})
+    if kind == "wake_hold_receipt" and normalized_version == 4:
+        valid_fields = actual_fields in (
+            fields | {"inbound_hold_mask"}, fields | {"inbound_hold_mask", "selection_reason"})
+    if kind == "bus_epoch_roll_receipt":
+        valid_fields = actual_fields in (fields, fields | {"automatic"})
     if kind == "ack_receipt" and normalized_version == 1:
         valid_fields = actual_fields in (
             _SPECS["ack_receipt"][1] | {"acting_session_id"},
             _V1_FIELDS["ack_receipt"],
+        )
+    if kind == "wake_daemon_consent_receipt" and normalized_version == 2:
+        # WD-4: consent schema v2 adds idle_retire_days and nothing else;
+        # v0/v1 rows keep the exact pre-WD-4 shape.
+        valid_fields = actual_fields == (
+            _SPECS["wake_daemon_consent_receipt"][1] | {"idle_retire_days"}
         )
     if kind == "wake_daemon_lifecycle_receipt":
         # SKEW-2-F1: cycle_exception receipts carry the exception's type and
@@ -678,7 +994,10 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     if kind == "task_contract":
         valid_fields = actual_fields in (fields, fields | {"repository"})
     if kind == "work_item":
-        valid_fields = fields <= actual_fields <= fields | {"workspace", "needs"}
+        if type(record.get("schema_version")) is int and record["schema_version"] == 2:
+            valid_fields = fields | {"workspace", "adhoc_binding"} <= actual_fields <= fields | {"workspace", "adhoc_binding", "needs"}
+        else:
+            valid_fields = fields <= actual_fields <= fields | {"workspace", "needs", "car_binding"}
     if kind == "node_lease":
         valid_fields = actual_fields in (
             fields | {"expires_at"},
@@ -694,6 +1013,17 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         and record.get("subject_kind") == "attempt"
     ):
         valid_fields = actual_fields == fields | {"run_id", "attempt_id"}
+    if kind == "thread_attachment_registered" and normalized_version == 2:
+        valid_fields = actual_fields == fields | {
+            "adhoc_profile_id", "adhoc_dispatch_id", "native_receipt_id"}
+    if kind == "codex_wait_session_receipt":
+        # BL-11: the stable launcher never moves; BL-13 adds the optional
+        # supersession evidence to a takeover receipt only.
+        valid_fields = actual_fields in (fields, fields | {"claim_superseded_dead"})
+    if kind == "wake_waiter_exit_receipt":
+        valid_fields = actual_fields in (fields, fields | {"integrity_failure"})
+    if kind == "stop_hold_receipt":
+        valid_fields = actual_fields in (fields, fields | {"holder_pid", "process_start_epoch"})
     if not valid_fields:
         refuse("record_fields_invalid", f"{kind} fields do not match the exact record contract")
     if kind in _V1_FIELDS and normalized_version == 1:
@@ -783,15 +1113,66 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             epoch=normalized_epoch,
         )
     is_v1_record = (
-        kind in ({"seat_board_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "timing_receipt", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        kind in {"hold_receipt", "stop_hold_receipt", "send_readiness_observation", "seat_execution", "work_item", "cursor_presentation_receipt", "consumption_receipt", "delivery_receipt", "epoch_carry_verification"}
         and isinstance(record["schema_version"], int)
         and not isinstance(record["schema_version"], bool)
-        and record["schema_version"] == 1
+        and (record["schema_version"] == 1 or (kind == "work_item" and record["schema_version"] == 2))
+    ) or (
+        kind in ({"seat_teardown_receipt", "seat_board_receipt", "seat_migration_receipt", "retired_home_disarm_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "timing_receipt", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
+        and isinstance(record["schema_version"], int)
+        and not isinstance(record["schema_version"], bool)
+        and (record["schema_version"] == 1 or (
+            kind in THREAD_OBSERVATION_KINDS | {"wake_hold_receipt"} and record["schema_version"] == 2)
+            or (kind == "wake_hold_receipt" and record["schema_version"] in {3, 4}))
     )
+    if kind in QUIET_KINDS:
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "quiet window records require integer version one")
+        is_v1_record = True
+    if kind == "registry_person_record":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "registry person records require integer version one")
+        is_v1_record = True
+    if kind == "work_handoff_record":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "work handoffs require integer version one")
+        is_v1_record = True
+    if kind in {"dispatch_revision", "dispatch_return", "dispatch_close"}:
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "dispatch records require integer version one")
+        is_v1_record = True
+    if kind == "fleet_presence_receipt":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "Fleet presence receipts require version one.")
+        is_v1_record = True
+    if kind == "native_dispatch_launcher_record":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "launcher testimony requires integer version one")
+        is_v1_record = True
+    if kind == "wake_daemon_directory_ownership_record":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "directory ownership records require integer version one")
+        is_v1_record = True
+    if kind == "codex_binding_repair_receipt":
+        if type(record["schema_version"]) is not int or record["schema_version"] != 1:
+            refuse("schema_version_invalid", "Codex binding repair receipts require integer version one")
+        is_v1_record = True
+    if kind == "epoch_history_commit":
+        if normalized_version != 1 or chain is not None:
+            refuse("schema_version_invalid", "history commits require unchained integer version one")
+        is_v1_record = True
     if kind in {"segment_opened", "segment_sealed"} and (
         record["schema_version"] != 1 or isinstance(record["schema_version"], bool)
     ):
         refuse("schema_version_invalid", "schema_version must be integer one")
+    if kind == "consumption_receipt" and normalized_version != 1:
+        refuse("schema_version_invalid", "consumption receipts require integer version one")
+    if kind == "cursor_presentation_receipt" and (
+        not isinstance(record["schema_version"], int)
+        or isinstance(record["schema_version"], bool)
+        or record["schema_version"] != 1
+    ):
+        refuse("schema_version_invalid", "presentation receipts require integer version one")
     if kind in {"run_admission_bound", "sequencer_epoch"} and (
         record["schema_version"] != 1 or isinstance(record["schema_version"], bool)
     ):
@@ -817,10 +1198,10 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         refuse("schema_version_invalid", f"{kind} must use integer version one")
     if kind in EFFECT_KINDS and normalized_version != 1:
         refuse("schema_version_invalid", "effect records require schema version 1")
-    if kind in THREAD_OBSERVATION_KINDS and normalized_version != 1:
-        refuse("schema_version_invalid", "thread observation records require schema version 1")
-    if kind == "wake_hold_receipt" and normalized_version != 1:
-        refuse("schema_version_invalid", "wake hold receipts require schema version 1")
+    if kind in THREAD_OBSERVATION_KINDS and normalized_version not in {1, 2}:
+        refuse("schema_version_invalid", "thread observation records require schema version 1 or 2")
+    if kind == "wake_hold_receipt" and normalized_version not in {1, 2, 3, 4}:
+        refuse("schema_version_invalid", "wake hold receipts require schema version 1, 2, 3 or 4")
     if kind == "wake_attempt_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "wake attempt receipts require schema version 1")
     if kind in {"codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt"} and normalized_version != 1:
@@ -829,14 +1210,42 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         refuse("schema_version_invalid", "fleet update receipts require schema version 1")
     if kind == "ledger_repair_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "ledger repair receipts require schema version 1")
+    if kind == "bus_epoch_recovery_receipt" and normalized_version != 1:
+        refuse("schema_version_invalid", "bus epoch recovery receipts require schema version 1")
     if kind == "bus_epoch_roll_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "bus epoch roll receipts require schema version 1")
     if kind == "prep_clear_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "prep-clear receipts require schema version 1")
     if kind == "timing_receipt" and normalized_version != 1:
         refuse("schema_version_invalid", "timing receipts require schema version 1")
-    if not is_v1_record and kind not in {"segment_opened", "segment_sealed"} and (
-        record["schema_version"] != 0 or isinstance(record["schema_version"], bool)
+    if kind == "bus_epoch_recovery_receipt":
+        is_v1_record = True
+    # WD-4: consent schema v2 (idle_retire_days) is the one legal non-zero
+    # stamp on this kind; v0/v1 rows are unchanged.
+    is_consent_v2 = (
+        kind == "wake_daemon_consent_receipt" and normalized_version == 2
+    )
+    is_teardown_v2 = (
+        kind == "seat_teardown_receipt" and normalized_version in {2, 3}
+    )
+    is_ask_v1 = (
+        kind in ASK_RECORD_KINDS
+        and isinstance(record["schema_version"], int)
+        and not isinstance(record["schema_version"], bool)
+        and record["schema_version"] == 1
+    )
+    if kind in ASK_RECORD_KINDS and not is_ask_v1:
+        refuse("schema_version_invalid", "ask records require integer version one")
+    if (
+        not is_v1_record
+        and not is_consent_v2
+        and not is_teardown_v2
+        and not is_ask_v1
+        and kind not in {"segment_opened", "segment_sealed"}
+        and (
+            record["schema_version"] != 0
+            or isinstance(record["schema_version"], bool)
+        )
     ):
         refuse("schema_version_invalid", "schema_version must be integer zero")
     if record["tenant_id"] != expected_tenant:
@@ -846,6 +1255,23 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     if not isinstance(record["id"], str) or re.fullmatch(re.escape(prefix) + _UUID7, record["id"]) is None:
         refuse("record_id_invalid", "record id must use the kind's UUIDv7 prefix")
     _timestamp_value(record["timestamp"], "timestamp", refuse)
+    if kind == "hold_receipt":
+        HoldReceipt.validate_authoring(record, refuse)
+    if kind in QUIET_KINDS:
+        _validate_quiet(record, refuse)
+    if kind == "fleet_presence_receipt":
+        if not _identifier(record["actor"]) or not _identifier(record["idempotency_key"]):
+            refuse("fleet_presence_identity_invalid", "Fleet presence requires an actor and an idempotency key.")
+        if record["mode"] not in ("AWAY", "PRESENT"):
+            refuse("fleet_presence_mode_invalid", "Fleet presence must be AWAY or PRESENT.")
+        if record["since"] != record["timestamp"]:
+            refuse("fleet_presence_since_invalid", "Fleet presence must start at its receipt timestamp.")
+        if record["predecessor_receipt_id"] is not None:
+            _record_ref(record["predecessor_receipt_id"], "fleet-presence-", "predecessor_receipt_id", refuse)
+        if record["away_since"] is not None:
+            _timestamp_value(record["away_since"], "away_since", refuse)
+            if record["mode"] != "PRESENT" or record["predecessor_receipt_id"] is None:
+                refuse("fleet_presence_since_invalid", "The prior AWAY timestamp requires a return from AWAY.")
     # Effect rows are post-v1 and may bypass legacy run-record branches below.
     # Validate their shared closed binding at the durable boundary regardless.
     if kind in EFFECT_KINDS:
@@ -870,12 +1296,20 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
 
     def ident(field: str) -> None:
         if not _identifier(record[field]):
-            refuse(f"{field}_invalid", f"{field} must be a bounded identifier")
+            refuse(
+                f"{field}_invalid",
+                f"{field} must be a bounded identifier",
+                "pass {0} as a bounded identifier matching [a-z0-9][a-z0-9_-]*".format(field),
+            )
 
     def integer(field: str, minimum: int, maximum: int) -> None:
         value = record[field]
         if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
-            refuse(f"{field}_invalid", f"{field} is outside its v0 integer bounds")
+            refuse(
+                f"{field}_invalid",
+                f"{field} is outside its v0 integer bounds",
+                "pass {0} as an integer within the bounds named in detail".format(field),
+            )
 
     if kind == "sequencer_epoch":
         integer("epoch", 1, 2**63 - 1)
@@ -953,6 +1387,10 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         ident("node_id")
         validate_role(record["role"], integrity=integrity)
         _enum(record["state"], {"active", "retired"}, "state", refuse)
+    elif kind == "registry_person_record":
+        ident("node_id")
+        if record["person"] is not None:
+            ident("person")
     elif kind == "node_lease":
         ident("node_id")
         if not isinstance(record["workspace"], str) or not Path(record["workspace"]).is_absolute():
@@ -1568,8 +2006,18 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _bounded_string(record["formula"], 1, 500, "formula", refuse)
         _repository_document(record["receipt_path"], refuse)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+    elif kind == "native_dispatch_launcher_record":
+        from .native_dispatch_launcher import validate_native_launcher_sender
+
+        ident("sender_node_id")
+        for field, prefix in (("message_id", "msg-"), ("session_claim_id", "codex-wait-session-")):
+            if not isinstance(record[field], str) or re.fullmatch(prefix + _UUID7, record[field]) is None:
+                refuse("native_dispatch_launcher_invalid", "launcher testimony requires exact message and claim IDs")
+        validate_native_launcher_sender(record, refuse)
     elif kind == "message_envelope":
         ident("sender"); ident("recipient")
+        if "message_class" in record:
+            _enum(record["message_class"], {"normal", "fyi"}, "message_class", refuse)
         _repository(record["repo"], refuse)
         _git_sha(record["sha"], refuse)
         _repository_document(record["doc"], refuse)
@@ -1735,7 +2183,32 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         integer("byte_length", 1, 64 * 1024 * 1024)
         _sha256(record["head_sha256"], "head_sha256", refuse)
         _sha256(record["checkpoint_sha256"], "checkpoint_sha256", refuse)
+    elif kind == "bus_epoch_recovery_receipt":
+        ident("actor")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if not isinstance(record["request_id"], str) or re.fullmatch(_UUID7, record["request_id"]) is None:
+            refuse("request_id_invalid", "recovery request must be the original UUIDv7 coordinate")
+        if not isinstance(record["roll_receipt_id"], str) or re.fullmatch(
+            "bus-epoch-roll-receipt-" + _UUID7, record["roll_receipt_id"]
+        ) is None:
+            refuse("roll_receipt_id_invalid", "recovery must bind one original roll receipt")
+        if record["direction"] != "rollback":
+            refuse("direction_invalid", "recovery receipt must record rollback")
+        if record["reason_code"] != "live_epoch_extended":
+            refuse("reason_code_invalid", "recovery receipt must name live epoch extension")
+        archive_path = record["archive_path"]
+        if (
+            not isinstance(archive_path, str)
+            or not 1 <= len(archive_path) <= 4096
+            or not Path(archive_path).is_absolute()
+            or _terminal_unsafe(archive_path)
+        ):
+            refuse("archive_path_invalid", "archive path must be bounded absolute terminal-safe text")
+        for field in ("archive_sha256", "observed_live_sha256"):
+            _sha256(record[field], field, refuse)
     elif kind == "bus_epoch_roll_receipt":
+        if "automatic" in record:
+            _automatic_epoch_decision(record["automatic"], record["timestamp"], refuse)
         archive_path = record["archive_path"]
         if (
             not isinstance(archive_path, str)
@@ -1795,6 +2268,18 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 "plane_counts_invalid",
                 "epoch plane counts must equal the archive file count",
             )
+    elif kind == "epoch_history_commit":
+        from .archive_catalog import validate_commit_fields
+        ident("actor")
+        validate_commit_fields(record, refuse)
+    elif kind == "epoch_archive_removal":
+        ident("actor")
+        _bounded_string(record["epoch_id"], 1, 256, "epoch_id", refuse)
+        _bounded_string(record["archive_path"], 1, 4096, "archive_path", refuse)
+        _sha256(record["archive_sha256"], "archive_sha256", refuse)
+        _sha256(record["object_sha256"], "object_sha256", refuse)
+        if record["trigger"] not in {"send", "present", "drain", "retract", "ack", "stop_poll"}:
+            refuse("removal_trigger_invalid", "archive removal trigger is unknown")
     elif kind == "ledger_repair_receipt":
         if record["ledger"] != "events.jsonl":
             refuse("repair_ledger_invalid", "repair receipt must select events.jsonl")
@@ -1854,7 +2339,28 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _bounded_string(record["claimed_sender"], 1, 64, "claimed_sender", refuse)
         _bounded_string(record["claimed_recipient"], 1, 64, "claimed_recipient", refuse)
         _enum(record["reason_code"], {"unknown_sender", "unknown_recipient", "idempotency_conflict", "reply_to_unknown", "reply_to_parties_mismatch"}, "reason_code", refuse)
-    elif kind in ("ack_receipt", "delivery_receipt"):
+        if "detail" in record:
+            _denial_detail(record["detail"], record["reason_code"], refuse)
+    elif kind == "consumption_receipt":
+        ident("recipient")
+        _record_ref(record["message_id"], "msg-", "message_id", refuse)
+        _record_ref(record["ack_receipt_id"], "ack-", "ack_receipt_id", refuse)
+        from .wake_control import validate_session_id
+        for field in ("acting_session_id", "worker_session_id"):
+            if record[field] is not None or field == "acting_session_id":
+                try:
+                    validate_session_id(record[field])
+                except ProtocolRefusal:
+                    refuse("consumption_session_invalid", "consumption session is invalid")
+        _enum(record["source"], {"explicit", "work_complete"}, "source", refuse)
+        if record["source"] == "work_complete":
+            _record_ref(record["work_item_id"], "work-", "work_item_id", refuse)
+        elif record["work_item_id"] is not None:
+            refuse("consumption_work_invalid", "explicit consumption cannot name a work item")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["idempotency_key"]):
+            refuse("consumption_key_invalid", "consumption key is terminal-unsafe")
+    elif kind in ("ack_receipt", "delivery_receipt", "delivered_unpresented"):
         ident("recipient")
         if kind == "ack_receipt" and normalized_version == 1:
             _opaque_identifier(record["acting_session_id"], "acting_session_id", refuse)
@@ -1889,9 +2395,96 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         minimum = 1 if kind == "ack_receipt" else 0
         if not isinstance(items, list) or not minimum <= len(items) <= 1000 or any(not isinstance(item, str) or re.fullmatch("msg-" + _UUID7, item) is None for item in items) or len(set(items)) != len(items):
             refuse("item_ids_invalid", "item_ids violate the v0 message-id set contract")
-        if kind == "delivery_receipt":
+        if kind in ("delivery_receipt", "delivered_unpresented"):
             integer("presentation_count", 1, 2**63 - 1)
+        if kind == "delivery_receipt" and normalized_version == 1:
+            diagnostic = record["claude_inbox"]
+            if not isinstance(diagnostic, dict) or set(diagnostic) != {
+                    "acting_session_id", "policy_source", "fallbacks"}:
+                refuse("claude_inbox_evidence_invalid", "delivery fallback needs closed exact-session testimony")
+            session = diagnostic["acting_session_id"]
+            if not isinstance(session, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", session) is None or session.casefold() in {"all", "global"}:
+                refuse("claude_inbox_evidence_invalid", "delivery fallback session is invalid")
+            if diagnostic["policy_source"] != "readable_settings_files":
+                refuse("claude_inbox_evidence_invalid", "fallback policy provenance must name readable settings files")
+            fallbacks = diagnostic["fallbacks"]
+            if not isinstance(fallbacks, list) or not 1 <= len(fallbacks) <= len(items):
+                refuse("claude_inbox_evidence_invalid", "delivery fallback must name a nonempty subset of delivered mail")
+            seen = set()
+            for fallback in fallbacks:
+                if not isinstance(fallback, dict) or set(fallback) != {"item_id", "code"}:
+                    refuse("claude_inbox_evidence_invalid", "each fallback needs only its item and typed reason")
+                item = fallback["item_id"]
+                if not isinstance(item, str) or item not in items or item in seen:
+                    refuse("claude_inbox_evidence_invalid", "fallback must name a unique delivered item")
+                seen.add(item)
+                _enum(fallback["code"], {"claude_inbox_unavailable", "claude_inbox_held",
+                    "claude_inbox_refused", "claude_inbox_unverified_version", "claude_inbox_unconfirmed"},
+                    "claude_inbox_fallback_code", refuse)
+        if kind == "delivery_receipt" and "bridge_publication" in record:
+            proof = record["bridge_publication"]
+            if not isinstance(proof, dict) or set(proof) != {
+                "invocation_id", "acting_session_id", "workspace", "output_digest"
+            }:
+                refuse("bridge_publication_invalid", "bridge publication needs its exact closed testimony fields")
+            _record_ref(proof["invocation_id"], "bridge-publication-", "invocation_id", refuse)
+            session = proof["acting_session_id"]
+            if not isinstance(session, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", session) is None or session.casefold() in {"all", "global"}:
+                refuse("bridge_publication_invalid", "bridge publication session is not an exact safe session")
+            if normalized_version == 1 and record["claude_inbox"]["acting_session_id"] != session:
+                refuse("claude_inbox_evidence_invalid", "fallback session differs from its native publication")
+            workspace = proof["workspace"]
+            _bounded_string(workspace, 1, 4096, "bridge_publication.workspace", refuse)
+            if _terminal_unsafe(workspace) or not Path(workspace).is_absolute() or workspace.startswith("//") or str(Path(workspace)) != workspace or ".." in Path(workspace).parts:
+                refuse("bridge_publication_invalid", "bridge publication workspace is not a normalized absolute path")
+            _sha256(proof["output_digest"], "bridge_publication.output_digest", refuse)
+            if not items:
+                refuse("bridge_publication_invalid", "bridge publication must name its nonempty exact envelope batch")
+        if kind == "delivered_unpresented":
+            evidence = record["presenter_evidence"]
+            if not isinstance(evidence, dict) or set(evidence) != {"shown", "reason", "sources"}:
+                refuse("presenter_evidence_invalid", "presenter evidence must have exactly shown, reason and sources")
+            if not isinstance(evidence["shown"], bool) or evidence["shown"]:
+                refuse("presenter_evidence_invalid", "an unpresented delivery cannot show its presenter alive")
+            _bounded_string(evidence["reason"], 1, 128, "presenter_evidence.reason", refuse)
+            if _terminal_unsafe(evidence["reason"]) or re.fullmatch(r"[a-z][a-z0-9_]{0,127}", evidence["reason"]) is None:
+                refuse("presenter_evidence_invalid", "presenter evidence reason must be a bounded code")
+            sources = evidence["sources"]
+            if not isinstance(sources, list) or len(sources) > 16:
+                refuse("presenter_evidence_invalid", "presenter evidence sources exceed their bound")
+            for source in sources:
+                if not isinstance(source, dict) or set(source) != {"path", "record_id"}:
+                    refuse("presenter_evidence_invalid", "presenter evidence source must name only path and record_id")
+                _bounded_string(source["path"], 1, 4096, "presenter_evidence.source.path", refuse)
+                if _terminal_unsafe(source["path"]):
+                    refuse("presenter_evidence_invalid", "presenter evidence source path is terminal-unsafe")
+                if source["record_id"] is not None:
+                    _bounded_string(source["record_id"], 1, 512, "presenter_evidence.source.record_id", refuse)
+                    if _terminal_unsafe(source["record_id"]):
+                        refuse("presenter_evidence_invalid", "presenter evidence source receipt is terminal-unsafe")
     elif kind == "wake_hold_receipt":
+        if "selection_reason" in record and record["selection_reason"] != "holder_released":
+            refuse("wake_hold_decision_digest_invalid", "release selection must name holder_released")
+        if normalized_version == 4:
+            import base64
+            import binascii
+
+            mask = record["inbound_hold_mask"]
+            valid = False
+            if isinstance(mask, str) and 4 <= len(mask) <= 16668:
+                try:
+                    raw = base64.b64decode(mask, validate=True)
+                    valid = 1 <= len(raw) <= 12500 and any(raw) and base64.b64encode(raw).decode("ascii") == mask
+                except (ValueError, binascii.Error):
+                    pass
+            if not valid:
+                refuse("wake_hold_decision_digest_invalid", "inbound hold mask must be bounded canonical base64")
+        if normalized_version == 3:
+            carried = record["carried_from"]
+            if not isinstance(carried, dict) or set(carried) != {"hold_id", "roll_receipt_id"}:
+                refuse("wake_hold_carried_from_invalid", "carried hold requires its exact predecessor and roll")
+            _record_ref(carried["hold_id"], "wake-hold-", "carried_from.hold_id", refuse)
+            _record_ref(carried["roll_receipt_id"], "bus-epoch-roll-receipt-", "carried_from.roll_receipt_id", refuse)
         ident("recipient")
         session = record["worker_session_id"]
         if session is not None:
@@ -1914,8 +2507,266 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             "decision_digest",
         ):
             _sha256(record[field], field, refuse)
-        if record["decision_digest"] != wake_hold_decision_digest(record):
+        # A roll-minted v3 row retains the original decision's digest as
+        # testimony; its new physical prefix axes are validated by the reader.
+        if normalized_version != 3 and record["decision_digest"] != wake_hold_decision_digest(record):
             refuse("wake_hold_decision_digest_invalid", "decision_digest must cover wake hold semantics")
+    elif kind == "cursor_presentation_receipt":
+        _record_ref(record["batch_id"], "cursor-presentation-", "batch_id", refuse)
+        ident("node_id")
+        from .wake_control import validate_session_id
+        try:
+            validate_session_id(record["acting_session_id"])
+        except ProtocolRefusal:
+            refuse("acting_session_id_invalid", "presentation requires one native session identity")
+        workspace = record["workspace"]
+        _bounded_string(workspace, 1, 4096, "workspace", refuse)
+        if (
+            _terminal_unsafe(workspace) or not workspace.startswith("/")
+            or (workspace != "/" and any(component in ("", ".", "..") for component in workspace[1:].split("/")))
+        ):
+            refuse("workspace_invalid", "presentation workspace must be canonical absolute terminal-safe text")
+        _record_ref(record["consent_receipt_id"], "codex-wait-consent-", "consent_receipt_id", refuse)
+        _enum(record["harness"], {"cursor", "codex"}, "harness", refuse)
+        if record["claim_receipt_id"] is None:
+            if record["harness"] != "cursor":
+                refuse("claim_receipt_id_invalid", "only Cursor testimony may omit its native claim receipt")
+        else:
+            _record_ref(record["claim_receipt_id"], "codex-wait-session-", "claim_receipt_id", refuse)
+        epoch = record["epoch_anchor"]
+        if not isinstance(epoch, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", epoch) is None:
+            refuse("epoch_anchor_invalid", "epoch anchor must be bounded safe identity text")
+        _enum(record["phase"], {"prepared", "flushed"}, "phase", refuse)
+        items = record["item_ids"]
+        if (
+            not isinstance(items, list) or not 1 <= len(items) <= 1000
+            or any(not isinstance(item, str) or re.fullmatch("msg-" + _UUID7, item) is None for item in items)
+            or len(set(items)) != len(items)
+        ):
+            refuse("item_ids_invalid", "presentation requires ordered unique exact message IDs")
+        for field in ("event_prefix_digest", "delivery_prefix_digest", "acknowledgment_prefix_digest", "output_digest"):
+            _sha256(record[field], field, refuse)
+        delivery = record["delivery_receipt_id"]
+        if record["phase"] == "prepared":
+            if delivery is not None:
+                refuse("delivery_receipt_id_invalid", "prepared presentation has no delivery receipt")
+        elif not isinstance(delivery, str) or re.fullmatch(r"(?:delivery-|wake-hold-)" + _UUID7, delivery) is None:
+            refuse("delivery_receipt_id_invalid", "flushed presentation requires its exact native delivery receipt")
+    elif kind in {"stop_hold_receipt", "send_readiness_observation"}:
+        if normalized_version != 1:
+            refuse("schema_version_invalid", "readiness testimony requires version one")
+        from .readiness_contract import validate_readiness_record
+        validate_readiness_record(record, refuse)
+    elif kind == "seat_teardown_epoch_verification":
+        _teardown_epoch_verification(record, refuse)
+    elif kind == "epoch_carry_verification":
+        _epoch_carry_verification(record, refuse)
+    elif kind == "seat_teardown_receipt":
+        if normalized_version not in {1, 2, 3}:
+            refuse("schema_version_invalid", "teardown receipts require version one, two or three")
+        if normalized_version == 3:
+            cutoff = record["inbound_hold_cutoff"]
+            if (not isinstance(cutoff, dict) or set(cutoff) != {"count", "digest"}
+                    or type(cutoff["count"]) is not int or not 1 <= cutoff["count"] <= 100000):
+                refuse("seat_teardown_record_invalid", "inbound hold cutoff is not a bounded prefix proof")
+            _sha256(cutoff["digest"], "inbound_hold_cutoff.digest", refuse)
+        for field in ("node_id", "envelope_recipient"):
+            _identifier(record[field]) or refuse("node_id_invalid", field + " must be an identifier")
+        for field, maximum in (("acting_session_id", 256), ("home", 4096), ("workspace", 4096), ("repo", 256), ("doc", 1024), ("report_note", 1024), ("idempotency_key", 128)):
+            _bounded_string(record[field], 1, maximum, field, refuse)
+            if _terminal_unsafe(record[field]):
+                refuse("seat_teardown_record_invalid", field + " is terminal-unsafe")
+        if not Path(record["home"]).is_absolute() or str(Path(record["home"]) / "repo") != record["workspace"]:
+            refuse("seat_teardown_record_invalid", "workspace must be HOME/repo")
+        for field in ("coordinate_digest", "workspace_map_digest"):
+            if not isinstance(record[field], str) or re.fullmatch(r"[0-9a-f]{64}", record[field]) is None:
+                refuse("seat_teardown_record_invalid", field + " must be a SHA-256 digest")
+        if not isinstance(record["pushed_tip"], str) or re.fullmatch(r"[0-9a-f]{40}", record["pushed_tip"]) is None:
+            refuse("seat_teardown_record_invalid", "report tip must be a full Git SHA")
+        _enum(record["step"], {"started", "paused", "reported", "completed"}, "step", refuse)
+        for field, prefix in (("started_receipt_id", "seat-teardown-"), ("claim_receipt_id", "codex-wait-session-"), ("consent_receipt_id", "codex-wait-consent-")):
+            _record_ref(record[field], prefix, field, refuse)
+        for field, prefix in (("pause_receipt_id", "wake-control-"), ("envelope_id", "msg-")):
+            if record[field] is not None:
+                _record_ref(record[field], prefix, field, refuse)
+        def prefix(value, label, native_prefix=None):
+            if not isinstance(value, dict) or set(value) != {"count", "last_id", "digest"}:
+                refuse("seat_teardown_record_invalid", label + " is not a closed prefix proof")
+            count = value["count"]
+            if type(count) is not int or not 0 <= count <= 100000:
+                refuse("seat_teardown_record_invalid", label + " count is outside native ledger bounds")
+            _sha256(value["digest"], label + ".digest", refuse)
+            last = value["last_id"]
+            if count == 0:
+                if last is not None:
+                    refuse("seat_teardown_record_invalid", label + " empty prefix must have null last ID")
+            else:
+                _bounded_string(last, 1, 128, label + ".last_id", refuse)
+                if _terminal_unsafe(last):
+                    refuse("seat_teardown_record_invalid", label + " last ID is terminal-unsafe")
+                if native_prefix is not None:
+                    _record_ref(last, native_prefix, label + ".last_id", refuse)
+        if normalized_version == 1:
+            for field in ("event_cutoff_ids", "ack_receipt_ids", "wake_cutoff_ids"):
+                items = record[field]
+                if not isinstance(items, list) or len(items) > 10000 or any(not isinstance(item, str) or len(item) > 128 or _terminal_unsafe(item) for item in items) or len(items) != len(set(items)):
+                    refuse("seat_teardown_record_invalid", field + " is not a bounded unique native prefix")
+        else:
+            prefix(record["event_cutoff"], "event_cutoff")
+            prefix(record["wake_cutoff"], "wake_cutoff", "wake-control-")
+        refs = record["ack_cutoff_refs"]
+        if not isinstance(refs, list) or not 1 <= len(refs) <= 1000:
+            refuse("seat_teardown_record_invalid", "ACK cutoff scopes are absent or out of bounds")
+        scopes = []
+        flattened = []
+        for item in refs:
+            expected = {"worker_session_id", "receipt_ids" if normalized_version == 1 else "prefix"}
+            if not isinstance(item, dict) or set(item) != expected:
+                refuse("seat_teardown_record_invalid", "ACK cutoff scope is malformed")
+            if item["worker_session_id"] is not None:
+                _opaque_identifier(item["worker_session_id"], "worker_session_id", refuse)
+            scopes.append(item["worker_session_id"])
+            if normalized_version == 1:
+                if not isinstance(item["receipt_ids"], list):
+                    refuse("seat_teardown_record_invalid", "ACK cutoff scope is malformed")
+                for identity in item["receipt_ids"]:
+                    _record_ref(identity, "ack-", "receipt_ids", refuse)
+                flattened.extend(item["receipt_ids"])
+            else:
+                prefix(item["prefix"], "ack_cutoff_refs.prefix", "ack-")
+        if len(scopes) != len(set(scopes)) or None not in scopes or (
+                normalized_version == 1 and flattened != record["ack_receipt_ids"]):
+            refuse("seat_teardown_record_invalid", "ACK cutoff scopes are duplicated or omit native references")
+        if normalized_version >= 2 and (
+                type(record["ack_scope_count"]) is not int or record["ack_scope_count"] != len(refs)):
+            refuse("seat_teardown_record_invalid", "ACK scope count differs from native scope inventory")
+        if not isinstance(record["pause_intent"], dict):
+            refuse("seat_teardown_record_invalid", "pause intent must be exact native evidence")
+        try:
+            validate_record(record["pause_intent"], expected_tenant, {"wake_control_receipt"}, integrity=integrity)
+        except ProtocolRefusal:
+            refuse("seat_teardown_record_invalid", "pause intent is malformed")
+        if record["step"] != "started" and record["pause_receipt_id"] != record["pause_intent"]["id"]:
+            refuse("seat_teardown_record_invalid", "phase lacks its exact native pause reference")
+        if record["step"] in {"reported", "completed"} and record["envelope_id"] is None:
+            refuse("seat_teardown_record_invalid", "report phase lacks native envelope")
+        if record["step"] == "started" and (record["pause_receipt_id"] is not None or record["envelope_id"] is not None):
+            refuse("seat_teardown_record_invalid", "started phase cannot claim native effects")
+        if record["step"] == "paused" and record["envelope_id"] is not None:
+            refuse("seat_teardown_record_invalid", "paused phase cannot claim a report")
+        activity_fields = {"workspace_set", "worktrees", "native_jobs", "native_unknown", "native_roots", "exempt_ancestry", "native_scope"}
+        if not isinstance(record["activity"], dict) or not activity_fields <= set(record["activity"]) <= activity_fields | {"native_host_workers", "retired_waiters"} or any(not isinstance(record["activity"][f], list) for f in ("workspace_set", "worktrees", "native_jobs", "native_unknown", "native_roots", "exempt_ancestry")):
+            refuse("seat_teardown_record_invalid", "activity testimony is malformed")
+        scope = record["activity"]["native_scope"]
+        if (not isinstance(scope, dict) or set(scope) != {"population", "uid"} or
+                scope["population"] != "invoking_uid" or type(scope["uid"]) is not int or
+                not 0 <= scope["uid"] <= 4294967295):
+            refuse("seat_teardown_record_invalid", "activity native scope must identify the invoking UID")
+        if not record["activity"]["workspace_set"] or record["workspace"] not in record["activity"]["workspace_set"] or record["activity"]["native_jobs"]:
+            refuse("seat_teardown_record_invalid", "activity testimony lacks primary or has native jobs")
+        activity = record["activity"]
+        for field, bound in (("native_host_workers", 100000), ("retired_waiters", 1)):
+            process_rows = activity.get(field, [])
+            if not isinstance(process_rows, list) or len(process_rows) > bound:
+                refuse("seat_teardown_record_invalid", "native process testimony exceeds its bound")
+            process_ids = []
+            for item in process_rows:
+                fields = {"pid", "process_start_epoch", "executable", "reason"} if field == "native_host_workers" else {
+                    "pid", "process_start_epoch", "invocation_id", "start_receipt_id", "exit_receipt_id", "reason"}
+                zcode_host = (field == "native_host_workers" and isinstance(item, dict) and
+                    item.get("reason") == "zcode_declared_session_host")
+                if zcode_host and normalized_version == 2:
+                    fields = fields | {"declaring_source"}
+                if (not isinstance(item, dict) or set(item) != fields or
+                        type(item["pid"]) is not int or not 0 < item["pid"] <= 2147483647 or
+                        type(item["process_start_epoch"]) not in (int, float) or
+                        not 0 < item["process_start_epoch"] <= 253402300799 or
+                        not math.isfinite(item["process_start_epoch"])):
+                    refuse("seat_teardown_record_invalid", "native process identity lacks bounded PID and birth")
+                process_ids.append(item["pid"])
+                if field == "native_host_workers":
+                    executable = item["executable"]
+                    if ((item["reason"] != "cursor_managed_agent_exact_workspace" and
+                            not (zcode_host and normalized_version == 2)) or
+                            not isinstance(executable, str) or not 1 <= len(executable) <= 4096 or
+                            _terminal_unsafe(executable) or not Path(executable).is_absolute() or
+                            str(Path(executable)) != executable or ".." in Path(executable).parts):
+                        refuse("seat_teardown_record_invalid", "host attribution lacks a named managed executable")
+                    if zcode_host:
+                        source = item["declaring_source"]
+                        if (not isinstance(source, dict) or
+                                not isinstance(source.get("kind"), str) or
+                                source.get("kind") not in {"binding", "bundle", "config"} or
+                                set(source) != ({"kind", "path", "server"} if source.get("kind") == "config"
+                                                else {"kind", "path"})):
+                            refuse("seat_teardown_record_invalid", "host attribution lacks its exact declaring source")
+                        path = source["path"]
+                        if (not isinstance(path, str) or not 1 <= len(path) <= 4096 or
+                                _terminal_unsafe(path) or not Path(path).is_absolute() or
+                                str(Path(path)) != path or path.startswith("//") or
+                                ".." in Path(path).parts or
+                                (source["kind"] == "bundle" and Path(path).suffix != ".app")):
+                            refuse("seat_teardown_record_invalid", "host declaring source path is not canonical")
+                        if source["kind"] == "config" and (
+                                not isinstance(source["server"], str) or not 1 <= len(source["server"]) <= 256 or
+                                _terminal_unsafe(source["server"])):
+                            refuse("seat_teardown_record_invalid", "host declaring server is not bounded and terminal-safe")
+                else:
+                    if item["reason"] != "teardown_requested" or item["invocation_id"] != item["start_receipt_id"]:
+                        refuse("seat_teardown_record_invalid", "waiter retirement lacks its exact native start")
+                    for reference in ("invocation_id", "start_receipt_id", "exit_receipt_id"):
+                        _record_ref(item[reference], "stop-hold-", reference, refuse)
+                    if item["exit_receipt_id"] == item["start_receipt_id"]:
+                        refuse("seat_teardown_record_invalid", "waiter retirement lacks a distinct native exit")
+            if process_ids != sorted(set(process_ids)):
+                refuse("seat_teardown_record_invalid", "native process identities must be sorted and unique")
+        roots = activity["native_roots"]
+        if (not 1 <= len(roots) <= 10000 or record["home"] not in roots or
+                any(not isinstance(value,str) or not 1 <= len(value) <= 4096 or _terminal_unsafe(value) or not Path(value).is_absolute() or str(Path(value)) != value or ".." in Path(value).parts for value in roots) or roots != sorted(set(roots))):
+            refuse("seat_teardown_record_invalid", "native roots must be canonical sorted unique locations including the declared home")
+        unknown = activity["native_unknown"]
+        if len(unknown) > 100000:
+            refuse("seat_teardown_record_invalid", "native UNKNOWN cutoff exceeds its process bound")
+        pids = []
+        for item in unknown:
+            if (not isinstance(item,dict) or set(item) != {"pid", "reason", "receipt_ids"} or
+                    type(item["pid"]) is not int or not 0 < item["pid"] <= 2147483647 or
+                    not isinstance(item["reason"],str) or item["reason"] not in {"cwd_missing", "cwd_unreadable", "cwd_unresolvable"} or item["receipt_ids"] != []):
+                refuse("seat_teardown_record_invalid", "successful UNKNOWN testimony requires an unnamed bounded PID and closed reason")
+            pids.append(item["pid"])
+        if pids != sorted(set(pids)):
+            refuse("seat_teardown_record_invalid", "native UNKNOWN PIDs must be sorted and unique")
+        workspaces = activity["workspace_set"]
+        if len(workspaces) > 10000 or any(not isinstance(value, str) or len(value) > 4096 or _terminal_unsafe(value) or not Path(value).is_absolute() or str(Path(value)) != value or ".." in Path(value).parts for value in workspaces) or workspaces != sorted(set(workspaces)):
+            refuse("seat_teardown_record_invalid", "activity workspace inventory is not canonical, sorted and unique")
+        observed = []
+        for item in activity["worktrees"]:
+            if not isinstance(item, dict) or set(item) != {"workspace", "head", "tracked_changes", "untracked_files", "unpushed_commits"}:
+                refuse("seat_teardown_record_invalid", "activity workspace row is malformed")
+            if not isinstance(item["head"], str) or re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", item["head"]) is None or any(item[f] != [] for f in ("tracked_changes", "untracked_files", "unpushed_commits")):
+                refuse("seat_teardown_record_invalid", "activity workspace lacks clean, banked HEAD testimony")
+            observed.append(item["workspace"])
+        if observed != workspaces:
+            refuse("seat_teardown_record_invalid", "activity rows differ from the complete workspace inventory")
+        ancestry = activity["exempt_ancestry"]
+        if not 1 <= len(ancestry) <= 256 or any(type(pid) is not int or pid <= 0 for pid in ancestry) or len(set(ancestry)) != len(ancestry):
+            refuse("seat_teardown_record_invalid", "activity ancestry testimony is absent, malformed or duplicated")
+        if not isinstance(record["work_evidence"], dict) or set(record["work_evidence"]) != {"work_item_ids", "worker_session_ids", "thread_attachment_ids"} or any(not isinstance(items, list) for items in record["work_evidence"].values()):
+            refuse("seat_teardown_record_invalid", "governed work testimony is malformed")
+        for field, items in record["work_evidence"].items():
+            if len(items) > 10000 or any(not isinstance(item, str) or not 1 <= len(item) <= 128 or _terminal_unsafe(item) for item in items) or len(set(items)) != len(items):
+                refuse("seat_teardown_record_invalid", "governed work IDs must be bounded, unique terminal-safe strings")
+            if field == "work_item_ids":
+                for identity in items:
+                    _record_ref(identity, "work-", field, refuse)
+            elif field == "thread_attachment_ids":
+                for identity in items:
+                    _record_ref(identity, "thread-attachment-", field, refuse)
+        abandoned = record["abandoned_pause_intents"]
+        if not isinstance(abandoned, list) or len(abandoned) > 100 or any(not isinstance(item, dict) or set(item) != {"pause_intent_id", "marker_absent", "receipt_absent", "native_key_absent"} or any(item[f] is not True for f in ("marker_absent", "receipt_absent", "native_key_absent")) for item in abandoned):
+            refuse("seat_teardown_record_invalid", "abandoned intents require explicit no-effect proof")
+        for item in abandoned:
+            _record_ref(item["pause_intent_id"], "wake-control-", "pause_intent_id", refuse)
     elif kind == "seat_board_receipt":
         if normalized_version != 1:
             refuse("schema_version_invalid", "boarding receipts require version one")
@@ -1945,6 +2796,80 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             refuse("seat_board_step_invalid", "boarding step lacks resume evidence")
         if record["step"] == "completed" and items and (record["delivery_receipt_id"] is None or record["ack_receipt_id"] is None):
             refuse("seat_board_step_invalid", "completed batch lacks delivery or acknowledgment evidence")
+        if "message_progress" in record:
+            progress = record["message_progress"]
+            counts = {"delivered", "acknowledged", "consumed"}
+            if record["step"] != "completed" or not isinstance(progress, dict):
+                refuse("seat_board_progress_invalid", "progress requires a completed exact batch")
+            if set(progress) == counts | {"state", "reason_code"}:
+                reason = progress["reason_code"]
+                if (progress["state"] != "unknown" or not isinstance(reason, str)
+                        or re.fullmatch(r"[a-z][a-z0-9_]{0,127}", reason) is None
+                        or any(progress[name] is not None for name in counts)):
+                    refuse("seat_board_progress_invalid", "unknown batch progress requires a stable reason and null counts")
+            elif set(progress) == counts:
+                if any(type(value) is not int or not 0 <= value <= len(items) for value in progress.values()):
+                    refuse("seat_board_progress_invalid", "batch progress counts are invalid")
+                if progress["delivered"] != len(items) or progress["acknowledged"] != len(items):
+                    refuse("seat_board_progress_invalid", "completed batch requires delivered and acknowledged counts")
+                if progress["consumed"] != 0:
+                    refuse("seat_board_progress_invalid", "boarding cannot author ACTED for its newly drained batch")
+            else:
+                refuse("seat_board_progress_invalid", "progress requires exact counted or unknown fields")
+    elif kind == "seat_migration_receipt":
+        if normalized_version != 1:
+            refuse("schema_version_invalid", "migration receipts require version one")
+        _identifier(record["node_id"]) or refuse("node_id_invalid", "node_id must be an identifier")
+        _identifier(record["coordinator"]) or refuse("node_id_invalid", "coordinator must be an identifier")
+        for field in ("workspace", "idempotency_key"):
+            _bounded_string(record[field], 1, 1024 if field == "workspace" else 128, field, refuse)
+        if _terminal_unsafe(record["workspace"]) or _terminal_unsafe(record["idempotency_key"]):
+            refuse("seat_migration_record_invalid", "migration identity is terminal-unsafe")
+        if not isinstance(record["coordinate_digest"], str) or re.fullmatch(r"[0-9a-f]{64}", record["coordinate_digest"]) is None:
+            refuse("seat_migration_record_invalid", "migration coordinate digest is invalid")
+        for field in ("declaration_created", "governance_created"):
+            if not isinstance(record[field], bool):
+                refuse("seat_migration_record_invalid", field + " must be a boolean")
+    elif kind == "retired_home_disarm_receipt":
+        if normalized_version != 1:
+            refuse("schema_version_invalid", "disarm receipts require version one")
+        _identifier(record["node_id"]) or refuse("node_id_invalid", "node_id must be an identifier")
+        if record["new_home"] is not None:
+            _bounded_string(record["new_home"], 1, 1024, "new_home", refuse)
+            _terminal_unsafe(record["new_home"]) and refuse("retired_home_disarm_record_invalid", "new_home is terminal-unsafe")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        homes = record["homes_examined"]
+        if not isinstance(homes, list) or len(homes) > 64 or any(not isinstance(home, str) for home in homes):
+            refuse("retired_home_disarm_record_invalid", "homes_examined is not a bounded list of paths")
+        for home in homes:
+            _bounded_string(home, 1, 1024, "homes_examined", refuse)
+            _terminal_unsafe(home) and refuse("retired_home_disarm_record_invalid", "homes_examined is terminal-unsafe")
+        disarmed = record["disarmed"]
+        if not isinstance(disarmed, list) or len(disarmed) > 256:
+            refuse("retired_home_disarm_record_invalid", "disarmed is not a bounded list")
+        for entry in disarmed:
+            if not isinstance(entry, dict) or not set(entry) <= {"config", "removed", "commands", "before_sha256", "after_sha256", "outcome"}:
+                refuse("retired_home_disarm_record_invalid", "disarmed entry has an unknown field")
+            _bounded_string(entry["config"], 1, 1024, "disarmed.config", refuse)
+            _terminal_unsafe(entry["config"]) and refuse("retired_home_disarm_record_invalid", "disarmed config is terminal-unsafe")
+            removed = entry.get("removed")
+            if not isinstance(removed, int) or isinstance(removed, bool) or removed < 0:
+                refuse("retired_home_disarm_record_invalid", "disarmed removed must be a non-negative integer")
+            commands = entry.get("commands")
+            if not isinstance(commands, list) or len(commands) > 256 or any(not isinstance(command, str) for command in commands):
+                refuse("retired_home_disarm_record_invalid", "disarmed commands is not a bounded list")
+            for command in commands:
+                _bounded_string(command, 0, 4096, "disarmed.commands", refuse)
+            if entry.get("outcome") is not None:
+                _enum(entry["outcome"], {"unreadable"}, "disarmed.outcome", refuse)
+                if removed != 0:
+                    refuse("retired_home_disarm_record_invalid", "an unreadable config cannot report removals")
+            for field in ("before_sha256", "after_sha256"):
+                value = entry.get(field)
+                if value is not None and (not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None):
+                    refuse("retired_home_disarm_record_invalid", field + " must be a sha256 hex digest")
+            if (entry.get("before_sha256") is None) != (entry.get("after_sha256") is None):
+                refuse("retired_home_disarm_record_invalid", "byte digests stand or fall together")
     elif kind == "wake_attempt_receipt":
         ident("node_id")
         _opaque_identifier(record["acting_session_id"], "acting_session_id", refuse)
@@ -1968,13 +2893,17 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _enum(record["outcome"], {"woke", "queued", "refused"}, "outcome", refuse)
         decision_id = record["decision_receipt_id"]
         reason_code = record["reason_code"]
+        decision_prefix = (
+            "cursor-presentation-" if isinstance(decision_id, str)
+            and decision_id.startswith("cursor-presentation-") else "wake-hold-"
+        )
         if record["outcome"] in {"woke", "queued"}:
-            _record_ref(decision_id, "wake-hold-", "decision_receipt_id", refuse)
+            _record_ref(decision_id, decision_prefix, "decision_receipt_id", refuse)
             if reason_code is not None:
                 refuse("reason_code_invalid", "an accepted wake attempt has no refusal reason")
         else:
             if decision_id is not None:
-                _record_ref(decision_id, "wake-hold-", "decision_receipt_id", refuse)
+                _record_ref(decision_id, decision_prefix, "decision_receipt_id", refuse)
             _enum(
                 reason_code,
                 WAKE_ATTEMPT_REFUSED_REASONS,
@@ -2067,6 +2996,15 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             )
         if record["operation"] == "takeover" and predecessor is None:
             refuse("codex_wait_session_predecessor_invalid", "takeover requires its predecessor")
+        superseded = record.get("claim_superseded_dead")
+        if superseded is not None:
+            if not isinstance(superseded, dict) or set(superseded) != {"claimant", "evidence"}:
+                refuse("claim_superseded_dead_invalid", "claim supersession evidence is malformed")
+            else:
+                _opaque_identifier(superseded["claimant"], "claim_superseded_dead.claimant", refuse)
+                _enum(superseded["evidence"], {"runtime_missing"}, "claim_superseded_dead.evidence", refuse)
+            if record["operation"] != "takeover" or predecessor is None:
+                refuse("claim_superseded_dead_invalid", "a supersession receipt needs its dead predecessor")
         if record["operation"] != "takeover" and predecessor is not None:
             refuse("codex_wait_session_predecessor_invalid", "initial arm or claim has no predecessor")
         _record_ref(
@@ -2089,11 +3027,15 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     elif kind == "wake_waiter_exit_receipt":
         ident("node_id")
         _sha256(record["session_digest"], "session_digest", refuse)
-        _enum(record["reason_code"], {"exhausted", "paused", "not_claimant", "consent_withdrawn", "breaker", "integrity_failure"}, "reason_code", refuse)
+        _enum(record["reason_code"], {"exhausted", "paused", "not_claimant", "consent_withdrawn", "breaker", "integrity_failure", "superseded_session", "observed_item"}, "reason_code", refuse)
         integer("waited_seconds", 0, 86399)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
         if _terminal_unsafe(record["idempotency_key"]):
             refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
+        if "integrity_failure" in record:
+            if record["reason_code"] != "integrity_failure":
+                refuse("record_fields_invalid", "integrity diagnostics require an integrity failure exit")
+            _wake_exit_integrity_failure(record["integrity_failure"], refuse)
     elif kind == "confluence_grant":
         _bounded_string(record["consumer"], 1, 64, "consumer", refuse)
         _enum(record["state"], {"granted", "revoked"}, "state", refuse)
@@ -2154,6 +3096,17 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _record_ref(predecessor, "wake-daemon-consent-", "predecessor_receipt_id", refuse)
         if record["operation"] == "revoke" and predecessor is None:
             refuse("wake_daemon_consent_predecessor_invalid", "revoke requires its active predecessor")
+        if record.get("idle_retire_days") is not None:
+            days = record["idle_retire_days"]
+            if (
+                isinstance(days, bool)
+                or not isinstance(days, int)
+                or not 0 <= days <= 3650
+            ):
+                refuse(
+                    "idle_retire_days_invalid",
+                    "idle_retire_days must be an integer 0 through 3650",
+                )
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
     elif kind == "wake_daemon_lifecycle_receipt":
         ident("node_id")
@@ -2184,6 +3137,68 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         predecessor = record["predecessor_receipt_id"]
         if predecessor is not None:
             _record_ref(predecessor, "wake-daemon-lifecycle-", "predecessor_receipt_id", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+    elif kind == "wake_daemon_directory_ownership_record":
+        ident("node_id")
+        _enum(record["harness"], {"codex", "cursor", "grok-build", "zcode"}, "harness", refuse)
+        _sha256(record["coordinate_digest"], "coordinate_digest", refuse)
+        _record_ref(record["lifecycle_receipt_id"], "wake-daemon-lifecycle-", "lifecycle_receipt_id", refuse)
+        _sha256(record["unit_digest"], "unit_digest", refuse)
+        unit_path = record["unit_path"]
+        if (
+            not isinstance(unit_path, str)
+            or "\0" in unit_path
+            or not Path(unit_path).is_absolute()
+            or str(Path(unit_path)) != unit_path
+            or ".." in Path(unit_path).parts
+            or unit_path.startswith("//")
+        ):
+            refuse("unit_path_invalid", "unit path must be a normalized absolute path")
+        directories = record["created_directories"]
+        if not isinstance(directories, list) or len(directories) > 3:
+            refuse("created_directories_invalid", "created directories must be a list of at most three entries")
+        paths = set()
+        for directory in directories:
+            if not isinstance(directory, dict) or set(directory) != {"path", "device", "inode"}:
+                refuse("created_directories_invalid", "created directory entries must contain path, device and inode")
+            path = directory["path"]
+            if (
+                not isinstance(path, str)
+                or "\0" in path
+                or not Path(path).is_absolute()
+                or str(Path(path)) != path
+                or ".." in Path(path).parts
+                or path.startswith("//")
+                or path in paths
+            ):
+                refuse("created_directories_invalid", "created directory paths must be distinct normalized absolute paths")
+            paths.add(path)
+            for field, minimum in (("device", 0), ("inode", 1)):
+                value = directory[field]
+                if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                    refuse("created_directories_invalid", "created directory device and inode must be bounded below integers")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+    elif kind == "codex_binding_repair_receipt":
+        ident("node_id")
+        for field in ("coordinate_digest", "old_executable_digest", "new_executable_digest"):
+            _sha256(record[field], field, refuse)
+        _record_ref(record["arm_receipt_id"], "codex-wait-session-", "arm_receipt_id", refuse)
+        _bounded_string(record["acting_session_id"], 1, 512, "acting_session_id", refuse)
+        for field in ("workspace", "declared_executable", "old_executable", "new_executable"):
+            value = record[field]
+            _bounded_string(value, 1, 4096, field, refuse)
+            if (not Path(value).is_absolute() or str(Path(value)) != value
+                    or ".." in Path(value).parts or value.startswith("//")):
+                refuse(f"{field}_invalid", f"{field} must be a normalized absolute path")
+        _bounded_string(record["provider_banner"], 1, 256, "provider_banner", refuse)
+        if re.fullmatch(
+            r"codex-cli [0-9]+\.[0-9]+\.[0-9]+"
+            r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+            record["provider_banner"],
+        ) is None:
+            refuse("provider_banner_invalid", "provider banner must be one Codex version line")
+        _enum(record["reason"], {"recorded_path_vanished"}, "reason", refuse)
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
     elif kind == "timing_receipt":
         _bounded_string(record["command"], 1, 64, "command", refuse)
@@ -2248,10 +3263,181 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         ident("node_id")
         _enum(record["cause"], {"self_wake", "external_injection", "resurrection"}, "cause", refuse)
         integer("context_bytes", 0, 65536); integer("wake_count", 1, 1000000)
+    elif kind == "seat_execution":
+        if record["schema_version"] != 1:
+            refuse("schema_version_invalid", "execution testimony requires schema version one")
+        ident("node_id")
+        for field in ("acting_session_id", "invocation_id", "source_receipt_id"):
+            _bounded_string(record[field], 1, 128, field, refuse)
+        for field, prefix in (("work_item_id", "work-"), ("work_claim_id", "transition-")):
+            if not isinstance(record[field], str) or re.fullmatch(prefix + _UUID7, record[field]) is None:
+                refuse("seat_execution_binding_invalid", "execution needs native work and claim IDs")
+        host_source = record["source_kind"] in ("codex_host", "cursor_host", "cursor_tool", "desktop_host")
+        _enum(record["source_kind"], {"worker", "cursor", "gateway", "codex_tool",
+                                     "codex_host", "cursor_host", "cursor_tool", "desktop_host"}, "source_kind", refuse)
+        _sha256(record["source_pin"], "source_pin", refuse)
+        binding = record["source_binding"]
+        if host_source:
+            common = {"contract_pin", "consent_receipt_id", "session_claim_id"}
+            if record["source_kind"] == "desktop_host":
+                fields = common | {"harness", "hook_event_name", "notification_type",
+                    "native_prompt_id", "native_timestamp", "native_event_id", "observed_at"}
+            elif record["source_kind"] == "codex_host":
+                fields = common | {"hook_event_name", "turn_id", "observed_sequence", "observed_at", "tool_name"}
+            elif record["source_kind"] == "cursor_host":
+                fields = common | {"cursor_version", "conversation_id", "generation_id", "loop_count", "status"}
+            else:
+                fields = common | {"cursor_version", "hook_event_name", "conversation_id", "generation_id",
+                                   "tool_use_id", "tool_name", "failure_type", "observed_at"}
+            if not isinstance(binding, dict) or set(binding) != fields:
+                refuse("seat_execution_binding_invalid", "host observation requires its exact closed native binding")
+            for field in ("consent_receipt_id", "session_claim_id"):
+                _bounded_string(binding[field], 1, 128, field, refuse)
+            if record["source_receipt_id"] != binding["session_claim_id"]:
+                refuse("seat_execution_binding_invalid", "host source receipt must equal its native session claim")
+            if record["source_kind"] == "desktop_host":
+                if binding["contract_pin"] != "167b2548837b5ed8163c850355fe125f8c0b6a9c81961188c807740d9e2eb952":
+                    refuse("seat_execution_binding_invalid", "desktop notification needs its pinned contract")
+                _enum(binding["harness"], {"claude", "grok-build", "opencode"}, "harness", refuse)
+                _enum(binding["notification_type"], {"permission_prompt", "idle_prompt"}, "notification_type", refuse)
+                expected = "approval_pending" if binding["notification_type"] == "permission_prompt" else "ended"
+                if record["event"] != expected:
+                    refuse("seat_execution_binding_invalid", "notification type must match its observed outcome")
+                _timestamp_value(binding["observed_at"], "observed_at", refuse)
+                if binding["harness"] == "opencode":
+                    if binding["hook_event_name"] != ("permission.asked" if expected == "approval_pending" else "session.idle") or binding["native_prompt_id"] is not None or binding["native_timestamp"] is not None:
+                        refuse("seat_execution_binding_invalid", "OpenCode requires its native plugin event and absent invented prompt/clock")
+                    _bounded_string(binding["native_event_id"], 1, 128, "native_event_id", refuse)
+                elif binding["native_event_id"] is not None:
+                    refuse("seat_execution_binding_invalid", "this native host has no event ID")
+                elif binding["harness"] == "claude":
+                    if binding["hook_event_name"] != "Notification" or binding["native_timestamp"] is not None or not isinstance(binding["native_prompt_id"], str) or re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", binding["native_prompt_id"]) is None:
+                        refuse("seat_execution_binding_invalid", "Claude notification needs its native prompt UUID and absent timestamp")
+                else:
+                    if binding["hook_event_name"] != "notification":
+                        refuse("seat_execution_binding_invalid", "Grok notification needs its native event name")
+                    _bounded_string(binding["native_timestamp"], 1, 128, "native_timestamp", refuse)
+                    try:
+                        native_stamp = datetime.fromisoformat(binding["native_timestamp"].replace("Z", "+00:00"))
+                        if native_stamp.tzinfo is None or native_stamp.utcoffset() is None:
+                            raise ValueError("native dispatch timestamp has no offset")
+                    except ValueError:
+                        refuse("seat_execution_binding_invalid", "Grok dispatch timestamp requires a native date-time with offset")
+                    if expected == "approval_pending":
+                        _bounded_string(binding["native_prompt_id"], 1, 128, "native_prompt_id", refuse)
+                    elif binding["native_prompt_id"] is not None:
+                        refuse("seat_execution_binding_invalid", "Grok idle notification has no native prompt identity")
+            elif record["source_kind"] == "codex_host":
+                _bounded_string(binding["turn_id"], 1, 128, "turn_id", refuse)
+                sequence = _json_integer(binding["observed_sequence"])
+                if sequence is None or sequence < 1:
+                    refuse("seat_execution_binding_invalid", "host observation sequence must be a positive integer")
+                _timestamp_value(binding["observed_at"], "observed_at", refuse)
+                if binding["hook_event_name"] == "PermissionRequest":
+                    if binding["contract_pin"] != "75c73d7a38cfc0e73ef06bd1fc506a44d25874522069ec4fb85e0bf1e7d6b8fb" or record["event"] != "permission_quiet":
+                        refuse("seat_execution_binding_invalid", "permission fact requires the pinned PermissionRequest contract")
+                    _bounded_string(binding["tool_name"], 1, 128, "tool_name", refuse)
+                elif binding["hook_event_name"] == "Interrupt":
+                    if binding["contract_pin"] != "be37402db3524543efe1e4058e6b9a3a53f7dd8f7791a9b75bb2accf7842196e" or record["event"] != "interrupted" or binding["tool_name"] is not None:
+                        refuse("seat_execution_binding_invalid", "interrupt fact requires its pinned contract and absent tool")
+                else:
+                    refuse("seat_execution_binding_invalid", "Codex host observation event is unsupported")
+            else:
+                if binding["contract_pin"] != "044ce0931100af5fe95403e9a692b02932bc3e13a6763f576b851f503fefa518" or binding["cursor_version"] != "3.24.12":
+                    refuse("seat_execution_binding_invalid", "Cursor host observation needs the measured native contract and version")
+                for field in ("conversation_id", "generation_id"):
+                    _bounded_string(binding[field], 1, 128, field, refuse)
+                if record["source_kind"] == "cursor_host":
+                    loop_count = _json_integer(binding["loop_count"])
+                    if loop_count is None or loop_count < 0:
+                        refuse("seat_execution_binding_invalid", "Cursor loop count must be a nonnegative integer")
+                    _enum(binding["status"], {"completed", "aborted", "error"}, "status", refuse)
+                else:
+                    if binding["hook_event_name"] != "postToolUseFailure" or binding["failure_type"] != "permission_denied":
+                        refuse("seat_execution_binding_invalid", "Cursor denial fact requires native permission_denied testimony")
+                    for field in ("tool_use_id", "tool_name"):
+                        _bounded_string(binding[field], 1, 128, field, refuse)
+                    _timestamp_value(binding["observed_at"], "observed_at", refuse)
+        elif record["source_kind"] == "codex_tool":
+            if not isinstance(binding, dict) or set(binding) != {
+                "contract_pin", "turn_id", "tool_use_id", "tool_name",
+                "consent_receipt_id", "session_claim_id"
+            }:
+                refuse("seat_execution_binding_invalid", "host source needs the exact retained PostToolUse binding")
+            if binding["contract_pin"] != "8ea1e4bccb262fad05b85c300d562d2653c5a64118d6a2c5704468fc4ea836a9" or binding["tool_name"] != "Bash":
+                refuse("seat_execution_binding_invalid", "host source needs the pinned main-thread Bash contract")
+            for field in ("turn_id", "tool_use_id", "consent_receipt_id", "session_claim_id"):
+                _bounded_string(binding[field], 1, 128, field, refuse)
+            if record["source_receipt_id"] != binding["session_claim_id"]:
+                refuse("seat_execution_binding_invalid", "host source receipt must equal its native session claim")
+        elif binding != "absent_legacy":
+            if record["source_kind"] != "worker" or not isinstance(binding, dict) or set(binding) != {
+                "run_id", "attempt_id", "binding_record_id", "attempt_binding"
+            }:
+                refuse("seat_execution_binding_invalid", "execution source needs an exact native worker join or absent_legacy")
+            for field in ("run_id", "attempt_id", "binding_record_id"):
+                _opaque_identifier(binding[field], field, refuse)
+            _attempt_binding(binding["attempt_binding"], record["acting_session_id"], refuse)
+            if not isinstance(binding["attempt_binding"], dict) or binding["attempt_id"] != binding["attempt_binding"]["attempt_id"]:
+                refuse("seat_execution_binding_invalid", "source attempt must equal its retained attempt binding")
+        _bounded_string(record["workspace"], 1, 4096, "workspace", refuse)
+        if not record["workspace"].startswith("/") or str(Path(record["workspace"])) != record["workspace"] or any(part in {".", ".."} for part in record["workspace"].split("/")[1:]):
+            refuse("seat_execution_binding_invalid", "execution workspace must be an absolute ordinary coordinate")
+        _enum(record["event"], {"running", "ended", "refused_action", "followup_failed", "unknown",
+                              "permission_quiet", "interrupted", "tool_request_refused", "approval_pending"}, "event", refuse)
+        if record['event'] not in {
+            'worker': {'running', 'ended', 'unknown'},
+            'cursor': {'running', 'followup_failed', 'unknown'},
+            'gateway': {'running', 'refused_action', 'unknown'},
+            'codex_tool': {'running', 'refused_action'},
+            'codex_host': {'permission_quiet', 'interrupted'},
+            'cursor_host': {'ended'},
+            'cursor_tool': {'tool_request_refused'},
+            'desktop_host': {'approval_pending', 'ended'},
+        }[record['source_kind']]:
+            refuse('seat_execution_source_invalid', 'execution event is unsupported by its native source')
+        if host_source:
+            if any(record[field] is not None for field in ("command", "code", "detail")):
+                refuse("seat_execution_detail_invalid", "host lifecycle command, refusal code and body must be typed absent")
+        else:
+            if record["code"] is not None:
+                _bounded_string(record["code"], 1, 128, "code", refuse)
+            _bounded_string(record["command"], 1, 1024, "command", refuse)
+            # Refusal BODY is preserved as data, including line breaks; renderers
+            # escape it. Never print this field as terminal control text.
+            if not isinstance(record["detail"], str) or len(record["detail"]) > 8192:
+                refuse("seat_execution_detail_invalid", "execution detail must be bounded text")
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if record["envelope_id"] is not None and (not isinstance(record["envelope_id"], str) or re.fullmatch("msg-" + _UUID7, record["envelope_id"]) is None):
+            refuse("seat_execution_envelope_invalid", "notice must name a native message ID")
+        if not host_source and (record["event"] == "running") != (record["code"] is None):
+            refuse("seat_execution_code_invalid", "only running testimony has no cause code")
     elif kind == "work_item":
+        if record["schema_version"] == 2:
+            from .adhoc_workspace import validate_borrowed_binding
+            try:
+                borrowed = validate_borrowed_binding(record["adhoc_binding"])
+            except ProtocolRefusal:
+                refuse("adhoc_binding_changed", "version two work requires a closed borrowed binding")
+            if record["workspace"] != borrowed["workspace"]:
+                refuse("adhoc_binding_changed", "borrowed work and profile workspace must agree")
+        if record["schema_version"] == 1 and "car_binding" not in record:
+            refuse("car_binding_invalid", "version one work items require a structured car binding")
         _bounded_string(record["title"], 1, 256, "title", refuse)
         ident("owner")
         _artifact_bindings(record["artifact_bindings"], refuse)
+        if "car_binding" in record:
+            if record["schema_version"] != 1:
+                refuse("schema_version_invalid", "structured car items require schema version one")
+            car = record["car_binding"]
+            if not isinstance(car, dict) or set(car) != {"row", "repository", "branch"}:
+                refuse("car_binding_invalid", "car binding must name exactly row, repository and branch")
+            for field in ("row", "repository", "branch"):
+                _bounded_string(car[field], 1, 256, "car_" + field, refuse)
+                if not isinstance(car[field], str) or re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", car[field]) is None or any(part in {".", ".."} for part in car[field].split("/")):
+                    refuse("car_binding_invalid", "car coordinates must be lexical, bounded and terminal-safe")
+            if not any(binding["repo"] == car["repository"] for binding in record["artifact_bindings"]):
+                refuse("car_binding_invalid", "car repository needs a recorded Git artifact binding")
         needs = record.get("needs", [])
         if not isinstance(needs, list) or len(needs) > 64:
             refuse("needs_invalid", "needs must contain at most 64 work ids")
@@ -2264,7 +3450,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             ):
                 refuse("needs_invalid", "needs must contain unique work UUIDv7 ids")
             seen_needs.add(dependency)
-        if "workspace" in record:
+        if "workspace" in record and record["schema_version"] != 2:
             workspace = record["workspace"]
             if workspace is not None and (
                 not _worker_workspace_shape(workspace)
@@ -2302,6 +3488,28 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         _bounded_string(record["title"], 1, 256, "title", refuse)
         _run_item_id(record["work_item_id"], "work_item_id", refuse)
         _sha256(record["idempotency_key"], "idempotency_key", refuse)
+    elif kind == "work_notification_record":
+        _record_ref(record["work_item_id"], "work-", "work_item_id", refuse)
+        ident("dispatcher")
+        if record["phase"] not in ("intent", "sent") or record["transition"] not in ("add", "complete"):
+            refuse("work_notification_invalid", "notification phase and transition must name the closed journal grammar")
+        if record["phase"] == "intent":
+            if record["transition"] != "add" or any(record[field] is not None for field in (
+                    "recipient", "transition_id", "envelope_id", "idempotency_key")):
+                refuse("work_notification_invalid", "only add has an intent and every send coordinate must be null")
+        else:
+            if any(record[field] is None for field in ("recipient", "envelope_id", "idempotency_key")):
+                refuse("work_notification_invalid", "sent notification requires a recipient, envelope and key")
+            ident("recipient")
+            _record_ref(record["envelope_id"], "msg-", "envelope_id", refuse)
+            _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+            if record["transition"] == "add":
+                if record["transition_id"] is not None:
+                    refuse("work_notification_invalid", "add notification cannot name a completion transition")
+            else:
+                if record["transition_id"] is None:
+                    refuse("work_notification_invalid", "complete notification must name its completion transition")
+                _record_ref(record["transition_id"], "transition-", "transition_id", refuse)
     elif kind == "work_transition":
         if not isinstance(record["work_item_id"], str) or re.fullmatch("work-" + _UUID7, record["work_item_id"]) is None:
             refuse("work_item_id_invalid", "work_item_id must use the work UUIDv7 prefix")
@@ -2309,6 +3517,80 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         ident("actor"); ident("authority_subject")
         integer("authority_epoch", 1, 2**63 - 1)
         _artifact_bindings(record["artifact_bindings"], refuse)
+    elif kind in {"dispatch_revision", "dispatch_return", "dispatch_close"}:
+        from .dispatch_records import validate_dispatch_record
+
+        validate_dispatch_record(record, refuse)
+    elif kind == "work_handoff_record":
+        from .bound_record import CLAIMED, OBSERVED, file_path
+        from .work_handoff import command_argv
+
+        def fact(value, fields, provenance):
+            if (not isinstance(value, dict) or set(value) != fields | {"provenance"}
+                    or value["provenance"] != provenance):
+                refuse("handoff_fact_invalid", "the handoff fact must carry its matching provenance")
+            return value
+
+        receipts = fact(record["work_receipts"], {"claim_id", "completion_id"}, OBSERVED)
+        coordinates = record["coordinates"]
+        if not isinstance(coordinates, list) or len(coordinates) not in {1, 2}:
+            refuse("handoff_coordinates_invalid", "bind the checkout and optionally its artifact files")
+        coordinate = fact(coordinates[0], {"kind", "repository", "ref", "commit", "paths"}, OBSERVED)
+        if coordinate["kind"] != "ref" or coordinate["ref"] != "HEAD" or coordinate["paths"] != []:
+            refuse("handoff_coordinates_invalid", "bind the checkout's HEAD without path filters")
+        _record_ref(record["work_item_id"], "work-", "work_item_id", refuse)
+        _record_ref(receipts["claim_id"], "transition-", "claim_id", refuse)
+        if receipts["completion_id"] is not None:
+            _record_ref(receipts["completion_id"], "transition-", "completion_id", refuse)
+        if record["supersedes"] is not None:
+            _record_ref(record["supersedes"], "work-handoff-", "supersedes", refuse)
+        ident("actor")
+        _bounded_string(coordinate["repository"], 1, 4096, "repository", refuse)
+        if not Path(coordinate["repository"]).is_absolute():
+            refuse("repository_invalid", "the handoff repository must be absolute")
+        _git_sha(coordinate["commit"], refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        _sha256(record["request_digest"], "request_digest", refuse)
+        for field in ("remaining", "statements"):
+            items = record[field]
+            if not isinstance(items, list) or len(items) > 16:
+                refuse("handoff_text_invalid", "a handoff accepts up to sixteen entries in each author text list")
+            texts = [fact(item, {"text"}, CLAIMED)["text"] for item in items]
+            _contract_string_list(texts, field, 0, 16, refuse)
+            for text in texts:
+                _bounded_string(text, 1, 512, field, refuse)
+        runs = record["runs"]
+        if not isinstance(runs, list) or len(runs) > 8:
+            refuse("handoff_runs_invalid", "a handoff records up to eight commands")
+        for run in runs:
+            fact(run, {"argv", "exit_code", "test_count", "test_count_source"}, OBSERVED)
+            command_argv(run["argv"], refuse)
+            if type(run["exit_code"]) is not int or not -(2**31) <= run["exit_code"] < 2**31:
+                refuse("handoff_exit_code_invalid", "the exit code must be a signed 32-bit integer")
+            source = run["test_count_source"]
+            _enum(source, {"unittest_result", "unittest_result_unavailable", "not_instrumented"},
+                  "test_count_source", refuse)
+            count = run["test_count"]
+            if source == "unittest_result":
+                if type(count) is not int or not 0 <= count < 2**63:
+                    refuse("handoff_test_count_invalid", "unittest testimony requires a nonnegative test count")
+            elif count is not None:
+                refuse("handoff_test_count_invalid", "an unavailable test count must be null")
+        if len(coordinates) == 2:
+            files = fact(coordinates[1], {"kind", "repository", "files"}, OBSERVED)
+            if files["kind"] != "files" or files["repository"] != coordinate["repository"]:
+                refuse("handoff_coordinates_invalid", "artifact files must belong to the bound checkout")
+            artifacts = files["files"]
+            if not isinstance(artifacts, list) or not 1 <= len(artifacts) <= 64:
+                refuse("handoff_artifacts_invalid", "a handoff names 1 to 64 artifacts in its files coordinate")
+            paths = []
+            for artifact in artifacts:
+                if not isinstance(artifact, dict) or set(artifact) != {"path", "sha256"}:
+                    refuse("handoff_artifact_invalid", "each bound file must carry its path and digest")
+                paths.append(file_path(artifact["path"], refuse).as_posix())
+                _sha256(artifact["sha256"], "artifact_digest", refuse)
+            if paths != sorted(set(paths)):
+                refuse("handoff_artifacts_invalid", "bound artifact paths must be sorted and unique")
     elif kind == "capability":
         ident("node_id")
         _capability(record["capability"], refuse)
@@ -3495,6 +4777,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             _record_ref(record["attempt_terminal_id"], "attempt-terminal-", "attempt_terminal_id", refuse)
             integer("max_attempts", 1, 32)
             _enum(record["reason_code"], {"max_attempts"}, "reason_code", refuse)
+    if kind in ASK_RECORD_KINDS:
+        _validate_ask_record(record, refuse, ident, integer)
     if chain is not None:
         record = dict(record, **chain)
     return record
@@ -3823,9 +5107,36 @@ def _git_sha(value: object, refuse: Any) -> None:
         refuse("sha_invalid", "sha must be a 40- or 64-character lowercase Git object id")
 
 
+def _inherit_refuse(callback: Any) -> Any:
+    """Keep a 3-arg remedy plant while 2-arg refusers still fire.
+
+    SEND-REFUSAL-REMEDY-2 calls refuse(code, detail, remedy). Callers such as
+    approvals._action_digest, validate_unknown_record, and sequencer
+    _intent_refuse still take two positional arguments; invoking them with
+    three raised TypeError instead of the named refusal.
+    """
+
+    def inherited(code: str, detail: str, remedy: object | None = None) -> Any:
+        if remedy is None:
+            return callback(code, detail)
+        try:
+            return callback(code, detail, remedy)
+        except TypeError as exc:
+            if "positional" not in str(exc) and "argument" not in str(exc):
+                raise
+            return callback(code, detail)
+
+    return inherited
+
+
 def _sha256(value: object, field: str, refuse: Any) -> None:
+    refuse = _inherit_refuse(refuse)
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
-        refuse(f"{field}_invalid", f"{field} must be a lowercase SHA-256 digest")
+        refuse(
+            f"{field}_invalid",
+            f"{field} must be a lowercase SHA-256 digest",
+            "pass {0} as a lowercase SHA-256 digest".format(field),
+        )
 
 
 def _run_id(value: object, refuse: Any) -> None:
@@ -4114,8 +5425,10 @@ def _thread_evidence_object(
 
 def _thread_observation_record(record: Mapping[str, object], refuse: Any) -> None:
     kind = record["kind"]
-    _enum(record["provider"], {"codex_local"}, "provider", refuse)
-    if (
+    versioned = record["schema_version"] == 2
+    _enum(record["provider"], {"codex_local", "claude_local", "pi_local"} if versioned
+        else {"codex_local"}, "provider", refuse)
+    if record["provider"] == "codex_local" and (
         not isinstance(record["provider_thread_id"], str)
         or re.fullmatch(_PROVIDER_UUID7, record["provider_thread_id"]) is None
     ):
@@ -4123,10 +5436,26 @@ def _thread_observation_record(record: Mapping[str, object], refuse: Any) -> Non
             "provider_thread_id_invalid",
             "provider_thread_id must be one canonical lowercase hyphenated UUIDv7",
         )
+    if record["provider"] != "codex_local":
+        session = record["provider_thread_id"]
+        if (type(session) is not str or not session or len(session) > 512
+            or any(unicodedata.category(c).startswith("C") for c in session)
+            or len(session.encode("utf-8")) > 512):
+            refuse("provider_thread_id_invalid", "provider session identity exceeds its bounded contract")
+    if versioned and kind == "thread_observation_recorded":
+        refuse("native_status_unsupported", "ad-hoc identity has no authenticated provider status source")
 
     if kind == "thread_attachment_registered":
-        _enum(record["subject_kind"], {"work_item", "attempt"}, "subject_kind", refuse)
+        _enum(record["subject_kind"], {"adhoc_dispatch"} if versioned else {"work_item", "attempt"}, "subject_kind", refuse)
         _run_item_id(record["work_item_id"], "work_item_id", refuse)
+        if versioned:
+            for field, prefix in (("adhoc_profile_id", "adhoc-profile-"),
+                                  ("adhoc_dispatch_id", "adhoc-dispatch-")):
+                _record_ref(record[field], prefix, field, refuse)
+            native = record["native_receipt_id"]
+            if type(native) is not str or re.fullmatch(
+                r"(?:adhoc-native-opened-|adhoc-lifecycle-)" + _UUID7, native) is None:
+                refuse("native_receipt_id_invalid", "thread attachment requires exact native testimony")
         if record["subject_kind"] == "attempt":
             _run_id(record["run_id"], refuse)
             _attempt_id(record["attempt_id"], "attempt_id", refuse)
@@ -4309,6 +5638,87 @@ def _thread_observation_record(record: Mapping[str, object], refuse: Any) -> Non
     )
 
 
+def _wake_exit_integrity_failure(value: object, refuse: Any) -> None:
+    """Retain structural check identity without retaining exception/message content."""
+
+    def invalid() -> None:
+        refuse("record_fields_invalid", "waiter integrity diagnostics violate their closed contract")
+
+    required = {"check_id", "exception_class", "input_identity", "occurrence_count"}
+    if not isinstance(value, dict) or not required <= set(value) <= required | {"hold_window_seconds"}:
+        invalid()
+    if "hold_window_seconds" in value:
+        window = value["hold_window_seconds"]
+        if not isinstance(window, int) or isinstance(window, bool) or not 0 <= window <= 86399:
+            invalid()
+    for field, pattern in (
+        ("check_id", r"[a-z][a-z0-9_.:-]{0,127}"),
+        ("exception_class", r"[A-Za-z_][A-Za-z0-9_.]{0,127}"),
+    ):
+        if not isinstance(value[field], str) or re.fullmatch(pattern, value[field]) is None:
+            invalid()
+    count = value["occurrence_count"]
+    if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 100000:
+        invalid()
+    identity = value["input_identity"]
+    if (
+        not isinstance(identity, dict)
+        or not set(identity) <= {"path", "byte_offset", "envelope_id", "operation"}
+        or not set(identity) & {"path", "operation"}
+    ):
+        invalid()
+    if "path" in identity:
+        path = identity["path"]
+        if (
+            not isinstance(path, str)
+            or not 1 <= len(path) <= 512
+            or re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", path) is None
+            or any(part in {".", ".."} for part in path.split("/"))
+        ):
+            invalid()
+    if "byte_offset" in identity:
+        offset = identity["byte_offset"]
+        if (
+            "path" not in identity
+            or not isinstance(offset, int)
+            or isinstance(offset, bool)
+            or not 0 <= offset <= 2**63 - 1
+        ):
+            invalid()
+    if "operation" in identity:
+        operation = identity["operation"]
+        if not isinstance(operation, str) or re.fullmatch(r"[a-z][a-z0-9_.:-]{0,127}", operation) is None:
+            invalid()
+    if "envelope_id" in identity:
+        envelope_id = identity["envelope_id"]
+        if not isinstance(envelope_id, str) or re.fullmatch("msg-" + _UUID7, envelope_id) is None:
+            invalid()
+
+
+def _denial_detail(value: object, reason_code: str, refuse: Any) -> None:
+    """Allow additive reply repair advice without widening the denial vocabulary."""
+
+    def invalid() -> None:
+        refuse("record_fields_invalid", "denial detail violates its closed reply-refusal contract")
+
+    if not isinstance(value, dict) or set(value) != {
+        "case", "requested_reply_to", "remedy"
+    }:
+        invalid()
+    if not isinstance(value["case"], str) or (value["case"], reason_code) not in {
+        ("own_outgoing", "reply_to_parties_mismatch"),
+        ("other_parties", "reply_to_parties_mismatch"),
+        ("unknown_reply", "reply_to_unknown"),
+    }:
+        invalid()
+    reply = value["requested_reply_to"]
+    if not isinstance(reply, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", reply) is None:
+        invalid()
+    remedy = value["remedy"]
+    if not isinstance(remedy, str) or re.fullmatch(r"[ -~]{1,1024}", remedy) is None:
+        invalid()
+
+
 def _opaque_identifier(value: object, field: str, refuse: Any) -> None:
     """Accept a bounded opaque binding without imposing a new identifier grammar."""
 
@@ -4485,7 +5895,11 @@ def _validate_lane_workspace_record(record: Dict[str, Any], *, integrity: bool) 
 
 def _record_ref(value: object, prefix: str, field: str, refuse: Any) -> None:
     if not isinstance(value, str) or re.fullmatch(re.escape(prefix) + _UUID7, value) is None:
-        refuse(f"{field}_invalid", f"{field} must use the governed record UUIDv7 prefix")
+        refuse(
+            f"{field}_invalid",
+            f"{field} must use the governed record UUIDv7 prefix",
+            "pass {0} as an id with the prefix named in detail".format(field),
+        )
 
 
 def _backoff(value: object, refuse: Any) -> None:
@@ -4722,6 +6136,26 @@ def _bounded_string(value: object, minimum: int, maximum: int, field: str, refus
 
 
 def _terminal_unsafe_hit(value: str) -> Optional[tuple[str, int]]:
+    # Decoded native records usually contain ASCII. Its only unsafe scalar
+    # class is Cc, so retain the exact first index with the C regex scanner.
+    # Subclasses keep the original iterator behavior and Unicode scan.
+    if type(value) is str and value.isascii():
+        match = _ASCII_TERMINAL_CONTROL.search(value)
+        return ("control", match.start()) if match is not None else None
+    if type(value) is str:
+        # A Unicode note can still contain long runs of safe visible ASCII.
+        # Skip only that proven-safe range; classify every other scalar with
+        # the same Unicode database and precedence as the original scan.
+        for match in _NON_VISIBLE_ASCII.finditer(value):
+            character = match.group()
+            category = unicodedata.category(character)
+            if category == "Cc":
+                return ("control", match.start())
+            if category == "Cs":
+                return ("surrogate", match.start())
+            if unicodedata.bidirectional(character) in _BIDI_CONTROLS:
+                return ("bidi", match.start())
+        return None
     for index, character in enumerate(value):
         category = unicodedata.category(character)
         if category == "Cc":
@@ -4782,14 +6216,135 @@ def _bounded_scope(value: object, refuse: Any, field: str = "scope") -> None:
 
 def _enum(value: object, values: set[str], field: str, refuse: Any) -> None:
     if not isinstance(value, str) or value not in values:
-        refuse(f"{field}_invalid", f"{field} is not a v0 value")
+        refuse(
+            f"{field}_invalid",
+            f"{field} is not a v0 value",
+            "pass {0} as one of the v0 values named in detail".format(field),
+        )
+
+
+def _automatic_epoch_decision(value: object, receipt_timestamp: object, refuse: Any) -> None:
+    """Closed policy testimony for a registered node's automatic epoch roll."""
+    fields = {"trigger", "policy", "observed_bytes", "observed_at",
+              "epoch_started_at", "due_reasons"}
+    if not isinstance(value, dict) or set(value) not in (fields, fields | {"teardown_carry"}):
+        refuse("epoch_automatic_invalid", "automatic epoch decision has invalid fields")
+    if "teardown_carry" in value:
+        carry = value["teardown_carry"]
+        if (not isinstance(carry, dict) or set(carry) != {"count", "digest"}
+                or type(carry["count"]) is not int or not 0 <= carry["count"] <= 100000):
+            refuse("epoch_automatic_invalid", "teardown carry commitment is malformed")
+        _sha256(carry["digest"], "teardown_carry.digest", refuse)
+    if (not isinstance(value["trigger"], str)
+            or value["trigger"] not in {"send", "present", "drain", "retract", "ack", "stop_poll"}):
+        refuse("epoch_automatic_invalid", "automatic epoch trigger is not a native activity")
+    policy = value["policy"]
+    if (not isinstance(policy, dict)
+            or set(policy) != {"max_bytes", "max_age_days", "source"}
+            or not isinstance(policy["source"], str)
+            or policy["source"] not in {"shipped_default", "operator_declared"}
+            or any(not isinstance(policy[field], int) or isinstance(policy[field], bool)
+                   or policy[field] <= 0 for field in ("max_bytes", "max_age_days"))):
+        refuse("epoch_automatic_invalid", "automatic epoch policy testimony is invalid")
+    observed_bytes = value["observed_bytes"]
+    if (not isinstance(observed_bytes, int) or isinstance(observed_bytes, bool)
+            or not 0 <= observed_bytes <= 2**63 - 1):
+        refuse("epoch_automatic_invalid", "automatic epoch byte observation is invalid")
+    observed_at = _timestamp_value(value["observed_at"], "observed_at", refuse)
+    if observed_at > _timestamp_value(receipt_timestamp, "timestamp", refuse):
+        refuse("epoch_automatic_invalid", "automatic epoch observation follows its receipt")
+    started = value["epoch_started_at"]
+    if started is not None:
+        started = _timestamp_value(started, "epoch_started_at", refuse)
+        if started > observed_at:
+            refuse("epoch_automatic_invalid", "automatic epoch start follows its observation")
+    expected = []
+    if observed_bytes >= policy["max_bytes"]:
+        expected.append("bytes")
+    if started is not None and (observed_at - started).total_seconds() >= policy["max_age_days"] * 86400:
+        expected.append("age")
+    if not expected or value["due_reasons"] != expected:
+        refuse("epoch_automatic_invalid", "automatic epoch reasons disagree with policy observations")
+
+
+def _epoch_carry_verification(record: Mapping[str, Any], refuse: Any) -> None:
+    """Closed roll testimony for the exact copied message-envelope frames."""
+    from .jsonl import MAX_LEDGER_RECORDS
+    refuse = _inherit_refuse(refuse)
+    _record_ref(record["roll_receipt_id"], "bus-epoch-roll-receipt-", "roll_receipt_id", refuse)
+    _sha256(record["roll_receipt_sha256"], "roll_receipt_sha256", refuse)
+    if record["schema_version"] == 1:
+        count = record["envelope_count"]
+        if type(count) is not int or not 0 <= count <= MAX_LEDGER_RECORDS:
+            refuse("epoch_carry_verification_invalid", "carried envelope count exceeds its native bound")
+        _sha256(record["digest"], "digest", refuse)
+        return
+    entries = record["carried_envelopes"]
+    if not isinstance(entries, list) or len(entries) > MAX_LEDGER_RECORDS:
+        refuse("epoch_carry_verification_invalid", "carried envelope inventory exceeds its native bound")
+    identities = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"id", "sha256"}:
+            refuse("epoch_carry_verification_invalid", "carried envelope inventory must contain exact id and digest pairs")
+        _record_ref(entry["id"], "msg-", "carried_envelopes.id", refuse)
+        _sha256(entry["sha256"], "carried_envelopes.sha256", refuse)
+        identities.append(entry["id"])
+    if identities != sorted(set(identities)):
+        refuse("epoch_carry_verification_invalid", "carried envelope identities must be sorted and unique")
+    _sha256(record["digest"], "digest", refuse)
+    if record["digest"] != epoch_carry_verification_digest(entries):
+        refuse("epoch_carry_verification_invalid", "carry verification digest must cover its exact envelope inventory")
+
+
+def _teardown_epoch_verification(record: Mapping[str, Any], refuse: Any) -> None:
+    """Closed native testimony; semantic acceptance also requires its roll commitment."""
+    refuse = _inherit_refuse(refuse)
+    _record_ref(record["teardown_receipt_id"], "seat-teardown-", "teardown_receipt_id", refuse)
+    _record_ref(record["roll_receipt_id"], "bus-epoch-roll-receipt-", "roll_receipt_id", refuse)
+    for field in ("teardown_context_sha256", "roll_receipt_sha256"):
+        _sha256(record[field], field, refuse)
+    if (not isinstance(record["outgoing_epoch_id"], str)
+            or re.fullmatch(r"epoch-[0-9a-f]{32}", record["outgoing_epoch_id"]) is None):
+        refuse("seat_teardown_epoch_verification_invalid", "outgoing epoch identity is malformed")
+    report_id, report_digest = record["report_envelope_id"], record["report_envelope_sha256"]
+    if (report_id is None) != (report_digest is None):
+        refuse("seat_teardown_epoch_verification_invalid", "report identity and digest must be one pair")
+    if report_id is not None:
+        _record_ref(report_id, "msg-", "report_envelope_id", refuse)
+        _sha256(report_digest, "report_envelope_sha256", refuse)
+    verification = record["verification"]
+    if (not isinstance(verification, dict)
+            or set(verification) != {"state", "failure_code", "remedy"}
+            or not isinstance(verification["state"], str)
+            or verification["state"] not in {"verified", "failed"}):
+        refuse("seat_teardown_epoch_verification_invalid", "verification result is not closed native testimony")
+    if verification["state"] == "verified":
+        if verification["failure_code"] is not None or verification["remedy"] is not None:
+            refuse("seat_teardown_epoch_verification_invalid", "verified testimony cannot carry a failure or remedy")
+    else:
+        code, remedy = verification["failure_code"], verification["remedy"]
+        if (not isinstance(code, str) or len(code) > 128
+                or re.fullmatch(r"[a-z][a-z0-9_]*", code) is None):
+            refuse("seat_teardown_epoch_verification_invalid", "failed testimony needs its native refusal code")
+        _bounded_string(remedy, 1, 1024, "verification.remedy", refuse)
+        if not remedy.strip() or _terminal_unsafe(remedy):
+            refuse("seat_teardown_epoch_verification_invalid", "failed testimony needs a visible named remedy")
 
 
 def _timestamp_value(value: object, field: str, refuse: Any) -> datetime:
+    refuse = _inherit_refuse(refuse)
     if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
-        refuse(f"{field}_invalid", f"{field} must be a UTC RFC3339 timestamp")
+        refuse(
+            f"{field}_invalid",
+            f"{field} must be a UTC RFC3339 timestamp",
+            "pass {0} as a UTC RFC3339 timestamp".format(field),
+        )
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        refuse(f"{field}_invalid", f"{field} is not a real timestamp")
+        refuse(
+            f"{field}_invalid",
+            f"{field} is not a real timestamp",
+            "pass {0} as a real UTC RFC3339 timestamp".format(field),
+        )
         raise AssertionError("unreachable")

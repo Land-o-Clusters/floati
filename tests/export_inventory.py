@@ -61,12 +61,14 @@ half is missing.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -236,6 +238,83 @@ def export_include_set(root: Path = REPOSITORY_ROOT) -> tuple[str, ...]:
     return classify_inventory(tracked_files(root), root=root)
 
 
+# HARBOR-SPEED-R-C: one adaptation per distinct input per process.
+#
+# Every name fence and every projection leg (test_public_name_fence twice,
+# test_source_scrub, test_name_sweep, test_no_listener_fence,
+# test_fixture_placement, test_public_export_baseline, test_copy_ledger)
+# re-ran the exporter's `_adapt` over the whole include set: 1,401 files, 668
+# of them Python sources fully tokenized and untokenized, ~5 s per build at
+# harbor main 1fa68e48. The adaptation is a pure function of
+#
+#   (the path, the file's bytes, the policy, the published baseline,
+#    and the exporter code that is loaded in this process),
+#
+# so it is memoised under exactly that key. Everything that can change during
+# a run is part of the key and is RE-READ ON EVERY CALL: the include set (git
+# ls-files and classification), each file's bytes (sha256), the policy file's
+# bytes, and the baseline (which also keeps the BASELINE-1 drift check on every
+# call). The loaded code is fingerprinted by the identity of every global in
+# the exporter and the modules its adaptation reaches; a re-bound or patched
+# global starts a fresh memo. An adaptation that refuses is never memoised, so
+# each caller still sees the refusal its own way (raw bytes in the lenient
+# helper, a propagated error in the strict one). Values are immutable bytes.
+_ADAPTATION_MODULES = (
+    "scripts.export_public",
+    "scripts.public_name_fence",
+    "floati.identity_fence",
+)
+_ADAPTATION_MEMO: dict[str, object] = {"fingerprint": None, "entries": {}}
+
+
+def _adaptation_fingerprint() -> tuple[tuple[tuple[str, int], ...], list[object]]:
+    keys: list[tuple[str, int]] = []
+    held: list[object] = []
+    for name in _ADAPTATION_MODULES:
+        module = sys.modules[name]
+        for attribute, value in sorted(vars(module).items()):
+            keys.append((f"{name}.{attribute}", id(value)))
+            held.append(value)
+    return tuple(keys), held
+
+
+def _adapted_bytes_source(
+    root: Path, exporter: object, policy: object, baseline: set[str]
+) -> Callable[[str, bytes], bytes]:
+    """Return `adapt(relative, data) -> bytes`, memoised under a content key."""
+
+    fingerprint, held = _adaptation_fingerprint()
+    if _ADAPTATION_MEMO["fingerprint"] != fingerprint:
+        # Holding the globals keeps their ids from being reused while the
+        # fingerprint that names them is live.
+        _ADAPTATION_MEMO.update(fingerprint=fingerprint, held=held, entries={})
+    entries = _ADAPTATION_MEMO["entries"]
+    assert isinstance(entries, dict)
+    context = (
+        hashlib.sha256((root / POLICY_RELATIVE).read_bytes()).hexdigest(),
+        hashlib.sha256("\0".join(sorted(baseline)).encode("utf-8")).hexdigest(),
+    )
+
+    def adapt(relative: str, data: bytes) -> bytes:
+        key = (relative, hashlib.sha256(data).hexdigest(), context)
+        cached = entries.get(key)
+        if cached is not None:
+            return data if cached is _UNCHANGED else cached
+        adapted, _notes = exporter._adapt(  # type: ignore[attr-defined]
+            relative,
+            data,
+            policy=policy,
+            public_paths=baseline,
+        )
+        entries[key] = _UNCHANGED if adapted == data else bytes(adapted)
+        return adapted
+
+    return adapt
+
+
+_UNCHANGED = object()
+
+
 def materialise_exposed_tree(
     destination: Path, root: Path = REPOSITORY_ROOT
 ) -> tuple[str, ...]:
@@ -264,20 +343,20 @@ def materialise_exposed_tree(
     )
     policy = export_policy(root) if exporter is not None else None
     baseline = set(published_baseline(root)) if exporter is not None else None
+    adapt = (
+        _adapted_bytes_source(root, exporter, policy, baseline)
+        if exporter is not None and baseline is not None
+        else None
+    )
     written: list[str] = []
     for relative in export_include_set(root):
         source = root / relative
         if not source.is_file() or source.is_symlink():
             continue
         data = source.read_bytes()
-        if exporter is not None:
+        if adapt is not None:
             try:
-                data, _notes = exporter._adapt(
-                    relative,
-                    data,
-                    policy=policy,
-                    public_paths=baseline,
-                )
+                data = adapt(relative, data)
             except Exception:  # pragma: no cover - a refusal is not a name finding
                 pass
         target = destination / relative
@@ -312,19 +391,19 @@ def materialise_adapted_tree(
     )
     policy = export_policy(root) if exporter is not None else None
     baseline = set(published_baseline(root)) if exporter is not None else None
+    adapt = (
+        _adapted_bytes_source(root, exporter, policy, baseline)
+        if exporter is not None and baseline is not None
+        else None
+    )
     written: list[str] = []
     for relative in export_include_set(root):
         source = root / relative
         if not source.is_file() or source.is_symlink():
             continue
         data = source.read_bytes()
-        if exporter is not None:
-            data, _notes = exporter._adapt(
-                relative,
-                data,
-                policy=policy,
-                public_paths=baseline,
-            )
+        if adapt is not None:
+            data = adapt(relative, data)
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)

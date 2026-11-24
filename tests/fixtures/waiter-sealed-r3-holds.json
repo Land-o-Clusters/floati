@@ -1,0 +1,45 @@
+{
+  "schemas/v1/wake-hold-receipt-record.schema.json": [
+    {
+      "acknowledgment_prefix_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "decision_digest": "b1f8fdba09a8c3e0ce0f1e306cf6ed88871e079bed2d44eab52c230d4dbe5c6e",
+      "delivery_prefix_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "event_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "wake-hold-018f7e9b3c147abc8def0123456789ab",
+      "idempotency_key": "wake-key",
+      "item_ids": [
+        "msg-018f7e9b3c117abc8def0123456789ab",
+        "msg-018f7e9b3c127abc8def0123456789ab"
+      ],
+      "kind": "wake_hold_receipt",
+      "limit": 2,
+      "recipient": "bob",
+      "schema_version": 1,
+      "tenant_id": "alpha",
+      "timestamp": "2026-08-13T12:00:00.000Z",
+      "worker_session_id": "worker-018f7e9b3c137abc8def0123456789ab"
+    }
+  ],
+  "schemas/v2/wake-hold-receipt-record.schema.json": [
+    {
+      "acknowledgment_prefix_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "decision_digest": "2c73fe6d3103a095ea886fd28d5c7ab30e3d17f2b3e02d2734f60cb73aa48474",
+      "delivery_prefix_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "event_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "wake-hold-018f7e9b3c147abc8def0123456789ab",
+      "idempotency_key": "wake-key",
+      "item_ids": [
+        "msg-018f7e9b3c117abc8def0123456789ab",
+        "msg-018f7e9b3c127abc8def0123456789ab"
+      ],
+      "kind": "wake_hold_receipt",
+      "limit": 2,
+      "recipient": "bob",
+      "schema_version": 2,
+      "selection_reason": "holder_released",
+      "tenant_id": "alpha",
+      "timestamp": "2026-08-13T12:00:00.000Z",
+      "worker_session_id": "worker-018f7e9b3c137abc8def0123456789ab"
+    }
+  ]
+}

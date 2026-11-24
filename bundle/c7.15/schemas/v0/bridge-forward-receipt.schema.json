@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/bridge-forward-receipt.schema.json",
+  "title": "Floati Bridge Forward Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "bridge_id", "forward_id", "direction", "source_tenant_id", "destination_tenant_id", "sender", "recipient", "repo", "sha", "doc", "note", "source_consent_id", "destination_consent_id", "stamp"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^bridge-forward-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "bridge_forward"},
+    "bridge_id": {"type": "string", "pattern": "^bridge-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "forward_id": {"type": "string", "pattern": "^forward-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "direction": {"enum": ["outbound", "inbound"]},
+    "source_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "destination_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "sender": {"type": "string", "minLength": 1, "maxLength": 64},
+    "recipient": {"type": "string", "minLength": 1, "maxLength": 64},
+    "repo": {"type": "string", "minLength": 1, "maxLength": 128},
+    "sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "doc": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "note": {"type": "string", "maxLength": 1024},
+    "source_consent_id": {"type": "string", "pattern": "^bridge-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "destination_consent_id": {"type": "string", "pattern": "^bridge-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "stamp": {"const": "advisory_not_consumption"}
+  }
+}

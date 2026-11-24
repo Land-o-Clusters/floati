@@ -327,7 +327,8 @@ def _deref(spec: dict, root: dict, base: Path, depth: int = 0) -> tuple[dict, di
 
 
 _CONTRACT_KEYS = ("type", "pattern", "format", "minLength", "maxLength",
-                  "minimum", "maximum", "enum", "const")
+                  "minimum", "maximum", "enum", "const", "items",
+                  "minItems", "maxItems", "uniqueItems")
 
 
 def _field_value(name: str, spec: dict, root: dict, base: Path) -> object:

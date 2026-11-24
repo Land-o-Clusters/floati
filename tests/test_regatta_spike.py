@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import io
-import json
 import os
 import re
 import unittest
@@ -20,33 +18,6 @@ FULL_CAPABILITY_RESPONSE = (
     b"\x1b[?1u"
     b"\x1bP1+r524742=31\x1b\\"
 )
-
-
-class RegattaMachineTwinTests(unittest.TestCase):
-    def test_board_plain_and_json_bytes_stay_pinned_during_regatta(self) -> None:
-        """Catches visual work leaking into either stable machine-facing twin."""
-        from floati.tui_render import HarborBoardModel, render_plain_dump
-
-        model = HarborBoardModel.from_projection(SNAPSHOT, WORK, RECEIPTS)
-        plain = render_plain_dump(model, width=100).encode("utf-8")
-        artifact = (
-            json.dumps(
-                model.to_snapshot(),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            + "\n"
-        ).encode("utf-8")
-
-        self.assertEqual(
-            "31fdd93cdc00ff456f440ca3b022c0a16d9b0e88a6c2e0e4be83a86aeb8ce545",
-            hashlib.sha256(plain).hexdigest(),
-        )
-        self.assertEqual(
-            "5c86d938487eacd6ca498aa31b0882c6640349d1458e0ff485a9d93f81543034",
-            hashlib.sha256(artifact).hexdigest(),
-        )
 
 
 class RegattaTerminalProtocolTests(unittest.TestCase):

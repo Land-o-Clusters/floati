@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/local-gateway-config.schema.json",
+  "title": "Floati Local Gateway Configuration v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "transport", "network", "workspace_root", "approval_mode"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "kind": {"const": "local_gateway_config"},
+    "transport": {"const": "stdio"},
+    "network": {"const": "disabled"},
+    "workspace_root": {"type": "string", "minLength": 2, "maxLength": 1024, "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+    "approval_mode": {"const": "forward_fail_closed"}
+  }
+}

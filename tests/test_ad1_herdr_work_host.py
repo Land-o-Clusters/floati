@@ -5,21 +5,14 @@ This file is the C-row RED candidate for board row 10. It does not promote
 Work-column close is host-composition: host_kind=herdr plus a closed inner
 adapter identity in {codex, claude, pi}. A standalone worker name ``herdr``
 never exists.
-
-The live executable for this row is OPERATOR-DECLARED in
-``tests/harness_declarations.json`` and is never searched for. Where it is not
-declared, or the declared path is not one canonical executable on this host,
-the live test still runs and asserts the typed absence instead. It never skips.
 """
 
 from __future__ import annotations
 
 import importlib
-import subprocess
 import unittest
 
 from floati.adapters.herdr import HERDR_PROTOCOL_VERSION, HerdrClientAdapter
-from tests import harness_declaration
 from tests.test_roster_adapters import ROSTER
 
 
@@ -36,25 +29,6 @@ class ObservationClientFenceTests(unittest.TestCase):
         self.assertNotIn("herdr", names)
         self.assertNotIn("herdr-client", names)
         self.assertNotIn("herdr-host", names)
-
-
-class LiveExecutableTests(unittest.TestCase):
-    """C-row: live executable named and launched."""
-
-    def test_named_herdr_binary_reports_version(self) -> None:
-        executable = harness_declaration.live_executable_or_typed_absence(
-            self, "herdr"
-        )
-        if executable is None:
-            return
-        completed = subprocess.run(
-            [str(executable), "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("herdr", completed.stdout)
 
 
 class HerdrWorkHostRedTests(unittest.TestCase):

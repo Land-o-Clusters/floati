@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import ast
 import os
+import json
+import signal
 import subprocess
 import sys
 import unittest
@@ -26,6 +28,7 @@ from pathlib import Path
 
 from tests import REAL_HOME_BEFORE_PIN, HOME_PIN_ROOT
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.readiness import communicate, wait_readable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,6 +65,209 @@ def _home_touching_files(root: Path) -> set[str]:
 
 
 class HomePinTests(unittest.TestCase):
+    def test_interruption_during_allocation_leaves_no_unregistered_directory(self) -> None:
+        code = '''
+import json, os, signal, tempfile
+import tests
+from tests.temp_roots import REAL_TEMP_ROOT
+create = os.mkdir
+def interrupt_after_creation(path, *args, **kwargs):
+    result = create(path, *args, **kwargs)
+    print(json.dumps([tests.HOME_PIN_ROOT, os.fsdecode(path)]), flush=True)
+    os.kill(os.getpid(), NUMBER)
+    return result
+os.mkdir = interrupt_after_creation
+tempfile.mkdtemp(dir=REAL_TEMP_ROOT)
+'''
+        for number in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=signal.Signals(number).name):
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", code.replace("NUMBER", str(int(number)))],
+                    cwd=REPOSITORY_ROOT, capture_output=True, text=True,
+                )
+                self.assertNotEqual(0, child.returncode, child.stderr)
+                self.assertEqual([], [path for path in json.loads(child.stdout) if Path(path).exists()], child.stderr)
+
+    def test_suite_exit_removes_fixtures_on_success_and_failure(self) -> None:
+        code = '''
+import json, os, tempfile
+from pathlib import Path
+import tests
+from tests.temp_roots import REAL_TEMP_ROOT
+directory = tempfile.mkdtemp(dir=REAL_TEMP_ROOT)
+Path(directory).mkdir(exist_ok=True)
+descriptor, regular_file = tempfile.mkstemp(dir=REAL_TEMP_ROOT)
+os.close(descriptor)
+with tempfile.NamedTemporaryFile(delete=False, dir=REAL_TEMP_ROOT) as named:
+    named_path = named.name
+with tempfile.TemporaryFile(dir=REAL_TEMP_ROOT) as anonymous:
+    anonymous.write(b'fixture')
+print(json.dumps([tests.HOME_PIN_ROOT, directory, regular_file, named_path]), flush=True)
+raise SystemExit(EXIT)
+'''
+        for status in (0, 1, 42):
+            with self.subTest(exit=status):
+                program = code.replace("EXIT", str(status))
+                if status == 42:
+                    program = ("import signal\n"
+                               "def harness_interrupt(number, frame):\n"
+                               "    raise SystemExit(42)\n"
+                               "signal.signal(signal.SIGTERM, harness_interrupt)\n"
+                               + program.replace("raise SystemExit(42)",
+                                                 "os.kill(os.getpid(), signal.SIGTERM)"))
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", program],
+                    cwd=REPOSITORY_ROOT, capture_output=True, text=True,
+                )
+                self.assertEqual(status, child.returncode, child.stderr)
+                self.assertEqual([], [path for path in json.loads(child.stdout) if Path(path).exists()])
+
+    def test_temporary_root_census_refuses_a_cached_unowned_allocator(self) -> None:
+        """New creators cannot bypass registration through an earlier alias."""
+        for imported in ("import tempfile; allocate = tempfile.mkdtemp",
+                         "from tempfile import mkdtemp as allocate"):
+            with self.subTest(imported=imported):
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", imported + "\n"
+                     "import tests\nfrom tests.temp_roots import REAL_TEMP_ROOT\n"
+                     "allocate(dir=REAL_TEMP_ROOT)\n"], cwd=REPOSITORY_ROOT,
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(0, child.returncode)
+                self.assertIn("fixture_finalizer_unowned_allocator", child.stderr)
+
+        for bypass in (
+            "os.mkdir(os.path.join(REAL_TEMP_ROOT, 'unowned-planted-fixture'))",
+            "os.mkdir('unowned-planted-fixture', dir_fd=os.open(REAL_TEMP_ROOT, os.O_RDONLY))",
+            "os.mkdir(os.path.join(REAL_TEMP_ROOT, 'unowned-planted-fixture').replace('\x2fprivate/tmp/', '\x2ftmp/', 1))",
+            "import tempfile\nowner = tempfile.TemporaryDirectory()\n"
+            "with owner as directory:\n    owner.cleanup()\n    os.mkdir(directory)",
+            # A product root's own name earns no exemption: the product moves
+            # its roots through FLOATI_HOST_TEMP_ROOT instead.
+            "path = os.path.join(REAL_TEMP_ROOT, 'floati-work')\nos.mkdir(path)\nos.rmdir(path)",
+        ):
+            with self.subTest(bypass=bypass):
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", "import os, tests\n"
+                     "from tests.temp_roots import REAL_TEMP_ROOT\n" + bypass],
+                    cwd=REPOSITORY_ROOT, capture_output=True, text=True,
+                )
+                self.assertNotEqual(0, child.returncode)
+                self.assertIn("fixture_finalizer_unowned_root", child.stderr)
+
+    def test_forked_child_cannot_remove_its_parents_fixtures(self) -> None:
+        code = '''
+import os, tempfile
+from pathlib import Path
+import tests
+from tests.temp_roots import REAL_TEMP_ROOT
+root = Path(tempfile.mkdtemp(dir=REAL_TEMP_ROOT))
+context = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
+child = os.fork()
+if child == 0:
+    from scripts.fixture_finalizer import cleanup
+    EXPLICIT_CLEANUP
+    cleanup()
+    raise SystemExit(0)
+_, status = os.waitpid(child, 0)
+assert status == 0 and root.is_dir() and Path(context.name).is_dir()
+print(json.dumps([str(root), context.name]))
+'''
+        code = "import json\n" + code
+        for explicit in (True, False):
+            with self.subTest(explicit_cleanup=explicit):
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", code.replace(
+                        "EXPLICIT_CLEANUP", "context.cleanup()" if explicit else "pass")],
+                    cwd=REPOSITORY_ROOT, capture_output=True, text=True,
+                )
+                self.assertEqual(0, child.returncode, child.stderr)
+                self.assertEqual([], [path for path in json.loads(child.stdout) if Path(path).exists()])
+
+    def test_replaced_fixture_coordinate_refuses_explicit_cleanup(self) -> None:
+        import tempfile
+        from scripts.fixture_finalizer import cleanup_path, retain_path
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as parent:
+            original = Path(tempfile.mkdtemp(dir=parent))
+            moved = Path(parent) / "retained-original"
+            original.rename(moved)
+            original.mkdir()
+            with self.assertRaisesRegex(ValueError, "fixture_finalizer_replaced"):
+                cleanup_path(original)
+            self.assertTrue(original.is_dir())
+            self.assertTrue(moved.is_dir())
+            # The parent context owns both contents; relinquish the stale
+            # child coordinate so its later cleanup cannot claim replacement.
+            retain_path(original)
+
+    def test_temporary_directory_cleanup_preserves_a_replacement(self) -> None:
+        import tempfile
+
+        for cleanup in ("context exit", "finalizer"):
+            with self.subTest(cleanup=cleanup):
+                with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as parent:
+                    owned = tempfile.TemporaryDirectory(dir=parent)
+                    original = Path(owned.name)
+                    moved = Path(parent) / "moved"
+                    original.rename(moved)
+                    original.mkdir()
+                    sentinel = original / "foreign"
+                    sentinel.touch()
+                    if cleanup == "context exit":
+                        try:
+                            with owned:
+                                pass
+                        except ValueError:
+                            pass
+                    del owned
+                    self.assertTrue(moved.is_dir())
+                    self.assertTrue(sentinel.is_file(), "cleanup removed the replacement")
+
+    def test_interrupted_suite_removes_its_temporary_fixtures(self) -> None:
+        """A ready child suite owns its fixtures until it is interrupted."""
+        code = '''
+import json, signal, tempfile, unittest
+from pathlib import Path
+import tests
+from tests.temp_roots import REAL_TEMP_ROOT
+from floati.identity_fence import RETIRED_PRODUCT_NAME
+class InterruptedSuite(unittest.TestCase):
+    def test_fixture(self):
+        fleet = tempfile.mkdtemp(dir=REAL_TEMP_ROOT)
+        (Path(fleet) / 'fleet').mkdir()
+        remote = tempfile.TemporaryDirectory(prefix=RETIRED_PRODUCT_NAME + '-sequencer-', dir=REAL_TEMP_ROOT)
+        (Path(remote.name) / 'remote.git').mkdir()
+        seat = tempfile.mkdtemp(prefix='hw-home.', dir=REAL_TEMP_ROOT)
+        (Path(seat) / 'seat-home').mkdir()
+        scale = tempfile.mkdtemp(prefix='bus-scale-', dir=REAL_TEMP_ROOT)
+        descriptor, regular_file = tempfile.mkstemp(dir=REAL_TEMP_ROOT)
+        import os
+        os.close(descriptor)
+        print(json.dumps([tests.HOME_PIN_ROOT, fleet, remote.name, seat, scale, regular_file]), flush=True)
+        signal.pause()
+unittest.main()
+'''
+        for number in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=signal.Signals(number).name):
+                child = subprocess.Popen(
+                    [sys.executable, "-B", "-c", code], cwd=REPOSITORY_ROOT,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                )
+                try:
+                    wait_readable(child.stdout, "interrupted suite fixture readiness")
+                    ready = child.stdout.readline()
+                    self.assertTrue(ready, "child exited before fixture readiness")
+                    paths = [Path(value) for value in json.loads(ready)]
+                    child.send_signal(number)
+                    _out, error = communicate(child, "interrupted suite exit")
+                    self.assertNotEqual(0, child.returncode, error)
+                    self.assertEqual([], [str(path) for path in paths if path.exists()], error)
+                finally:
+                    if child.poll() is None:
+                        child.terminate()
+                        communicate(child, "interrupted suite cleanup")
+
     def test_the_suite_runs_with_home_pinned_away_from_the_operator(self) -> None:
         self.assertTrue(REAL_HOME_BEFORE_PIN, "the pre-pin home was not recorded")
         home = os.environ.get("HOME", "")

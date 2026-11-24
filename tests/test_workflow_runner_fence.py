@@ -155,7 +155,7 @@ jobs:
 # The live harbor CI is the 481afae4 bytes above under EXACTLY FOUR named
 # substitutions, and the pin below names all four rather than tolerating a
 # diff. Two are the rename out of the projection. The other two are the
-# ci-box-8 (run 33653526683) remedy: `pip install … --user`, and the Linux
+# fixture-runner-8 (run 33653526683) remedy: `pip install … --user`, and the Linux
 # step that stopped running `sudo apt-get` as the first act. A default-context
 # unified diff collapses those last two into one hunk, which is how this pin
 # once named three. SequenceMatcher (and unified diff at context 0) sees four.
@@ -171,7 +171,7 @@ HARBOR_CONCURRENCY_LIVE = "group: harbor-selftest-${{ github.ref }}"
 HARBOR_PIP_481AFAE4 = (
     "          python3 -m pip install --disable-pip-version-check --quiet pillow jsonschema\n"
 )
-HARBOR_PIP_LIVE = r"""          # ci-box-8, run 33653526683: this step assumed hosted ubuntu and ran
+HARBOR_PIP_LIVE = r"""          # fixture-runner-8, run 33653526683: this step assumed hosted ubuntu and ran
           # `sudo apt-get`, which on the self-hosted box died with "sudo: a
           # terminal is required to read the password". The install was never
           # the point - the ASSERTION was - so assert first and install only
@@ -195,9 +195,43 @@ HARBOR_LINUX_STEP_LIVE = r"""            if command -v minisign >/dev/null 2>&1;
             fi
 """
 
+HARBOR_PARALLEL_NOTE_481AFAE4 = (
+    "# and SAYING WHY (absent secret / API failure / offline are three different lines).\n"
+)
+HARBOR_PARALLEL_NOTE_LIVE = (
+    "# and SAYING WHY (absent secret, API failure, and offline are three different lines).\n"
+    "# Each selftest leg runs the governed parallel runner through\n"
+    "# `floati.selftest --workers`. The Mac leg passes 8. The Linux leg passes\n"
+    "# `nproc`, capped at 8 because that is the runner's explicit maximum. Neither\n"
+    "# `--profile` nor `--reference` is set, so the runner schedules by test counts.\n"
+    "# Output is a new directory under `realpath` of `RUNNER_TEMP`: the runner\n"
+    "# refuses a path whose ancestors are not ordinary directories. Omitting\n"
+    "# `--workers` keeps the serial suite. Triggers are unchanged.\n"
+)
+
+HARBOR_SELFTEST_RUN_481AFAE4 = "        run: python3 -m floati.selftest\n"
+HARBOR_LINUX_PARALLEL_LIVE = (
+    "        shell: bash\n"
+    "        run: |\n"
+    "          set -euo pipefail\n"
+    "          workers=\"$(nproc)\"\n"
+    "          if [ \"$workers\" -gt 8 ]; then\n"
+    "            workers=8\n"
+    "          fi\n"
+    "          output=\"$(realpath \"$RUNNER_TEMP\")/floati-selftest-parallel\"\n"
+    "          python3 -m floati.selftest --workers \"$workers\" --output \"$output\"\n"
+)
+HARBOR_MAC_PARALLEL_LIVE = (
+    "        shell: bash\n"
+    "        run: |\n"
+    "          set -euo pipefail\n"
+    "          output=\"$(realpath \"$RUNNER_TEMP\")/floati-selftest-parallel\"\n"
+    "          python3 -m floati.selftest --workers 8 --output \"$output\"\n"
+)
+
 # (from-481afae4, to-live, what it is) — the whole substitution set, in one
-# place, so the pin cannot name three of four.
-HARBOR_SUBSTITUTION_COUNT = 4
+# place, so the pin cannot name a subset of the cold diff.
+HARBOR_SUBSTITUTION_COUNT = 7
 HARBOR_SUBSTITUTIONS = (
     (HARBOR_NAME_481AFAE4, HARBOR_NAME_LIVE, "the workflow name"),
     (
@@ -213,7 +247,22 @@ HARBOR_SUBSTITUTIONS = (
     (
         HARBOR_LINUX_STEP_481AFAE4,
         HARBOR_LINUX_STEP_LIVE,
-        "the Linux install step (ci-box-8 assert-first remedy, run 33653526683)",
+        "the Linux install step (fixture-runner-8 assert-first remedy, run 33653526683)",
+    ),
+    (
+        HARBOR_PARALLEL_NOTE_481AFAE4,
+        HARBOR_PARALLEL_NOTE_LIVE,
+        "the parallel-runner note in the workflow header",
+    ),
+    (
+        HARBOR_SELFTEST_RUN_481AFAE4,
+        HARBOR_LINUX_PARALLEL_LIVE,
+        "the Linux selftest leg (nproc workers, capped at 8)",
+    ),
+    (
+        HARBOR_SELFTEST_RUN_481AFAE4,
+        HARBOR_MAC_PARALLEL_LIVE,
+        "the Mac selftest leg (8 workers)",
     ),
 )
 
@@ -591,9 +640,24 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
     def test_the_renamed_harbor_workflow_is_the_481afae4_bytes(self) -> None:
         """The harbor's live CI is the 481afae4 bytes under four NAMED substitutions."""
 
+        from floati.tenant_fence import load_pinned_operator_declaration
+
         relative = ".github/workflows/harbor-selftest.yml"
         require_private_artifact(self, relative)
         live = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+
+        # Restore the historical comment only in this private byte comparison.
+        declaration = load_pinned_operator_declaration(REPOSITORY_ROOT)
+        historical_runner_pin = "78dccc1ec29722c9306b0c161b160fdb61758fa6b288ae9350cd90f817c0b2c1"
+        historical_label = next(
+            entry["token"]
+            for entry in declaration["forbidden_tokens"]
+            if entry["digest"] == historical_runner_pin
+        )
+        substitutions = [
+            (old, new.replace("fixture-runner-8", f"{historical_label}-8"), what)
+            for old, new, what in HARBOR_SUBSTITUTIONS
+        ]
 
         # Every substitution is asserted from BOTH sides before it is applied:
         # the 481afae4 text is in the fixture and ABSENT from the live file, and
@@ -606,7 +670,7 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
         hunks = harbor_differing_hunks(HARBOR_SELFTEST_481AFAE4, live)
         self.assertEqual(
             HARBOR_SUBSTITUTION_COUNT,
-            len(HARBOR_SUBSTITUTIONS),
+            len(substitutions),
             "the named substitution LIST must have one entry per differing hunk",
         )
         self.assertEqual(
@@ -614,7 +678,7 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
             len(hunks),
             "differing-hunk count must equal the named LIST length",
         )
-        for old, new, what in HARBOR_SUBSTITUTIONS:
+        for old, new, what in substitutions:
             if old not in HARBOR_SELFTEST_481AFAE4:
                 self.fail(
                     f"{what}: this pin substitutes text absent from the 481afae4"
@@ -632,9 +696,57 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
                 )
 
         restored = live
-        for old, new, _what in HARBOR_SUBSTITUTIONS:
+        for old, new, _what in substitutions:
             restored = restored.replace(new, old, 1)
         self.assertEqual(HARBOR_SELFTEST_481AFAE4, restored)
+
+    def test_harbor_selftest_legs_pass_worker_counts_on_the_same_runners(self) -> None:
+        """Both artifact legs call the parallel selftest; hosted macOS stays refused.
+
+        The 481afae4 bytes remain the RED fixture for self-hosted labels. This
+        checks the live harbor file's worker invocation without relaxing that
+        fixture's runs-on refusals.
+        """
+
+        relative = ".github/workflows/harbor-selftest.yml"
+        require_private_artifact(self, relative)
+        text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+        self.assertIn("branches: [main]", text)
+        self.assertIn("pull_request:", text)
+        self.assertIn("workflow_dispatch:", text)
+        self.assertIn(
+            "${{ fromJSON(vars.FLOATI_CI_RUNNER_LINUX || '[\"ubuntu-latest\"]') }}",
+            text,
+        )
+        self.assertIn(
+            "${{ fromJSON(vars.FLOATI_CI_RUNNER_MACOS || '[\"self-hosted\",\"macOS\",\"floati-mac\"]') }}",
+            text,
+        )
+        self.assertNotIn("macos-latest", text)
+        self.assertNotIn("macos-14", text)
+        findings = scan_workflow_source(
+            ".github/workflows/selftest.yml", HARBOR_SELFTEST_481AFAE4
+        )
+        self.assertIn("runner_self_hosted", self.reasons(findings))
+
+        linux, _marker, mac = text.partition("\n  macos-selftest:")
+        linux_step = linux.split("name: Run full artifact selftest", 1)[1]
+        mac_step = mac.split("name: Run full artifact selftest", 1)[1]
+        for step in (linux_step, mac_step):
+            self.assertIn("python3 -m floati.selftest", step)
+            self.assertIn("--workers", step)
+            self.assertIn('realpath "$RUNNER_TEMP"', step)
+            self.assertLess(
+                step.index('realpath "$RUNNER_TEMP"'),
+                step.index("python3 -m floati.selftest"),
+            )
+        self.assertLess(linux_step.index("nproc"), linux_step.index("-gt 8"))
+        self.assertLess(
+            linux_step.index("-gt 8"),
+            linux_step.index("python3 -m floati.selftest"),
+        )
+        self.assertRegex(mac_step, r"--workers\s+8\b")
+        self.assertNotIn("nproc", mac_step)
 
 
 if __name__ == "__main__":

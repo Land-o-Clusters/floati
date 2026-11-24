@@ -363,8 +363,17 @@ class OneShotWakePathBindingTests(_OneShotWakePathTestCase):
             directory, non_executable, unreadable, unsafe,
             Path("/") / ("x" * 5000),
         )
-        for callback in cases:
-            with self.subTest(callback=str(callback)):
+        for case_index, callback in enumerate(cases):
+            with self.subTest(case=(
+                "relative-callback",
+                "missing-callback",
+                "symlink-callback",
+                "directory-callback",
+                "nonexecutable-callback",
+                "unreadable-callback",
+                "callback-bidi-U202E",
+                "absolute-name-length-5000",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal):
                     self.registrar(callback).preview(self.request)
         self.assertFalse((self.root.tenant_home / "wake").exists())

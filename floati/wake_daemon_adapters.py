@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
+from .bus_epoch import shared_epoch_operation
 from .codex_wait_contract import CodexWaitParticipant
 from .codex_wait_liveness import classify_holder, read_holder_testimony
 from .errors import IntegrityFailure, ProtocolRefusal
@@ -40,7 +41,7 @@ _ADAPTER_CONTRACTS = {
     "codex": "floati:wake-daemon:codex:v1:queue --thread SESSION --message REASON",
     "cursor": "floati:wake-daemon:cursor:v1:--print --output-format json --single-turn --resume SESSION REASON",
     "grok-build": "floati:wake-daemon:grok-build:v1:-p REASON --output-format json --resume SESSION",
-    "zcode": "floati:wake-daemon:zcode:v1:node ENTRY --json --no-color --resume SESSION --prompt ENVELOPES; deadline bounds hand-off",
+    "zcode": "floati:wake-daemon:zcode:v1:node ENTRY --json --no-color --resume SESSION --prompt ENVELOPES; packaged glm entry uses resource-bound ZCODE_BUILTIN_PROVIDER_CONFIG_FILE; deadline bounds hand-off",
 }
 # WD-R5a (Am.1 5fc3f7d): every adapter DECLARES its resume-probe class. Each
 # declared wake shape above consumes a turn, so all three declare
@@ -278,7 +279,7 @@ def record_codex_daemon_binding(
         return {}
     session = validate_session_id(session_id)
     try:
-        executable = CODEX_EXECUTABLE.resolve(strict=True)
+        CODEX_EXECUTABLE.resolve(strict=True)
     except OSError as exc:
         raise _codex_executable_absent() from exc
     coordinate = DaemonCoordinate(
@@ -289,7 +290,7 @@ def record_codex_daemon_binding(
         coordinate,
         session_id=session,
         workspace=participant.binding.workspace,
-        executable=executable,
+        executable=CODEX_EXECUTABLE,
         adapter_version=_ADAPTER_VERSIONS["codex"],
         adapter_digest=adapter_contract_digest("codex"),
         binding_epoch=epoch,
@@ -300,6 +301,63 @@ def _default_runner(
     argv: tuple[str, ...], cwd: Path, timeout: int
 ) -> subprocess.CompletedProcess[str]:
     return run_with_timeout_forensics(argv, cwd, timeout)
+
+
+@shared_epoch_operation
+def refresh_codex_daemon_binding(
+    coordinate: DaemonCoordinate, *, session_id: str, workspace: Path,
+    executable: Path, binding_epoch: int,
+) -> dict:
+    """Explicitly trust new bytes for an existing, currently claimed Codex seat.
+
+    This is not an initial bind or a session takeover. The executable remains
+    the fixed trust pin; neither a caller path nor stale seat authority can
+    republish a binding. No waiter, probe, or provider process is launched.
+    """
+    from .codex_wait_contract import (
+        CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant,
+    )
+    from .jsonl import read_records_snapshot
+    from .seat_declaration import require_declared_coordinate
+    from .wake_hold import wake_coordination_guard
+
+    def refuse():
+        raise ProtocolRefusal(
+            "wake_daemon_codex_binding_source_invalid",
+            "Codex rebind requires the fixed executable and an existing binding "
+            "for the same declared workspace, epoch, and current armed waiter session",
+            remedy="board the declared Codex seat through its trusted waiter before rebinding",
+        )
+
+    if coordinate.harness != "codex" or executable != CODEX_EXECUTABLE:
+        refuse()
+    with wake_coordination_guard(coordinate.root, coordinate.node_id):
+        store = AdapterBindingStore(coordinate.root)
+        prior = store._read_metadata(coordinate)
+        store._validate_metadata_contract(prior)
+        if (prior["workspace"] != str(workspace)
+                or prior["binding_epoch"] != binding_epoch):
+            refuse()
+        participant = resolve_participant(coordinate.root.tenant_home, workspace)
+        if (participant is None or participant.root.path != coordinate.root.path
+                or participant.binding.node_id != coordinate.node_id):
+            refuse()
+        declaration = require_declared_coordinate(workspace, coordinate.node_id, coordinate.root)
+        if declaration["workspace_identity"] != "declared":
+            refuse()
+        consent = CodexWaitConsentLedger(coordinate.root).require_armed(participant.binding)
+        rows = read_records_snapshot(coordinate.root,
+            CodexWaitSessionLedger._relative(coordinate.node_id),
+            allowed_kinds=CodexWaitSessionLedger._KINDS)
+        matching = [row for row in rows if row["workspace"] == str(workspace)]
+        if (not matching or matching[-1]["acting_session_id"] != session_id
+                or matching[-1]["consent_receipt_id"] != consent["id"]
+                or matching[-1]["workspace_map_digest"] != participant.binding.map_digest):
+            refuse()
+        refreshed = record_codex_daemon_binding(participant, session_id, binding_epoch=binding_epoch)
+        if not refreshed:
+            refuse()
+        return refreshed
 
 
 def _reason(value: object) -> str:
@@ -322,7 +380,7 @@ def _deadline(value: object) -> int:
     return value
 
 
-def zcode_wake_prompt(envelopes: object) -> str:
+def zcode_wake_prompt(envelopes: object, *, presence: str = "") -> str:
     """Build the zcode resume prompt from drained envelopes, or a typed no-mail reason."""
 
     if not isinstance(envelopes, (list, tuple)):
@@ -344,10 +402,12 @@ def zcode_wake_prompt(envelopes: object) -> str:
                 "wake_daemon_reason_invalid", "wake reason is empty, oversized, or unsafe"
             )
         parts.append("{0}: {1}".format(item_id, note) if note else item_id)
-    prompt = "[floati] {0} new message(s). {1}. {2}".format(
-        len(envelopes), "; ".join(parts), ZCODE_ACT_INSTRUCTION
+    from .colleague_frame import frame_clause
+
+    prompt = "[floati] {0} new message(s). {1}. {2} {3}".format(
+        len(envelopes), "; ".join(parts), ZCODE_ACT_INSTRUCTION, frame_clause(envelopes)
     )
-    return _reason(prompt)
+    return _reason(presence + " " + prompt if presence else prompt)
 
 
 class _BoundWakeAdapter:
@@ -367,7 +427,14 @@ class _BoundWakeAdapter:
         self._timeout_forensics_key = attempt_key
 
     def exact_binding(self) -> AdapterBinding:
-        record = self.store.read(self.coordinate)
+        try:
+            record = self.store.read(self.coordinate)
+        except ProtocolRefusal as exc:
+            if self.harness != 'codex' or exc.code != 'wake_daemon_executable_invalid':
+                raise
+            from .codex_binding_repair import repair_codex_binding
+            repair_codex_binding(self.coordinate)
+            record = self.store.read(self.coordinate)
         binding = AdapterBinding.from_record(record)
         expected_digest = adapter_contract_digest(self.harness)
         if (
@@ -426,6 +493,7 @@ class _BoundWakeAdapter:
                     deadline,
                     sidecar_path=sidecar_path,
                     attempt_key=attempt_key,
+                    env=self._launch_environment(argv),
                 )
             else:
                 result = self._runner(argv, workspace, deadline)
@@ -444,6 +512,9 @@ class _BoundWakeAdapter:
                 bounded_stderr_excerpt(result.stderr),
             )
         return self._successful_result(result.returncode, output, digest, session_id)
+
+    def _launch_environment(self, argv: tuple[str, ...]):
+        return None
 
     def _successful_result(
         self,
@@ -502,19 +573,43 @@ class CodexQueueWakeAdapter(_BoundWakeAdapter):
             return WakeAdapterResult(
                 "refused", "wake_target_thread_dead", None, None,
             )
+        from .wake_daemon_contract import executable_drift_remedy
+        executable = current.executable
         try:
             executable = CODEX_EXECUTABLE.resolve(strict=True)
         except OSError as exc:
-            raise _codex_executable_absent() from exc
-        if executable != current.executable:
+            absent = _codex_executable_absent()
+            _, remedy = executable_drift_remedy(
+                self.coordinate, vars(current), CODEX_EXECUTABLE, None)
+            raise ProtocolRefusal(
+                "wake_daemon_codex_executable_absent",
+                absent.detail + "; restore the reviewed executable before rebinding",
+                remedy=remedy,
+            ) from exc
+        try:
+            executable = self.store._ordinary_executable(executable)
+            current_digest = hashlib.sha256(executable.read_bytes()).hexdigest()
+        except (ProtocolRefusal, OSError, RuntimeError) as exc:
+            detail, remedy = executable_drift_remedy(
+                self.coordinate, vars(current), executable, None)
+            raise ProtocolRefusal(
+                "wake_daemon_executable_invalid", detail, remedy=remedy) from exc
+        if (
+            current.executable not in (CODEX_EXECUTABLE, executable)
+            or current_digest != current.executable_digest
+        ):
+            detail, remedy = executable_drift_remedy(
+                self.coordinate, vars(current), executable, current_digest
+            )
             raise ProtocolRefusal(
                 "wake_daemon_executable_digest_mismatch",
-                "the fixed Codex executable no longer matches the binding",
+                detail,
+                remedy=remedy,
             )
         wake_reason = _reason(reason)
         deadline = _deadline(deadline_seconds)
         argv = (
-            str(CODEX_EXECUTABLE),
+            str(executable),
             "queue",
             "--thread",
             current.session_id,
@@ -667,6 +762,11 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
 
     harness = "zcode"
 
+    def _launch_environment(self, argv: tuple[str, ...]):
+        from .adapters.zcode import zcode_launch_environment
+
+        return zcode_launch_environment(Path(argv[1]))
+
     def __init__(
         self,
         coordinate: DaemonCoordinate,
@@ -725,9 +825,9 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
                 "wake_daemon_zcode_entry_mismatch",
                 "the binding does not name the pinned zcode entry script",
             )
-        wake_reason = (
-            zcode_wake_prompt(envelopes) if envelopes is not None else _reason(reason)
-        )
+        from .fleet_presence import presence_line
+        wake_reason = (zcode_wake_prompt(envelopes, presence=presence_line(self.coordinate.root, self.coordinate.node_id))
+                       if envelopes is not None else _reason(reason))
         deadline = _deadline(deadline_seconds)
         argv = self.resume_argv(
             current.executable,
@@ -776,7 +876,8 @@ class ZcodeResumeWakeAdapter(_BoundWakeAdapter):
                 if devnull > 2:
                     os.close(devnull)
                 os.closerange(3, self._handoff_close_end())
-                os.execv(argv[0], list(argv))
+                environment = self._launch_environment(argv)
+                os.execve(argv[0], list(argv), os.environ if environment is None else environment)
             except OSError:
                 os._exit(127)
         deadline_at = time.monotonic() + deadline

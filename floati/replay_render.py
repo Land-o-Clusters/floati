@@ -114,6 +114,20 @@ def render_replay_plain(artifact: Mapping[str, object], width: int = 120) -> str
         *(_event_line(event, width) for event in events),
         f"{REPLAY_SUMMARY} // {len(events)} {REPLAY_UNIT_EVENTS} // "
         f"{int(artifact.get('duration_ms', 0))} {REPLAY_UNIT_MILLISECONDS}",
+        *[
+            _clip(
+                f"[replay] {finding['ledger']}: history unavailable "
+                f"({finding['code']}"
+                + (
+                    f": record {finding['record_id']}"
+                    if finding.get("record_id")
+                    else ""
+                )
+                + ")",
+                width,
+            )
+            for finding in artifact.get("read_findings", [])
+        ],
     ]
     return "\n".join(lines) + "\n"
 

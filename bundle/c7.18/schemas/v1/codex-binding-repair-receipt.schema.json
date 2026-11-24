@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/codex-binding-repair-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind", "node_id",
+    "coordinate_digest", "acting_session_id", "workspace", "arm_receipt_id",
+    "declared_executable", "old_executable", "old_executable_digest",
+    "new_executable", "new_executable_digest", "provider_banner", "reason",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^codex-binding-repair-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "codex_binding_repair_receipt"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "coordinate_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "acting_session_id": {"type": "string", "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true},
+    "workspace": {"$ref": "#/$defs/path"},
+    "arm_receipt_id": {"type": "string", "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "declared_executable": {"$ref": "#/$defs/path"},
+    "old_executable": {"$ref": "#/$defs/path"},
+    "old_executable_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "new_executable": {"$ref": "#/$defs/path"},
+    "new_executable_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "provider_banner": {
+      "type": "string", "minLength": 1, "maxLength": 256,
+      "pattern": "^codex-cli [0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "x-floati-terminal-unsafe": true
+    },
+    "reason": {"const": "recorded_path_vanished"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true}
+  },
+  "$defs": {
+    "path": {
+      "type": "string", "minLength": 1, "maxLength": 4096,
+      "pattern": "^/(?:[^/\\x00]+(?:/[^/\\x00]+)*)?$",
+      "not": {"pattern": "(?:^|/)\\.{1,2}(?:/|$)"},
+      "x-floati-terminal-unsafe": true
+    }
+  }
+}

@@ -1,0 +1,534 @@
+{
+  "schema_version": 1,
+  "provider": "pi_local",
+  "version": "0.84.3",
+  "evidence_kind": "read_only_installed_source",
+  "compiled_equivalence": "unmeasured",
+  "extracts": [
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 238,
+      "byte_end_exclusive": 691,
+      "line_start": 8,
+      "line_end": 12,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "9ffcbf19d406db2cf3481e5d0b173cfb114d95db03e57babcd2a81493a70e387",
+      "text": "import { modelsAreEqual } from \"@earendil-works/pi-ai\";\nimport chalk from \"chalk\";\nimport { normalizeSessionName, parseArgs, printHelp } from \"./cli/args.js\";\nimport { checkProviderAuth, createAuthCheckModelRuntime, getProviderCredential, } from \"./cli/auth-check.js\";\nimport { AuthCommandError, getAuthCommandName, getAuthCommandUsage, isAuthCommandHelp, parseAuthCommand, printAuthCommandHelp, validateAuthCommandArgs, } from \"./cli/auth-command.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 13523,
+      "byte_end_exclusive": 15505,
+      "line_start": 300,
+      "line_end": 343,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "73575c75c2dc1792769e37532dc80e9a16f31f1c9afda2d6e2760f3ad1db8219",
+      "text": "    if (parsed.session) {\n        const resolved = await resolveSessionPath(parsed.session, cwd, sessionDir);\n        switch (resolved.type) {\n            case \"path\":\n            case \"local\":\n                return openSessionOrExit(resolved.path, sessionDir);\n            case \"global\": {\n                console.log(chalk.yellow(`Session found in different project: ${resolved.cwd}`));\n                const shouldFork = await promptConfirm(\"Fork this session into current directory?\");\n                if (!shouldFork) {\n                    console.log(chalk.dim(\"Aborted.\"));\n                    process.exit(0);\n                }\n                return forkSessionOrExit(resolved.path, cwd, sessionDir);\n            }\n            case \"not_found\":\n                console.error(chalk.red(`No session found matching '${resolved.arg}'`));\n                process.exit(1);\n        }\n    }\n    if (parsed.resume) {\n        try {\n            const selectedPath = await selectSession((onProgress) => SessionManager.list(cwd, sessionDir, onProgress), (onProgress) => SessionManager.listAll(sessionDir, onProgress), settingsManager);\n            if (!selectedPath) {\n                console.log(chalk.dim(\"No session selected\"));\n                process.exit(0);\n            }\n            return SessionManager.open(selectedPath, sessionDir);\n        }\n        finally {\n            stopThemeWatcher();\n        }\n    }\n    if (parsed.continue) {\n        return SessionManager.continueRecent(cwd, sessionDir);\n    }\n    if (parsed.sessionId) {\n        const existingSession = await findLocalSessionByExactId(parsed.sessionId, cwd, sessionDir);\n        if (existingSession) {\n            return SessionManager.open(existingSession.path, sessionDir);\n        }\n        console.error(chalk.yellow(`Warning: No project session found with id '${parsed.sessionId}'; creating a new session with that id.`));\n    }\n    return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId });\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 18559,
+      "byte_end_exclusive": 19506,
+      "line_start": 411,
+      "line_end": 437,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "30e388e769e0ea1ae2d3e7e364804e9044c490875a31eadd6f2672f0851af102",
+      "text": "    // Tools\n    if (parsed.noTools) {\n        options.noTools = \"all\";\n    }\n    else if (parsed.noBuiltinTools) {\n        options.noTools = \"builtin\";\n    }\n    if (parsed.tools) {\n        options.tools = [...parsed.tools];\n    }\n    if (parsed.excludeTools) {\n        options.excludeTools = [...parsed.excludeTools];\n    }\n    return { options, cliThinkingFromModel, diagnostics };\n}\nfunction resolveCliPaths(cwd, paths) {\n    return paths?.map((value) => (isLocalPath(value) ? resolvePath(value, cwd) : value));\n}\nasync function promptForMissingSessionCwd(issue, settingsManager) {\n    return showStartupSelector(settingsManager, formatMissingSessionCwdPrompt(issue), [\n        { label: \"Continue\", value: issue.fallbackCwd },\n        { label: \"Cancel\", value: undefined },\n    ]);\n}\nexport async function main(args, options) {\n    resetTimings();\n    const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 28277,
+      "byte_end_exclusive": 28965,
+      "line_start": 610,
+      "line_end": 623,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "bcff1b454b2e450e5d318c0650ef85fd63d33cb24c4a7078adae4af969bb83b4",
+      "text": "                additionalExtensionPaths: resolvedExtensionPaths,\n                additionalSkillPaths: resolvedSkillPaths,\n                additionalPromptTemplatePaths: resolvedPromptTemplatePaths,\n                additionalThemePaths: resolvedThemePaths,\n                noExtensions: parsed.noExtensions,\n                noSkills: parsed.noSkills,\n                noPromptTemplates: parsed.noPromptTemplates,\n                noThemes: parsed.noThemes,\n                noContextFiles: parsed.noContextFiles,\n                systemPrompt: parsed.systemPrompt,\n                appendSystemPrompt: parsed.appendSystemPrompt,\n                extensionFactories,\n            },\n        });\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "byte_start": 10924,
+      "byte_end_exclusive": 11331,
+      "line_start": 304,
+      "line_end": 320,
+      "file_sha256": "433097aefa47520f256f19b7b6ec2c954ef73b8024cc30507ba45a8931460fe5",
+      "extract_sha256": "d245cea2f29d3b872f914babd76992e069468d7566ad6d35f26f6727458d8a2b",
+      "text": "        const finalEntry = parseSessionEntryLine(pending);\n        if (finalEntry)\n            entries.push(finalEntry);\n    }\n    finally {\n        closeSync(fd);\n    }\n    // Validate session header\n    if (entries.length === 0)\n        return entries;\n    const header = entries[0];\n    if (header.type !== \"session\" || typeof header.id !== \"string\") {\n        return [];\n    }\n    return entries;\n}\n/**\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "byte_start": 22043,
+      "byte_end_exclusive": 24017,
+      "line_start": 614,
+      "line_end": 660,
+      "file_sha256": "433097aefa47520f256f19b7b6ec2c954ef73b8024cc30507ba45a8931460fe5",
+      "extract_sha256": "f9c0d5b5f42d7ee108f425c2d2fe01373d88603321f2150900a4c8b6da25ae98",
+      "text": "    _setSessionFile(sessionFile, preloadedFileEntries) {\n        this.sessionFile = resolvePath(sessionFile);\n        if (existsSync(this.sessionFile)) {\n            this.fileEntries = preloadedFileEntries ?? loadEntriesFromFile(this.sessionFile);\n            // If file was empty, initialize it with a valid session header. If it was\n            // non-empty but did not parse as a pi session, fail without modifying it.\n            if (this.fileEntries.length === 0) {\n                const explicitPath = this.sessionFile;\n                if (statSync(explicitPath).size > 0) {\n                    throw new Error(`Session file is not a valid ${APP_NAME} session: ${explicitPath}`);\n                }\n                this.newSession();\n                this.sessionFile = explicitPath;\n                this._rewriteFile();\n                this.flushed = true;\n                return;\n            }\n            const header = this.fileEntries.find((e) => e.type === \"session\");\n            this.sessionId = header?.id ?? createSessionId();\n            if (migrateToCurrentVersion(this.fileEntries)) {\n                this._rewriteFile();\n            }\n            this._buildIndex();\n            this.flushed = true;\n        }\n        else {\n            const explicitPath = this.sessionFile;\n            this.newSession();\n            this.sessionFile = explicitPath; // preserve explicit path from --session flag\n        }\n    }\n    newSession(options) {\n        if (options?.id !== undefined) {\n            assertValidSessionId(options.id);\n        }\n        this.sessionId = options?.id ?? createSessionId();\n        const timestamp = new Date().toISOString();\n        const header = {\n            type: \"session\",\n            version: CURRENT_SESSION_VERSION,\n            id: this.sessionId,\n            timestamp,\n            cwd: this.cwd,\n            parentSession: options?.parentSession,\n        };\n        this.fileEntries = [header];\n        this.byId.clear();\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "byte_start": 25936,
+      "byte_end_exclusive": 26840,
+      "line_start": 724,
+      "line_end": 748,
+      "file_sha256": "433097aefa47520f256f19b7b6ec2c954ef73b8024cc30507ba45a8931460fe5",
+      "extract_sha256": "2abbba442782d409cf3882ceb7b2876467ca61b0b97427feec5066b15d6b832f",
+      "text": "    _persist(entry) {\n        if (!this.persist || !this.sessionFile)\n            return;\n        const hasAssistant = this.fileEntries.some((e) => e.type === \"message\" && e.message.role === \"assistant\");\n        if (!hasAssistant) {\n            if (this.flushed) {\n                appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\\n`);\n            }\n            else {\n                // Mark as not flushed so when assistant arrives, all entries get written\n                this.flushed = false;\n            }\n            return;\n        }\n        if (!this.flushed) {\n            const fd = openSync(this.sessionFile, \"wx\");\n            try {\n                for (const e of this.fileEntries) {\n                    writeFileSync(fd, `${JSON.stringify(e)}\\n`);\n                }\n            }\n            finally {\n                closeSync(fd);\n            }\n            this.flushed = true;\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js",
+      "byte_start": 13720,
+      "byte_end_exclusive": 16116,
+      "line_start": 312,
+      "line_end": 350,
+      "file_sha256": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+      "extract_sha256": "1e6a34acd35ed5d54f0d94183ec2d240ebed6d07df9f4c5226dda637021882ea",
+      "text": "        const cliEnabledExtensions = getEnabledPaths(cliExtensionPaths.extensions);\n        const cliEnabledSkills = getEnabledPaths(cliExtensionPaths.skills);\n        const cliEnabledPrompts = getEnabledPaths(cliExtensionPaths.prompts);\n        const cliEnabledThemes = getEnabledPaths(cliExtensionPaths.themes);\n        const extensionPaths = this.noExtensions\n            ? cliEnabledExtensions\n            : this.mergePaths(cliEnabledExtensions, enabledExtensions);\n        const extensionsResult = await this.loadFinalExtensionSet(extensionPaths, preTrustExtensions);\n        for (const p of this.additionalExtensionPaths) {\n            if (isLocalPath(p)) {\n                const resolved = this.resolveResourcePath(p);\n                if (!existsSync(resolved)) {\n                    extensionsResult.errors.push({ path: resolved, error: `Extension path does not exist: ${resolved}` });\n                }\n            }\n        }\n        this.extensionsResult = this.extensionsOverride ? this.extensionsOverride(extensionsResult) : extensionsResult;\n        this.applyExtensionSourceInfo(this.extensionsResult.extensions, metadataByPath);\n        const skillPaths = this.noSkills\n            ? this.mergePaths(cliEnabledSkills, this.additionalSkillPaths)\n            : this.mergePaths([...cliEnabledSkills, ...enabledSkills], this.additionalSkillPaths);\n        this.lastSkillPaths = skillPaths;\n        this.updateSkillsFromPaths(skillPaths, metadataByPath);\n        for (const p of this.additionalSkillPaths) {\n            if (isLocalPath(p)) {\n                const resolved = this.resolveResourcePath(p);\n                if (!existsSync(resolved) && !this.skillDiagnostics.some((d) => d.path === resolved)) {\n                    this.skillDiagnostics.push({ type: \"error\", message: \"Skill path does not exist\", path: resolved });\n                }\n            }\n        }\n        const promptPaths = this.noPromptTemplates\n            ? this.mergePaths(cliEnabledPrompts, this.additionalPromptTemplatePaths)\n            : this.mergePaths([...cliEnabledPrompts, ...enabledPrompts], this.additionalPromptTemplatePaths);\n        this.lastPromptPaths = promptPaths;\n        this.updatePromptsFromPaths(promptPaths, metadataByPath);\n        for (const p of this.additionalPromptTemplatePaths) {\n            if (isLocalPath(p)) {\n                const resolved = this.resolveResourcePath(p);\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js",
+      "byte_start": 17151,
+      "byte_end_exclusive": 17528,
+      "line_start": 370,
+      "line_end": 379,
+      "file_sha256": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+      "extract_sha256": "e520f6e23ac6d8623e0db9b475ec121258386092ea9e3427808e046af2194646",
+      "text": "        }\n        const agentsFiles = {\n            agentsFiles: this.noContextFiles\n                ? []\n                : loadProjectContextFiles({\n                    cwd: this.cwd,\n                    agentDir: this.agentDir,\n                }),\n        };\n        const resolvedAgentsFiles = this.agentsFilesOverride ? this.agentsFilesOverride(agentsFiles) : agentsFiles;\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js",
+      "byte_start": 18841,
+      "byte_end_exclusive": 19945,
+      "line_start": 402,
+      "line_end": 419,
+      "file_sha256": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+      "extract_sha256": "9ca3df8f9bcbfb89269d005fe055aa701b89fd1ac7bce0d308e52c0a0cc641e7",
+      "text": "    async loadCurrentExtensionSet(options) {\n        const resolvedPaths = await this.packageManager.resolve();\n        const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {\n            temporary: true,\n        });\n        const enabledExtensions = resolvedPaths.extensions.filter((r) => r.enabled).map((r) => r.path);\n        const cliEnabledExtensions = cliExtensionPaths.extensions.filter((r) => r.enabled).map((r) => r.path);\n        const extensionPaths = this.noExtensions\n            ? cliEnabledExtensions\n            : this.mergePaths(cliEnabledExtensions, enabledExtensions);\n        const extensionsResult = await loadExtensionsCached(extensionPaths, this.cwd, this.eventBus);\n        if (!options.includeInlineFactories) {\n            return extensionsResult;\n        }\n        const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);\n        extensionsResult.extensions.push(...inlineExtensions.extensions);\n        extensionsResult.errors.push(...inlineExtensions.errors);\n        return extensionsResult;\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/resource-loader.js",
+      "byte_start": 33980,
+      "byte_end_exclusive": 34884,
+      "line_start": 740,
+      "line_end": 758,
+      "file_sha256": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+      "extract_sha256": "336f36610237bf53d5489530195e500b2700dc382e35e0c6d13f7b7804203d75",
+      "text": "    }\n    async loadExtensionFactories(runtime) {\n        const extensions = [];\n        const errors = [];\n        for (const [index, input] of this.extensionFactories.entries()) {\n            const isNamed = typeof input !== \"function\";\n            const factory = isNamed ? input.factory : input;\n            const extensionPath = `<inline:${isNamed ? input.name : index + 1}>`;\n            try {\n                const extension = await loadExtensionFromFactory(factory, this.cwd, this.eventBus, runtime, extensionPath);\n                extension.hidden = isNamed && input.hidden;\n                extensions.push(extension);\n            }\n            catch (error) {\n                const message = error instanceof Error ? error.message : \"failed to load extension\";\n                errors.push({ path: extensionPath, error: message });\n            }\n        }\n        return { extensions, errors };\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/index.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 144,
+      "line_start": 1,
+      "line_end": 2,
+      "file_sha256": "f980647d447657237cb12b189cec903dc093c55f7a5942a57930c620b01420cc",
+      "extract_sha256": "d91ee3ee8dd2616250568a9e84284d0ee6bd7d689429298a69ab22ea979445b4",
+      "text": "import llamaExtension from \"./llama/index.js\";\nexport const builtInExtensions = [{ name: \"llama.cpp\", factory: llamaExtension, hidden: true }];\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 629,
+      "line_start": 1,
+      "line_end": 3,
+      "file_sha256": "1c3a5094b54aae9ae98c66516ce8c6578140363d081471ca7e91f9cb8c23dc8a",
+      "extract_sha256": "1c3a5094b54aae9ae98c66516ce8c6578140363d081471ca7e91f9cb8c23dc8a",
+      "text": "#!/usr/bin/env node\nimport { createRequire as __piCreateRequire } from \"node:module\"; const require = __piCreateRequire(import.meta.url);\nimport{APP_NAME,configureHttpDispatcher,main}from\"./chunks/chunk-E5KXRMZK.js\";import\"./chunks/chunk-XDUWOHPL.js\";import\"./chunks/chunk-JUUC5AZY.js\";import\"./chunks/chunk-DRQDKNXA.js\";import\"./chunks/chunk-TRDNDS6A.js\";import\"./chunks/chunk-MNAIPA3J.js\";import\"./chunks/chunk-UAQELI3K.js\";import\"./chunks/chunk-4L3WN2XY.js\";process.title=APP_NAME;process.env.PI_CODING_AGENT=\"true\";process.env.AI_AGENT=\"pi\";process.emitWarning=(()=>{});configureHttpDispatcher();main(process.argv.slice(2));\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "byte_start": 14233,
+      "byte_end_exclusive": 15055,
+      "line_start": 344,
+      "line_end": 359,
+      "file_sha256": "b8056af06447a3b89b680519bae1ce1d9063a266d827c3ca92f2dcd57c5ffd2b",
+      "extract_sha256": "c42f05b2866d16fc719cc604b55a57c5a6ee767c4c7122935746ec619f2350b0",
+      "text": "            case \"get_state\": {\n                const state = {\n                    model: session.model,\n                    thinkingLevel: session.thinkingLevel,\n                    isStreaming: session.isStreaming,\n                    isCompacting: session.isCompacting,\n                    steeringMode: session.steeringMode,\n                    followUpMode: session.followUpMode,\n                    sessionFile: session.sessionFile,\n                    sessionId: session.sessionId,\n                    sessionName: session.sessionName,\n                    autoCompactionEnabled: session.autoCompactionEnabled,\n                    messageCount: session.messages.length,\n                    pendingMessageCount: session.pendingMessageCount,\n                };\n                return success(id, \"get_state\", state);\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "byte_start": 20507,
+      "byte_end_exclusive": 20793,
+      "line_start": 473,
+      "line_end": 478,
+      "file_sha256": "b8056af06447a3b89b680519bae1ce1d9063a266d827c3ca92f2dcd57c5ffd2b",
+      "extract_sha256": "e4e35af2ecbe8ab925d169b6d4e1c344729c0d0134754f019d7d5d894943cb48",
+      "text": "            case \"switch_session\": {\n                const result = await runtimeHost.switchSession(command.sessionPath);\n                if (!result.cancelled) {\n                    await rebindSession();\n                }\n                return success(id, \"switch_session\", result);\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/docs/rpc.md",
+      "byte_start": 21420,
+      "byte_end_exclusive": 23378,
+      "line_start": 840,
+      "line_end": 887,
+      "file_sha256": "7810af74b75c02301d38ca4af49f5d7751a158ad2561e50e704951b3e1c1c4b8",
+      "extract_sha256": "2cbceedf5def5e9b2283e9a1c07a69ad77670b8d7c178092c6cb4017a6e407ab",
+      "text": "| `agent_start` | Agent begins processing |\n| `agent_end` | One low-level agent run completes (may still be followed by retry, compaction, or queued continuations) |\n| `agent_settled` | Agent run is fully settled; no automatic retry, compaction retry, or queued continuation remains |\n| `turn_start` | New turn begins |\n| `turn_end` | Turn completes (includes assistant message and tool results) |\n| `message_start` | Message begins |\n| `message_update` | Streaming update (text/thinking/toolcall deltas) |\n| `message_end` | Message completes |\n| `bash_execution_update` | Direct RPC bash command output chunk |\n| `tool_execution_start` | Tool begins execution |\n| `tool_execution_update` | Tool execution progress (streaming output) |\n| `tool_execution_end` | Tool completes |\n| `queue_update` | Pending steering/follow-up queue changed |\n| `compaction_start` | Compaction begins |\n| `compaction_end` | Compaction completes |\n| `auto_retry_start` | Auto-retry begins (after transient error) |\n| `auto_retry_end` | Auto-retry completes (success or final failure) |\n| `summarization_retry_scheduled` | Retry scheduled for a transient compaction or branch-summary summarization error |\n| `summarization_retry_attempt_start` | Retried summarization request starts |\n| `summarization_retry_finished` | Summarization retry loop completes |\n| `extension_error` | Extension threw an error |\n\n### agent_start\n\nEmitted when the agent begins processing a prompt.\n\n```json\n{\"type\": \"agent_start\"}\n```\n\n### agent_end\n\nEmitted when one low-level agent run completes. Contains all messages generated during this run. If `willRetry` is true, an automatic retry will follow.\n\n```json\n{\n  \"type\": \"agent_end\",\n  \"messages\": [...],\n  \"willRetry\": false\n}\n```\n\n### agent_settled\n\nEmitted after the full session-level run settles. At this point Pi will not continue automatically through retry, compaction retry, or queued follow-up messages.\n\n```json\n{\"type\": \"agent_settled\"}\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js",
+      "byte_start": 2671,
+      "byte_end_exclusive": 3828,
+      "line_start": 76,
+      "line_end": 105,
+      "file_sha256": "bfb311d2c5d919fa4015d6aaa3c5a71a90b90011320e5e40f56b12e448c44dfc",
+      "extract_sha256": "0ba7d7fef776bf9a26355c70ad968546339fdeba804c17fb300df644f5dcc37a",
+      "text": "        else if (arg === \"--no-session\") {\n            result.noSession = true;\n        }\n        else if (arg === \"--session\" && i + 1 < args.length) {\n            result.session = args[++i];\n        }\n        else if (arg === \"--session-id\" && i + 1 < args.length) {\n            result.sessionId = args[++i];\n        }\n        else if (arg === \"--fork\" && i + 1 < args.length) {\n            result.fork = args[++i];\n        }\n        else if (arg === \"--session-dir\" && i + 1 < args.length) {\n            result.sessionDir = args[++i];\n        }\n        else if (arg === \"--models\" && i + 1 < args.length) {\n            result.models = args[++i].split(\",\").map((s) => s.trim());\n        }\n        else if (arg === \"--no-tools\" || arg === \"-nt\") {\n            result.noTools = true;\n        }\n        else if (arg === \"--no-builtin-tools\" || arg === \"-nbt\") {\n            result.noBuiltinTools = true;\n        }\n        else if ((arg === \"--tools\" || arg === \"-t\") && i + 1 < args.length) {\n            result.tools = args[++i]\n                .split(\",\")\n                .map((s) => s.trim())\n                .filter((name) => name.length > 0);\n        }\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js",
+      "byte_start": 4991,
+      "byte_end_exclusive": 6692,
+      "line_start": 135,
+      "line_end": 176,
+      "file_sha256": "bfb311d2c5d919fa4015d6aaa3c5a71a90b90011320e5e40f56b12e448c44dfc",
+      "extract_sha256": "74ce78cce8919a46bcc07ecab9db78092ed1ed56be4e7c06e71b71d55b070e79",
+      "text": "        else if ((arg === \"--extension\" || arg === \"-e\") && i + 1 < args.length) {\n            result.extensions = result.extensions ?? [];\n            result.extensions.push(args[++i]);\n        }\n        else if (arg === \"--no-extensions\" || arg === \"-ne\") {\n            result.noExtensions = true;\n        }\n        else if (arg === \"--skill\" && i + 1 < args.length) {\n            result.skills = result.skills ?? [];\n            result.skills.push(args[++i]);\n        }\n        else if (arg === \"--prompt-template\" && i + 1 < args.length) {\n            result.promptTemplates = result.promptTemplates ?? [];\n            result.promptTemplates.push(args[++i]);\n        }\n        else if (arg === \"--theme\" && i + 1 < args.length) {\n            result.themes = result.themes ?? [];\n            result.themes.push(args[++i]);\n        }\n        else if (arg === \"--use-theme\") {\n            const themeName = args[i + 1];\n            if (themeName === undefined || themeName.startsWith(\"-\")) {\n                result.diagnostics.push({ type: \"error\", message: \"--use-theme requires a theme name\" });\n            }\n            else {\n                result.useTheme = themeName;\n                i++;\n            }\n        }\n        else if (arg === \"--no-skills\" || arg === \"-ns\") {\n            result.noSkills = true;\n        }\n        else if (arg === \"--no-prompt-templates\" || arg === \"-np\") {\n            result.noPromptTemplates = true;\n        }\n        else if (arg === \"--no-themes\") {\n            result.noThemes = true;\n        }\n        else if (arg === \"--no-context-files\" || arg === \"-nc\") {\n            result.noContextFiles = true;\n        }\n        else if (arg === \"--list-models\") {\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 885,
+      "line_start": 1,
+      "line_end": 15,
+      "file_sha256": "6969bd56ba8e1628cd033bb15cb15fe38299f00b5ad84f4f8ef37a33a98681c9",
+      "extract_sha256": "59aa515a5fd289355e1b885e53c6a441738c32a110d8399fce5a7d3b06db6a3d",
+      "text": "import { join } from \"node:path\";\nimport { Agent, setDefaultStreamFn } from \"@earendil-works/pi-agent-core\";\nimport { clampThinkingLevel, streamSimple } from \"@earendil-works/pi-ai/compat\";\nimport { getAgentDir } from \"../config.js\";\nimport { resolvePath } from \"../utils/paths.js\";\nimport { AgentSession } from \"./agent-session.js\";\nimport { formatNoModelsAvailableMessage } from \"./auth-guidance.js\";\nimport { DEFAULT_THINKING_LEVEL } from \"./defaults.js\";\nimport { convertToLlm } from \"./messages.js\";\nimport { findInitialModel } from \"./model-resolver.js\";\nimport { ModelRuntime } from \"./model-runtime.js\";\nimport { mergeProviderAttributionHeaders } from \"./provider-attribution.js\";\nimport { DefaultResourceLoader } from \"./resource-loader.js\";\nimport { getDefaultSessionDir, SessionManager } from \"./session-manager.js\";\nimport { SettingsManager } from \"./settings-manager.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js",
+      "byte_start": 6359,
+      "byte_end_exclusive": 6924,
+      "line_start": 139,
+      "line_end": 144,
+      "file_sha256": "6969bd56ba8e1628cd033bb15cb15fe38299f00b5ad84f4f8ef37a33a98681c9",
+      "extract_sha256": "325f13192470556e6ce02027263c6c8eee6b9df0e37d9e1feb409c94e9807d3c",
+      "text": "    const defaultActiveToolNames = [\"read\", \"bash\", \"edit\", \"write\"];\n    const configuredDefaultToolNames = settingsManager.getDefaultTools();\n    const allowedToolNames = options.tools ?? (options.noTools === \"all\" ? [] : undefined);\n    const excludedToolNames = options.excludeTools;\n    const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;\n    const initialActiveToolNames = (options.tools ?? (options.noTools ? [] : (configuredDefaultToolNames ?? defaultActiveToolNames))).filter((name) => !excludedToolNameSet?.has(name));\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "byte_start": 89876,
+      "byte_end_exclusive": 91079,
+      "line_start": 2030,
+      "line_end": 2052,
+      "file_sha256": "ddf11c2792ea647174dfd271ccd692f135740b96777e14db230f06de02b282e7",
+      "extract_sha256": "852220a372de1a8eb597c23132770d1925d7c27d86911763b32b8cc581e04b75",
+      "text": "    _refreshToolRegistry(options) {\n        const previousRegistryNames = new Set(this._toolRegistry.keys());\n        const previousActiveToolNames = this.getActiveToolNames();\n        const allowedToolNames = this._allowedToolNames;\n        const excludedToolNames = this._excludedToolNames;\n        const isAllowedTool = (name) => (!allowedToolNames || allowedToolNames.has(name)) && !excludedToolNames?.has(name);\n        const registeredTools = this._extensionRunner.getAllRegisteredTools();\n        const allCustomTools = [\n            ...registeredTools,\n            ...this._customTools.map((definition) => ({\n                definition,\n                sourceInfo: createSyntheticSourceInfo(`<sdk:${definition.name}>`, { source: \"sdk\" }),\n            })),\n        ].filter((tool) => isAllowedTool(tool.definition.name));\n        const definitionRegistry = new Map(Array.from(this._baseToolDefinitions.entries())\n            .filter(([name]) => isAllowedTool(name))\n            .map(([name, definition]) => [\n            name,\n            {\n                definition,\n                sourceInfo: createSyntheticSourceInfo(`<builtin:${name}>`, { source: \"builtin\" }),\n            },\n        ]));\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "byte_start": 13931,
+      "byte_end_exclusive": 14290,
+      "line_start": 330,
+      "line_end": 340,
+      "file_sha256": "ddf11c2792ea647174dfd271ccd692f135740b96777e14db230f06de02b282e7",
+      "extract_sha256": "f1c147a0ae78fe489545c8d67cc1b578513bde694e469d8dbb873bc1528c0fb3",
+      "text": "    async _emitAgentSettled() {\n        this._isAgentRunActive = false;\n        try {\n            await this._extensionRunner.emit({ type: \"agent_settled\" });\n            this._emit({ type: \"agent_settled\" });\n        }\n        finally {\n            this._resolveIdleWaitIfIdle();\n        }\n    }\n    // Track last assistant message for auto-compaction check\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "byte_start": 10672,
+      "byte_end_exclusive": 11269,
+      "line_start": 258,
+      "line_end": 272,
+      "file_sha256": "b8056af06447a3b89b680519bae1ce1d9063a266d827c3ca92f2dcd57c5ffd2b",
+      "extract_sha256": "46fa6989b6784f6f0a5abe231e8014fad84d821669f0075d76badc62315bd343",
+      "text": "            },\n            onError: (err) => {\n                output({ type: \"extension_error\", extensionPath: err.extensionPath, event: err.event, error: err.error });\n            },\n        });\n        unsubscribe?.();\n        unsubscribeBackpressure?.();\n        unsubscribe = session.subscribe((event) => {\n            output(toJsonEvent(event));\n            if (event.type === \"agent_settled\") {\n                void checkShutdownRequested();\n            }\n        });\n        unsubscribeBackpressure = session.agent.subscribe(async () => {\n            await waitForRawStdoutBackpressure();\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/index.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 285,
+      "line_start": 1,
+      "line_end": 4,
+      "file_sha256": "446b17f49d6197de5aaa6548f78da5934e4e5dfc83acdeed7119a2971ce5e8c1",
+      "extract_sha256": "c96b698127178144d89c71e5e7e02c7783c867be31f593f0f2e251b62d6f55c6",
+      "text": "import { formatBytes, LlamaClient, normalizeLlamaServerUrl } from \"./client.js\";\nimport { findHuggingFaceToken, HuggingFaceClient } from \"./huggingface.js\";\nimport { createLlamaProvider, LLAMA_PROVIDER_ID } from \"./provider.js\";\nimport { runWithProgress, showLlamaUi } from \"./ui.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/index.js",
+      "byte_start": 1628,
+      "byte_end_exclusive": 1871,
+      "line_start": 35,
+      "line_end": 39,
+      "file_sha256": "446b17f49d6197de5aaa6548f78da5934e4e5dfc83acdeed7119a2971ce5e8c1",
+      "extract_sha256": "d96685dfd240c258cfe2b22ba34e449ef5b5299c516089179e53630d5a11f264",
+      "text": "export default function llamaExtension(pi) {\n    const provider = createLlamaProvider();\n    pi.registerProvider(provider.provider);\n    const syncCatalog = async (ctx, client, catalog) => {\n        const signal = AbortSignal.timeout(15_000);\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/index.js",
+      "byte_start": 7337,
+      "byte_end_exclusive": 7791,
+      "line_start": 162,
+      "line_end": 173,
+      "file_sha256": "446b17f49d6197de5aaa6548f78da5934e4e5dfc83acdeed7119a2971ce5e8c1",
+      "extract_sha256": "1efb51c19b03e10b4f23df4ab24b92fba051b8744acc1ab40551451a357978fc",
+      "text": "    };\n    pi.registerCommand(\"llama\", {\n        description: \"Manage llama.cpp router models\",\n        handler: async (_args, ctx) => {\n            if (ctx.mode !== \"tui\") {\n                ctx.ui.notify(\"/llama is available in interactive mode\", \"warning\");\n                return;\n            }\n            const client = await configuredClient(ctx);\n            if (!client)\n                return;\n            await showLlamaUi(ctx, async (ui) => {\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/index.js",
+      "byte_start": 9235,
+      "byte_end_exclusive": 9724,
+      "line_start": 203,
+      "line_end": 212,
+      "file_sha256": "446b17f49d6197de5aaa6548f78da5934e4e5dfc83acdeed7119a2971ce5e8c1",
+      "extract_sha256": "58ad35d81d6088f07106c5320b50e2a4448492d795862604547473f20a29734b",
+      "text": "                    }\n                    catch (error) {\n                        actionError = error;\n                    }\n                    const refreshed = await readCatalog();\n                    if (!refreshed)\n                        return;\n                    catalog = refreshed;\n                    if (actionError && !isConnectionError(actionError)) {\n                        ctx.ui.notify(actionError instanceof Error ? actionError.message : String(actionError), \"error\");\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 1060791,
+      "byte_end_exclusive": 1061241,
+      "line_start": 276,
+      "line_end": 276,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "5aeaf443e4600123e9568a8289af65d8d309f59537403cf34648ccd768190b83",
+      "text": "arg===\"--session\"&&i+1<args.length)result.session=args[++i];else if(arg===\"--session-id\"&&i+1<args.length)result.sessionId=args[++i];else if(arg===\"--fork\"&&i+1<args.length)result.fork=args[++i];else if(arg===\"--session-dir\"&&i+1<args.length)result.sessionDir=args[++i];else if(arg===\"--models\"&&i+1<args.length)result.models=args[++i].split(\",\").map(s=>s.trim());else if(arg===\"--no-tools\"||arg===\"-nt\")result.noTools=!0;else if(arg===\"--no-builtin-"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 1061163,
+      "byte_end_exclusive": 1061478,
+      "line_start": 276,
+      "line_end": 276,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "cdf52a088ef0248c6c80c70ba31bf4280f131f7f79d84d35e6bbbc3b9b519747",
+      "text": "arg===\"--no-tools\"||arg===\"-nt\")result.noTools=!0;else if(arg===\"--no-builtin-tools\"||arg===\"-nbt\")result.noBuiltinTools=!0;else if((arg===\"--tools\"||arg===\"-t\")&&i+1<args.length)result.tools=args[++i].split(\",\").map(s=>s.trim()).filter(name=>name.length>0);else if((arg===\"--exclude-tools\"||arg===\"-xt\")&&i+1<args."
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 1062222,
+      "byte_end_exclusive": 1063272,
+      "line_start": 276,
+      "line_end": 276,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "a2cdf776022e319d24f3bccffe01abeb8d26dde27d33e42fe08da7e2481b8fb1",
+      "text": "arg===\"--no-extensions\"||arg===\"-ne\")result.noExtensions=!0;else if(arg===\"--skill\"&&i+1<args.length)result.skills=result.skills??[],result.skills.push(args[++i]);else if(arg===\"--prompt-template\"&&i+1<args.length)result.promptTemplates=result.promptTemplates??[],result.promptTemplates.push(args[++i]);else if(arg===\"--theme\"&&i+1<args.length)result.themes=result.themes??[],result.themes.push(args[++i]);else if(arg===\"--use-theme\"){let themeName=args[i+1];themeName===void 0||themeName.startsWith(\"-\")?result.diagnostics.push({type:\"error\",message:\"--use-theme requires a theme name\"}):(result.useTheme=themeName,i++)}else if(arg===\"--no-skills\"||arg===\"-ns\")result.noSkills=!0;else if(arg===\"--no-prompt-templates\"||arg===\"-np\")result.noPromptTemplates=!0;else if(arg===\"--no-themes\")result.noThemes=!0;else if(arg===\"--no-context-files\"||arg===\"-nc\")result.noContextFiles=!0;else if(arg===\"--list-models\")i+1<args.length&&!args[i+1].startsWith(\"-\")&&!args[i+1].startsWith(\"@\")?result.listModels=args[++i]:result.listModels=!0;else if(arg===\"--tu"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 3121418,
+      "byte_end_exclusive": 3121818,
+      "line_start": 1264,
+      "line_end": 1264,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "9ae18c7cb9696b19c29d1041b95a704caf6655e2a4ad63432a183738d5835d81",
+      "text": "allowedToolNames=options.tools??(options.noTools===\"all\"?[]:void 0),excludedToolNames=options.excludeTools,excludedToolNameSet=excludedToolNames?new Set(excludedToolNames):void 0,initialActiveToolNames=(options.tools??(options.noTools?[]:configuredDefaultToolNames??defaultActiveToolNames)).filter(name=>!excludedToolNameSet?.has(name)),agent,convertToLlmWithBlockImages=messages=>{let converted=conv"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2873799,
+      "byte_end_exclusive": 2874649,
+      "line_start": 1245,
+      "line_end": 1245,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "ade1870fe95c281c65dfd279fb3d62c8d7b149cb2120a88d1c3a8c7caf900d54",
+      "text": "isAllowedTool=name=>(!allowedToolNames||allowedToolNames.has(name))&&!excludedToolNames?.has(name),allCustomTools=[...this._extensionRunner.getAllRegisteredTools(),...this._customTools.map(definition=>({definition,sourceInfo:createSyntheticSourceInfo(`<sdk:${definition.name}>`,{source:\"sdk\"})}))].filter(tool=>isAllowedTool(tool.definition.name)),definitionRegistry=new Map(Array.from(this._baseToolDefinitions.entries()).filter(([name])=>isAllowedTool(name)).map(([name,definition])=>[name,{definition,sourceInfo:createSyntheticSourceInfo(`<builtin:${name}>`,{source:\"builtin\"})}]));for(let tool of allCustomTools)definitionRegistry.set(tool.definition.name,{definition:tool.definition,sourceInfo:tool.sourceInfo});this._toolDefinitions=definitionRegistry,this._toolPromptSnippets=new Map(Array.from(definitionRegistry.values()).map(({definition})="
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2837543,
+      "byte_end_exclusive": 2837783,
+      "line_start": 1236,
+      "line_end": 1236,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "7ff08af0e6643f484a7801697802bfa137d9b7904af1bfc335fbccd717812b24",
+      "text": "_emitAgentSettled(){this._isAgentRunActive=!1;try{await this._extensionRunner.emit({type:\"agent_settled\"}),this._emit({type:\"agent_settled\"})}finally{this._resolveIdleWaitIfIdle()}}_lastAssistantMessage=void 0;_handleAgentEvent=async event="
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 3634010,
+      "byte_end_exclusive": 3634550,
+      "line_start": 1470,
+      "line_end": 1470,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "8de58267a9ae29d5243541afb1b4940f48e3507c273fcd4073146cacaaff1952",
+      "text": "case\"get_state\":{let state2={model:session.model,thinkingLevel:session.thinkingLevel,isStreaming:session.isStreaming,isCompacting:session.isCompacting,steeringMode:session.steeringMode,followUpMode:session.followUpMode,sessionFile:session.sessionFile,sessionId:session.sessionId,sessionName:session.sessionName,autoCompactionEnabled:session.autoCompactionEnabled,messageCount:session.messages.length,pendingMessageCount:session.pendingMessageCount};return success(id,\"get_state\",state2)}case\"set_model\":{let model=session.modelRuntime.getAv"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 3215637,
+      "byte_end_exclusive": 3215807,
+      "line_start": 1302,
+      "line_end": 1302,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "677e914887b01d95321cbd24877fe44a79e8ceeb619bee2ea67359b103681740",
+      "text": "function llamaExtension(pi){let provider=createLlamaProvider();pi.registerProvider(provider.provider);let syncCatalog=async(ctx,client,catalog)=>{let signal=AbortSignal.t"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 3219281,
+      "byte_end_exclusive": 3219471,
+      "line_start": 1309,
+      "line_end": 1309,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "8d4d38520373a8af4573b413f1d4e49b9b0c42a76bd53d4f57339659a381fed1",
+      "text": "ctx.mode!==\"tui\"){ctx.ui.notify(\"/llama is available in interactive mode\",\"warning\");return}let client=await configuredClient(ctx);client&&await showLlamaUi(ctx,async ui=>{let readCatalog=as"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2418996,
+      "byte_end_exclusive": 2420096,
+      "line_start": 664,
+      "line_end": 664,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "2e16b687909eaa563643e82e21592fad8892841b2f2fc32a00871c963c40a38c",
+      "text": "_setSessionFile(sessionFile,preloadedFileEntries){if(this.sessionFile=resolvePath(sessionFile),existsSync4(this.sessionFile)){if(this.fileEntries=preloadedFileEntries??loadEntriesFromFile(this.sessionFile),this.fileEntries.length===0){let explicitPath=this.sessionFile;if(statSync4(explicitPath).size>0)throw new Error(`Session file is not a valid ${APP_NAME} session: ${explicitPath}`);this.newSession(),this.sessionFile=explicitPath,this._rewriteFile(),this.flushed=!0;return}let header=this.fileEntries.find(e=>e.type===\"session\");this.sessionId=header?.id??createSessionId(),migrateToCurrentVersion(this.fileEntries)&&this._rewriteFile(),this._buildIndex(),this.flushed=!0}else{let explicitPath=this.sessionFile;this.newSession(),this.sessionFile=explicitPath}}newSession(options){options?.id!==void 0&&assertValidSessionId(options.id),this.sessionId=options?.id??createSessionId();let timestamp=new Date().toISOString(),header={type:\"session\",version:CURRENT_SESSION_VERSION,id:this.sessionId,timestamp,cwd:this.cwd,parentSession:options?.parentSession};if(this.fileEntries=[header],this.byId.cl"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 1170,
+      "byte_end_exclusive": 1544,
+      "line_start": 20,
+      "line_end": 23,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "434022058546307cd2e0e99211a80bcdf86b6df91900a4813715ce4ac3863486",
+      "text": "import { APP_NAME, ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from \"./config.js\";\nimport { createAgentSessionRuntime } from \"./core/agent-session-runtime.js\";\nimport { createAgentSessionFromServices, createAgentSessionServices, } from \"./core/agent-session-services.js\";\nimport { formatNoModelsAvailableMessage } from \"./core/auth-guidance.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/main.js",
+      "byte_start": 2580,
+      "byte_end_exclusive": 2791,
+      "line_start": 37,
+      "line_end": 39,
+      "file_sha256": "4b9b50c918dfd7b889c6fb781982d74808cd633e3fe99c641fb1943f6de8fdc5",
+      "extract_sha256": "0bd4fa9ada3b15e66ba442aa6f43df8224e405232a6265a8ba26a65ba79fbe5c",
+      "text": "import { builtInExtensions } from \"./extensions/index.js\";\nimport { runMigrations, showDeprecationWarnings } from \"./migrations.js\";\nimport { InteractiveMode, runPrintMode, runRpcMode } from \"./modes/index.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/index.js",
+      "byte_start": 43,
+      "byte_end_exclusive": 257,
+      "line_start": 4,
+      "line_end": 7,
+      "file_sha256": "42bd65ff8aee4f60dfcfcfb9db66772219281585cdbef845df747c8846618a87",
+      "extract_sha256": "1c55bbf0ed42612afb2d2684936562d2f644c885708945511160a7b1b2163cd0",
+      "text": "export { InteractiveMode } from \"./interactive/interactive-mode.js\";\nexport { runPrintMode } from \"./print-mode.js\";\nexport { RpcClient } from \"./rpc/rpc-client.js\";\nexport { runRpcMode } from \"./rpc/rpc-mode.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session-services.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 345,
+      "line_start": 1,
+      "line_end": 7,
+      "file_sha256": "3a4ee476b0596f346023398f52176381355f98dd621b8161f269c7ef3a57e28f",
+      "extract_sha256": "424590b9accc23ca75e2ba19fff76f267e69fdbc104417c711dd5759e64ee1b8",
+      "text": "import { join } from \"node:path\";\nimport { getAgentDir } from \"../config.js\";\nimport { resolvePath } from \"../utils/paths.js\";\nimport { ModelRuntime } from \"./model-runtime.js\";\nimport { DefaultResourceLoader, } from \"./resource-loader.js\";\nimport { createAgentSession } from \"./sdk.js\";\nimport { SettingsManager } from \"./settings-manager.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/provider.js",
+      "byte_start": 1845,
+      "byte_end_exclusive": 2347,
+      "line_start": 41,
+      "line_end": 53,
+      "file_sha256": "33d201b9851f52db45231d11870e5b4aa66522f257118d1060c7bd0721a898f3",
+      "extract_sha256": "492fed1e060679579b4380952db1e69620572f0dd780ad59db35566e2f638ec0",
+      "text": "export function createLlamaProvider() {\n    let models = [];\n    const setCatalog = (catalog, serverUrl) => {\n        models = catalog.filter((model) => modelIsSelectable(model)).map((model) => toPiModel(model, serverUrl));\n    };\n    const provider = {\n        id: LLAMA_PROVIDER_ID,\n        name: \"llama.cpp\",\n        baseUrl: llamaInferenceUrl(DEFAULT_LLAMA_SERVER_URL),\n        auth: {\n            apiKey: {\n                name: \"llama.cpp server\",\n                login: async (interaction) => {\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/provider.js",
+      "byte_start": 4281,
+      "byte_end_exclusive": 5846,
+      "line_start": 90,
+      "line_end": 128,
+      "file_sha256": "33d201b9851f52db45231d11870e5b4aa66522f257118d1060c7bd0721a898f3",
+      "extract_sha256": "a02190e84a49b07c1a6e8efb1aaf46f8e9851ff9664abeb0c3575f7ba2ea4a0b",
+      "text": "        getModels: () => models,\n        refreshModels: async (context) => {\n            if (context.stored) {\n                const restored = context.stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === \"openai-completions\");\n                if (!(await context.publish({\n                    update: () => {\n                        models = restored;\n                    },\n                }))) {\n                    return;\n                }\n            }\n            if (!context.allowNetwork || context.signal.aborted || context.credential?.type !== \"api_key\")\n                return;\n            const serverUrl = credentialServerUrl(context.credential);\n            if (!serverUrl)\n                return;\n            const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });\n            if (context.signal.aborted)\n                return;\n            const refreshed = catalog\n                .filter((model) => modelIsSelectable(model))\n                .map((model) => toPiModel(model, serverUrl));\n            await context.publish({\n                persist: { models: refreshed, checkedAt: Date.now() },\n                update: () => {\n                    models = refreshed;\n                },\n            });\n        },\n        stream: (model, context, options) => stream(model, context, options),\n        streamSimple: (model, context, options) => streamSimple(model, context, options),\n    };\n    return { provider, setCatalog };\n}\n//# sourceMappingURL=provider.js.map"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "byte_start": 15543,
+      "byte_end_exclusive": 18067,
+      "line_start": 366,
+      "line_end": 416,
+      "file_sha256": "ddf11c2792ea647174dfd271ccd692f135740b96777e14db230f06de02b282e7",
+      "extract_sha256": "d43164e093be0e734295cb04aec1985647afec61871ab53bb6511eb03ec32cfc",
+      "text": "        // Emit to extensions first\n        await this._emitExtensionEvent(event);\n        // Notify all listeners\n        this._emit(event.type === \"agent_end\" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event) } : event);\n        // Handle session persistence\n        if (event.type === \"message_end\") {\n            // Check if this is a custom message from extensions\n            if (event.message.role === \"custom\") {\n                // Persist as CustomMessageEntry\n                this.sessionManager.appendCustomMessageEntry(event.message.customType, event.message.content, event.message.display, event.message.details);\n            }\n            else if (event.message.role === \"user\" ||\n                event.message.role === \"assistant\" ||\n                event.message.role === \"toolResult\") {\n                // Regular LLM message - persist as SessionMessageEntry\n                this.sessionManager.appendMessage(event.message);\n            }\n            // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere\n            // Track assistant message for auto-compaction (checked on agent_end)\n            if (event.message.role === \"assistant\") {\n                this._lastAssistantMessage = event.message;\n                const assistantMsg = event.message;\n                if (assistantMsg.stopReason !== \"error\" && assistantMsg.stopReason !== \"length\") {\n                    this._overflowRecoveryAttempted = false;\n                }\n                // Reset retry counter immediately on successful assistant response\n                // This prevents accumulation across multiple LLM calls within a turn\n                if (assistantMsg.stopReason !== \"error\" && this._retryAttempt > 0) {\n                    this._emit({\n                        type: \"auto_retry_end\",\n                        success: true,\n                        attempt: this._retryAttempt,\n                    });\n                    this._retryAttempt = 0;\n                }\n            }\n        }\n    };\n    _willRetryAfterAgentEnd(event) {\n        const settings = this.settingsManager.getRetrySettings();\n        if (!settings.enabled || this._retryAttempt >= settings.maxRetries) {\n            return false;\n        }\n        for (let i = event.messages.length - 1; i >= 0; i--) {\n            const message = event.messages[i];\n            if (message.role === \"assistant\") {\n                return this._isRetryableError(message);\n            }\n        }\n        return false;\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "byte_start": 31057,
+      "byte_end_exclusive": 32361,
+      "line_start": 746,
+      "line_end": 783,
+      "file_sha256": "ddf11c2792ea647174dfd271ccd692f135740b96777e14db230f06de02b282e7",
+      "extract_sha256": "803e8c1487f116d6836007a791b1f5e441ea91dad0808ee50b7acbc76d5edcad",
+      "text": "    // =========================================================================\n    async _runAgentPrompt(messages) {\n        this._isAgentRunActive = true;\n        try {\n            await this.agent.prompt(messages);\n            while (await this._handlePostAgentRun()) {\n                await this.agent.continue();\n            }\n        }\n        finally {\n            this._systemPromptOverride = undefined;\n            this._flushPendingBashMessages();\n            await this._emitAgentSettled();\n        }\n    }\n    async _handlePostAgentRun() {\n        const msg = this._lastAssistantMessage;\n        this._lastAssistantMessage = undefined;\n        if (!msg) {\n            return false;\n        }\n        if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {\n            return true;\n        }\n        if (msg.stopReason === \"error\" && this._retryAttempt > 0) {\n            this._emit({\n                type: \"auto_retry_end\",\n                success: false,\n                attempt: this._retryAttempt,\n                finalError: msg.errorMessage,\n            });\n            this._retryAttempt = 0;\n        }\n        if (await this._checkCompaction(msg)) {\n            return true;\n        }\n        // The agent loop drains both queues before emitting agent_end. Any messages\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "byte_start": 98494,
+      "byte_end_exclusive": 100330,
+      "line_start": 2209,
+      "line_end": 2257,
+      "file_sha256": "ddf11c2792ea647174dfd271ccd692f135740b96777e14db230f06de02b282e7",
+      "extract_sha256": "aaca5f087c96ccad297436c4f97e823d6823bd6d2cdd583d4185237bd2801594",
+      "text": "     * @returns true if the caller should continue the agent, false otherwise\n     */\n    async _prepareRetry(message) {\n        const settings = this.settingsManager.getRetrySettings();\n        if (!settings.enabled) {\n            return false;\n        }\n        this._retryAttempt++;\n        if (this._retryAttempt > settings.maxRetries) {\n            // Preserve the completed attempt count so post-run handling can emit the final failure.\n            this._retryAttempt--;\n            return false;\n        }\n        const delayMs = settings.baseDelayMs * 2 ** (this._retryAttempt - 1);\n        this._emit({\n            type: \"auto_retry_start\",\n            attempt: this._retryAttempt,\n            maxAttempts: settings.maxRetries,\n            delayMs,\n            errorMessage: message.errorMessage || \"Unknown error\",\n        });\n        // Remove error message from agent state (keep in session for history)\n        const messages = this.agent.state.messages;\n        if (messages.length > 0 && messages[messages.length - 1].role === \"assistant\") {\n            this.agent.state.messages = messages.slice(0, -1);\n        }\n        // Wait with exponential backoff (abortable)\n        this._retryAbortController = new AbortController();\n        try {\n            await sleep(delayMs, this._retryAbortController.signal);\n        }\n        catch {\n            // Aborted during sleep - emit end event so UI can clean up\n            const attempt = this._retryAttempt;\n            this._retryAttempt = 0;\n            this._emit({\n                type: \"auto_retry_end\",\n                success: false,\n                attempt,\n                finalError: \"Retry cancelled\",\n            });\n            return false;\n        }\n        finally {\n            this._retryAbortController = undefined;\n        }\n        return true;\n    }\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "byte_start": 613,
+      "byte_end_exclusive": 979,
+      "line_start": 14,
+      "line_end": 19,
+      "file_sha256": "b8056af06447a3b89b680519bae1ce1d9063a266d827c3ca92f2dcd57c5ffd2b",
+      "extract_sha256": "dcf7e3c17bc2762ab301543eacd2a2a4f4f55b1ce9ca123c6b0f442bbba86954",
+      "text": "import { flushRawStdout, takeOverStdout, waitForRawStdoutBackpressure, writeRawStdout, } from \"../../core/output-guard.js\";\nimport { killTrackedDetachedChildren } from \"../../utils/shell.js\";\nimport { theme } from \"../interactive/theme/theme.js\";\nimport { toJsonEvent } from \"../json-event.js\";\nimport { attachJsonlLineReader, serializeJsonLine } from \"./jsonl.js\";\n"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/json-event.js",
+      "byte_start": 0,
+      "byte_end_exclusive": 1057,
+      "line_start": 1,
+      "line_end": 29,
+      "file_sha256": "5f3756470739fa4a1595feeaf1ce2dfd29e36a2cffd9e642f914fc23f540d606",
+      "extract_sha256": "5f3756470739fa4a1595feeaf1ce2dfd29e36a2cffd9e642f914fc23f540d606",
+      "text": "function toJsonAssistantMessageEvent(event) {\n    if (event.type === \"toolcall_start\") {\n        const toolCall = event.partial.content[event.contentIndex];\n        if (toolCall?.type !== \"toolCall\") {\n            throw new Error(`toolcall_start content at index ${event.contentIndex} is not a tool call`);\n        }\n        const { partial: _partial, ...deltaEvent } = event;\n        return { ...deltaEvent, id: toolCall.id, toolName: toolCall.name };\n    }\n    if (!(\"partial\" in event)) {\n        return event;\n    }\n    const { partial: _partial, ...deltaEvent } = event;\n    return deltaEvent;\n}\nexport function toJsonEvent(event) {\n    if (event.type !== \"message_update\") {\n        return event;\n    }\n    if (event.message.role !== \"assistant\") {\n        throw new Error(\"message_update message is not an assistant message\");\n    }\n    return {\n        type: \"message_update\",\n        usage: event.message.usage,\n        assistantMessageEvent: toJsonAssistantMessageEvent(event.assistantMessageEvent),\n    };\n}\n//# sourceMappingURL=json-event.js.map"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2478951,
+      "byte_end_exclusive": 2480731,
+      "line_start": 825,
+      "line_end": 825,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "7d384e8765eec7daee57cb05ddd9628c1a9545da124b72c48a3e51949d36a65f",
+      "text": "async function streamAssistantResponse(context,config,signal,emit,streamFunction){let messages=context.messages;config.transformContext&&(messages=await config.transformContext(messages,signal));let llmMessages=await config.convertToLlm(messages),llmContext={systemPrompt:context.systemPrompt,messages:llmMessages,tools:context.tools},resolvedApiKey=(config.getApiKey?await config.getApiKey(config.model.provider):void 0)||config.apiKey,response=await streamFunction(config.model,llmContext,{...config,apiKey:resolvedApiKey,signal}),partialMessage=null,addedPartial=!1;for await(let event of response)switch(event.type){case\"start\":partialMessage=event.partial,context.messages.push(partialMessage),addedPartial=!0,await emit({type:\"message_start\",message:{...partialMessage}});break;case\"text_start\":case\"text_delta\":case\"text_end\":case\"thinking_start\":case\"thinking_delta\":case\"thinking_end\":case\"toolcall_start\":case\"toolcall_delta\":case\"toolcall_end\":partialMessage&&(partialMessage=event.partial,context.messages[context.messages.length-1]=partialMessage,await emit({type:\"message_update\",assistantMessageEvent:event,message:{...partialMessage}}));break;case\"done\":case\"error\":{let finalMessage2=await response.result();return addedPartial?context.messages[context.messages.length-1]=finalMessage2:context.messages.push(finalMessage2),addedPartial||await emit({type:\"message_start\",message:{...finalMessage2}}),await emit({type:\"message_end\",message:finalMessage2}),finalMessage2}}let finalMessage=await response.result();return addedPartial?context.messages[context.messages.length-1]=finalMessage:(context.messages.push(finalMessage),await emit({type:\"message_start\",message:{...finalMessage}})),await emit({type:\"message_end\",message:finalMessage}),finalMessage}async func"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2845925,
+      "byte_end_exclusive": 2846835,
+      "line_start": 1238,
+      "line_end": 1238,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "767655bc6676e464a88668ea8fbf6ea66d3e5e18a6000a05ed114dc79e2b8560",
+      "text": "async _runAgentPrompt(messages){this._isAgentRunActive=!0;try{for(await this.agent.prompt(messages);await this._handlePostAgentRun();)await this.agent.continue()}finally{this._systemPromptOverride=void 0,this._flushPendingBashMessages(),await this._emitAgentSettled()}}async _handlePostAgentRun(){let msg=this._lastAssistantMessage;return this._lastAssistantMessage=void 0,msg?this._isRetryableError(msg)&&await this._prepareRetry(msg)||(msg.stopReason===\"error\"&&this._retryAttempt>0&&(this._emit({type:\"auto_retry_end\",success:!1,attempt:this._retryAttempt,finalError:msg.errorMessage}),this._retryAttempt=0),await this._checkCompaction(msg))?!0:this.agent.hasQueuedMessages():!1}async prompt(text,options){let expandPromptTemplates=options?.expandPromptTemplates??!0,preflightResult=options?.preflightResult,messages;try{if(expandPromptTemplates&&text.startsWith(\"/\")&&await this._tryExecuteExtensionCommand"
+    },
+    {
+      "path": "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-E5KXRMZK.js",
+      "byte_start": 2878886,
+      "byte_end_exclusive": 2880046,
+      "line_start": 1245,
+      "line_end": 1245,
+      "file_sha256": "0d162b1014afe5343a86c2606a1c40f5cc3cccf7d739ffd304ba54cac0b1ec50",
+      "extract_sha256": "87eb846ba355f2c56441f057cbc8f84b9162be1efa4fe41f3c703212bd390175",
+      "text": "async _prepareRetry(message){let settings2=this.settingsManager.getRetrySettings();if(!settings2.enabled)return!1;if(this._retryAttempt++,this._retryAttempt>settings2.maxRetries)return this._retryAttempt--,!1;let delayMs=settings2.baseDelayMs*2**(this._retryAttempt-1);this._emit({type:\"auto_retry_start\",attempt:this._retryAttempt,maxAttempts:settings2.maxRetries,delayMs,errorMessage:message.errorMessage||\"Unknown error\"});let messages=this.agent.state.messages;messages.length>0&&messages[messages.length-1].role===\"assistant\"&&(this.agent.state.messages=messages.slice(0,-1)),this._retryAbortController=new AbortController;try{await sleep2(delayMs,this._retryAbortController.signal)}catch{let attempt2=this._retryAttempt;return this._retryAttempt=0,this._emit({type:\"auto_retry_end\",success:!1,attempt:attempt2,finalError:\"Retry cancelled\"}),!1}finally{this._retryAbortController=void 0}return!0}abortRetry(){this._retryAbortController?.abort()}get isRetrying(){return this._retryAbortController!==void 0}get autoRetryEnabled(){return this.settingsManager.getRetryEnabled()}setAutoRetryEnabled(enabled){this.settingsManager.setRetryEnabled(enabled)}async "
+    }
+  ],
+  "unresolved": {
+    "exact_discovery_disable_cli_spellings": "main.js imports parseArgs from ./cli/args.js; this file is outside the design-named read set",
+    "builtin_factory_body": "extensions/index.js imports ./llama/index.js; this file is outside the design-named read set"
+  },
+  "unread_scope_paths": [
+    "dist/cli/args.js",
+    "dist/extensions/llama/index.js"
+  ],
+  "reviewed_source_conclusions": {
+    "permission_translation": "--no-tools selects empty all-tool authority; --tools selects an exact builtin/custom allowlist; --no-builtin-tools is insufficient.",
+    "resource_loading": "--no-extensions disables discovery but explicit extension paths and builtin inline factories remain; all explicit resources are forbidden by the adapter.",
+    "builtin_factory": "The imported llama index registers one provider and /llama command; the command returns before configured-client discovery unless ctx.mode is tui. No tool registration or session event hook occurs in that index. The registered provider has credential/auth callbacks and refreshModels can contact a configured server only after allowNetwork, signal, credential and URL checks; kernel network isolation remains required. No credential values or configuration stores were read.",
+    "bundled_subset": "Installed CLI imports chunk-E5KXRMZK.js; bounded extracts match session parser/create hazards, authority filters, get_state fields, settled event, and llama registration/TUI gate. No whole-bundle execution or overall equivalence claim.",
+    "retry_ordering": "Bundled streamAssistantResponse emits message_update for text/thinking/toolcall stream events, but done/error emits message_end with the final assistant message. agent-session forwards this event, then handles assistant error via post-run auto_retry_start/continue. A later successful assistant message_end emits auto_retry_end success=true. agent_settled follows the whole continuation loop, including failure paths. message_update.assistantMessageEvent.type=error is not emitted by this inspected core switch; settled alone does not establish successful assistant outcome."
+  }
+}

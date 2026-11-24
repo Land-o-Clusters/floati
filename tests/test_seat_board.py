@@ -1,4 +1,5 @@
 """Boarding orders authority, resume and consumption without replaying mail."""
+from tests.readiness import wait_event, wait_join
 import unittest
 from unittest import mock
 from floati import fixture_ids as ids
@@ -9,7 +10,8 @@ from floati.registry import Registry
 from floati.wake_control import WakeController
 from tests import test_codex_wait as fixture
 
-class SeatBoardTests(unittest.TestCase):
+
+class _SeatBoardFixture:
     write_map = fixture.CodexWaitContractTests.write_map
     send = fixture.CodexWaitRuntimeTests.send
     arm_session = fixture.CodexWaitRuntimeTests.arm_session
@@ -26,6 +28,9 @@ class SeatBoardTests(unittest.TestCase):
         from floati.seat_board import SeatBoard
         return SeatBoard(self.root).board(ids.builder('floati'), self.workspace, session,
             idempotency_key=key, **kwargs)
+
+
+class SeatBoardTests(_SeatBoardFixture, unittest.TestCase):
     def test_board_drains_after_arm_and_completed_replay_does_not_drain_new_mail(self):
         first = self.send('first')
         result = self.board()
@@ -34,6 +39,30 @@ class SeatBoardTests(unittest.TestCase):
         self.send('second')
         self.assertEqual(result, self.board())
         self.assertEqual(1, len(EventLog(self.root).present(ids.builder('floati'))[0]))
+
+    def test_empty_board_and_completed_replay_do_not_read_certified_unrelated_events(self):
+        from floati import jsonl
+
+        log = EventLog(self.root)
+        for index in range(3):
+            log.send('architect', 'architect', 'floati', 'a' * 40, 'note.md',
+                'unrelated retained mail', idempotency_key='board-unrelated-' + str(index))
+        # Establish native recipient absence before either fresh SeatBoard
+        # instance runs. The event certificate is maintained by real sends.
+        self.assertEqual(([], None), log.present(ids.builder('floati')))
+        before = log.path.read_bytes()
+        native_read = jsonl._read_path_records
+        def read(path, *args, **kwargs):
+            if path == log.path:
+                self.fail('boarding replayed certified unrelated event history')
+            return native_read(path, *args, **kwargs)
+        with mock.patch.object(jsonl, '_read_path_records', side_effect=read):
+            result = self.board()
+            self.assertEqual([], result['item_ids'])
+            self.assertEqual([], result['messages'])
+            self.assertEqual(result, self.board())
+        self.assertEqual(before, log.path.read_bytes())
+
     def test_contested_claim_requires_explicit_takeover(self):
         prior = self.arm_session('prior-session')
         with self.assertRaises(ProtocolRefusal) as caught:
@@ -47,7 +76,9 @@ class SeatBoardTests(unittest.TestCase):
         from floati.seat_board import SeatBoard
         with self.assertRaises(ProtocolRefusal) as caught:
             SeatBoard(self.root).board(ids.builder('floati'), self.base, 'new-session', idempotency_key='bad')
-        self.assertEqual('seat_board_workspace_undeclared', caught.exception.code)
+        # BL-10 split the two-subject refusal: an unmapped workspace is UNBOUND
+        # (no waiter binding); a mapped-but-undeclared one stays UNDECLARED.
+        self.assertEqual('seat_board_workspace_unbound', caught.exception.code)
     def test_paused_session_resumes_before_drain(self):
         WakeController(self.root).pause(ids.builder('floati'), 'new-session', idempotency_key='pause')
         self.assertEqual('resumed', self.board()['resume_outcome'])
@@ -93,11 +124,11 @@ class SeatBoardTests(unittest.TestCase):
             thread = threading.Thread(target=contender)
             threads.append(thread)
             thread.start()
-            self.assertTrue(attempted.wait(1))
+            self.assertTrue(wait_event(attempted, "test_seat_board attempted"))
             self.assertFalse(finished.wait(.1))
             return real(log, *args, **kwargs)
         with mock.patch.object(EventLog, '_present_already_guarded', present): self.board()
-        for thread in threads: thread.join(2)
+        for thread in threads: wait_join(thread, "test_seat_board thread")
         self.assertTrue(finished.is_set())
         self.assertFalse(failures)
     def test_resume_completion_crash_reuses_native_receipt(self):
@@ -177,4 +208,8 @@ class SeatBoardTests(unittest.TestCase):
         self.assertEqual(0, result, artifact)
         self.assertEqual('declared-session', artifact['evidence']['acting_session_id'])
         self.assertEqual([message['id']], artifact['evidence']['item_ids'])
-        self.assertEqual([message], artifact['evidence']['messages'])
+        envelope = message['message']
+        self.assertEqual(
+            [envelope],
+            [{key: row[key] for key in envelope} for row in artifact['evidence']['messages']],
+        )

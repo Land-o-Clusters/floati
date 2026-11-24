@@ -14,15 +14,16 @@ It derives nothing of its own: the deployable path set comes from
 the digests are plain SHA-256 of the bytes on disk. Every top-level field other than
 `files` is carried through untouched, because those are declarations and not measurements.
 
-    --check   compare only; exit 1 and name what drifted. **The default**, because a tool
+    (no flag) compare only; exit 1 and name what drifted. **The default**, because a tool
               that writes by default gets run by accident.
     --write   rewrite the manifest in place.
 
-Run `--check` at the tip you are about to push, never only at the union you composed.
+Run without flags at the tip you are about to push, never only at the union you composed.
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import sys
@@ -51,13 +52,71 @@ def render(current: dict, files: list[dict]) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
 
 
+def reviewed_schema_pin(root: Path, reviewed: list[str]) -> str:
+    """Advance only explicitly reviewed membership; reuse the verifier's census."""
+    sys.path.insert(0, str(root))
+    from tests import test_manifest as owner
+
+    target = root / "tests/test_manifest.py"
+    text = target.read_text(encoding="utf-8")
+    assignments = {node.targets[0].id: node for node in ast.parse(text).body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)}
+    names = ("_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT", "_FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256",
+        "_FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT", "_FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256")
+    pinned = tuple(ast.literal_eval(assignments[name].value) for name in names)
+    paths = owner._protocol_json_paths(owner._GOVERNED_PROTOCOL_ASSET_ROOTS, "governed protocol", root=root)
+    reviewed_paths = {Path(value) for value in reviewed}
+    if (len(reviewed_paths) != len(reviewed) or not reviewed_paths
+        or any(path.is_absolute() or path.as_posix() != value or ".." in path.parts
+            for value, path in zip(reviewed, map(Path, reviewed)))
+        or not reviewed_paths <= set(paths)):
+        raise ValueError("reviewed_schema_selection_invalid")
+    observed = owner._governed_protocol_snapshot(root=root)
+    if observed[2:] != pinned[2:]:
+        raise ValueError("reviewed_schema_shared_shape_changed")
+    frozen = ("_FLOATI_FROZEN_PROTOCOL_ASSET_COUNT", "_FLOATI_FROZEN_PROTOCOL_PATHS_SHA256",
+        "_FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256")
+    if owner._frozen_protocol_snapshot(root=root) != tuple(
+        ast.literal_eval(assignments[name].value) for name in frozen):
+        raise ValueError("reviewed_schema_frozen_bytes_changed")
+    if observed == pinned:
+        return text
+    previous = [path for path in paths if path not in reviewed_paths]
+    if (len(previous), owner._protocol_paths_sha256(previous)) != pinned[:2]:
+        raise ValueError("reviewed_schema_previous_membership_mismatch")
+    lines = text.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    replacements = []
+    for name, value in zip(names[:2], observed[:2]):
+        node = assignments[name].value
+        replacements.append((offsets[node.lineno - 1] + node.col_offset,
+            offsets[node.end_lineno - 1] + node.end_col_offset, repr(value)))
+    for start, end, value in sorted(replacements, reverse=True):
+        text = text[:start] + value + text[end:]
+    return text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root (default: cwd)")
     parser.add_argument("--write", action="store_true", help="rewrite the manifest in place")
+    parser.add_argument("--reviewed-schema", action="append", default=[],
+        help="explicit governed schema addition; refuses any other membership or shape drift")
     arguments = parser.parse_args()
 
     root = Path(arguments.root).resolve()
+    if arguments.reviewed_schema:
+        schema_pin = root / "tests/test_manifest.py"
+        wanted_pin = reviewed_schema_pin(root, arguments.reviewed_schema)
+        if wanted_pin != schema_pin.read_text(encoding="utf-8"):
+            if not arguments.write:
+                print("DRIFT     reviewed governed-schema membership pin; re-run with --write")
+                return 1
+            schema_pin.write_text(wanted_pin, encoding="utf-8")
+            print("WROTE     tests/test_manifest.py reviewed governed-schema membership pin")
     path = root / MANIFEST_NAME
     current_text = path.read_text(encoding="utf-8")
     current = json.loads(current_text)

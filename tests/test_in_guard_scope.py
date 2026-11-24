@@ -70,11 +70,14 @@ class InGuardScopeTests(unittest.TestCase):
         self.assertEqual("recipient_unregistered", artifact["evidence"]["code"])
 
     def test_status_default_and_json_name_validated_explicit_scope(self):
-        for arguments in (
+        for case_index, arguments in enumerate((
             ("status", "--root", str(self.root)),
             ("status", "--root", str(self.root), "--json"),
-        ):
-            with self.subTest(arguments=arguments):
+        )):
+            with self.subTest(case=(
+                "explicit-root-status",
+                "explicit-root-status-json",
+            )[case_index]):
                 _completed, artifact = invoke(*arguments)
                 self.assertEqual(
                     str(self.opened.path), artifact["evidence"]["scope"]["root"]

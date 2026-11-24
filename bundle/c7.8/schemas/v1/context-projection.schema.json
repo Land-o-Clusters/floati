@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/context-projection.schema.json",
+  "title": "Floati Context Turnover Projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "node_id", "harness", "state_file", "inputs", "role_provenance", "steps", "read_only"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "context_turnover_projection"},
+    "node_id": {"$ref": "../v0/context-projection.schema.json#/$defs/identifier"},
+    "harness": {"$ref": "../v0/context-projection.schema.json#/$defs/identifier"},
+    "state_file": {"$ref": "../v0/context-projection.schema.json#/$defs/turnover/properties/state_file"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "values"],
+      "properties": {
+        "source": {"const": "operator_supplied"},
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["current_session", "next_session", "repo", "doc", "prior_mtime_ns"],
+          "properties": {
+            "current_session": {"const": "<CURRENT_NATIVE_SESSION>"},
+            "next_session": {"const": "<NEXT_NATIVE_SESSION>"},
+            "repo": {"const": "<REPO>"},
+            "doc": {"const": "<DOC>"},
+            "prior_mtime_ns": {"const": "<PRIOR_MTIME_NS>"}
+          }
+        }
+      }
+    },
+    "role_provenance": {"$ref": "../v0/context-projection.schema.json#/$defs/turnover/properties/role_provenance"},
+    "steps": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {"$ref": "#/$defs/teardown_step"},
+        {"$ref": "../v0/context-projection.schema.json#/$defs/flush_step"},
+        {"$ref": "#/$defs/boot_step"}
+      ],
+      "items": false
+    },
+    "read_only": {"const": true}
+  },
+  "$defs": {
+    "teardown_step": {
+      "allOf": [
+        {"$ref": "../v0/context-projection.schema.json#/$defs/step_common"},
+        {
+          "properties": {
+            "kind": {"const": "teardown_projection"},
+            "artifact_kind": {"const": "node_teardown_result"}
+          }
+        }
+      ]
+    },
+    "boot_step": {
+      "allOf": [
+        {"$ref": "../v0/context-projection.schema.json#/$defs/step_common"},
+        {
+          "properties": {
+            "kind": {"const": "boot_projection"},
+            "artifact_kind": {"const": "node_boot_result"}
+          }
+        }
+      ]
+    }
+  }
+}

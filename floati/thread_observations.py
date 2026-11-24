@@ -85,7 +85,7 @@ class ThreadObservationProjection:
         attachment = current["attachment"]
         if not isinstance(attachment, dict) or any(
             record[field] != attachment[field]
-            for field in ("provider", "provider_thread_id")
+            for field in ("schema_version", "provider", "provider_thread_id")
         ):
             raise IntegrityFailure(
                 "thread_attachment_mismatch",
@@ -365,6 +365,66 @@ class ThreadObserver:
             now=now,
         )
 
+    def register_adhoc(self, dispatch_id: str, registered_by: str, *,
+                       now: Optional[datetime] = None) -> Dict[str, object]:
+        """Derive provider identity exclusively from authenticated native testimony."""
+        from .adhoc_journal import AdhocJournal
+        from .adhoc_profiles import AdhocProfiles
+        from .bus_epoch import epoch_guard
+        from .car_fence import car_acceptance_guard
+        from .registry import Registry
+
+        current = _current_time(now)
+        with epoch_guard(self.root), car_acceptance_guard(self.root):
+            Registry(self.root).require_active(registered_by)
+            journal = AdhocJournal(self.root)
+            admission = journal.show(dispatch_id)
+            with AdhocProfiles(self.root).validated(admission["profile_id"], now=current) as (profile, _binding):
+                if profile["node_id"] != registered_by:
+                    raise ProtocolRefusal("adhoc_dispatch_authentication_failed",
+                        "thread registration requires the exact admitted node")
+                native = [row for row in journal.records()
+                    if row.get("dispatch_id") == dispatch_id
+                    and (row["kind"] == "adhoc_native_thread_opened_record"
+                        or row.get("phase") == "provider_terminal")]
+                if not native:
+                    raise ProtocolRefusal("native_session_unmaterialized",
+                        "thread attachment requires durable native identity testimony",
+                        remedy="retain the dispatch and wait for its authenticated native identity receipt before attaching")
+                row = native[0]
+                evidence = row["evidence"]
+                coordinate = evidence.get("provider_coordinate") if row["kind"] == "adhoc_native_thread_opened_record"\
+                    else evidence.get("event", {}).get("provider_coordinate")
+                if not isinstance(coordinate, dict):
+                    raise ProtocolRefusal("native_session_unmaterialized",
+                        "native identity testimony has no provider coordinate",
+                        remedy="retain the exact native receipt for investigation; do not invent a provider coordinate")
+                # Keep epoch, car, lane and descriptor ownership pinned while
+                # the narrower thread-ledger append consumes this frozen join.
+                candidate = validate_record({"schema_version": 2,
+                    "id": "thread-attachment-" + uuid7_hex(), "tenant_id": self.root.tenant_id,
+                    "timestamp": _timestamp(current), "kind": "thread_attachment_registered",
+                    "provider": coordinate["provider"], "provider_thread_id": coordinate["session_id"],
+                    "subject_kind": "adhoc_dispatch", "work_item_id": admission["dispatch"]["work_item_id"],
+                    "registered_by": registered_by, "registered_at_testimony": _timestamp(current),
+                    "adhoc_profile_id": profile["id"], "adhoc_dispatch_id": dispatch_id,
+                    "native_receipt_id": row["id"]}, self.root.tenant_id,
+                    THREAD_OBSERVATION_KINDS, integrity=False)
+
+                def decide(existing):
+                    for state in ThreadObservationProjection.from_records(existing).attachments():
+                        attachment = state["attachment"]
+                        if (attachment["provider"], attachment["provider_thread_id"]) == (
+                            candidate["provider"], candidate["provider_thread_id"]):
+                            if (attachment.get("schema_version") == 2
+                                and attachment.get("adhoc_profile_id") == profile["id"]):
+                                return deepcopy(attachment), None
+                            raise ProtocolRefusal("thread_attachment_conflict",
+                                "provider coordinate already belongs to another subject")
+                    return deepcopy(candidate), candidate
+
+                return self.ledger._transact(self.__capability, decide)
+
     def register_attempt(
         self,
         run_id: str,
@@ -448,6 +508,10 @@ class ThreadObserver:
             )
         attachment = before["attachment"]
         assert isinstance(attachment, dict)
+        if attachment["schema_version"] == 2:
+            raise ProtocolRefusal("native_status_unsupported",
+                "ad-hoc runtime identity does not supply provider status observation",
+                remedy="use worker adhoc show for recorded runtime testimony; this provider status source remains unsupported")
         result = self.source.read(str(attachment["provider_thread_id"]))
         candidate = self._observation_candidate(
             attachment, result, _current_time(now)
@@ -495,7 +559,7 @@ class ThreadObserver:
         current = _current_time(now)
         candidate = validate_record(
             {
-                "schema_version": 1,
+                "schema_version": attachment["schema_version"],
                 "id": "thread-attachment-detached-" + uuid7_hex(),
                 "tenant_id": self.root.tenant_id,
                 "timestamp": _timestamp(current),

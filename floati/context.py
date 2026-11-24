@@ -70,6 +70,10 @@ _DECLARED_ROOTS = "<DECLARED_ROOTS_FILE>"
 _MANAGED_EXECUTABLE = "<MANAGED_EXECUTABLE>"
 _PROFILE = "<PROFILE>"
 _PRIOR_MTIME = "<PRIOR_MTIME_NS>"
+_CURRENT_SESSION = "<CURRENT_NATIVE_SESSION>"
+_NEXT_SESSION = "<NEXT_NATIVE_SESSION>"
+_REPO = "<REPO>"
+_DOC = "<DOC>"
 
 
 def _refuse(code: str, detail: str) -> None:
@@ -312,15 +316,9 @@ class ContextTurnoverProjection(_ContextProjection):
             root,
             "--node",
             self.node_id,
-            "--declared-roots",
-            _DECLARED_ROOTS,
-            "--managed-executable",
-            _MANAGED_EXECUTABLE,
-            "--profile",
-            _PROFILE,
         ]
         return {
-            "schema_version": 0,
+            "schema_version": 1,
             "kind": "context_turnover_projection",
             "node_id": self.node_id,
             "harness": active["harness"],
@@ -328,9 +326,10 @@ class ContextTurnoverProjection(_ContextProjection):
             "inputs": {
                 "source": "operator_supplied",
                 "values": {
-                    "declared_roots": _DECLARED_ROOTS,
-                    "managed_executable": _MANAGED_EXECUTABLE,
-                    "profile": _PROFILE,
+                    "current_session": _CURRENT_SESSION,
+                    "next_session": _NEXT_SESSION,
+                    "repo": _REPO,
+                    "doc": _DOC,
                     "prior_mtime_ns": _PRIOR_MTIME,
                 },
             },
@@ -338,8 +337,9 @@ class ContextTurnoverProjection(_ContextProjection):
             "steps": [
                 {
                     "kind": "teardown_projection",
-                    "artifact_kind": "node_teardown_projection",
-                    "argv": ["floati", "node", "teardown", *shared],
+                    "artifact_kind": "node_teardown_result",
+                    "argv": ["floati", "node", "teardown", *shared,
+                             "--session", _CURRENT_SESSION, "--repo", _REPO, "--doc", _DOC],
                     "optional_argv": ["--json"],
                 },
                 {
@@ -358,8 +358,8 @@ class ContextTurnoverProjection(_ContextProjection):
                 },
                 {
                     "kind": "boot_projection",
-                    "artifact_kind": "node_boot_projection",
-                    "argv": ["floati", "node", "boot", *shared],
+                    "artifact_kind": "node_boot_result",
+                    "argv": ["floati", "node", "boot", *shared, "--session", _NEXT_SESSION],
                     "optional_argv": ["--json"],
                 },
             ],
@@ -410,9 +410,12 @@ def render_context_projection(
         detail="context harness is invalid",
         maximum=64,
     )
-    if value.get("schema_version") != 0 or value.get("read_only") is not True:
+    schema_version = value.get("schema_version")
+    if type(schema_version) is not int or schema_version not in (0, 1) or value.get("read_only") is not True:
         _refuse("context_output_invalid", "context artifact header is invalid")
     if kind == "context_status_projection":
+        if schema_version != 0:
+            _refuse("context_output_invalid", "context status requires v0")
         if set(value) != _STATUS_FIELDS:
             _refuse("context_output_invalid", "context status fields do not match v0")
         remaining = _mapping(
@@ -517,7 +520,7 @@ def render_context_projection(
         ]
     elif kind == "context_turnover_projection":
         if set(value) != _TURNOVER_FIELDS:
-            _refuse("context_output_invalid", "turnover fields do not match v0")
+            _refuse("context_output_invalid", "turnover fields do not match its version")
         inputs = _mapping(
             value.get("inputs"),
             code="context_output_invalid",
@@ -530,12 +533,19 @@ def render_context_projection(
             code="context_output_invalid",
             detail="turnover input values are invalid",
         )
-        if set(inputs) != {"source", "values"} or input_values != {
+        expected_inputs = {
             "declared_roots": _DECLARED_ROOTS,
             "managed_executable": _MANAGED_EXECUTABLE,
             "profile": _PROFILE,
             "prior_mtime_ns": _PRIOR_MTIME,
-        }:
+        } if schema_version == 0 else {
+            "current_session": _CURRENT_SESSION,
+            "next_session": _NEXT_SESSION,
+            "repo": _REPO,
+            "doc": _DOC,
+            "prior_mtime_ns": _PRIOR_MTIME,
+        }
+        if set(inputs) != {"source", "values"} or input_values != expected_inputs:
             _refuse("context_output_invalid", "turnover input values are invalid")
         provenance = _mapping(
             value.get("role_provenance"),
@@ -664,6 +674,17 @@ def render_context_projection(
             "node_state_flush_receipt",
             "node_boot_projection",
         )
+        if schema_version == 1:
+            shared = ["--root", root, "--node", node_id]
+            expected_argv = (
+                ["floati", "node", "teardown", *shared,
+                 "--session", _CURRENT_SESSION, "--repo", _REPO, "--doc", _DOC],
+                expected_argv[1],
+                ["floati", "node", "boot", *shared, "--session", _NEXT_SESSION],
+            )
+            expected_artifacts = (
+                "node_teardown_result", "node_state_flush_receipt", "node_boot_result",
+            )
         lines = [
             "CONTEXT TURNOVER PROJECTION",
             "INPUTS: operator supplied",
@@ -672,6 +693,8 @@ def render_context_projection(
             f"ROLE: {role} v{version} via {role_record}",
             f"ROLE SHA256: {digest}",
         ]
+        if schema_version == 1:
+            lines.append("Run boot from the declared seat workspace in a fresh native session.")
         for index, (raw_step, expected_kind) in enumerate(zip(steps, expected), start=1):
             step = _mapping(
                 raw_step,

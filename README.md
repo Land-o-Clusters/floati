@@ -32,6 +32,7 @@
   <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 
+<p align="center">Every Floati-specific term — <em>bus</em>, <em>board</em>, <em>receipt</em> — is defined in one plain sentence in the <a href="docs/glossary.md">glossary</a>. <em>(Link line: DRAFT-ZCODE 2026-10-11.)</em></p>
 
 You are already running a fleet. An agent in Codex, two in Claude,
 one in OpenCode, something experimental in Cursor. Each sits in its
@@ -42,21 +43,20 @@ anything died.
 Floati takes those jobs. Register your agents as nodes, whatever
 harness they run in, and they share one bus: they dispatch work,
 message each other with full provenance, and show up on one board.
-A plan with a Codex worker, a Claude reviewer and a scout in a third
-harness is the normal case.
+A Codex worker, a Claude reviewer and a scout in a third harness in
+one plan is the normal case, not the demo.
 
 <p align="center">
   <img src="docs/demo/board-glow.gif" alt="The Harbor Board, live: three nodes, each with separate liveness, authority and lock lamps, redrawn as their ledgers change" width="1400">
 </p>
 
-The Harbor Board gives liveness, authority and lock state a lamp each,
-because a node can be alive with expired authority, or hold a lock
-while it is down. Every
+The Harbor Board. Liveness, authority and lock state are three
+separate lamps, because they are three different questions. Every
 terminal image on this page is a capture from a real ledger or a
-declared fixture, listed with its SHA-256 in the manifest beside it.
-The drawings are illustrations; the captures are measurements. To see
-what an agent can do with Floati, point yours at
-[`AGENTS.md`](AGENTS.md), which walks it from install to a verified fleet.
+declared fixture, listed with its SHA-256 in the manifest beside it;
+the drawings illustrate, the captures measure. If you want to see
+what an agent can do with it, point yours at
+[`AGENTS.md`](AGENTS.md); it walks from install to a verified fleet.
 
 ## Start here
 
@@ -70,17 +70,16 @@ git -C /absolute/floati checkout v0.1.2
 python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.1.2
 ```
 
-The command is `/absolute/install/scripts/floati`. Add that `scripts`
+`/absolute/install/scripts/floati` is the command; add that `scripts`
 directory to your `PATH` or call it by path. Leave out `checkout` and
 `--ref` to install whatever `main` is today.
 
 <p align="center">
-  <img src="docs/demo/tui/install-moment-dark.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt with status installed, the source SHA it deployed and the wiring journal it opened" width="1400">
+  <img src="docs/demo/tui/install-moment-dark.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt - status installed, the source SHA it deployed, the wiring journal it opened" width="1400">
 </p>
 
 Now make your first record. Every durable command names an absolute
-root. No command falls back to a default root, and nothing scans your
-home directory.
+root; there is no default root and nothing scans your home directory.
 
 ```bash
 floati init --root /absolute/my-sessions --solo me --harness Codex
@@ -90,10 +89,10 @@ floati board --root /absolute/my-sessions
 ```
 
 `work show` lists "Record this session". That is your first durable
-record, made without an agent process or a wake hook.
+record, and no agent process or wake hook was needed to make it.
 `floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install`
-checks what is on disk against the manifest, file by file, and names
-each finding with its remedy.
+tells you whether what is on disk still matches the manifest, file by
+file, and names each finding with its remedy.
 
 To grow past one seat, add a node and give it work:
 
@@ -104,77 +103,111 @@ floati send --root /absolute/my-sessions --from me --to builder-a \
 floati receipts builder-a --root /absolute/my-sessions
 ```
 
-`node add` prints the exact records it will write before it writes
-them. `receipts` keeps delivery, acknowledgment and consumption as
-three separate histories, so you can tell whether a node got the
-message. Plans with dependency edges across several workers go
-through `floati orchestrate`. Today it takes one adapter, `codex`;
-the fleet underneath can be any mix.
+`node add` prints the exact records it will write before writing
+them. `receipts` shows delivery, acknowledgment and consumption as
+three separate histories, so "did they get it?" has an actual answer.
+Consumption records the recipient's explicit attestation that it acted on an
+acknowledged message. Author it with `floati consume ID --root ROOT --as NODE
+--session SESSION --idempotency-key KEY`, or name the envelope with
+`work complete --consume ID --session SESSION`. Delivery and ACK alone leave
+consumption absent. Consumption is recorded before work completion; a retry
+can finish completion without duplicating the consumption receipt.
+Plans with dependency edges across several workers are
+`floati orchestrate`; today it takes one adapter, `codex`, while the
+fleet underneath it can be any mix.
+
+### Cursor Remote Control beside a Floati seat
+
+Use **Cursor Cloud by default** for phone work. For local Remote Control on
+the same Mac, give its one worker a separate, unregistered clone outside the
+Floati seat home and every leased worktree. Keep exactly one Git remote in
+that clone. Replace both absolute paths below; the destination must be absent
+or empty, and its parent must already exist.
+
+<!-- floati-phone-checkout-recipe -->
+```sh
+git clone --no-local --no-hardlinks --origin seat --config remote.seat.pushurl=file:///dev/null -- "/absolute/seat/repo" "/absolute/sibling-phone-clone"
+```
+
+This copies committed history into independent Git storage. It does not copy
+dirty or untracked seat work, or the source repository's remote configuration.
+Its only remote, `seat`, fetches from the local seat repository; ordinary pushes
+to that remote fail at `file:///dev/null`. Run `git fetch seat` inside the phone
+clone to read newer committed history; fetching leaves its checkout unchanged.
+Phone edits, checkout and reset stay in that clone. Changes are proposals to
+review through your normal fleet workflow, not writes back to the leased seat.
+
+Keep the phone clone outside Floati registration and leases, and do not install
+a Floati seat hook there. The clone still carries committed project files and
+configuration. The recipe prepares a checkout; it does not start a worker or
+verify a phone connection.
+
+Cursor can start an automatic Remote Control worker for every open Cursor
+window. Open only the phone clone in windows eligible for those workers; keep
+leased seats in another harness or CLI. A separate clone cannot protect a
+leased tree that is also open in such a Cursor window. Local support is bounded
+to **one phone worker and one Git remote**, with no automatic worker bound to
+a leased tree. Keep Remote Control available; choose Cloud when this local
+topology does not fit.
+
+The fetch-only remote is Git configuration, not access control: it can be
+changed or bypassed with an explicit push URL, and processes running as your
+user can still access the seat's files. Floati does not add a filesystem lock,
+change Cursor settings or stop Cursor workers for this workflow.
 
 ## What you get
 
-### The bus
+**A bus with provenance.** Every message is a typed envelope: sender,
+recipient, tenant, repository, commit. It is validated on the way in
+and refused, with a typed code, when malformed. Delivered,
+acknowledged and consumed are three records; a refusal is a fourth.
 
-Every message is a typed envelope naming its sender, recipient,
-tenant, repository and commit. Floati validates it on the way in and
-refuses a malformed one with a typed code. Delivery, acknowledgment
-and consumption are each their own record, and so is a refusal.
-
-### The board
+**A board that says which thing is wrong.**
 
 <p align="center">
   <img src="docs/demo/tui/board-degraded-dark.png" alt="The Harbor Board degraded: STALE AUTHORITY named with its holder, one presence lapsed, one claim stalled without a witness" width="1400">
 </p>
 
-In this capture one presence has lapsed, one lease has run out, and
-one claim has stalled without a witness. The board names each on its
-own line, with its holder. Green is live, amber is a lease running
-out, and an empty ring is a node nobody has seen yet. `floati graph`
-draws the same fleet as a dependency picture, `floati chart` draws
-every fleet you have declared on this machine, and `floati watch`
-streams the board's changes as text.
+One presence lapsed, one lease ran out, one claim stalled without a
+witness. Each is named, with its holder, on the line where it lives.
+Green is live, amber is a lease running out, an empty ring is a node
+that has not been seen. `floati graph` draws the same fleet as a
+dependency picture; `floati chart` draws every fleet you have declared
+on this machine; `floati watch` streams the board's changes as text.
 
-### The doctor
 
-"The node went quiet" is not a diagnosis. `floati doctor` reports each
-node's undelivered count, the age of its oldest message and its last
-drain. `doctor --probe` sends a self-addressed envelope through each
-node's own delivery path and reports PASS or DEAF per node. A node
-with no waiter armed is DEAF by definition; the probe reports that
-and cannot know whether you meant it. Liveness is a separate check:
-`floati presence report` is a node reporting on itself, and an
-expired report means only that nothing has arrived since. It does not
-mean the node is down.
+**A doctor that reports absence, not guesses.** "The node went quiet"
+is not a diagnosis. `floati doctor` states per-node undelivered
+counts, oldest-message age and last drain. `doctor --probe` sends a
+self-addressed envelope through each node's own delivery path and
+reports PASS or DEAF per node. A node with no waiter armed is
+DEAF by definition; the probe reports the fact and does not know
+whether you meant it. Liveness is a separate question: `floati presence report`
+is a node reporting about itself, and an expired report means *no
+report since*, never *down*.
 
-### The flight recorder
+**A flight recorder.**
 
 <p align="center">
   <img src="docs/demo/hero-three-fault-replay.gif" alt="A three-fault replay: a worker killed, the sequencer killed, a reboot, every event reconstructed from receipts in order" width="1400">
 </p>
 
-This capture kills a worker, then the sequencer, then reboots, and
-rebuilds every event from receipts, in order. `floati log --replay`
+A worker killed, a sequencer killed, a reboot, and every event
+reconstructed from receipts, in order, on demand. `floati log --replay`
 plays back any finished run the same way: claims, worker turns,
-degradations, denials and completions. Playback speed changes the
-gaps between events; the order stays fixed.
+degradations, denials, completions. Playback speed changes the
+waiting, never the order.
 
-### Wake
+**Wake, when you ask for it.** Stop-hook waiters and an optional
+per-fleet daemon mean a dispatched node can wake when mail lands. Wake
+is off by default, armed per fleet by a consent receipt
+(`floati wake arm`), and `floati wake status` shows exactly what is
+armed. Wake observations vary by harness and surface; see the
+[measured wake posture](docs/evidence/gauntlet/H-wake-posture-matrix.md) and the open issues.
 
-Stop-hook waiters and an optional per-fleet daemon let a dispatched
-node wake when mail lands. Wake is off by default. You arm it per fleet
-with a consent receipt (`floati wake arm`), and `floati wake status`
-shows exactly what is armed. How reliably each harness wakes is
-measured; see [What it runs with](#what-it-runs-with) and the open
-issues.
-
-### Roles, context and intake
-
-`floati node explain` generates and explains each node's boot and
-wind-down commands from its role. Context is tracked per harness
-(`floati context policy`). When a node's context fills, it is handed a
-recorded turnover, and Floati shows no context-pressure number it
-cannot measure. `floati intake` snapshots a GitHub issue or a local
-Markdown file as the source of a work item.
+**Roles, context and intake.** `floati node explain` generates and
+explains boot and wind-down commands per node from its role. Context policy is set per node. [Context status and turnover](docs/evidence/WS-E2-CONTEXT-V0.md) show what each harness reports, with its source, and the turnover steps in order; nothing runs until you run it. `floati intake` snapshots a GitHub
+issue or a local Markdown file as the source of a work item.
 
 ### Bring your agent, or be the human
 
@@ -182,16 +215,16 @@ Markdown file as the source of a work item.
   <img src="docs/demo/site-v3-readme/floati-help-dark-source.png" alt="floati --help: every verb of the CLI, each self-describing, each with typed refusals" width="1320">
 </p>
 
-A person and an agent drive Floati through the same commands. Point
-your agent at this repo: [`AGENTS.md`](AGENTS.md) is its manual, every
-verb describes itself in JSON (`floati describe --json`), every refusal
+Humans and agents are both first-class operators here. Point your
+agent at this repo: [`AGENTS.md`](AGENTS.md) is its manual, every verb
+self-describes in JSON (`floati describe --json`), every refusal
 carries a typed code and a detail, and every action leaves a receipt
-your agent can check, so it can confirm its own message arrived.
-`floati mcp serve` exposes the same verbs to an MCP client as tools,
-with the node identity pinned at launch so the client cannot speak as
-anyone else. The keyboard flows and the `--json` flows run on one
-engine, so your fleet reads the same whether you drive it or your
-agent does.
+your agent can verify. It never has to guess whether its own message
+arrived. `floati mcp serve` exposes the same verbs to an MCP client
+as tools, with the node identity pinned at launch so the client
+cannot speak as anyone else. The keyboard-first flows and the
+declarative `--json` flows are the same engine, so your fleet reads
+identically whether you run it or your agent does.
 
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/floati-multifleet-dark.svg">
@@ -199,32 +232,32 @@ agent does.
     <img src="docs/assets/floati-multifleet-light.svg" alt="Two floati fleets and a solo seat on one machine: each fleet is a star of harnesses around its own append-only root with an architect seat; the architects exchange artifacts as peers; the fleets share nothing by default" width="1440">
 </picture>
 
-Everything in that picture ships today: roots, ledgers, leases and
-star governance.
+Every element in that picture is a shipping mechanism: roots,
+ledgers, leases, star governance.
 
 ## What it runs with
 
-Floati is useful with a single harness, as a durable work log with
-receipts and a board for your own sessions. It was built for fleets
-that span several harnesses.
+Floati is worth installing for a single harness: a durable work log,
+receipts and a board for your own sessions. Cross-harness fleets are
+the point, not the entry fee.
 
-Twelve harnesses have been measured, and what each one supports
-depends on its surface. Messaging, observation, wake and managed
-execution are four separate capabilities, and having one says nothing
-about the others. In the tables below a filled dot is a live
-measurement, a hollow dot is a classification from the surface with
-the unexercised probe named in its receipt, and a dash means there is
-no receipt yet. The method behind the tables is in
+The [capability matrix](docs/capability-matrix.md) records each harness surface. **What each can do varies by
+surface.** Messaging, observation, wake and managed execution are
+four different capabilities, and a harness that has one does not
+automatically have the rest. In the tables below a filled dot is a
+live measurement, a hollow dot is a classification from the surface
+with the unexercised probe named in its receipt, and a dash means no
+receipt yet. The methodology behind the tables is in
 [docs/capability-matrix.md](docs/capability-matrix.md).
 
 <!-- capability-matrix:begin — GENERATED from docs/capability-matrix.v0.json by
      scripts/capability-matrix-render.py; edit the dataset, rerun the script.
      Every cell links the receipt that earned it; no cell says more than its receipt. -->
-Every harness on this bus gets the same append-only ledger, replay, doctor, receipts and typed refusals, whatever its surface.
+Every harness on this bus shares an append-only ledger, replay, doctor, receipts, and typed refusals — those do not vary by surface.
 
-Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface: when agents run there, its sessions and panes are the record. The harnesses underneath keep their own rows and receipts, because supporting a harness and supporting the orchestrator that hosts it are separate promises.
+Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads the orchestrator's own surface - its sessions and panes are the truth when agents run there. The harnesses underneath keep their own rows and their own receipts; supporting them is a different promise than supporting the orchestrator.
 
-Surface rows list the installs MEASURED on the reference machine (C0-DELTA photograph). They are not a product catalog. Two rows are missing on purpose. Claude.app is a desktop chat app and cannot host a Claude Code seat, so it is classified out; the same cut separates ChatGPT Classic from Codex. No Codex IDE extension was installed when the photograph was taken, and that row arrives when the MX-1 campaign photographs one.
+Surface rows are the reference machine's MEASURED installs ([C0-DELTA photograph](docs/evidence/conformance/C0-DELTA-surface-axis.md)), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.
 
 Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-03](docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md); cells marked `version_stale: true` were measured at 2.1.231 (Claude Code) at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps.
 
@@ -233,13 +266,13 @@ Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-0
 | harness | bus | work | wake | notes |
 |---|---|---|---|---|
 | codex | [live](docs/evidence/conformance/C1-codex-conformance-live.md) | [adapter](docs/evidence/conformance/C1-codex-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-codex-cli-wake.md) ● | deep integrations below |
-| claude | [live](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [daemon](docs/evidence/conformance/H-claude-wake-remeasure-2026-09-04.md) ● | confirmed at 2.1.251 (re-measured 09-04) |
-| opencode | [live](docs/evidence/conformance/C3-opencode-conformance-live.md) | [adapter](docs/evidence/conformance/C3-opencode-conformance-live.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) ● | 3-cycle live hold |
+| claude | [live](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [adapter](docs/evidence/conformance/C2-claude-conformance-live-2026-09-04.md) | [daemon](docs/evidence/conformance/H-claude-wake-remeasure-2026-09-04.md) ● | [confirmed at 2.1.251 (re-measured 09-04)](docs/evidence/conformance/H-claude-wake-remeasure-2026-09-04.md); Idle wake uses Claude Code's undocumented session inbox socket, verified on [2.1.309](docs/evidence/claude-inbox-idle-public-2026-10-29.md). |
+| opencode | [live](docs/evidence/conformance/C3-opencode-issue16-2026-10-25.md) | [live (free model)](docs/evidence/conformance/C3-opencode-issue16-2026-10-25.md) | [event-driven](docs/evidence/gauntlet/H-wake-posture-matrix.md) ● | Worker completes across expiry; fresh expired claim refused; governed resume unmeasured |
 | cursor | [live](docs/evidence/conformance/C4-cursor-conformance-live.md) | [adapter](docs/evidence/conformance/C4-cursor-conformance-live.md) | [daemon](docs/evidence/gauntlet/MX1-cursor-cli-wake.md) ● |  |
 | cline | [live](docs/evidence/conformance/C5-cline-conformance-live.md) | [adapter](docs/evidence/conformance/C5-cline-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-cline-cli-wake.md) ● |  |
 | grok | [live](docs/evidence/conformance/C6-grok-build-conformance.md) | [adapter](docs/evidence/conformance/C6-grok-build-conformance.md) | [daemon](docs/evidence/gauntlet/MX1-grok-cli-wake.md) ● | via installed grok binary |
 | pi | [live](docs/evidence/conformance/C7-pi-conformance-live.md) | [adapter](docs/evidence/conformance/C7-pi-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-pi-cli-wake.md) ● |  |
-| zcode | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [daemon](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) ● | wake measured on arrival; the Stop-hook path is superseded by the daemon |
+| zcode | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [daemon](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) ● | [daemon wake observed on arrival; hook paths returned null behind workspace trust review](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) |
 | herdr | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) | [—](docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-matrix.md) | orchestrator; observation adapter live |
 | t3 | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) | [event-driven](docs/evidence/gauntlet/MX1-t3-cli-wake.md) ● | orchestrator; observed via its own surface |
 | devin | [CLI](docs/evidence/conformance/C11-devin-conformance-live.md) | [—](docs/evidence/conformance/C11-devin-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-devin-cli-wake.md) ● | CLI-compat tier |
@@ -250,24 +283,46 @@ Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-0
 | harness / surface | wake | notes |
 |---|---|---|
 | codex / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | ChatGPT.app |
-| claude / desktop-chat | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | chat app; Claude seats run in the CLI or IDE extension |
+| claude / desktop-chat | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) | chat app, not a seat - Claude seats run in the CLI or IDE extension |
 | claude / ide-extension | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | extension ≠ CLI; own row by design |
 | opencode / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
-| cursor / desktop | [stop hook](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md) ○ | `floati hook install --harness cursor` writes a project-scoped `stop` hook. The daemon wakes a headless twin, and the window stays asleep (measured, `docs/evidence/cur-2-2026-09-11.md`). Re-rooting the chat leaves the hook behind, so work in other directories by absolute path |
+| cursor / desktop | [stop hook](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md) ○ | [Stop hook installed for the seat workspace](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md); the daemon wakes a headless twin, not the window; [re-rooting the chat leaves the hook behind](CHANGELOG.md) — work other directories by absolute path |
 | grok / desktop | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) |  |
 | t3 / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
 | antigravity / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | not inherited from its CLI |
 
-● measured live · ○ classified from the surface, with the unexercised probe named in the receipt · `—` no receipt yet. A cell claims only what its receipt measured.
+● measured live · ○ classified from surfaces (the unexercised probe is named in the receipt) · — no receipt yet: we do not claim what we have not measured ([matrix methodology](docs/capability-matrix.md)).
 
-Deep integrations for codex: [session boot](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) · [managed send](docs/evidence/gate-wsb-b5-2026-08-27.md). These sit in a note, outside the grid, so that one harness's extra integrations do not show up as gaps for every other harness. The full 20-surface grid, every cell receipt-linked, is in [docs/capability-matrix.md](docs/capability-matrix.md).
+**Deep integrations (codex):** [session boot](docs/evidence/WS-D3-NODE-LIFECYCLE-PROJECTION-WIRING.md) · [managed send](docs/evidence/gate-wsb-b5-2026-08-27.md) — receipt-linked notes rather than grid columns, so one harness's head start does not read as everyone else's gap. The full 20-surface grid, every cell receipt-linked, lives in [docs/capability-matrix.md](docs/capability-matrix.md).
 <!-- capability-matrix:end -->
 
-### Platforms
+### Worker teardown
 
-The supported platform today is macOS. The public test suite also runs
-on Linux in CI. That tells you the suite passes there; Linux becomes a
-supported platform the way a harness joins this page, with receipts.
+To learn whether a worker needs teardown, close it without one and boot
+that node's next session. A teardown that succeeds does not show that
+skipping it is safe. `NOT_YET_MEASURED` means **not yet measured**: the
+reason names the missing observation, and the cell claims nothing
+([absence scope](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md#what-the-cells-mean)).
+
+| Harness | Worker teardown | Observed lifecycle |
+| --- | --- | --- |
+| codex | NOT_YET_MEASURED: `worker_omission_pair_missing` | NOT_YET_MEASURED: `desktop_resit_owed` |
+| claude | NOT_YET_MEASURED: `worker_omission_pair_missing` | [MEASURED headless boot and explicit teardown; native fresh-session comparison still owed](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md#claude) |
+| cursor | NOT_YET_MEASURED: `worker_omission_pair_missing` | [MEASURED explicit teardown completed and consent disarmed; post-fix re-sit still owed](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md#cursor) |
+| zcode | NOT_YET_MEASURED: `worker_omission_pair_missing` | [MEASURED boot and explicit teardown refusal before the host fix; post-fix live acceptance still owed](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md#zcode) |
+
+An architect always needs wind-down, whatever the worker cells say,
+because wind-down saves its context checkpoint. The
+[teardown receipt scope and remaining procedure](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md)
+say what each observation shows. When a cell is measured, replace it with
+a link to its native receipt; the release check requires that link in the
+same cell
+([receipt guidance](docs/evidence/conformance/F2-teardown-posture-2026-10-31.md#codex-and-the-next-observations)).
+
+**Platforms.** The supported experience today is macOS. The public
+test suite also runs on Linux in CI, which is a claim about the
+suite, not yet about a supported platform; a platform joins this page
+the way a harness does, with receipts.
 
 <p align="center">
   <picture>
@@ -277,99 +332,86 @@ supported platform the way a harness joins this page, with receipts.
   </picture>
 </p>
 
-Harnesses sit at the edge and one append-only ledger sits in the
-middle. Every operator surface is a projection of that ledger.
+Harnesses at the edge, one append-only ledger in the middle, and every
+operator surface a projection of it.
 
 ## How it holds up
 
-### Reliability and recovery
+**Reliability and recovery.** Everything above runs on one
+append-only, typed ledger. The board, the chart, the doctor and the
+replay are projections of it, and if a projection ever disagrees with
+the receipts, the receipts win. Kill a worker, kill the sequencer,
+reboot: the run reconstructs from receipts, in order, on demand. What
+replay does not do is also written down: a killed step is never
+silently completed on resume. Reconstruction is of the record, not of
+the work. `journal verify` checks the ledger's own chain,
+`floati verify` reproduces a delivery claim in a fresh worktree at the
+claimed commit, and nothing is deleted in place. The full list of
+promises, and precisely what Floati refuses to guess, is
+[Truth Guarantees](docs/TRUTH-GUARANTEES.md); a promise that cannot be
+demonstrated by a test or a receipt does not belong on that page.
 
-Everything above runs on one append-only, typed ledger. The board, the
-chart, the doctor and the replay are projections of it, and when a
-projection disagrees with the receipts, the receipts win. Kill a
-worker, kill the sequencer, reboot, and the run reconstructs from
-receipts, in order, on demand. Replay has one documented limit: a step
-killed mid-run is not marked complete on resume, because replay
-rebuilds the record and does not redo the work. `journal verify`
-checks the ledger's own chain, `floati verify` reproduces a delivery
-claim in a fresh worktree at the claimed commit, and nothing is
-deleted in place. Every promise, and exactly what Floati refuses to
-guess, is listed in [Truth Guarantees](docs/TRUTH-GUARANTEES.md). A
-promise stays on that page only if a test or a receipt demonstrates it.
+**Identity and authority.** Ambiguous identity, expired authority, a
+malformed envelope: refusal with a reason, never a guess. Authority is
+a grant with a holder, a subject, an epoch and an expiry, and a
+detached signature verifies exact artifact bytes. Refusals and degraded
+results print on stdout with a typed code, a detail and a `remedy`.
 
-### Identity and authority
-
-Floati refuses an ambiguous identity, expired authority or a malformed
-envelope, and says why. Authority is a grant with a holder, a subject,
-an epoch and an expiry, and a detached signature verifies exact
-artifact bytes. Refusals and degraded results print on stdout with a
-typed code, a detail and a `remedy`.
-
-### Data boundaries
-
-No telemetry, ever. Floati's own sockets are local pipes between its
-own processes, and a test refuses any `bind` or `listen` outside one.
-The outbound paths are counted, and there are exactly four: two
-client-only loopback dials for the herdr and t3 adapters, one HTTPS
-fetch for updates, and `intake adopt --source github`, which runs the
+**Data boundaries.** No telemetry, ever. Floati's own sockets are local
+pipes between its own processes, and a test refuses any `bind` or
+`listen` outside one. The outbound paths are counted, and there are
+exactly four: two client-only loopback dials for the herdr and t3
+adapters, one HTTPS fetch for updates, and `intake adopt --source
+github`, which runs the
 `gh` executable you name to read one issue. The first three run only
-behind an explicit consent receipt. The fourth runs only when you type
-it, and it has no consent receipt of its own yet. The child harnesses
-you install keep their own provider traffic and credentials.
+behind an explicit consent receipt; the fourth runs only when you type
+it, and it has no consent receipt of its own yet. The installed child harnesses own their own provider traffic and
+credentials.
 
-### What it costs
+**What it costs.** Floati makes no model calls of its own; each agent
+keeps its own provider cost. Almost nothing stays resident: a send, a
+drain, a doctor run are processes that live for one command. Three
+things stay up while you use them, each on your say-so: the wake
+daemon you consent to per seat, `sequencer serve` while a run is in
+flight, and `mcp serve` for as long as an agent client is attached.
+The readers stay fast at scale. Measured on 2026-08-01 at 10,000 work
+items and 100,000 ledger events, fix-round medians of three samples
+after one warm-up, from [the gauntlet](docs/evidence/HM3H-GAUNTLET.md):
 
-Floati makes no model calls of its own; each agent keeps its own
-provider cost. Almost nothing stays resident: a send, a drain or a
-doctor run is a process that lives for one command. Three things stay
-up while you use them, each because you started it: the wake daemon
-you consent to per seat, `sequencer serve` while a run is in flight,
-and `mcp serve` while an agent client is attached. The readers stay
-fast at scale. These are medians of three samples after one warm-up,
-measured on 2026-08-01 at 10,000 work items and 100,000 ledger events,
-from [the gauntlet](docs/evidence/HM3H-GAUNTLET.md):
-
-| Reader | Median | Budget |
+| Reader | Median | Budget target |
 | --- | ---: | ---: |
-| inbox | 34 ms | <100 ms |
-| status | 76 ms | <150 ms |
-| replay render start | 47 ms | <300 ms |
-| board full redraw | 92 ms | <250 ms |
-| doctor | 116 ms | <2,000 ms |
-| doctor --probe | budget-shaped: per node, default 60 s | per-node budget × node count |
+| inbox | [34 ms](docs/evidence/HM3H-GAUNTLET.md) | [<100 ms](docs/evidence/HM3H-GAUNTLET.md) |
+| status | [76 ms](docs/evidence/HM3H-GAUNTLET.md) | [<150 ms](docs/evidence/HM3H-GAUNTLET.md) |
+| replay render start | [47 ms](docs/evidence/HM3H-GAUNTLET.md) | [<300 ms](docs/evidence/HM3H-GAUNTLET.md) |
+| board full redraw | [92 ms](docs/evidence/HM3H-GAUNTLET.md) | [<250 ms](docs/evidence/HM3H-GAUNTLET.md) |
+| doctor | [116 ms](docs/evidence/HM3H-GAUNTLET.md) | [<2,000 ms](docs/evidence/HM3H-GAUNTLET.md) |
+| doctor --probe | [per node, default 60 s budget](floati/cli.py) | per-node budget × node count |
 
-`doctor` in that table is the plain report; `doctor --probe` adds its
-per-node budget on top. One caveat: we measured the wake daemon's cost
-over a long window on our own fleet on 2026-09-10, and it was not
-small while a seat sat paused. A fix is in progress. Until it ships,
-revoke the daemon for any seat you are not using.
+`doctor` there is the plain report; `doctor --probe` waits its
+per-node budget on top. [The 0.1.2 fix](CHANGELOG.md) makes a paused wake daemon back off like an idle one and measures each cycle's CPU.
 
-### Leaving
-
-Pausing the wake, retiring the node, draining the run and uninstalling
-the tool are one command each. Each writes a receipt, and none of them
+**Leaving.** Pause the wake, retire the node, drain the run, uninstall
+the tool: each is one command, each writes a receipt, and none of them
 touches your records.
 
 ```bash
 floati uninstall --destination /absolute/install --dry-run
 ```
 
-Removal is manifest-exact. Floati never touches files it did not
-install. Your ledgers and the install wiring journal
-(`.floati-install/wiring-journal.v1.jsonl`) stay out of every
-uninstall, and the receipt names every path it kept.
+Removal is manifest-exact. Files Floati did not install are never
+touched, your ledgers and the install wiring journal
+(`.floati-install/wiring-journal.v1.jsonl`) are never part of an
+uninstall, and the receipt names every retained path.
 
-### Composing with it
-
-`floati status --root /absolute/fleet --json` is the stable
-version-zero machine contract, and `floati graph --json` returns the
-same fleet as nodes and edges. [`docs/CONFLUENCE-v0.md`](docs/CONFLUENCE-v0.md)
+**Composing with it.** `floati status --root /absolute/fleet --json` is
+the stable version-zero machine contract, and `floati graph --json`
+returns the same fleet as nodes and edges. [`docs/CONFLUENCE-v0.md`](docs/CONFLUENCE-v0.md)
 and its JSON Schemas define the read-only seam for a GUI, a dashboard
 or anything else that wants to draw your harbor. `floati confluence
-adopt` and `release` are how a downstream consumer takes over a
-managed session, and hands it back, with a record of both.
+adopt` and `release` are the recorded way a downstream consumer takes
+over, and hands back, a managed session.
 
-### Verifying
+**Verifying.**
 
 <p align="center">
   <img src="docs/demo/tui/selftest-dark.png" alt="python3 -m floati.selftest under a real terminal: the bundle verified, exit 0" width="1400">
@@ -379,11 +421,11 @@ managed session, and hands it back, with a record of both.
 python3 -m floati.selftest
 ```
 
-CI runs the full suite on every push to `main`. The commands for the
+CI runs the full suite on every push to `main`; the commands for the
 full local run, and the tools it needs, are in
 [Contributing](CONTRIBUTING.md#the-ground-rules). How the captures on
-this page were made, and why we keep only captures we can reproduce
-byte for byte, is in [the capture inventory](docs/demo/CAPTURE-INVENTORY.md).
+this page were made, and why one that cannot be reproduced byte for
+byte is not banked, is in [the capture inventory](docs/demo/CAPTURE-INVENTORY.md).
 
 ## What is still wrong
 
@@ -391,31 +433,35 @@ Every open defect we know about is an issue on this repository, filed
 by us with the measurement that found it. The ones you are most
 likely to meet:
 
-- Cursor auto-wake was reported to stop after about 28 minutes of idle
+- Cursor auto-wake was [reported to stop after about 28 minutes of idle](docs/evidence/gauntlet/QUIRKS.md)
   ([#14](https://github.com/Land-o-Clusters/floati/issues/14)). A controlled
-  soak did not reproduce it. The stop we did reproduce was the hook's own
+  soak did not reproduce it; the stop we did reproduce was the hook's own
   wait deadline, and 0.1.2 ships a waiter that re-arms instead, measured
   from a clean public clone
   ([receipt](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md)).
   The issue stays open until that release is public.
 - The Cursor hook is scoped to the workspace it was installed in. A chat
-  re-rooted to another directory leaves the hook behind, so work in other
+  re-rooted to another directory leaves the hook behind; work other
   directories by absolute path.
-- The shipped daemon does not re-arm a Codex seat whose Stop window has
-  closed. Queuing mail into a finished thread does not wake it
+- A Codex seat whose Stop window has closed is not re-armed by the
+  shipped daemon; queuing into a finished thread is not a wake
   ([#15](https://github.com/Land-o-Clusters/floati/issues/15)).
-- OpenCode has no adapter yet, so 0.1.x does not support its sessions
-  ([#16](https://github.com/Land-o-Clusters/floati/issues/16)).
+- OpenCode has a headless adapter. Direct CLI resume retained its conversation
+  after a Floati node lease expired. With an explicit free model, a governed
+  worker completed across lease expiry; a fresh expired-node claim was refused
+  before spawn. Governed native-session resume remains unmeasured.
+  ([#16](https://github.com/Land-o-Clusters/floati/issues/16),
+  [measurement](docs/evidence/conformance/C3-opencode-issue16-2026-10-25.md)).
 - `floati orchestrate` takes one adapter, `codex`.
-- `effect compensate` refuses. It records side effects and does not
+- `effect compensate` refuses; it records side effects and does not
   undo them.
 - Linux runs the suite in CI and is not yet a supported platform. From a
   fresh clone on Ubuntu the suite needs `umask 022` and a box where no other
   user already holds `<temp>/floati-work`; [`AGENTS.md`](AGENTS.md) says why.
 
-The [roadmap](docs/ROADMAP.md) lists what the product does not do yet,
-in the order we intend to build it. It commits to no dates, and an item
-leaves it only with a receipt. The operator's manual is
+What the product does not do yet, in the order we intend to build it,
+is the [roadmap](docs/ROADMAP.md): a sequence, not a promise, and an
+item leaves it only with a receipt. The operator's manual is
 [`AGENTS.md`](AGENTS.md); the design and its case law are in
 [`docs/DESIGN.md`](docs/DESIGN.md) and [`docs/CASE-LAW.md`](docs/CASE-LAW.md).
 

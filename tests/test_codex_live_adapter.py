@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import importlib.util
 import os
+import signal
 import stat
 import shutil
 import subprocess
@@ -18,6 +21,7 @@ from floati.host_paths import worker_workspace_root
 from floati.ids import uuid7_hex
 from floati.workers import WorkerAdapterFailure
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.readiness import wait_readable
 
 try:
     import floati.adapters.codex_live as codex_live
@@ -36,11 +40,9 @@ WORK_ID = "work-018f0f23abcd71238000000000000000"
 # refusal (or assert an absence) whose whole mechanism is these exact bytes.
 LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
 
-# ADAPT-1: fixture deadline derived from MEASURED elapsed, not guessed.
-# 30 serial runs on 2026-09-04: OK elapsed 0.670-0.859 s; process_timeout 0/30.
-# 4 * max(OK elapsed) = 3.436, ceil 4. See
-# docs/evidence/adapt-1-artifact-ambiguous-rate-2026-09-04.md
-QUIESCENT_DESCENDANT_DEADLINE_SECONDS = 4
+# These controls prove group ownership and quiescence, never startup latency.
+# Keep their watchdog beyond the reference harness's readiness handshake.
+QUIESCENT_DESCENDANT_DEADLINE_SECONDS = 120.0
 
 
 
@@ -701,8 +703,14 @@ class CodexAppServerAdapterTests(unittest.TestCase):
             self.workspace / ".floati" / "transcript.jsonl": 0o600,
             self.workspace / ".floati" / "app-server.stderr": 0o600,
         }
-        for path, expected in expected_modes.items():
-            with self.subTest(path=path):
+        for case_index, (path, expected) in enumerate(expected_modes.items()):
+            with self.subTest(storage=(
+                "workspace-parent",
+                "workspace",
+                "metadata-directory",
+                "transcript-jsonl",
+                "app-server-stderr",
+            )[case_index], expected_mode=expected):
                 self.assertTrue(path.exists(), f"Floati storage is missing: {path}")
                 self.assertEqual(expected, stat.S_IMODE(path.stat().st_mode))
 
@@ -812,6 +820,173 @@ class CodexAppServerAdapterTests(unittest.TestCase):
         self.assertEqual(["PROOF.txt"], [row["doc"] for row in bindings])
         self.assertFalse((self.workspace / "LATE.txt").exists())
         self.assertEqual("", self.git(self.workspace, "status", "--porcelain"))
+
+    def test_owned_app_server_group_is_quiescent_at_git_boundary_and_peer_is_excluded(self) -> None:
+        """Observe exact owned identities; a sibling session is never ours."""
+        spec = importlib.util.spec_from_file_location("r3_reference_identity", HARNESS)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        adapter = CodexAppServerAdapter(self.command("complete-background-observed"))
+        peer = None
+        handle = None
+        observations = {
+            "kind": "r3_owned_group_boundary", "observer_pid": os.getpid(),
+            "workspace": str(self.workspace), "provider_argv": list(adapter.command),
+            "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "fixture_sha256": hashlib.sha256(HARNESS.read_bytes()).hexdigest(),
+            "adapter_sha256": hashlib.sha256(Path(codex_live.__file__).read_bytes()).hexdigest(),
+            "identity_source_sha256": hashlib.sha256(
+                (HARNESS.resolve().parents[3] / "scripts" / "parallel_processes.py").read_bytes()).hexdigest(),
+            "performance_evidence": False,
+        }
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            peer_workspace = Path(temporary) / "peer"
+            peer_workspace.mkdir(mode=0o700)
+            (peer_workspace / ".floati").mkdir(mode=0o700)
+            peer_argv = [str(Path(sys.executable).resolve()), str(HARNESS), "--mode", "observed-peer",
+                         "--observation-workspace", str(peer_workspace)]
+            observations["peer_argv"] = peer_argv
+            try:
+                handle = adapter.spawn(self.item(), deadline_seconds=QUIESCENT_DESCENDANT_DEADLINE_SECONDS)
+                provider = handle.session.process
+                observations["provider_after_spawn"] = fixture.observed_identity(provider.pid)
+                peer = subprocess.Popen.__new__(subprocess.Popen)
+                peer.__init__(peer_argv, cwd=peer_workspace, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+                wait_readable(peer.stdout, "owned peer did not publish readiness")
+                peer_ready = json.loads(peer.stdout.readline())
+                observations["peer_ready"] = peer_ready
+                self.assertEqual("peer", peer_ready["role"])
+                self.assertEqual(str(peer_workspace), peer_ready["workspace"])
+                self.assertEqual(peer.pid, peer_ready["identity"]["pid"])
+                self.assertEqual(os.getpid(), peer_ready["identity"]["ppid"])
+                original_reset = adapter._reset_repository
+
+                def at_first_git_finalization(accepted):
+                    proof = json.loads((self.workspace / ".floati" / "owned-group.json").read_bytes())
+                    descendant = proof["descendant"]["identity"]
+                    provider_identity = proof["app_server"]
+                    boundary = {
+                        "observed_monotonic": time.monotonic(), "owned_group": proof,
+                        "provider_current": fixture.observed_identity(provider_identity["pid"]),
+                        "descendant_current": fixture.observed_identity(descendant["pid"]),
+                        "peer_current": fixture.observed_identity(peer.pid),
+                        "peer_returncode": peer.poll(), "provider_returncode": provider.poll(),
+                    }
+                    try:
+                        os.killpg(provider_identity["pgid"], 0)
+                    except ProcessLookupError:
+                        boundary["owned_group_exists"] = False
+                    else:
+                        boundary["owned_group_exists"] = True
+                    observations["git_boundary"] = boundary
+                    self.assertEqual(str(self.workspace), proof["workspace"])
+                    self.assertEqual(str(self.workspace), proof["descendant"]["workspace"])
+                    self.assertEqual(observations["provider_after_spawn"], provider_identity)
+                    self.assertEqual(provider_identity["pid"], descendant["ppid"])
+                    self.assertEqual(provider_identity["pid"], provider_identity["pgid"])
+                    self.assertEqual(provider_identity["pid"], provider_identity["sid"])
+                    self.assertEqual(provider_identity["pgid"], descendant["pgid"])
+                    self.assertEqual(provider_identity["sid"], descendant["sid"])
+                    self.assertEqual(peer_ready["identity"], boundary["peer_current"])
+                    self.assertEqual(peer.pid, boundary["peer_current"]["pgid"])
+                    self.assertEqual(peer.pid, boundary["peer_current"]["sid"])
+                    self.assertNotEqual(provider_identity["pgid"], boundary["peer_current"]["pgid"])
+                    self.assertNotEqual(provider_identity["sid"], boundary["peer_current"]["sid"])
+                    self.assertIsNone(boundary["peer_returncode"], "sibling-session peer was not preserved")
+                    self.assertFalse(boundary["owned_group_exists"], "owned group survived into Git finalization")
+                    self.assertIsNone(boundary["provider_current"])
+                    self.assertIsNone(boundary["descendant_current"])
+                    self.assertIsNotNone(boundary["provider_returncode"])
+                    stopped = json.loads((self.workspace / ".floati" / "descendant-exit.json").read_bytes())
+                    collected = json.loads((self.workspace / ".floati" / "descendant-collected.json").read_bytes())
+                    boundary.update(descendant_exit=stopped, descendant_collected=collected)
+                    self.assertEqual(descendant, stopped["ready_identity"])
+                    self.assertEqual("signal", stopped["reason"])
+                    self.assertEqual(signal.SIGTERM, stopped["signal"])
+                    self.assertEqual({"pid": descendant["pid"], "exit_code": 0, "collected": True}, collected)
+                    return original_reset(accepted)
+
+                with mock.patch.object(adapter, "_reset_repository", side_effect=at_first_git_finalization):
+                    bindings = adapter.drive(handle, self.item(), deadline_seconds=QUIESCENT_DESCENDANT_DEADLINE_SECONDS)
+                self.assertEqual(["PROOF.txt"], [row["doc"] for row in bindings])
+                self.assertFalse((self.workspace / "LATE.txt").exists())
+                self.assertEqual("", self.git(self.workspace, "status", "--porcelain"))
+                self.assertIsNone(peer.poll(), "adapter cleanup reached an unrelated peer session")
+            finally:
+                try:
+                    adapter.cancel()
+                    if handle is not None:
+                        handle.session.close()
+                finally:
+                    try:
+                        if peer is not None and getattr(peer, "pid", None) is not None:
+                            if peer.poll() is None:
+                                try:
+                                    peer.terminate()
+                                except OSError as error:
+                                    observations["peer_terminate_error"] = repr(error)
+                            try:
+                                peer.wait(timeout=QUIESCENT_DESCENDANT_DEADLINE_SECONDS)
+                            except (subprocess.TimeoutExpired, OSError) as error:
+                                observations["peer_bounded_wait_error"] = repr(error)
+                                try:
+                                    peer.kill()
+                                except OSError as error:
+                                    observations["peer_kill_error"] = repr(error)
+                                peer.wait()
+                            observations["peer_collected"] = {"pid": peer.pid, "exit_code": peer.returncode}
+                            if peer.stdout is not None:
+                                peer.stdout.close()
+                        observations["native_evidence"] = {
+                            path.name: path.read_text() for path in (self.workspace / ".floati").glob("*json")
+                            if path.name in {"owned-group.json", "descendant-ready.json", "descendant-exit.json",
+                                             "descendant-collected.json"}}
+                        if (peer_workspace / ".floati" / "peer-exit.json").exists():
+                            observations["peer_exit"] = json.loads((peer_workspace / ".floati" / "peer-exit.json").read_bytes())
+                    finally:
+                        # The native worker log retains this proof before all
+                        # test-owned scratch is removed; no output override.
+                        print("R3_DESCENDANT_OBSERVATION " + json.dumps(observations, sort_keys=True), flush=True)
+
+    def test_close_error_still_restores_prepared_directory_and_releases_fds(self) -> None:
+        """A real drive failure cannot bypass its prepared-workspace cleanup."""
+        before = os.stat(".")
+        self.workspace.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.workspace.mkdir(mode=0o700)
+        metadata = self.workspace.stat()
+        adapter = CodexAppServerAdapter(self.command("complete"))
+        adapter.set_prepared_workspace(str(self.workspace), metadata.st_dev, metadata.st_ino)
+        handle = adapter.spawn(self.item(), deadline_seconds=5)
+        descriptors = (adapter._prepared_workspace_descriptor, adapter._prior_directory_descriptor)
+        close = handle.session.close
+        observed = {}
+
+        def closed_then_error():
+            close()
+            raise OSError("controlled native-close aftermath")
+
+        try:
+            with mock.patch.object(handle.session, "close", side_effect=closed_then_error):
+                with self.assertRaisesRegex(OSError, "controlled native-close aftermath"):
+                    adapter.drive(handle, self.item(), deadline_seconds=5)
+            after = os.stat(".")
+            observed["directory_restored"] = (before.st_dev, before.st_ino) == (after.st_dev, after.st_ino)
+            observed["active_session_cleared"] = adapter._active_session is None
+            observed["descriptors_closed"] = []
+            for descriptor in descriptors:
+                try:
+                    os.fstat(descriptor)
+                except OSError:
+                    observed["descriptors_closed"].append(True)
+                else:
+                    observed["descriptors_closed"].append(False)
+        finally:
+            adapter.cancel()
+            close()
+        self.assertTrue(observed["directory_restored"])
+        self.assertTrue(observed["active_session_cleared"])
+        self.assertEqual([True, True], observed["descriptors_closed"])
 
     def test_adapter_refuses_workspace_escape_missing_artifact_symlink_and_overflow(self) -> None:
         cases = (

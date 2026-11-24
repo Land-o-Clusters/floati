@@ -115,7 +115,7 @@ class RegistryRetirementWriterTests(unittest.TestCase):
 
 
 class RegistryRetirementCliTests(unittest.TestCase):
-    """The `floati retire` surface. Self-retirement only; no actor override exists."""
+    """The `floati retire` surface selects NODE; no actor override syntax exists."""
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -181,7 +181,7 @@ class RegistryRetirementCliTests(unittest.TestCase):
         )
 
     def test_retire_offers_no_actor_override_pending_the_controller_ruling(self) -> None:
-        """Self-retirement only: retiring another node is not yet ruled lawful."""
+        """Unsupported actor flags refuse; this does not bind the caller to NODE."""
         self.register(public_ids.builder('a'))
         self.register(public_ids.builder('b'))
 

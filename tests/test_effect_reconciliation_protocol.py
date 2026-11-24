@@ -655,8 +655,15 @@ class ReconciliationProtocolTests(unittest.TestCase):
             dict(value, outcome="confirmed", confirmation=dict(self.expected, kind="none")),
             dict(value, observation={"nested": {"bad": object()}}),
         )
-        for candidate in cases:
-            with self.subTest(candidate=candidate):
+        for case_index, candidate in enumerate(cases):
+            with self.subTest(case=(
+                "foreign-request-id",
+                "zero-request-digest",
+                "boolean-schema-version",
+                "boolean-git-spend",
+                "confirmed-with-none-confirmation",
+                "noncanonical-nested-object-observation",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal):
                     protocol["validate_result"](candidate, request)
 

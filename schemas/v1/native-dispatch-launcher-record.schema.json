@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/native-dispatch-launcher-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "tenant_id", "timestamp", "message_id", "sender_node_id", "sender_provider", "sender_native_session_id", "session_claim_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "native_dispatch_launcher_record"},
+    "id": {"type": "string", "pattern": "^native-dispatch-launcher-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "message_id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "sender_node_id": {"$ref": "#/$defs/identifier"},
+    "sender_provider": {"const": "codex"},
+    "sender_native_session_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "session_claim_id": {"type": "string", "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+  }
+}

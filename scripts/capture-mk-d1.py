@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -62,15 +63,40 @@ RECEIVER = "codex-receiver"
 RECEIVER_SESSION = "receiver-session"
 HANDOFF_DOC = "docs/demo/recipes/mk-d1.md"
 HANDOFF_NOTE = "row one: the handoff slice"
-BANKED_SHA = "0" * 40
+
+
+def _banked_sha(repository: Path) -> str:
+    """Use the earliest recipe commit in the demonstrated checkout's ancestry.
+
+    Unrelated HEAD changes leave this real fixture coordinate unchanged.
+    Deriving it from recipe history also works in the independent public
+    export history, where a literal harbor object ID would not resolve.
+    The real send still checks resolution and remote-ref reachability.
+    """
+    result = subprocess.run(
+        ("/usr/bin/git", "--no-replace-objects", "-C", str(repository),
+         "log", "--reverse", "--topo-order", "--format=%H", "HEAD", "--", HANDOFF_DOC),
+        capture_output=True, text=True, check=False, timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr)
+    commits = result.stdout.splitlines()
+    if not commits:
+        raise RuntimeError("handoff recipe has no committed history in this checkout")
+    return commits[0]
+
+
 FRAME_MS = 3000
 FINAL_MS = 4000
 WRAP_COLUMNS = 110
 
-SEND_COMMAND = (
-    f"$ floati send --root $ROOT --from {SENDER} --to {RECEIVER} --repo floati \\\n"
-    f"      --sha {BANKED_SHA} --doc {HANDOFF_DOC} --note \"{HANDOFF_NOTE}\"\n\n"
-)
+def _send_command(banked_sha: str) -> str:
+    return (
+        f"$ floati send --root $ROOT --from {SENDER} --to {RECEIVER} --repo floati \\\n"
+        f"      --sha {banked_sha} --doc {HANDOFF_DOC} --note \"{HANDOFF_NOTE}\"\n\n"
+    )
+
+
 INBOX_COMMAND = (
     f"$ floati inbox --root $ROOT --as {RECEIVER} --session {RECEIVER_SESSION}\n\n"
 )
@@ -119,6 +145,25 @@ def _restore_capture_clock() -> None:
     while _PINNED_ATTRIBUTES:
         module, name, original = _PINNED_ATTRIBUTES.pop()
         setattr(module, name, original)
+
+
+@contextmanager
+def _fixture_home(scratch: Path):
+    """Every native observation and child runs with this capture's own home."""
+    home = scratch / "home"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True, exist_ok=True)
+    originals = {name: os.environ.get(name) for name in ("HOME", "CODEX_HOME")}
+    os.environ["HOME"] = str(home)
+    os.environ["CODEX_HOME"] = str(codex_home)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = original
 
 
 def _pty_text(command: list[str], cwd: Path, tolerated: set[int]) -> str:
@@ -210,10 +255,12 @@ def _frame(root_path: Path, command: str, output: str) -> str:
     return f"ROOT={root_path}\n\n{command}{output}\n"
 
 
-def _seed_handoff(root, moment: datetime) -> tuple[str, str]:
+def _seed_handoff(root, moment: datetime, banked_sha: str | None = None) -> tuple[str, str]:
     """The real handoff, performed by the CLI's own handlers at the captured
     moment: one send, one drain that presents and acknowledges."""
 
+    if banked_sha is None:
+        banked_sha = _banked_sha(REPOSITORY_ROOT)
     with engine._capture_id_scope("mk-d1", moment) as id_factory:
         _pin_capture_clock(moment, id_factory)
         try:
@@ -226,7 +273,7 @@ def _seed_handoff(root, moment: datetime) -> tuple[str, str]:
                     sender=SENDER,
                     recipient=RECEIVER,
                     repo="floati",
-                    sha=BANKED_SHA,
+                    sha=banked_sha,
                     doc=HANDOFF_DOC,
                     note=HANDOFF_NOTE,
                     reply_to=None,
@@ -236,6 +283,17 @@ def _seed_handoff(root, moment: datetime) -> tuple[str, str]:
             )
             if status != "ok":
                 raise RuntimeError(f"handoff send did not clear: {status}")
+            readiness = evidence.get("recipient_readiness", {})
+            if (readiness.get("state") != "unknown"
+                    or readiness.get("reason") != "mechanism_evidence_incomplete"
+                    or readiness.get("checked_mechanisms") != ["lease", "stop_hook", "seat_board"]):
+                raise RuntimeError("unconfigured fixture recipient must retain unknown readiness")
+            observations = [row for row in events_module.EventLog(root).event_records()
+                            if row.get("kind") == "send_readiness_observation"]
+            if (len(observations) != 1
+                    or observations[0]["envelope_id"] != evidence["message"]["id"]
+                    or observations[0]["readiness"] != readiness):
+                raise RuntimeError("handoff send did not journal its exact readiness observation")
             send_artifact = _artifact_text("send", status, evidence)
 
             status, evidence, _ = cli._inbox(
@@ -261,6 +319,7 @@ def main() -> int:
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--handoff-repository", type=Path, default=REPOSITORY_ROOT)
     args = parser.parse_args()
     try:
         font_path = engine.resolve_capture_font(args.font)
@@ -282,8 +341,21 @@ def main() -> int:
     if any(output.iterdir()):
         raise SystemExit(f"output is not empty: {output}")
 
+    with _fixture_home(scratch):
+        return _capture(args, captured_at, scratch, output, font_path)
+
+
+def _capture(args, captured_at: datetime, scratch: Path, output: Path, font_path: Path) -> int:
+
     root = engine._new_root(scratch / "fleet")
-    send_artifact, inbox_artifact = _seed_handoff(root, captured_at)
+    handoff_repository = args.handoff_repository.expanduser().resolve()
+    banked_sha = _banked_sha(handoff_repository)
+    previous_directory = Path.cwd()
+    try:
+        os.chdir(handoff_repository)
+        send_artifact, inbox_artifact = _seed_handoff(root, captured_at, banked_sha)
+    finally:
+        os.chdir(previous_directory)
 
     receipts_output = _pty_text(
         [
@@ -306,13 +378,18 @@ def main() -> int:
     )
 
     frames = [
-        _frame(root.path, SEND_COMMAND, send_artifact),
+        _frame(root.path, _send_command(banked_sha), send_artifact),
         _frame(root.path, INBOX_COMMAND, inbox_artifact),
         _frame(root.path, RECEIPTS_COMMAND_PREFIX, receipts_output),
         _frame(root.path, REFUSED_SEND_COMMAND, refused_output),
     ]
     exposed = [
-        engine.expose_readme_text(frame, instrument_roots=(scratch,))
+        engine.expose_readme_text(
+            engine.expose_readme_text(
+                frame, instrument_roots=(REPOSITORY_ROOT, handoff_repository)
+            ).replace("<scratch>", "<repository>"),
+            instrument_roots=(scratch,),
+        )
         for frame in frames
     ]
     engine._assert_rendered_identity_safe("mk-d1", exposed)

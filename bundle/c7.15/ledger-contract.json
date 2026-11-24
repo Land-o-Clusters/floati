@@ -1,0 +1,1839 @@
+{
+  "format_version": 1,
+  "kind": "ledger_contract",
+  "members": {
+    "kinds": {
+      "absent": [
+        "floati/deploy.py"
+      ],
+      "acceptance_receipt": [
+        "floati/decisions.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "ack_receipt": [
+        "floati/conformance.py",
+        "floati/cursor.py",
+        "floati/cursor_prefix.py",
+        "floati/mail_summary.py",
+        "floati/records.py",
+        "floati/seat_teardown.py",
+        "floati/sent.py",
+        "floati/wake_hold.py"
+      ],
+      "adhoc_dispatch_record": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_records.py",
+        "floati/adhoc_threads.py",
+        "floati/jsonl.py",
+        "floati/projection.py"
+      ],
+      "adhoc_lifecycle_record": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_records.py",
+        "floati/jsonl.py"
+      ],
+      "adhoc_native_thread_opened_record": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_records.py",
+        "floati/jsonl.py",
+        "floati/native_thread_protocol.py",
+        "floati/projection.py",
+        "floati/thread_observations.py"
+      ],
+      "adhoc_profile_record": [
+        "floati/adhoc_profiles.py",
+        "floati/adhoc_records.py"
+      ],
+      "approval_consumed_for_resume": [
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/suspension.py"
+      ],
+      "approval_decision": [
+        "floati/approvals.py",
+        "floati/records.py"
+      ],
+      "approval_panel_decision_receipt": [
+        "floati/tui_approval.py"
+      ],
+      "approval_request": [
+        "floati/approvals.py",
+        "floati/records.py"
+      ],
+      "ask_answer": [
+        "floati/ask.py",
+        "floati/epoch_carry.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "ask_decline": [
+        "floati/ask.py",
+        "floati/epoch_carry.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "ask_question": [
+        "floati/ask.py",
+        "floati/epoch_carry.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "ask_timeout": [
+        "floati/ask.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "attempt_cancelled_before_start": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/scheduler.py"
+      ],
+      "attempt_harness_session_bound": [
+        "floati/c7_2_bundle.py",
+        "floati/c7_bundle.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "attempt_opened": [
+        "floati/decisions.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "attempt_spawn_policy_bound": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "attempt_started": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "attempt_suspended_for_approval": [
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/suspension.py"
+      ],
+      "attempt_terminal": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "authority_grant": [
+        "floati/conformance.py",
+        "floati/records.py",
+        "floati/solo.py"
+      ],
+      "bank": [
+        "floati/bridge_rebank.py"
+      ],
+      "binding": [
+        "floati/records.py",
+        "floati/seat_host_worker.py"
+      ],
+      "boot_projection": [
+        "floati/context.py"
+      ],
+      "bridge_consent": [
+        "floati/bridge.py",
+        "floati/records.py"
+      ],
+      "bridge_denial": [
+        "floati/bridge.py",
+        "floati/records.py"
+      ],
+      "bridge_forward": [
+        "floati/bridge.py",
+        "floati/records.py"
+      ],
+      "bridge_rebank": [
+        "floati/bridge_rebank.py"
+      ],
+      "bridge_record": [
+        "floati/bridge.py",
+        "floati/records.py"
+      ],
+      "bridge_stub": [
+        "floati/graph.py"
+      ],
+      "bundle": [
+        "floati/records.py",
+        "floati/seat_host_worker.py"
+      ],
+      "bus_epoch_recovery_receipt": [
+        "floati/bus_epoch.py",
+        "floati/records.py"
+      ],
+      "bus_epoch_roll_receipt": [
+        "floati/archive_catalog_entries.py",
+        "floati/archive_checkpoint.py",
+        "floati/archive_consumption_replay.py",
+        "floati/archive_retention.py",
+        "floati/archive_source_pool.py",
+        "floati/archive_survivor_admission.py",
+        "floati/archive_survivor_pool.py",
+        "floati/bus_epoch.py",
+        "floati/codex_wait.py",
+        "floati/cursor_presentations.py",
+        "floati/cut_prefix.py",
+        "floati/epoch_carry.py",
+        "floati/epoch_prefix.py",
+        "floati/epoch_rotation.py",
+        "floati/epoch_teardown.py",
+        "floati/events.py",
+        "floati/history_query_join.py",
+        "floati/mail_summary.py",
+        "floati/records.py",
+        "floati/send_prefix.py",
+        "floati/wake_hold.py",
+        "floati/work_notification.py"
+      ],
+      "bus_root": [
+        "floati/wiring_journal.py"
+      ],
+      "c7_canonical_projection": [
+        "floati/c7_2_bundle.py",
+        "floati/c7_bundle.py"
+      ],
+      "c7_read_bundle_index": [
+        "floati/c7_2_bundle.py",
+        "floati/c7_bundle.py"
+      ],
+      "c7_schema_catalog": [
+        "floati/c7_2_bundle.py",
+        "floati/c7_bundle.py"
+      ],
+      "cancel_observed": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "cancel_requested": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "cancel_scope_resolved": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "cancel_signal_sent": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "cancel_terminal": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "cancel_unconfirmed": [
+        "floati/cancellation.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "capability": [
+        "floati/approvals.py",
+        "floati/records.py"
+      ],
+      "capability_grant": [
+        "floati/adhoc_launch.py",
+        "floati/capabilities.py",
+        "floati/records.py"
+      ],
+      "capability_revoked": [
+        "floati/capabilities.py",
+        "floati/records.py"
+      ],
+      "capability_set_bound": [
+        "floati/capability_binding.py",
+        "floati/credential_leases.py",
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer.py"
+      ],
+      "car_dissolved": [
+        "floati/locks/contracts.py"
+      ],
+      "car_landed": [
+        "floati/locks/contracts.py"
+      ],
+      "car_measurement_recorded": [
+        "floati/locks/contracts.py"
+      ],
+      "car_reviewed": [
+        "floati/locks/contracts.py"
+      ],
+      "car_submitted": [
+        "floati/locks/contracts.py"
+      ],
+      "change": [
+        "floati/projection.py"
+      ],
+      "check_committed_and_banked": [
+        "floati/node_projections.py"
+      ],
+      "child_admitted": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "child_rejected": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "claude": [
+        "floati/worker_bootstrap_protocol.py"
+      ],
+      "cli": [
+        "floati/seat_onboarding.py"
+      ],
+      "clone": [
+        "floati/seat_onboarding.py"
+      ],
+      "clonecli": [
+        "floati/seat_onboarding.py"
+      ],
+      "close_lease": [
+        "floati/node_projections.py"
+      ],
+      "codex": [
+        "floati/worker_bootstrap_protocol.py"
+      ],
+      "codex_binding_repair_receipt": [
+        "floati/codex_binding_repair.py",
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/wake_daemon_contract.py"
+      ],
+      "codex_stop_hook": [
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py"
+      ],
+      "codex_wait_consent_receipt": [
+        "floati/codex_wait_contract.py",
+        "floati/records.py"
+      ],
+      "codex_wait_exhaustion_receipt": [
+        "floati/codex_wait_contract.py",
+        "floati/records.py"
+      ],
+      "codex_wait_holder_testimony": [
+        "floati/codex_wait_liveness.py"
+      ],
+      "codex_wait_reopen_fact": [
+        "floati/codex_wait_contract.py"
+      ],
+      "codex_wait_session_receipt": [
+        "floati/codex_wait_contract.py",
+        "floati/records.py"
+      ],
+      "command_contract": [
+        "floati/command_contract.py"
+      ],
+      "compensation_executed": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "compensation_proposed": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "config": [
+        "floati/bridge_rebank.py",
+        "floati/records.py",
+        "floati/seat_host_worker.py"
+      ],
+      "confluence_grant": [
+        "floati/confluence.py",
+        "floati/records.py"
+      ],
+      "consumed_fraction": [
+        "floati/quota.py",
+        "floati/records.py"
+      ],
+      "consumption_receipt": [
+        "floati/archive_consumption_domain.py",
+        "floati/jsonl.py",
+        "floati/message_consumption.py",
+        "floati/records.py"
+      ],
+      "context_status_projection": [
+        "floati/context.py"
+      ],
+      "context_turnover_projection": [
+        "floati/context.py"
+      ],
+      "credential_lease_consumed": [
+        "floati/credential_leases.py",
+        "floati/records.py"
+      ],
+      "credential_lease_granted": [
+        "floati/credential_leases.py",
+        "floati/records.py"
+      ],
+      "credential_lease_revoked": [
+        "floati/credential_leases.py",
+        "floati/records.py"
+      ],
+      "cursor_presentation_receipt": [
+        "floati/cursor_presentations.py",
+        "floati/records.py"
+      ],
+      "decision_record": [
+        "floati/decisions.py",
+        "floati/records.py"
+      ],
+      "declaration": [
+        "floati/seat_onboarding.py"
+      ],
+      "declarationcli": [
+        "floati/seat_onboarding.py"
+      ],
+      "delivered_unpresented": [
+        "floati/adhoc_journal.py",
+        "floati/archive_consumption_replay.py",
+        "floati/conformance.py",
+        "floati/cursor_prefix.py",
+        "floati/cursor_presentations.py",
+        "floati/epoch_prefix.py",
+        "floati/events.py",
+        "floati/mail_summary.py",
+        "floati/projection.py",
+        "floati/records.py",
+        "floati/sent.py",
+        "floati/supervisor.py",
+        "floati/tui.py",
+        "floati/tui_render.py"
+      ],
+      "delivery_claim": [
+        "floati/epoch_prefix.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/send_prefix.py",
+        "floati/tui.py",
+        "floati/verification.py"
+      ],
+      "delivery_receipt": [
+        "floati/adhoc_journal.py",
+        "floati/archive_consumption_replay.py",
+        "floati/conformance.py",
+        "floati/cursor.py",
+        "floati/cursor_prefix.py",
+        "floati/cursor_presentations.py",
+        "floati/doctor_probe.py",
+        "floati/epoch_prefix.py",
+        "floati/events.py",
+        "floati/mail_summary.py",
+        "floati/projection.py",
+        "floati/records.py",
+        "floati/sent.py",
+        "floati/tui.py"
+      ],
+      "denial_receipt": [
+        "floati/events.py",
+        "floati/records.py",
+        "floati/replay.py"
+      ],
+      "deployment_artifact_equals": [
+        "floati/effect_reconciliation_protocol.py"
+      ],
+      "deployment_target": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/records.py"
+      ],
+      "descendant_observation_closed": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "dir": [
+        "floati/deploy.py",
+        "floati/wiring_journal.py"
+      ],
+      "dispatch_decision": [
+        "floati/capability_binding.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "effect_acknowledged": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "effect_confirmed": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "effect_dispatched": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "effect_failed": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "effect_intent": [
+        "floati/demo.py",
+        "floati/effects.py",
+        "floati/projection.py",
+        "floati/records.py"
+      ],
+      "effect_reconciled": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "effect_status": [
+        "floati/projection.py"
+      ],
+      "effect_unknown": [
+        "floati/effects.py",
+        "floati/records.py"
+      ],
+      "epoch_archive_removal": [
+        "floati/archive_retention.py",
+        "floati/records.py"
+      ],
+      "epoch_carry_verification": [
+        "floati/epoch_carry.py",
+        "floati/epoch_rotation.py",
+        "floati/epoch_teardown.py",
+        "floati/events.py",
+        "floati/records.py"
+      ],
+      "epoch_history_commit": [
+        "floati/jsonl.py",
+        "floati/records.py"
+      ],
+      "epoch_roll": [
+        "floati/fleet_update_receipts.py"
+      ],
+      "error": [
+        "floati/c7_bundle.py",
+        "floati/selftest.py"
+      ],
+      "external_api_resource": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/records.py"
+      ],
+      "failure": [
+        "floati/selftest.py"
+      ],
+      "file": [
+        "floati/deploy.py",
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py",
+        "floati/wiring_journal.py"
+      ],
+      "fixture_error": [
+        "floati/selftest.py"
+      ],
+      "flag": [
+        "floati/wiring_journal.py"
+      ],
+      "fleet_status": [
+        "floati/projection.py"
+      ],
+      "fleet_update_completed": [
+        "floati/doctor.py",
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py",
+        "floati/records.py"
+      ],
+      "fleet_update_plan": [
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py"
+      ],
+      "fleet_update_started": [
+        "floati/doctor.py",
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py",
+        "floati/records.py"
+      ],
+      "fleet_update_step": [
+        "floati/doctor.py",
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py",
+        "floati/records.py"
+      ],
+      "floati-install-manifest-v0": [
+        "floati/bridge_bank.py",
+        "floati/seat_harness_config.py",
+        "floati/seat_transport_preflight.py"
+      ],
+      "floati_standalone": [
+        "floati/deploy.py"
+      ],
+      "flush_state": [
+        "floati/node_projections.py"
+      ],
+      "fork": [
+        "floati/c7_2_bundle.py"
+      ],
+      "fresh_work": [
+        "floati/codex_wait.py"
+      ],
+      "gateway_approval_forward": [
+        "floati/gateway.py",
+        "floati/records.py"
+      ],
+      "gateway_capability_declaration": [
+        "floati/gateway.py",
+        "floati/records.py"
+      ],
+      "gateway_session_ingress": [
+        "floati/gateway.py",
+        "floati/records.py"
+      ],
+      "git_ref": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/records.py"
+      ],
+      "git_ref_equals": [
+        "floati/effect_reconciliation_protocol.py"
+      ],
+      "git_remote_ref": [
+        "floati/adhoc_workspace.py",
+        "floati/effect_reconciliation_protocol.py",
+        "floati/records.py"
+      ],
+      "git_remote_ref_equals": [
+        "floati/adhoc_workspace.py",
+        "floati/effect_reconciliation_protocol.py"
+      ],
+      "github_idempotency_marker": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/intake.py"
+      ],
+      "github_resource": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/intake.py",
+        "floati/records.py"
+      ],
+      "handoff": [
+        "floati/c7_2_bundle.py"
+      ],
+      "handoff_capsule": [
+        "floati/decisions.py"
+      ],
+      "herdr": [
+        "floati/adapters/herdr_host.py"
+      ],
+      "hold_receipt": [
+        "floati/holds.py",
+        "floati/records.py"
+      ],
+      "hook_burn_record": [
+        "floati/hook_preconditions.py",
+        "floati/records.py"
+      ],
+      "hook_entry": [
+        "floati/wiring_journal.py"
+      ],
+      "initial": [
+        "floati/c7_2_bundle.py",
+        "floati/projection.py"
+      ],
+      "intake_snapshot": [
+        "floati/intake.py",
+        "floati/records.py"
+      ],
+      "journal_checkpoint_state": [
+        "floati/journal_chain.py",
+        "floati/records.py"
+      ],
+      "lane_spawn_receipt": [
+        "floati/lane_scaling.py",
+        "floati/records.py",
+        "floati/registry.py"
+      ],
+      "lane_teardown_receipt": [
+        "floati/lane_scaling.py",
+        "floati/records.py",
+        "floati/registry.py"
+      ],
+      "lane_workspace_record": [
+        "floati/lane_workspaces.py",
+        "floati/records.py"
+      ],
+      "ledger_repair_receipt": [
+        "floati/events.py",
+        "floati/ledger_repair.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "liveness_presence": [
+        "floati/conformance.py",
+        "floati/planes.py",
+        "floati/records.py"
+      ],
+      "local_gateway_config": [
+        "floati/gateway.py"
+      ],
+      "lock_acquired": [
+        "floati/locks/contracts.py"
+      ],
+      "lock_announcement_delivered": [
+        "floati/locks/contracts.py"
+      ],
+      "lock_announcement_rearmed": [
+        "floati/locks/contracts.py"
+      ],
+      "lock_announcement_stopped": [
+        "floati/locks/contracts.py"
+      ],
+      "lock_escalated": [
+        "floati/locks/contracts.py"
+      ],
+      "marker": [
+        "floati/wiring_journal.py"
+      ],
+      "mcp_integration_pin": [
+        "floati/mcp_pin.py",
+        "floati/records.py"
+      ],
+      "message_envelope": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_threads.py",
+        "floati/archive_checkpoint.py",
+        "floati/archive_consumption_checkpoint.py",
+        "floati/archive_consumption_domain.py",
+        "floati/archive_consumption_replay.py",
+        "floati/archive_execution_checkpoint.py",
+        "floati/archive_execution_domain.py",
+        "floati/archive_execution_replay.py",
+        "floati/archive_projection_replay.py",
+        "floati/archive_source_pool.py",
+        "floati/confluence.py",
+        "floati/conformance.py",
+        "floati/cursor.py",
+        "floati/cursor_presentations.py",
+        "floati/cut_prefix.py",
+        "floati/delivery_health.py",
+        "floati/doctor.py",
+        "floati/epoch_carry.py",
+        "floati/epoch_prefix.py",
+        "floati/epoch_teardown.py",
+        "floati/events.py",
+        "floati/graph.py",
+        "floati/history_query_join.py",
+        "floati/inbox_prefix.py",
+        "floati/mail_summary.py",
+        "floati/message_consumption.py",
+        "floati/projection.py",
+        "floati/records.py",
+        "floati/seat_board.py",
+        "floati/seat_teardown.py",
+        "floati/seat_waiter_lifecycle.py",
+        "floati/send_prefix.py",
+        "floati/sent.py",
+        "floati/stop_skip.py",
+        "floati/supervisor.py",
+        "floati/tui.py",
+        "floati/wake_health.py",
+        "floati/wake_hold.py",
+        "floati/work_notification.py"
+      ],
+      "message_retracted": [
+        "floati/adhoc_journal.py",
+        "floati/archive_consumption_replay.py",
+        "floati/confluence.py",
+        "floati/cursor.py",
+        "floati/cursor_presentations.py",
+        "floati/cut_prefix.py",
+        "floati/epoch_prefix.py",
+        "floati/events.py",
+        "floati/inbox_prefix.py",
+        "floati/message_consumption.py",
+        "floati/records.py",
+        "floati/seat_teardown.py",
+        "floati/seat_waiter_lifecycle.py",
+        "floati/send_prefix.py",
+        "floati/tui.py"
+      ],
+      "mutual_exclusion_hold": [
+        "floati/conformance.py",
+        "floati/records.py"
+      ],
+      "native_closing_recovery": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_records.py",
+        "floati/adhoc_threads.py"
+      ],
+      "node": [
+        "floati/graph.py"
+      ],
+      "node_boot_projection": [
+        "floati/node_explain.py",
+        "floati/node_projections.py"
+      ],
+      "node_boot_result": [
+        "floati/node_turnover.py"
+      ],
+      "node_lease": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_profiles.py",
+        "floati/adhoc_threads.py",
+        "floati/admin_registry.py",
+        "floati/cursor_workers.py",
+        "floati/fleet_update.py",
+        "floati/lane_scaling.py",
+        "floati/node_wizard.py",
+        "floati/projection.py",
+        "floati/records.py",
+        "floati/registry.py"
+      ],
+      "node_state_flush_receipt": [
+        "floati/state_receipts.py",
+        "floati/tide.py"
+      ],
+      "node_teardown_projection": [
+        "floati/node_projections.py"
+      ],
+      "node_teardown_result": [
+        "floati/node_turnover.py"
+      ],
+      "none": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/errors.py",
+        "floati/mcp.py"
+      ],
+      "other": [
+        "floati/deploy.py"
+      ],
+      "pi": [
+        "floati/worker_bootstrap_protocol.py"
+      ],
+      "plan_amendment": [
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer.py",
+        "floati/sequencer_scale.py",
+        "floati/spawn_groups.py"
+      ],
+      "plugin": [
+        "floati/wiring_journal.py"
+      ],
+      "prep_clear_receipt": [
+        "floati/prep_clear.py",
+        "floati/records.py"
+      ],
+      "provider_switch_receipt": [
+        "floati/admin_registry.py",
+        "floati/provider_switch.py",
+        "floati/records.py",
+        "floati/registry.py"
+      ],
+      "push_and_envelope_unbanked": [
+        "floati/node_projections.py"
+      ],
+      "quota_receipt": [
+        "floati/quota.py"
+      ],
+      "quota_receipt_record": [
+        "floati/quota.py",
+        "floati/records.py"
+      ],
+      "read_state": [
+        "floati/node_projections.py"
+      ],
+      "receipt_index": [
+        "floati/bridge_rebank.py"
+      ],
+      "receipts_read_bundle": [
+        "floati/confluence.py"
+      ],
+      "registry_entry": [
+        "floati/admin_registry.py",
+        "floati/codex_wait_contract.py",
+        "floati/conformance.py",
+        "floati/doctor.py",
+        "floati/fleet_update.py",
+        "floati/graph.py",
+        "floati/lane_scaling.py",
+        "floati/lane_workspaces.py",
+        "floati/multi_bus_chart.py",
+        "floati/node_wizard.py",
+        "floati/provider_switch.py",
+        "floati/recipient_mechanisms.py",
+        "floati/records.py",
+        "floati/registry.py",
+        "floati/registry_prefix.py",
+        "floati/role_assignment.py",
+        "floati/seat_fence.py",
+        "floati/seat_migration.py",
+        "floati/seat_onboarding.py",
+        "floati/solo.py",
+        "floati/supervisor.py"
+      ],
+      "registry_person_record": [
+        "floati/persons.py",
+        "floati/records.py"
+      ],
+      "registry_role_record": [
+        "floati/admin_registry.py",
+        "floati/context.py",
+        "floati/doctor.py",
+        "floati/lane_scaling.py",
+        "floati/node_projections.py",
+        "floati/records.py",
+        "floati/registry.py",
+        "floati/registry_prefix.py",
+        "floati/role_assignment.py"
+      ],
+      "registry_role_transfer": [
+        "floati/admin_registry.py",
+        "floati/records.py",
+        "floati/registry.py"
+      ],
+      "remove": [
+        "floati/bridge_rebank.py"
+      ],
+      "report_drained": [
+        "floati/node_projections.py"
+      ],
+      "restored-root-receipt": [
+        "floati/purge.py"
+      ],
+      "result_accepted": [
+        "floati/adhoc_threads.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "result_produced": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "result_verified": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "resume": [
+        "floati/c7_2_bundle.py"
+      ],
+      "retain_newest": [
+        "floati/wake_daemon.py"
+      ],
+      "retire_without_deleting_workspace": [
+        "floati/node_projections.py"
+      ],
+      "retired_home_disarm_receipt": [
+        "floati/records.py",
+        "floati/retired_home_disarm.py"
+      ],
+      "retry_exhausted": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "retry_scheduled": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "review_handoff_delivered": [
+        "floati/locks/contracts.py"
+      ],
+      "review_handoff_queued": [
+        "floati/locks/contracts.py"
+      ],
+      "review_handoff_rearmed": [
+        "floati/locks/contracts.py"
+      ],
+      "review_handoff_stopped": [
+        "floati/locks/contracts.py"
+      ],
+      "role_template_write_receipt": [
+        "floati/records.py",
+        "floati/role_library.py"
+      ],
+      "run_admission_bound": [
+        "floati/admission.py",
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer.py",
+        "floati/sequencer_scale.py"
+      ],
+      "run_created": [
+        "floati/decisions.py",
+        "floati/graph.py",
+        "floati/orchestrate.py",
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer.py",
+        "floati/sequencer_scale.py"
+      ],
+      "run_dependency": [
+        "floati/graph.py"
+      ],
+      "run_environment_observed": [
+        "floati/records.py",
+        "floati/run_manifest.py"
+      ],
+      "run_manifest_fact": [
+        "floati/records.py",
+        "floati/run_manifest.py"
+      ],
+      "run_policy_bound": [
+        "floati/orchestrate.py",
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer_scale.py"
+      ],
+      "run_spawn_admission_enabled": [
+        "floati/admission.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "run_terminal": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "same_schema": [
+        "floati/overlap_radar.py"
+      ],
+      "same_symbol": [
+        "floati/overlap_radar.py"
+      ],
+      "seat_board_receipt": [
+        "floati/records.py",
+        "floati/seat_board.py"
+      ],
+      "seat_execution": [
+        "floati/archive_execution_checkpoint.py",
+        "floati/archive_execution_domain.py",
+        "floati/archive_execution_replay.py",
+        "floati/cursor_stop_hook.py",
+        "floati/desktop_host_notifications.py",
+        "floati/epoch_carry.py",
+        "floati/events.py",
+        "floati/host_observations.py",
+        "floati/jsonl.py",
+        "floati/records.py",
+        "floati/seat_execution.py",
+        "floati/seat_teardown_activity.py",
+        "floati/send_prefix.py"
+      ],
+      "seat_migration_receipt": [
+        "floati/records.py",
+        "floati/seat_migration.py"
+      ],
+      "seat_provisioned": [
+        "floati/locks/contracts.py"
+      ],
+      "seat_teardown_epoch_verification": [
+        "floati/epoch_carry.py",
+        "floati/epoch_rotation.py",
+        "floati/epoch_teardown.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/tui.py"
+      ],
+      "seat_teardown_receipt": [
+        "floati/records.py",
+        "floati/seat_teardown.py",
+        "floati/seat_teardown_capacity.py"
+      ],
+      "segment_opened": [
+        "floati/records.py",
+        "floati/run_segments.py"
+      ],
+      "segment_sealed": [
+        "floati/records.py",
+        "floati/run_segments.py"
+      ],
+      "selector": [
+        "floati/bridge_rebank.py"
+      ],
+      "send_readiness_observation": [
+        "floati/archive_execution_checkpoint.py",
+        "floati/archive_execution_domain.py",
+        "floati/conformance.py",
+        "floati/cursor_presentations.py",
+        "floati/epoch_prefix.py",
+        "floati/events.py",
+        "floati/readiness_contract.py",
+        "floati/records.py",
+        "floati/send_prefix.py",
+        "floati/tui.py"
+      ],
+      "sequencer_epoch": [
+        "floati/records.py",
+        "floati/sequencer_epoch.py"
+      ],
+      "session_adoption": [
+        "floati/managed.py",
+        "floati/records.py"
+      ],
+      "session_release": [
+        "floati/managed.py",
+        "floati/records.py"
+      ],
+      "session_tokens": [
+        "floati/quota.py"
+      ],
+      "shared_install": [
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py"
+      ],
+      "shell_environment": [
+        "floati/effect_reconciliation_protocol.py",
+        "floati/records.py"
+      ],
+      "solo_configuration": [
+        "floati/solo.py"
+      ],
+      "spawn_child_cancelled_without_attempt": [
+        "floati/cancellation.py",
+        "floati/records.py"
+      ],
+      "spawn_group_aborted": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "spawn_group_closed": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "spawn_group_created": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "spawn_late_result_disposition": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "stage": [
+        "floati/seat_onboarding.py"
+      ],
+      "stagecli": [
+        "floati/seat_onboarding.py"
+      ],
+      "stale_attempt_evidence": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "stale_evidence_adopted": [
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "state_dir": [
+        "floati/wiring_journal.py"
+      ],
+      "state_flush_receipt": [
+        "floati/context.py"
+      ],
+      "stop_hold_receipt": [
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/stop_hold.py"
+      ],
+      "stranded-root-receipt": [
+        "floati/purge.py"
+      ],
+      "subtest_error": [
+        "floati/selftest.py"
+      ],
+      "subtest_failure": [
+        "floati/selftest.py"
+      ],
+      "supervisor_orphaned": [
+        "floati/c7_bundle.py",
+        "floati/cancellation.py",
+        "floati/events.py",
+        "floati/records.py",
+        "floati/runtruth.py"
+      ],
+      "symlink": [
+        "floati/deploy.py"
+      ],
+      "task_contract": [
+        "floati/decisions.py",
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer_scale.py"
+      ],
+      "teardown_projection": [
+        "floati/context.py"
+      ],
+      "terminal_capability_receipt": [
+        "floati/tui_capabilities.py"
+      ],
+      "thread_attachment_detached": [
+        "floati/records.py",
+        "floati/thread_observations.py"
+      ],
+      "thread_attachment_registered": [
+        "floati/records.py",
+        "floati/thread_observations.py"
+      ],
+      "thread_observation_recorded": [
+        "floati/records.py",
+        "floati/thread_observations.py"
+      ],
+      "thread_observation_status": [
+        "floati/projection.py"
+      ],
+      "tide_policy_record": [
+        "floati/records.py",
+        "floati/tide_policy.py"
+      ],
+      "tide_receipt": [
+        "floati/records.py",
+        "floati/tide.py"
+      ],
+      "tide_testimony_record": [
+        "floati/records.py",
+        "floati/tide_policy.py"
+      ],
+      "timing_receipt": [
+        "floati/records.py",
+        "floati/timings.py"
+      ],
+      "transient": [
+        "floati/car_fence.py",
+        "floati/consumed_prefix.py",
+        "floati/errors.py",
+        "floati/jsonl.py",
+        "floati/waiter_lock_retry.py"
+      ],
+      "transport_pins": [
+        "floati/fleet_update_receipts.py"
+      ],
+      "unexpected_success": [
+        "floati/selftest.py"
+      ],
+      "unknown": [
+        "floati/deploy.py",
+        "floati/quota.py",
+        "floati/records.py"
+      ],
+      "untracked_descendant": [
+        "floati/records.py",
+        "floati/spawn_groups.py"
+      ],
+      "update_application": [
+        "floati/update_apply.py",
+        "floati/update_check.py",
+        "floati/update_status.py"
+      ],
+      "update_consent_receipt": [
+        "floati/update_consent.py"
+      ],
+      "update_observation": [
+        "floati/update_apply.py",
+        "floati/update_check.py",
+        "floati/update_status.py"
+      ],
+      "verification_receipt": [
+        "floati/records.py",
+        "floati/verification.py"
+      ],
+      "waiter_binding": [
+        "floati/fleet_update.py",
+        "floati/fleet_update_receipts.py"
+      ],
+      "waiter_generation": [
+        "floati/fleet_update_receipts.py"
+      ],
+      "wake_attempt_receipt": [
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/wake_hold.py"
+      ],
+      "wake_cause": [
+        "floati/records.py"
+      ],
+      "wake_control_receipt": [
+        "floati/records.py",
+        "floati/wake_control.py"
+      ],
+      "wake_daemon_consent_receipt": [
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/wake_daemon.py",
+        "floati/wake_daemon_contract.py",
+        "floati/wake_daemon_roll.py"
+      ],
+      "wake_daemon_directory_ownership_record": [
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/wake_daemon_contract.py",
+        "floati/wake_daemon_systemd.py"
+      ],
+      "wake_daemon_lifecycle_receipt": [
+        "floati/admin_cli.py",
+        "floati/presenter_liveness.py",
+        "floati/records.py",
+        "floati/wake_daemon.py",
+        "floati/wake_daemon_contract.py",
+        "floati/wake_daemon_launchd.py",
+        "floati/wake_daemon_roll.py",
+        "floati/wake_daemon_systemd.py"
+      ],
+      "wake_daemon_log_prune": [
+        "floati/wake_daemon.py"
+      ],
+      "wake_daemon_log_rotation": [
+        "floati/wake_daemon.py"
+      ],
+      "wake_daemon_serve_refusal": [
+        "floati/wake_daemon.py"
+      ],
+      "wake_daemon_uninstall_removed": [
+        "floati/uninstall.py"
+      ],
+      "wake_decision": [
+        "floati/wake_hold.py"
+      ],
+      "wake_hold_receipt": [
+        "floati/archive_checkpoint.py",
+        "floati/archive_projection_replay.py",
+        "floati/archive_source_pool.py",
+        "floati/confluence.py",
+        "floati/cursor_presentations.py",
+        "floati/cut_prefix.py",
+        "floati/epoch_carry.py",
+        "floati/epoch_prefix.py",
+        "floati/history_query_projection.py",
+        "floati/jsonl.py",
+        "floati/records.py",
+        "floati/wake_hold.py"
+      ],
+      "wake_path_status": [
+        "floati/wake.py"
+      ],
+      "wake_waiter_exit_receipt": [
+        "floati/records.py",
+        "floati/wake_exit.py"
+      ],
+      "warmcli": [
+        "floati/seat_onboarding.py"
+      ],
+      "work_dependency": [
+        "floati/graph.py"
+      ],
+      "work_item": [
+        "floati/adhoc_threads.py",
+        "floati/consumption.py",
+        "floati/records.py",
+        "floati/work.py",
+        "floati/work_notification.py"
+      ],
+      "work_notification_record": [
+        "floati/records.py",
+        "floati/work_notification.py"
+      ],
+      "work_transition": [
+        "floati/adhoc_journal.py",
+        "floati/adhoc_threads.py",
+        "floati/consumption.py",
+        "floati/records.py",
+        "floati/work.py",
+        "floati/work_notification.py",
+        "floati/workers.py"
+      ],
+      "worker": [
+        "floati/graph.py"
+      ],
+      "worker_pool_bound": [
+        "floati/records.py",
+        "floati/runtruth.py",
+        "floati/sequencer_scale.py"
+      ],
+      "worker_receipt": [
+        "floati/archive_execution_domain.py",
+        "floati/jsonl.py",
+        "floati/records.py",
+        "floati/tui_render.py",
+        "floati/workers.py"
+      ],
+      "worker_refusal": [
+        "floati/records.py",
+        "floati/replay.py",
+        "floati/workers.py"
+      ]
+    },
+    "schemas": {
+      "schemas/v0/acceptance-receipt-record.schema.json": "84e19159a16a573231a758abc4752f4fca0077f704c2026fa19be390068b11f6",
+      "schemas/v0/ack-receipt.schema.json": "8188f43bb403d773e348a7c1775e8f37193c76ee83c1a77c217bd618e66b640f",
+      "schemas/v0/approval-decision-record.schema.json": "14ac195588ec46d6870436b53a12e5e37abf3fbf4a5bcd7995efc1d55fd1826a",
+      "schemas/v0/approval-request-record.schema.json": "28d6de7be1aadf82e36ccd6b62df0dcbf8680f30d213e076d03967f1f0c748d7",
+      "schemas/v0/attempt-harness-session-bound-record.schema.json": "50c85aedd42ce2d0c863bd6634d169efa4e35373a1672fd410fcba927c5f89ae",
+      "schemas/v0/attempt-opened-record.schema.json": "d1a6df2abe1267dbe8aa6f02f73eea14d878ce86edccfbe28813bada5feeaa84",
+      "schemas/v0/attempt-started-record.schema.json": "0c9be201d63e4d2455355fdac6f65e637f647016929316da22d3f88d45fbcc3c",
+      "schemas/v0/attempt-terminal-record.schema.json": "0632f4ed2eafb05a184a4b2fc34c12000438d959d7685236732011515599f6cd",
+      "schemas/v0/authority-grant-record.schema.json": "7f89e8097216b48b9bc0c45e6f4529918e636e95f28ddf252742ad432f26d3e9",
+      "schemas/v0/bridge-consent-receipt.schema.json": "24c240ec8a967addee86d02d06cb5cc2a0dbd33b4aae48cb8290607bbc900937",
+      "schemas/v0/bridge-denial-receipt.schema.json": "9425ffc2cc185a10a954c978856fdfbbb1468c8e2d76d3f323ef4cf5431efa60",
+      "schemas/v0/bridge-forward-receipt.schema.json": "7123faf467c297a92510f399df10e18f935bd23e949a0cb771289fb8562756a2",
+      "schemas/v0/bridge-record.schema.json": "eb9952182813715b3c413ffbc7e9b3c107f9d95c7ee465335e15cdcf49c3ee73",
+      "schemas/v0/cancel-observed-record.schema.json": "3c37ffe16d8829045515d9092f7d3a03fb8cbccd5229f2ba3fb9fd2ee6df033c",
+      "schemas/v0/cancel-requested-record.schema.json": "49af3175351d2d8fa9b515f202122cb1828c8a5971dba59f9f5065c4fef300ed",
+      "schemas/v0/cancel-scope-resolved-record.schema.json": "832354daeb1e524b7f22f4f6c81fa8ae0bfa376c632b828604142463aa127b1c",
+      "schemas/v0/cancel-signal-sent-record.schema.json": "c31d31d31582e516fa84ca9019c3e13cc9ae703af64955d6b886b8870a92392e",
+      "schemas/v0/cancel-terminal-record.schema.json": "dfece6f90d6db120a5c4c7c0034a58e99b6c389f64280c815a9cce0431f99bd1",
+      "schemas/v0/cancel-unconfirmed-record.schema.json": "97b66324c33dec76794bf90d5efecb3ed0cb8bd92da57bcdd6b195f0d02a5816",
+      "schemas/v0/capability-record.schema.json": "ce0b89c6802dfd67b0c9f4fe82bb655d0df7303f830b7861e7f07b8af31ea66a",
+      "schemas/v0/codex-app-server-notification.schema.json": "24e53571e4d1fbe54d567411713ca056f1e33e4fa96faa038a70d7c1f687ec38",
+      "schemas/v0/codex-app-server-request.schema.json": "f83863ed45caa1a849a73c37ffafec706963d084cf8aad2af7b41e90bd7c5b90",
+      "schemas/v0/codex-app-server-response.schema.json": "2110b0211799f5ac076d77270632664016d1d2c76b4dca26155fb2d406279e90",
+      "schemas/v0/codex-wait-workspace-map.schema.json": "5f82e840883804a23749f11fe1b030ce4cd3917a0897b51ab2081d05dfd1cd03",
+      "schemas/v0/context-absence-dataset.schema.json": "6045a35111170eaf8a494b11972e19cc3327c167f981a1fe77902dfdb2e6f7f8",
+      "schemas/v0/context-projection.schema.json": "b95ce330c13f7600b73f318537156979374282a4abea0fb76db6b34d6390d860",
+      "schemas/v0/decision-record.schema.json": "5cfb95ffa7bbf0dec82d78ac43778d9f9cb15c3aa4d503bef3a50851472836a6",
+      "schemas/v0/declared-roots.schema.json": "e7d340335a5a45d57f8a154d72458fa522b4315ab8007f827f28e2ba5140f07a",
+      "schemas/v0/delivery-receipt.schema.json": "c3686ffa4c14f41117bfabf6f90a14ca5c1f5466d789b615cb4119798c7f50a4",
+      "schemas/v0/denial-receipt.schema.json": "633aa3b795aca60f7f1aedfa8d8b5304256074e69cbfd2cef30f4fe6457c8267",
+      "schemas/v0/doctor-artifact.schema.json": "1a6689025000ae0e7c06e9c202bc8526a2ef944fcf2849e7540ae49575965848",
+      "schemas/v0/epoch-carry-verification.schema.json": "0faf51692a6b8d086299210e3aeddbb896a7f68ad0f0768018ea67c61338d284",
+      "schemas/v0/fleet-status-artifact.schema.json": "5829b9b871f070eaf002edb28d9cc287e4bef78f960655fc58dac065d78a1da2",
+      "schemas/v0/fleet-update-binding.schema.json": "86f3b93303eacc19e7892036fa163a0238e3da2eada57ec18c9ed34ce7d91b68",
+      "schemas/v0/gateway-approval-forward-record.schema.json": "f0b3b19b05f48bf61cc55746351a4234dd761cbbbd403b6023eb3044a60b8aa9",
+      "schemas/v0/gateway-capability-declaration-record.schema.json": "35dc999173a9ada4e1a9f07b203587615ac35fa9737da6e5a33f8de910882fee",
+      "schemas/v0/gateway-session-ingress-record.schema.json": "d50bf37b7d09b78fd6a6b16e53473ff4886a079b6835713350158092ab5d9f02",
+      "schemas/v0/handoff-capsule.schema.json": "4c0cb8f9962a171f2e39c9bf607e7a923e3d28a95b8a400d2b60f19daa4e5be5",
+      "schemas/v0/harbor-chart-topology.schema.json": "0e34a47d5528ba6a1670164d1adad5c521c540abae3e896edf8f587313104a06",
+      "schemas/v0/harbor-chart-traffic.schema.json": "0057838657f513b060edd8320151f72888cd86ee06366915cc7cdf4041d03f8b",
+      "schemas/v0/intake-snapshot-record.schema.json": "d46ec1bd9ed0e8440c52a5ae490a7d186f8c03763d38879ba0e64783fa77c6ff",
+      "schemas/v0/liveness-presence-record.schema.json": "b4f332ebee08e62f40b82283b56c7a73a10ad48b4b0fa30bb57a5f652e4a8c99",
+      "schemas/v0/local-gateway-config.schema.json": "b3b22e5a2d2f561fb38bb9825761c9b2b2668da4242d187713d98d47a0b0bbdd",
+      "schemas/v0/message-envelope.schema.json": "926f06cef65c85a468d607435e754c0a2d768112e809d7ed36ba8c52999a5a33",
+      "schemas/v0/message-retracted-record.schema.json": "68a4add426b7695feb9bb79811059a0abb68a004a3b757c2a12199bdf482f1ce",
+      "schemas/v0/mutual-exclusion-hold-record.schema.json": "260133d755bfa850560cf8c8a5e8154bc775bfae07aa480bdff1ffd4b5899e44",
+      "schemas/v0/node-lease.schema.json": "cd887f8b73a23fc0b63accb02055d44728b442d89839cb50505a3f856dca1c01",
+      "schemas/v0/node-lifecycle-projection.schema.json": "be49c7725e638d83b2cb1c25f49dcae2c73969d5b9dcc79edd6ad5f1a95a9b72",
+      "schemas/v0/node-state-file-receipt.schema.json": "16de335aa1eb302787ab0400d03e88ad186d306b0ee994da36824952c0d2ab8c",
+      "schemas/v0/plan-amendment-record.schema.json": "5da5ef85accefa85c311e6578f7cbef46d34a02807283a2968a3b8b3fd458cea",
+      "schemas/v0/provider-switch-receipt.schema.json": "73bf2c963d3cf050b79fb9d02010d58eeccf09ef8fb9c8b80793d7132e874680",
+      "schemas/v0/quota-receipt-record.schema.json": "37bc599dffd2f6d97cec5938c6f6880956532c3ebac88a3bf829f9aa0ae21305",
+      "schemas/v0/receipts-read-bundle-v1.schema.json": "6a7b75863b8aa0ada07f271ba921c24440ef2c8089658a78d0c9a4626ef32cdf",
+      "schemas/v0/receipts-read-bundle-v2.schema.json": "edecdea3f42a90b39a6ac621298bde730d5aa4ec30ac95fecafcd06ed1168b0b",
+      "schemas/v0/receipts-read-bundle.schema.json": "1c2a66e5ee2b22df64955517b140e45b4cad7d1f52f793826004883f651f9a01",
+      "schemas/v0/registry-entry.schema.json": "92dbbc728dcddd4d0ad974b64d51b85a5429492fd5b75bddbd2e4d2ef7452294",
+      "schemas/v0/registry-role-record.schema.json": "59680578bfd6498e82b5b9adf0f9603d1c0247b172e5e56d7b9ed830e2555c95",
+      "schemas/v0/retry-exhausted-record.schema.json": "037f844e8e0bd81f80e2e02278c42f7793a2007116c1d756019462e50a594305",
+      "schemas/v0/retry-scheduled-record.schema.json": "9a013220c1c0854465e29556916da65a37b6ee6285fc2d1579d781abb101d61e",
+      "schemas/v0/role-template.schema.json": "7553e206f0f599e6e685b6aa04709076e9d510fcf3286dc1e9c79e4490ab695a",
+      "schemas/v0/run-created-record.schema.json": "b64536b38b3feec9e3720c37c64ffe3c74804c0ff24cbfdef9d1e5bb51c3f664",
+      "schemas/v0/run-dispatch-decision-record.schema.json": "339ca1f9bdad96e4988a5cf38e8b9306f48d4fc160ccc92a2a830e64feb0c2d5",
+      "schemas/v0/run-environment-observed-record.schema.json": "949e2e092c25ea1a5384ec53505f4c9b36fc7421c3ce982644e84f1800f523b9",
+      "schemas/v0/run-policy-bound-record.schema.json": "26a4b07e6c6fa6e8fe6e891eb1184a5dc7923c0a9b2a76de1d5017e1941771a4",
+      "schemas/v0/run-result-accepted-record.schema.json": "f5a775265af9a20c8e28fc78385fc0b0ef0da11324f4ec98fbc20df609a39bcb",
+      "schemas/v0/run-result-produced-record.schema.json": "c974a5023a2c92936e8db43d46c12b5b375e280a32bf1a4c6958583726e05498",
+      "schemas/v0/run-result-verified-record.schema.json": "027494b950f76f434aa53048e27c14a6815b930ec1b4e74971f45eb2a9e788c7",
+      "schemas/v0/run-terminal-record.schema.json": "e82aefa713a2889bfdd00e35b9ea60e7d3011a63653a079d9da8f9f968bc35fc",
+      "schemas/v0/run-worker-pool-bound-record.schema.json": "a42aad1149c82b04501d7071689fc7a4e171e5c108f3968b99dd3a233817b336",
+      "schemas/v0/seat-teardown-epoch-verification.schema.json": "2410af54890cf1d344b6a662055648c0cc013acb7bae9cde5c943598f186d29f",
+      "schemas/v0/session-adoption-record.schema.json": "cc27a528c9884cf6855d5452e18f06ff8d8ff62df95cb01cf6c1ff1158f9d5d1",
+      "schemas/v0/session-release-record.schema.json": "e2ebd0098c2357241837d3263dd0577fec719437e3516309b996ec6a2a599356",
+      "schemas/v0/stale-attempt-evidence-record.schema.json": "d42955986e159be3a041af8f325042ea05f142ca980c58cbe73e7a839a7b71f5",
+      "schemas/v0/stale-evidence-adopted-record.schema.json": "d72e575c411374433bf183baf2c61fcfcdf3578ffd986bb596761de39edbcf06",
+      "schemas/v0/supervisor-orphaned-record.schema.json": "9be26f1de3e12784a670d5a7aaa4dc477b5338d85e093c93439f230d3072da6a",
+      "schemas/v0/task-contract-record.schema.json": "1d0500e15ed0099bb05f04bd946f81be5512dd323e88754336cba22b3e8bd542",
+      "schemas/v0/tide-policy-record.schema.json": "9df7aabec5578746185ea81f8f1f22ebfaa73252fcc70e318be01d5267b520ea",
+      "schemas/v0/tide-receipt-record.schema.json": "641328a24b22a9a4248b1801726e3db1e2792e290c55eb34f162ddbe14b11afd",
+      "schemas/v0/tide-testimony-record.schema.json": "43e9db48b8030f8f4036f63a4e419de5087c5a31cd101aacd8fb3c187947dc04",
+      "schemas/v0/wake-cause-record.schema.json": "7e2c6eb3d8b29d6dc382833e769ac4af70c42058e72b4012468f35446e6e975a",
+      "schemas/v0/wake-control-receipt.schema.json": "405f0395cdb8bdf1278f558da4997373d9f9371d49e9dda92679fe56a5e285dc",
+      "schemas/v0/wake-daemon-adapter-record.schema.json": "8ba9102ac7542997a9b99220134c1bc20fbd73a33ef2aff8caaec9958e89103b",
+      "schemas/v0/wake-daemon-consent-receipt.schema.json": "8235046a508448997d6019e20fe3cc73a84f66d4780399b3a960b4c1703a28c3",
+      "schemas/v0/wake-daemon-lifecycle-receipt.schema.json": "eb20fad8ca8644864b32174f75db0c9d288e2befdd00319988cf4f48cd22066d",
+      "schemas/v0/work-item-record.schema.json": "9fba00d4a18cf82adf956aa78757e3af26ca7af8aa595ece14c24a0ccba05822",
+      "schemas/v0/work-notification-record.schema.json": "d9e475ef2c72e14811e0f27bfcb3cad42f5939565536ff1dcec0aaa8c66941ec",
+      "schemas/v0/work-transition-record.schema.json": "335d701cf216462a08a612955ce7478e176c7c7b1fbac2ceebca55eac6f92a21",
+      "schemas/v0/worker-receipt-record.schema.json": "7f5f3231d21d4961d91cc08124fa0dc1b93386e5474b41874d4461014d160201",
+      "schemas/v0/worker-refusal-record.schema.json": "45d3e6646200f09d201ed94c675cd63952bec0ea26f9466a4ebf31728e5b403f",
+      "schemas/v1/ack-receipt.schema.json": "8b15d2ab9dc05e79a8b0b81bf844dfb45fe862cfc7b8798c2f1bde660d6bb4d2",
+      "schemas/v1/adhoc-thread-status.schema.json": "454eae8bedf57e9fff97b3ead5dbc4ab18a93f9ee952c90629ae36fb1862c162",
+      "schemas/v1/approval-consumed-for-resume-record.schema.json": "fe99393499fce784ded819894ae1f77ddda157bb09f873b757bf0b2c59a6af94",
+      "schemas/v1/approval-decision-record.schema.json": "23a115237aac52b48e9395fb5b05dc36d6fa8863354df0867dbbfdeb841972c2",
+      "schemas/v1/approval-request-record.schema.json": "665c4719401d8bd0bbf95bf9370d7c857541e5780547de8a504d5d783586dd3d",
+      "schemas/v1/attempt-cancelled-before-start-record.schema.json": "9ac7045be0718ba5f0b71b13ca4355b4e69756ff35884c0972f79927c27d5b61",
+      "schemas/v1/attempt-harness-session-bound-record.schema.json": "65c6c335574b65897ad84852b53e472f5d4be78dd5a3d0abc00f65daca8fefbd",
+      "schemas/v1/attempt-spawn-policy-bound-record.schema.json": "a02fe23d670584997eaf7b4a48ccbb2267b14804e0c852f08fcb1c52f2bb93b6",
+      "schemas/v1/attempt-suspended-for-approval-record.schema.json": "81187a65d7bb73a4334494b54691ab4059de2c729bbeeb7f5302915ac749f4e8",
+      "schemas/v1/bus-epoch-recovery-receipt.schema.json": "836d96204f4f8ee7b8ae89b58c2efb99abc30f1e01df3302b0683a3f8acd0d96",
+      "schemas/v1/bus-epoch-roll-receipt.schema.json": "f0ee3e881d7c8ff556b42d7d82a3161b846d2ac8c5186deea7f83a5c324cb56a",
+      "schemas/v1/capability-grant-record.schema.json": "49f8ce21f6c9be246d85de8a032a6f8ea5b9261a6ac8d6248422ca451b169ff5",
+      "schemas/v1/capability-revoked-record.schema.json": "bdf51a1049f0dd46a5d14ccf92794dcc1a22e05b736ecdcd725a95852a44df06",
+      "schemas/v1/capability-set-bound-record.schema.json": "915e72fb9f487e10512e655b32ca053ee85d89dd5e02043e7a90a81cb2305bbd",
+      "schemas/v1/child-admitted-record.schema.json": "b7c48a0ea77105e7df7934bbacc6b30d988688d11dc5998b4e20ee7f1a89fdf7",
+      "schemas/v1/child-rejected-record.schema.json": "ff05e6f17df2af318ec31ab9b505322c562664704153ea12daa081696faf8fb9",
+      "schemas/v1/codex-binding-repair-receipt.schema.json": "4b70a8ea90a41cad4e94a4e7e4dbe0613f5ce14fbd08785201d33e8f73ba6888",
+      "schemas/v1/codex-wait-consent-receipt.schema.json": "63170d0d16ce636b6e8111f4be5c1be40e20b5ec834cc2feff67c09df8d6225c",
+      "schemas/v1/codex-wait-exhaustion-receipt.schema.json": "c759e57765065ccb11bced4da042f24821652f2c1cd15f332a4f8a6fda29d145",
+      "schemas/v1/codex-wait-session-receipt.schema.json": "54a3ccdc81cc0abb189e1333b312c7677b1e0b0db82f8196f326d7328b1cf2d3",
+      "schemas/v1/compensation-executed-record.schema.json": "2eb5674f67a6c6031cbf7bb436e2cbdde6d99d4efe71b354a2d48759d101dce5",
+      "schemas/v1/compensation-proposed-record.schema.json": "50c5de4c430ca966227e9772813978d75c657177b7e7ce2dbba27a7428c9ea63",
+      "schemas/v1/consumption-receipt.schema.json": "26097761b6c3f044efd9bd41fb2776744fd5a137070ecc64a093323c028e546f",
+      "schemas/v1/context-projection.schema.json": "4e61e506d8f640f6d2e70cef67f83078a5d04d1f9824dee327c07485706481b5",
+      "schemas/v1/credential-lease-consumed-record.schema.json": "2b62394122c0df05b38b9c842354655ebbcf057d96e567dcfe04bb59a9e4bf46",
+      "schemas/v1/credential-lease-granted-record.schema.json": "d62f48d6c1e32dabf085179ff46394a72d9d42698e93bd36dc836d249ccc9718",
+      "schemas/v1/credential-lease-revoked-record.schema.json": "61f8b24c43f63bc65868ce86e9977e39b9c81eb309b9f8a224e475acffc5593d",
+      "schemas/v1/cursor-presentation-receipt.schema.json": "45861b0fa3c34bd75f565af0b3b28cc4195782150968ebad1832e384c2999c1e",
+      "schemas/v1/delivery-receipt.schema.json": "5a021adff6fa5c8c68c46961fc0f6109cb347abaa7b3617fd0f46cc73ca5cb1a",
+      "schemas/v1/descendant-observation-closed-record.schema.json": "c9716fac817038820055c9ae3044c165e30858c62c543f25acd4514acada3282",
+      "schemas/v1/doctor-artifact.schema.json": "b28d2735707aefb1a3e5fd64307df6fae313a2f7ee72347933103f106e486d82",
+      "schemas/v1/effect-acknowledged-record.schema.json": "2d301a8a2fe388e40e550dd5ddb35dc7edffdfdc295b44cba92c13b0cfb451c6",
+      "schemas/v1/effect-confirmed-record.schema.json": "438f14430db560f22096af4027bb9a44811cf3f4fd1741202be67473a4469700",
+      "schemas/v1/effect-dispatched-record.schema.json": "88b1b6931ea3e1851da46247e3c467ade424ad5103c00079367ba914a2b6b0f4",
+      "schemas/v1/effect-failed-record.schema.json": "ceec4a9643e9a0e8bc14d1421484e3f8d69d63e4320ca161906600637c0cb7df",
+      "schemas/v1/effect-intent-record.schema.json": "d08402ca748f91ed54e55eb784a6ce421254920b61970469291802c6641a125a",
+      "schemas/v1/effect-reconciled-record.schema.json": "bc57d5b972dcce1bb8638a131c629914ce375011e89d426e5e750393014abb1d",
+      "schemas/v1/effect-record-common.schema.json": "3fda8dbc9f7da599dacb6c59f2c73e2f80e75bab75f8b385d6cec66acca9500c",
+      "schemas/v1/effect-status-artifact.schema.json": "f904161c875ca0bd6fd518356776c138f4a5c769e1c8181b637e9186ff6fb9e4",
+      "schemas/v1/effect-unknown-record.schema.json": "42feef268efec8c30a4a484cb6e25a5f3e2cc24f3e373bf20b298881afd50c07",
+      "schemas/v1/epoch-history-commit.schema.json": "e467feb1ff5cffc991a07d77c3d2aa36ef424f811914883b18bdee95c7ae8a1f",
+      "schemas/v1/exact-items-cancel-requested-record.schema.json": "7eda5982af90994fc85c009d7c9370f102e044bb17057fbc4f6f137516f5616e",
+      "schemas/v1/exact-items-cancel-scope-resolved-record.schema.json": "cededad3ababf2e6ad96e45c4287ca95974c06323c7159cda66e5b06a6afba1e",
+      "schemas/v1/fleet-status-artifact.schema.json": "8103dde1553f4a11e158de36feb0e2a2b9141105ff3d98db103fa8510a90557d",
+      "schemas/v1/fleet-update-receipt.schema.json": "6d7064a1b440dd509c50f93b3da360af4d2ff9a2929649494f00a372ba5c1c50",
+      "schemas/v1/hook-burn-record.schema.json": "d43bcedf8037787ec6483af46f66b220c6376d1c1a92d206feb377c4b2e54cfc",
+      "schemas/v1/ledger-repair-receipt.schema.json": "cfe1735ca1a1371ff656481d4f59f85be0b690bc229f13622422e569f09ad591",
+      "schemas/v1/mcp-integration-pin.schema.json": "998572325759edec81211cf3bf5d57d85ac06f99163330dafa4eec46e0f454e5",
+      "schemas/v1/overlap-report-fact.schema.json": "1aed84ded8a2954b0b5c94939814d1b73f18422ea34ef2f83f19d23d1aa9ef64",
+      "schemas/v1/prep-clear-receipt.schema.json": "b1db1c5cd9b71be9189a3ddfef913185d53c72b57737bd2deed8a43db3c7036c",
+      "schemas/v1/recipient-preview.schema.json": "ed7932f59da72e13cfc6bd88259558e2bf8a27a369b365656dccff611134a1b0",
+      "schemas/v1/registry-person-record.schema.json": "3d5d01d94c8a897ab7375e7e29921e63165c0588861e7fb677f27bf957cddc3e",
+      "schemas/v1/role-template-write-record.schema.json": "391469291f1dad607aa08d284bc5699d19ad5ebda95a9e0451b06ed31c98d013",
+      "schemas/v1/run-admission-bound-record.schema.json": "249bcce953d5aee57c4e8cf07640b95394605b9c363408e727eb36356036c519",
+      "schemas/v1/run-dispatch-decision-record.schema.json": "ee21b6baed46a4f08b45aff08689e9bc1d8130495f2b0f145a485b91c6163815",
+      "schemas/v1/run-manifest-fact.schema.json": "2200874b542cc1aa811570232d6d951f85880222f369ecf11c0a3e880a159af2",
+      "schemas/v1/run-result-accepted-record.schema.json": "d14bbad8ad4420ef56f9202f4cc91cd225d190f136dea12e3aeea5844807e534",
+      "schemas/v1/run-segment-opened-record.schema.json": "91389185a801ced9ac655bd0ebfe847f8241f4e31f10d0f137b08057a4a5d625",
+      "schemas/v1/run-segment-sealed-record.schema.json": "aebf652010995f6f875467e34cf1e2d7cf8819d51d17aac08dc80338e47be313",
+      "schemas/v1/run-spawn-admission-enabled-record.schema.json": "4e596fb9ab4fc6c27cd562cc0d6153236ea3ab1dfae6c539f7d83a09b54f3895",
+      "schemas/v1/seat-board-record.schema.json": "5b3d19fe85caaa4cc0739ead16c7a67b0f97bdbd69621acef9e0f3ade2267500",
+      "schemas/v1/seat-execution-record.schema.json": "98e1dcf76093658a2218f955a81d0b5e6ff81d7dce5206b018324a7a25899612",
+      "schemas/v1/seat-migration-record.schema.json": "97e2643e4e835414f2c5bf0cf9b1b0b0267e5f725dc65837797d8835b8c58baa",
+      "schemas/v1/seat-teardown-record.schema.json": "5dbb4ee097efde23cbe844fa59142489d9291df43203de49a10e787215e297ba",
+      "schemas/v1/send-readiness-observation.schema.json": "3147dd6f999ae5b32ae1b97f31e222f7e70bf74b4922d5d85ad830bbb7c8a9a2",
+      "schemas/v1/sequencer-epoch-record.schema.json": "3dfd0c83b770aae54655da834425ead7560d627be0bfe3bcae371b13422409b1",
+      "schemas/v1/spawn-child-cancelled-without-attempt-record.schema.json": "ed724a89248f7dc9451b85188a24a8cabdabb9c513b2b327828a872ee5c1c87c",
+      "schemas/v1/spawn-group-aborted-record.schema.json": "da0dcd969d6ada93a457b1c74d79b0607c4117f69e0c76f534465fcf9f93e648",
+      "schemas/v1/spawn-group-closed-record.schema.json": "c9880ac28e9f28b7ecca59dff4debe1bb41eac83ec50f7c6c8cea27ea86b297a",
+      "schemas/v1/spawn-group-created-record.schema.json": "9c75463715ff618cbb19bb8920e35fd24f876af3af0df0200084518bb2473eca",
+      "schemas/v1/spawn-late-result-disposition-record.schema.json": "66b91ec530ca68597eeeb969d786b47935c8e59287ba846df88ee3af10f1ce74",
+      "schemas/v1/spawn-plan-amendment-record.schema.json": "33ec2bfb94a6e0b01f7dcff55015bd0fba8fe958bd59cd37a19e9e5e9413ec4d",
+      "schemas/v1/stop-hold-receipt.schema.json": "d1a4c1500028a50d9fe56eabb234e1af4a42145cb8d97321518ca0543b9b5d4f",
+      "schemas/v1/thread-attachment-detached-record.schema.json": "7c4a40b619da36f158f0245a4e197478110cf56fe11ff883928cd97c04864ba7",
+      "schemas/v1/thread-attachment-registered-record.schema.json": "060f3fd9f73d82bce62c171c1850875ee9cf248633c184fe367bfa87750e6532",
+      "schemas/v1/thread-observation-recorded-record.schema.json": "cda4c739b64152269e2d0ef4b9ac43979ca513c2be48dc9fbe90398de2e1ada3",
+      "schemas/v1/thread-observation-status-artifact.schema.json": "2b94ff49e63b12b820154a3b21e1b557653da05ed6a33b36cc7cb36cefb7c9fe",
+      "schemas/v1/tide-policy-record.schema.json": "ed757dde0d1ebfb32fee51129aa5244f37188f93725567d7941097b0ae5dd041",
+      "schemas/v1/tide-receipt-record.schema.json": "70fa604c0cbebcf2ddcd77391fbe316b3204e98d38c09f73f6e7ae2d47359bb0",
+      "schemas/v1/timing-receipt.schema.json": "47c80031cc9340abbde901da23bd555e69613b83f0a5c8dfc18103bf4cd5bd7b",
+      "schemas/v1/untracked-descendant-record.schema.json": "ba11bb315bb4956a96bbbefbf74f8ea9909a7b470f7458e765eb21bc1bbff8ee",
+      "schemas/v1/wake-attempt-record.schema.json": "a429de4d1e085b4454f2884bfef694a65171e822b09df2c3a514d751c34f7a5e",
+      "schemas/v1/wake-daemon-adapter-record.schema.json": "32f2a552851d8212ca253ac52f0c704b5d9b04a1ce29d2ca66bf19d2ce70736c",
+      "schemas/v1/wake-daemon-consent-receipt.schema.json": "0cf2c06e41dfc0e1d2befbfd07e5a2fac3428d5abcc651e2d62547f5d8b4154a",
+      "schemas/v1/wake-daemon-directory-ownership-record.schema.json": "b05a1b34ce72a5e67d29ca9c0d77b18b25ed31bda4c3af0788180ef350186625",
+      "schemas/v1/wake-daemon-lifecycle-receipt.schema.json": "64159ced9e3e79b3139af18dcc58328495bb232d1ad77ffaa3e0cab7bff709db",
+      "schemas/v1/wake-decision-artifact.schema.json": "1d0372be08eb7af71738321f57066fcbff09f28b0793204dbddeeca00df18b26",
+      "schemas/v1/wake-health-fact.schema.json": "18507f45545e70a27b8c6c413e4a1fcfd8f328bca6ec00781c67ef0cbb8dfce4",
+      "schemas/v1/wake-hold-receipt-record.schema.json": "3730ebe158d139c8a33cd9f1a432ddc859c692ce9abd8cd8f69fef149c272526",
+      "schemas/v1/wake-path-status-artifact.schema.json": "4b2832d3fa883b7d59fa2039f53aaa00f830ea0c75d8137ae15bed11863420b0",
+      "schemas/v1/wake-waiter-exit-receipt.schema.json": "c7c1f1b2e491f4a58afe57ebd94d4bd8e3e9c653bcdafc8a1ecdccd7e81a4fe7",
+      "schemas/v1/watch-artifact.schema.json": "b8ed9122d3d17ecb366d7c8fd3ba3d0d0a2eb028b5a0daa6e518f8c8753f3717",
+      "schemas/v1/work-item-record.schema.json": "56fc1f34ed15c07c95e8cadb49327a58dc4b309ed70bd626d94107e4d7bf9775",
+      "schemas/v1/workspace-seat-declaration.schema.json": "f6160d762abc85df0afabf6287122c2e108f4050a581d51cc378055f351088c5",
+      "schemas/v2/seat-teardown-record.schema.json": "9679a14c6a0549047eebd894c0033201bdf51631c31bfed549daf1b049e7f03f",
+      "schemas/v2/thread-attachment-detached-record.schema.json": "e76ed16a330f916cf1da9da5dc431e0a72a569a50e246e6b27e4572dca906525",
+      "schemas/v2/thread-attachment-registered-record.schema.json": "a8183fa6ce1cf076cf190487b94e8591d8631619fbfd178568b2cf0368c6a719",
+      "schemas/v2/wake-hold-receipt-record.schema.json": "13cb2a1b0a608829fe9114d7657377fcaf946e82f9bb7b883fa8bed90adcb11c",
+      "schemas/v3/wake-hold-receipt-record.schema.json": "594fc26a6ec4e40476d80c61a094188b75b9d211d631c1348871b427c9cf1a5f"
+    },
+    "sources": {
+      "floati/adapters/claude.py": "ade350acf9949b6bac33007f04b538ab4a8687af8bcb787a7ba50485d5eccb26",
+      "floati/adapters/codex.py": "b8e6a7683495ea804ee318159bcb5de8e0eb15dbe7b3285da3cc37108d96cd03",
+      "floati/adapters/codex_live.py": "c99d082579d27bdd409136a716cdcc57c9c4e6c49b8daa65adda7ac931119bf2",
+      "floati/adapters/headless_template.py": "9ecb9e8a977363cf9863675f641aa607116162c9f49011e1f178ee91240e9974",
+      "floati/adapters/herdr.py": "d9a9a1e658be5916f9272f31d3a4ad23dc8b27e23222eb96ecc41045fb31c0a2",
+      "floati/adapters/herdr_host.py": "f3a8a663a121c56a9bb0f9bcf0e44a1a9a40155305ca767083c31daa60b92d72",
+      "floati/adapters/mistral_usage.py": "8e22d24b3fde725480dd77fa58a0d39833565ebe98a530664ab3e68851eb5055",
+      "floati/adapters/native_io.py": "fdbc72cf2727c051faf0557dde55165b4298853d4f876e1f409cf3eef30f43f8",
+      "floati/adapters/pi.py": "f06401ce22831eaa92353a0041ca0cf663e68a81729ecd538d143e4f72222ac2",
+      "floati/adapters/t3.py": "e2f923848645bb90d0182b66349a253c4ce23449e1cd4d7311a286c69f0f791c",
+      "floati/addressing.py": "1f0241783f811ee546d307eae657ffcf2a8bd881fd15da3883cd192b6a0324fe",
+      "floati/adhoc_execution.py": "96b235707eb180c3a794c22d0bfbec73a98366a1ab6297453748eed41b9e06df",
+      "floati/adhoc_journal.py": "c92bea45684793c8d89560582fe114a5f0aec44be41646c430d6e425f944d794",
+      "floati/adhoc_launch.py": "621475d22a990351c42d15186d2486c463e86c44a0ecd2710a00001743f36f8e",
+      "floati/adhoc_profiles.py": "fc9fa2633b2d922a93a32320626d77c75e1c0caee3663856bf59e97624a192a8",
+      "floati/adhoc_records.py": "a2b698e356d61123b1ca78fad5ad41015397a0381ec6fadda3e86d2348aa6c5d",
+      "floati/adhoc_result_identity.py": "a7090bacdfcbf1f621dd3ad7629f4e167c548315852fa9613068320273e15aa6",
+      "floati/adhoc_threads.py": "41f9d22531ea5b9e78c318402779fc45e291ae665cdf4f6b3d53d86e3a2a6ebe",
+      "floati/adhoc_workspace.py": "b6502cd48bc9e537da5cddab42beefe5ccfd030600a6f8a664b0c8a12a569cc1",
+      "floati/admin_cli.py": "acb8e36ab46602170d1c077b0a8354febf964edf63c2172d48d0fb04669b957b",
+      "floati/admin_registry.py": "fae96bbd4bb4a2c4dac719a7c395089ec9b1274b4b2d7d93f82d5de575c6b44b",
+      "floati/admission.py": "a93ed44e16e7b2d07ea280ff462fbac5225721e8fe55f445516b4dd57ad36d7f",
+      "floati/approvals.py": "57594a3b053a064bafdd31258e35fa824866277145d7c42ad5a5f734738b71f2",
+      "floati/archive_catalog.py": "157a0b8a804e551c086fb963a3f5c097b343bd5ff55a2f667a07cc68beed4e67",
+      "floati/archive_catalog_entries.py": "772ccabd2c585ac71b5c245b5410975a57363f066bb3f68bb327a621876fc913",
+      "floati/archive_checkpoint.py": "aa027fbe3c80faf383c2ffd8b88c3969c3bc1a279c04464a1431c599b43729db",
+      "floati/archive_consumption_checkpoint.py": "517008b12ed274669df85b01762be38596af7d472d058017d0a4a2535e6250ed",
+      "floati/archive_consumption_domain.py": "c43545d461126282c910c61935560ab3c334fd50015b11f3af1a7eb600f62cb2",
+      "floati/archive_consumption_replay.py": "84355d90c773e5963194c2685b250af1db6611ac3740602ca8e356cd023a2963",
+      "floati/archive_container.py": "948922d2c771706979833b5fa30d3c1d4e01ad77a4ee624ef9bc7f7a1aaede4e",
+      "floati/archive_execution_checkpoint.py": "0672e2e526988bbe2d4e8f99b32bdd399b2fdb607fd3ecf74770c8a08cd855c9",
+      "floati/archive_execution_domain.py": "4529eb54eb22949e3edad1ea57cdb5fc1d1574bca7eeab9f5d73f0d2b61c9919",
+      "floati/archive_execution_replay.py": "744ac89ad241146d1f9da2dcddacdde8c3cd9fdffaaef602d8e9c2fb1838b29c",
+      "floati/archive_maintenance_authority.py": "87f4be0924ae264da256ada5b4b82c03fdb13362d44d47eca6e3a49f38edc6ef",
+      "floati/archive_presentation_domain.py": "c725909ddffec2851f886a95aae8deb434b14074b85855bc55fac23b5e08db87",
+      "floati/archive_presentation_replay.py": "969dc7db5d82fa9fdf1b695df4fc8dd32e17a8579d3409bc292c8137ddd70257",
+      "floati/archive_projection_replay.py": "06db8e3c301a0c5b78d1ac93a7ba244075b293c535be0b31f573b8dc1bffa529",
+      "floati/archive_publication_journal.py": "ba99e45cd02543799f973c7f632e269def07063d353c9e9cf3b32c857030eb5f",
+      "floati/archive_retention.py": "46d68d434f4028b752cbb38f59de89c9ce7ac47e28ecfdbe5eed5fcef9ca4bac",
+      "floati/archive_retention_policy.py": "3bce2887e8541cd3776ff34793c69ec48d9ada9db13f074304983307eab2ddce",
+      "floati/archive_source_pool.py": "d6b09038b445be06ea42cce84f91b2b6dbe9e40cf1a0c69e438fa9c960468b92",
+      "floati/archive_survivor_admission.py": "b8a4c041d84cd163f3037ca1f877ce186ccb8d970c9506004f94c7a268c80359",
+      "floati/archive_survivor_bundle.py": "ab51c84354f3b7e03c1f2b03ada9c9070b246c6df3624b9201e6495264ec494c",
+      "floati/archive_survivor_pool.py": "da1d8e29ad37011d0a18dc2d74178952979f174ab48a0eaf22dce2e1613ff95e",
+      "floati/archive_survivor_sources.py": "5995deaa3829b9e6b897b64705d4f7546c54dac8b5f31ece0f34496dc7422917",
+      "floati/artifact_subject.py": "0483fc4268833a6bcde9ea0583aedcc7d62fe201e89edf8ed1531098de0aff0d",
+      "floati/ask.py": "0c447b65378a5640287183224869199fa75f290e651127c0524ca7d03db4688a",
+      "floati/brand.py": "89d01156e967f7a7ab5e357d3abb78c4dab213a134d79da353d6e0345f04ae8b",
+      "floati/bridge.py": "3f697284a69674f7c61d6e21215692904f82ef8cd2ed3d54b4c9d488fb5716bc",
+      "floati/bridge_bank.py": "ff9d8780dfae7ccaf1e4de829bfdaf2dd7f8fc8b8408d198adfa1c339e9cfb42",
+      "floati/bridge_publication.py": "00f06c2665efc2ffd8045ae4ecfabc119da184284bea31d776df7bda00689871",
+      "floati/bridge_rebank.py": "85cdc1a84e149235f33691712602cc2e46fdbe797fa401ec0aac1328dc38f8d8",
+      "floati/bus_epoch.py": "13c85a2d4a6791999450aee8d785f78af0831414e2a50842b233a4be6e6b40a0",
+      "floati/c7_2_bundle.py": "80f7241d19098647e47e6d7d290ea347a63de34a19ce737f83013b4c54a37d44",
+      "floati/c7_bundle.py": "10617f3795b4d53a1ca47c0bff3d8a18be8f0c8075e0e1c8218a67881b6b4725",
+      "floati/cancellation.py": "844b48581e9fc0f89e13072c86ef6ff4ee1c0ace40b02b4330dbb6c78d2593a2",
+      "floati/capabilities.py": "be3eb36bd7d43f228e0b5f0d09d461a71dc9258d9a94ab49318f40803ac32100",
+      "floati/capability_binding.py": "3a5dbdbc218c48911868dad087432ae9fadedf4cc4f5951838619744793efd29",
+      "floati/car_fence.py": "13cf4be2afa0f545452d68577a194655f68fb6411e90edf10f86f6a8826f05f1",
+      "floati/claude_hook_install.py": "4249eb52fa1030fd4224cd6c719de543faf7a92f7e7d9208cbc98cf92898ee91",
+      "floati/claude_inbox.py": "d86dbb0b38a10d8ac0a52c445c9c4dea7c967562e4566f2f966d612d5971659c",
+      "floati/cli.py": "67c0f28aeb548b8cf74f4b0d8274da71913801be0c57c98cb61c243a48bfb371",
+      "floati/codex_binding_repair.py": "f440b16726ca5273fe5906e0269989cb775dd0b32b55fe51569a492718387217",
+      "floati/codex_hook_install.py": "8b44edcbacd7464ab4d6a7d4a8b5ddcb7662c9ab7eb9bf19c61440515884269e",
+      "floati/codex_hook_trust.py": "afa15a132eac000243d9ad1a92b78ec942e6538be485e7c45a346b86dcd18313",
+      "floati/codex_tool_hook.py": "b4bbb07ee796b085813b6fd45f2ebde972478dcb9befcf3a6975b6c6c8271f48",
+      "floati/codex_wait.py": "e0275ab45ff987131de7c972ef7944411afd5e2a06f2406b8aec52037aaf2f53",
+      "floati/codex_wait_contract.py": "9ce29246e4e8624895e095bc3ee9683823ea3d7cc2563930a6744c2d4a6fc8a5",
+      "floati/codex_wait_liveness.py": "d97c5191589bbc57f63b4e5136db61eea4a97feca1be306a8dcac276f2d9e222",
+      "floati/colleague_frame.py": "d301f44a81450e8535be447c9bb0675329856f53f5041b22ca667ccd91cea7c4",
+      "floati/command_contract.py": "49f466fe9e93f7820e253c96a3b8e34904a43072c33af498e7acee0a4b04521e",
+      "floati/command_scope.py": "271780c8f5a524b59a81fdd8260882033217241b67ffe6b3254e66c04b231148",
+      "floati/confluence.py": "a02a193da7958733f65b4760cbd091907ede950420bb3fcd3702da003b8430cb",
+      "floati/conformance.py": "a8897b516db2963f9db98d956740070334881f24cbce8576c35648064a3a235e",
+      "floati/consumed_prefix.py": "5c543b914244b32bdfc2b178ffa82872dfdb9203ab4475908bdf6843a40db6c7",
+      "floati/consumption.py": "cd94ca73feeee212d4b04080697d0276f46ecaf78bc3c3e759af35298937dbe6",
+      "floati/context.py": "28ed39191f6a6ac8b754bdbf8d6c498046eca6cfb8ebeffc712155cc2cf1b6cc",
+      "floati/context_absences.py": "2c1b0d1184a02421fb1a846a2dd22f67315a5a6dd26b8774c9833a212907124e",
+      "floati/context_absences_v0.py": "7baffcc595b93a7b5db70d98e9645eea4ab36fc0cd4b11707147b7523b63704d",
+      "floati/contracts.py": "1b8626a36dc5b804f6563c86df0e37f77598a54aaed21724d56e826981e5f34d",
+      "floati/copy.py": "da2549bd58a4a4351bb6781342e1578994ec682909f003cb24f0e26ad1d11aee",
+      "floati/credential_leases.py": "1b90f44b87608d00f60c642ffe3dc28d5b683a19c09e677edbdea02948558198",
+      "floati/cursor.py": "e3beaa080bc1940a648c67b6be1fb19ba7ac9eeb554e71b23e3254cb115c4245",
+      "floati/cursor_prefix.py": "9b50ab68d1d92606c3accc4bb366915325b6efd9fc2ec4ac0144590ded7d8908",
+      "floati/cursor_presentations.py": "eec615739eb4b36337e7e91d877bc6e18710869196d35b64ef5869b29c701536",
+      "floati/cursor_stop_hook.py": "b4ef2269ec0fdd818027846d8dea51138fad00e6b9a4f963c7dfe8169e5519f0",
+      "floati/cursor_user_hook.py": "cf8a9f0d2161e4d9c93f152d18247f03714487d09db1c3eeb16994a19357f1c3",
+      "floati/cursor_wait.py": "1c0280d06542514cbafd6ab7e29dd67882b25be6007e043e1ebd67ac580ea9ea",
+      "floati/cursor_workers.py": "15f35160ef0741d9f857a8a3cb0f9425be6b7cd6cf9dfcd55e30604e239e8782",
+      "floati/cut_prefix.py": "50392e3d23baecd7b93eec669499f447c9abe2110cd3c408fc30d8b946743724",
+      "floati/decisions.py": "0aa43ba8d80905ec9b76c593a5d98f6543bb7b3e7b146b46b4c72c20e4975b6e",
+      "floati/delivery_health.py": "79574657626f842c96e551de124df186f6fa46486e5e417362e76fb5f9af16c2",
+      "floati/demo.py": "8f24e14c68b4c57b21d6dff8f994bb85eb77f0d56ccec44778ffb13a398ff260",
+      "floati/deploy.py": "6292279f9ac86bba9b82f664799a576e597771fed87d922481a45aa7c1eec376",
+      "floati/desktop_host_notifications.py": "b822361c5c269f87fc56a1aba7c32366c8aef1a563c4d911216c114dda81da6e",
+      "floati/doctor.py": "011f9dde2d714e6d854d0c7483932e87bedc68dac7603e03c812d97a57026fe4",
+      "floati/doctor_disk_watch.py": "05912461d56e3fd956e2858e7330eecf4fb1ca5a31ac95b3c544329b099916a1",
+      "floati/doctor_probe.py": "f74f1c365650b469a0aa2cbc92cad7522754c8ac1f33763bd3dde9b3abd2814a",
+      "floati/doctor_wake_receipt_legacy_read.py": "37ec7680f8003f7d8997ca2ba75bb0fd813fcaa827b8f0f73e8c8aacfe1f0d72",
+      "floati/doctor_wd_4.py": "5ddc04d8d0f75de84400e6162ae2f04dec57d3dee02e7332686253cf4b707581",
+      "floati/effect_reconciliation_exec.py": "32033c3ed28c75fdb639eb128ef76a40bc4db1b4d6cf4c7b76f1d8fff1462e8a",
+      "floati/effect_reconciliation_observer.py": "006e4ad49e7f331e8c4852ace3e8e4e0ad3acdbfa5b17c314f052b446909883f",
+      "floati/effect_reconciliation_protocol.py": "89155362438ff7491052a9a551b1ce8ff3421f9196dca507e2b75c16701dfada",
+      "floati/effects.py": "69f7fe9ec33a745067b22b24d680d1b8dcd4e531d9a43bfcdfe51db5624f8a55",
+      "floati/epoch_carry.py": "242500acdc720a5e2c6eb2bfb392bb005b36a196e1ab49fdac36224a70523863",
+      "floati/epoch_history.py": "cc4fa248719e704122996e4fe3eaf1feeab2f18e4bb853d5828010d116c4508f",
+      "floati/epoch_prefix.py": "83c18a58e26990443bd3607a5d30f2a44c77b3f87701b1adbae7102aebd677d8",
+      "floati/epoch_rotation.py": "752498120b31f84fc6dbc5e5139593c236b8735dd4c41a442d187a0f5351023c",
+      "floati/epoch_teardown.py": "5e88b89634a688f05dd8e0b879a3b09d8e51a31346f0e819b3f1703328944770",
+      "floati/errors.py": "eaffe415fff9d3a6e62eec6846f5750415803e89f73773eb542400b6c95d0e9b",
+      "floati/events.py": "4ed2b42f6aa845f8e7c11266f3ef862e6910c5d717b28c2442143d74ea19d73a",
+      "floati/fcd20_conformance.py": "c8d554d9ed0cdef0d009dc9f7e5f1951132983286f0cdda53f893dccf227c53a",
+      "floati/fixture_ids.py": "5556bfd5d0bae6956a8f2b13e6ef6ff47b1b82d64245b97fcedba690eb0cc198",
+      "floati/fleet_update.py": "5da52413b053b4c3a8ba74d2b7b0a82cbf41bd9a9a78b36abfed171180a70f52",
+      "floati/fleet_update_receipts.py": "413f2bf7bb8a9a81561f1aa9c4a14ea58846cd8c95d5f6e827bec77781babc74",
+      "floati/fleet_update_registry.py": "5948665525bd05ca390c0c60958c3aecf5609e43ae9ed139b1d22700c82fd6f2",
+      "floati/framing.py": "586dda223bca7bcfe35921682ee34fe7f32fc878d8800dd0ec0668797677bfbb",
+      "floati/gateway.py": "5ab5c558001275b090709059554a2783ff275aba47b4d45be29ed6f4656bb6f6",
+      "floati/gh_process.py": "46c3089f178551667211753a40923bb34a20b6dd9bcf9856803c4a9db61dce41",
+      "floati/git_process.py": "476f1dc302d135f79bb02df5db468428010478d812643bf60c2108b326c803af",
+      "floati/graph.py": "0413054a79cfcf628008910db3594973a76281128644001dbd5c72dfe478f9ce",
+      "floati/harness_versions.py": "8a8e7f5585543a46808f3744eba0272e3979825d17197cb7e5503df5c5446cba",
+      "floati/history_query_join.py": "647781e322fa92c55ed20288f4f59755cca929355d709c3cfeada7d0c6a12f6d",
+      "floati/history_query_projection.py": "8b262fd319024e6478e55fba8e9e6200ced9aaddf3f91b8c21edf47609f833b1",
+      "floati/holds.py": "1037ce39f32ca32b13c20d49f2c76f313920815b303f63600940abe90e5b67d8",
+      "floati/hook_preconditions.py": "0cb595269f1c083ff1bd25e691f2602b31be508d403695736ad5d9a1fab0ca2a",
+      "floati/host_callback_support.py": "f01d1829135261fba6b3b64140c1e129274fc3b5b8ed0247d8f980b62ad1bb34",
+      "floati/host_deadline.py": "7ae339a0f68963b82c168310fbeb76106d080a5ccc1fce0ca0861dac060ea2ab",
+      "floati/host_observations.py": "0ba9931763d628abd0233db76644f111276bd3de186f121780b8f41388a06a15",
+      "floati/host_paths.py": "13ca7f13ab5cb6e68f10c64b678203a8c758e6969d71a38263b23a09894eb95e",
+      "floati/ids.py": "59fbe261981091beb29f827a74571fc893b7bc0a2a7ceb688ef86f374ef6cb1d",
+      "floati/inbox_prefix.py": "bfbacb05b69b6d58c04d7097d3ca154a1098eb0ecf8fef05d0c42a3d81aceb64",
+      "floati/installed_reader.py": "a55543eafb8d8160e1baf3584e02136096299ef15fe8840a77c9ffbcf1f289d7",
+      "floati/installer_shadow.py": "3ca58eea6dbd32b6f01a5fe4d928dc8cf171d56c1ab12a67eb9d395f4d76e8e0",
+      "floati/intake.py": "fe92624b49b38949a1ced4075c7cc234831a8f09177846a04a5057d8e780b5b8",
+      "floati/journal_chain.py": "aaec3951cb4b59120da5e0b35aef2f0105cd3d072b386a1ec481fae97cf7ee1d",
+      "floati/jsonl.py": "429c3db1a9114b59c84786914ca10b90198ada9abb8729890103902317a1d22f",
+      "floati/key_prefix.py": "77761acd98fe0fbebb631195e7c71e01b19173bf9e25afcd19a50a8581452bf9",
+      "floati/lane_retirement.py": "23e297870f32e7a8d33905b563b61b41b4e1c14c7eea4ec5cb6517125c7a2393",
+      "floati/lane_scaling.py": "306efde5b5360521d5b54b80ec8f4cfe67e225876626b34f41495f0bda0dd2bf",
+      "floati/lane_workspace_inventory.py": "842d44cd4142a603d028eaa645f7033bb379497bb3b6a33c3ec94b30fd78a219",
+      "floati/lane_workspaces.py": "a2b0b8f450cb4bb389b0fbd99dc01bfa66ea3e17a37872ec1dffa823c6e0aacd",
+      "floati/ledger_repair.py": "aaa4dc2a517995de01d688ff6c550728196154e4aa4cb80fc6734f3ce0111b64",
+      "floati/lifecycle_prompts.py": "bd223d26d5bde13c404b8581e25a3f7b9b9fb26c05bf03e69d46027051483cff",
+      "floati/locks/contracts.py": "eece1c57e6870d7d60e26df8fc7f1d4f754b2ac2afb34c38be72a4db958672c1",
+      "floati/locks/git_observer.py": "98bc75545e7f4c9d7582a2c88d4dc0eada7f262f1a6ad8497bfeace6ac1bd43b",
+      "floati/locks/ledger.py": "bb360009a159df9648ccb2c5454c49ce26f53027f7efdf9cfebdcde37a23157a",
+      "floati/locks/projection.py": "1a40c6c5ed6c16887c77fcc00eb49de59ece3cd4f29bfabe8b0ae86bc51616fe",
+      "floati/locks/queue.py": "23484fe1e4f24cd83a3f0ca4c8871485947ec923594f160f5d653ec86f6de3db",
+      "floati/mail_health.py": "2aa2a1d5d813c3d8f10040e8ab70d0f538cf4b68d2b956b1f8022235559bba41",
+      "floati/mail_summary.py": "82a39ad554edb72efcf820e19ac7926084920205a46c03c5a75c8c0bdcc8743d",
+      "floati/managed.py": "1a1d5929f39c8fdbd1e7089bc876942c5e12bc804518a19d3cb8d3eac2b3017f",
+      "floati/manifest.py": "70036c4c2380139ba106da25a826119a8a4a52f5a194a1d22a0a1238cb745dbe",
+      "floati/mcp.py": "71c601ece85af9645ec1e80ec1c15f75ffc2542dae014eb9d2cb2cb3d1ef9ec0",
+      "floati/mcp_pin.py": "32f7e796e241a6b13e9baed288c6a21a1b68d722d2b0617ddef7a40ab5e12d1a",
+      "floati/memo_key_closure.py": "51cdae66217a213371ea17bdc5464603cbbb4aebe5d7246d0582514e2aec7bba",
+      "floati/message_consumption.py": "7e0caa73762b82ec62a8e0c13e03626fb7d3f52d7ee1c786d0aa4d992cb03506",
+      "floati/multi_bus_chart.py": "2090575c13e9ac2315dcab7eea67d64c37ed29d107d7245b230e03843bf36999",
+      "floati/native_thread_protocol.py": "75002ae161e04d5b6fee37496cfcf2d6dea0792c6e0c538a60c016918c91e2a5",
+      "floati/native_usage.py": "c6e399b774e91347a2de1a4c2f5eb9adce974bcf85ed518ad31da2ee7601298f",
+      "floati/node_explain.py": "a0cd43a6e3f8f2ff38b10f887ec6c5f1173f23eaf6b245015618fd182e4c5aba",
+      "floati/node_projections.py": "05fe8007918f803070255cc8b189694be415118919f72ade242e1c7cba60728f",
+      "floati/node_turnover.py": "91475fd7a86ad48d44b373fccbe784810845052bc3e97f541ffe92212d14ab07",
+      "floati/node_wizard.py": "40bb11f95df41ca66acb79f4f1e6313c3b830a9965c03065ac9dda039f37567d",
+      "floati/orchestrate.py": "0708f38cf2aacc97d121d7976b20b38bdd0a8813a89ef9e2aebdf13002056f92",
+      "floati/overlap_radar.py": "ed72e034c1495b922c0a45e1a169fd871b9d1ee829d605c104e78f95467d171c",
+      "floati/persons.py": "760a8ae8a5904314034a2dc2fff6819e99d2ea2983a5ea3a0777b5b04fc9cac1",
+      "floati/planes.py": "a42ff72d525847909b23a5b543e6b8eda4628faeb7bf9a317687b06012b56a8c",
+      "floati/policy.py": "2a2d46f3c80586f3189ceddff2c419ae23c753564ecce26794e23c29d56f8c1c",
+      "floati/prep_clear.py": "f7f74f309aedbbac73c83c81c32bc2098d61edcd6a0b7cf3eb2c5a56f59ecd0e",
+      "floati/presence.py": "5c8c244985e21c2b0d9b4f1f3e9abf308e1f6fed9334d02b55727e9efa9271d9",
+      "floati/presenter_liveness.py": "48310f690034ef688b1f93d03e0c51f0ef16527abaf6da852fa36177e2296ca5",
+      "floati/profile_update.py": "ea0c761913c1550e1abb66d0ab3b373a6fab9c8e0c20f22aa2c5135cc0516054",
+      "floati/projection.py": "7da8dba67a75e8ed03669f11c68878905e481337b0d0a8aced5705e7358122cf",
+      "floati/provider_switch.py": "5452bbbc969954c8ed632d7e9fd0551b1a63e8cfa353c190a28c916b601cd884",
+      "floati/proxy_awareness.py": "3345669a32efc1cc805dd47ef18a438f489caf93753223c6b48ad4b7211c26bf",
+      "floati/public_export_policy.py": "044fe194ff501cd350d6de955318dd6c3f60f439fb43ecb9f53719a077351977",
+      "floati/purge.py": "8f44b083f6e7c64a41e964291da177bc09ce2ed4ea4f74ddfa4af3c02d71cfb9",
+      "floati/quota.py": "55e3b415daaef7a7384e27b51fc13a027ef20847a167e97d9b5b9be0b9874282",
+      "floati/quota_adapters.py": "f3209baa5173aefb4b864f40445a1c6597125652671ad70d15204051b006b243",
+      "floati/reader_currency.py": "4c83f27365d88d5da546be013742962c72d9bb1ebc42d8fe6ea368c1632bd193",
+      "floati/readiness_contract.py": "866486b34971a10acdee9202246c123bf5a1cd3ac06a5bf5261aba5d67934bbc",
+      "floati/receipt_prefix.py": "c9dce16eee41889bc71628d2bd977c972becae047264e5c3fad766f50d2715f2",
+      "floati/recipient_mechanisms.py": "22250f4d9ff289cb984fdb80861574a69d1fdf82857c296e6264c430926b07cf",
+      "floati/records.py": "1de7bab208fe019ded4581a6863ee05f14bc5f91eeb6c894fd7b7733ce8fd8b9",
+      "floati/registry.py": "b8dd03bc8ed934d5022107784b4ff7c042b6fa4edaec2aeb42e7741d8a02deb3",
+      "floati/registry_prefix.py": "9b549453b3a733249e1ac3f5ea83b03ac8724f959874d897ebfd36ee050341bd",
+      "floati/replay.py": "c69af8b09c3864d33160605b3bf9afd95eedb59132516b2f124bae2fa62dcc7a",
+      "floati/replay_render.py": "84a5bfc7dcd794a500d5582d771df620e104043b8ecdab8d39c4bc402fc813bd",
+      "floati/retired_home_disarm.py": "6396a3308a3839582c1a9b5c8af94c740945c54e09f2508bc46597919d36eec7",
+      "floati/role_assignment.py": "aa6664726ba4f9e71a1ba4f499e3608b08e789d6f5a0ad53fbc0ec0385656da9",
+      "floati/role_library.py": "8865b9f5e1a18cb2b89821090db2a4aa26d56538792ce4cfb34ea3da6b39ddf9",
+      "floati/role_templates.py": "d3b13827b010e1dc7e4270818c9dfdca43af42f79a083ed2ec54b4d809c3be49",
+      "floati/root.py": "840547ef2e7826ebdfc9d266bf2bed789e6d9a10c12312cf9de07511b2d3582f",
+      "floati/roster.py": "29ed287441064efb5cb71a414a7608874c85b40c5517271e258ca793b1029f7b",
+      "floati/run_limits.py": "9a45d68903ead9c5a6fe96ac197fa97decfb1f6aa5567d7453882ed7671168f5",
+      "floati/run_manifest.py": "7848eb8252afb23237a939195bfbbafe385d6aaf7d99c441c6fa084375d2b03f",
+      "floati/run_segments.py": "419c36ab8d28f0c9ad4b20b8f11a8dd2e94d4ebe0c4d1fc184008461823878df",
+      "floati/runtruth.py": "42e66d07159e2a94d2fa89ff360f48a54be40ee3fba3f4928a456bd361347498",
+      "floati/sandbox_probe.py": "d560d14db2e7bb9f3d880bc3ffb115b8d44c0d6b468af9bea803ec8f192887b1",
+      "floati/sandbox_remedy.py": "7c2940ed356c182ed7e19f204acdd84827d71d7adad56e7df44848656a0df542",
+      "floati/scheduler.py": "3fbb2765cc5146f37bfa34974a3c4ca7775a66c1be86dadbfec2b6e786ead2de",
+      "floati/seat_board.py": "edfd918ecda3d2e60e50c3f133120a0faff248a241c37b884d956e3ca7ade8d0",
+      "floati/seat_declaration.py": "166f01bcac072232052e9a64a1491e47855c057509de89b5d778a30c8364fc21",
+      "floati/seat_execution.py": "9f67f8f44f1512eb3e22ed61cd4af90f8f38584d70bc74c54737a191ce712c69",
+      "floati/seat_fence.py": "e00b8cbd0a5d4bb9880b9be1ec19fd2c3ca20c68524e3f0bd1e19b6b4ef80f0a",
+      "floati/seat_harness_config.py": "227d3799e5b2356ff0da3c7776da60b94bc3180d2b5527ffa6aa50c836191a77",
+      "floati/seat_host_worker.py": "55497d9e699dd53e6b378d4abe843655def03101d595796b78cd995d8141be60",
+      "floati/seat_migration.py": "445e47712fa06a78c2e59f0bad7925cb30006afeaac87d58fc504904a7a94790",
+      "floati/seat_onboarding.py": "322f223945546799dffb92299611580ea92e5c40c54422e916d65710cd9515c0",
+      "floati/seat_teardown.py": "c0c621b1b77540e846f45f04ca686233da0c6c2c36b262c5be2684b034a0e600",
+      "floati/seat_teardown_activity.py": "1390b18d5e4a0a819de69db0302d1b2f29cc47d06b9a8adb4be753ec6628e5bd",
+      "floati/seat_teardown_capacity.py": "1f81638eb92ab416e31baa9244ef46ff588c81294bc13c63adee8896f887bb69",
+      "floati/seat_teardown_prefix.py": "160abda87c7122a390608e6a58d5e2cd29d95f35812c60c2e0067ea82b71299d",
+      "floati/seat_transport_preflight.py": "6837b3fb224c5f1050af8cd0bb3c6405a09ec3cf164b08cc93a9d0d673b05831",
+      "floati/seat_waiter_lifecycle.py": "fff86d42e74501f3909d62fc6fa526942ec9df68a875a5c2d164289608f45379",
+      "floati/selftest.py": "d46c3f7438cabbeb051559a17f2989718d52a90030813900bbe601ba11c08238",
+      "floati/send_prefix.py": "959188ebd81edf8ea7de8051fbe3d35665b4fe8969e5c8fb8d48242265250d41",
+      "floati/sent.py": "cda0dcd334db14bffe22252c6a7598a6cd0f358b9499edb71a3da3e02aae7411",
+      "floati/sequencer.py": "2a4a55e5ef2de4dd8becb9d320051f97728d0619b60236d85202104ff9919e0d",
+      "floati/sequencer_epoch.py": "976a723db925e34e1dd57920ec6e14c47e4059cfd25a167b9b6dec97f86f4e3e",
+      "floati/sequencer_scale.py": "5b1da8a78cbcf6b931599174b722671603dfeb5f75729bf02dd0fd0cb670a5ab",
+      "floati/session_identity.py": "bf76bedbefac89afcd606297d238c62ec212f10eb3e558318e7c9fd57b14b5a5",
+      "floati/signing.py": "f91d2a9ec3071af42ac827c9dd82941055938d01c59cad6636776ceddee23eff",
+      "floati/snapshot.py": "170147d5a82bdbcc6b9d48dff55c026a92e9355ec45b8b37c911162a10d2d651",
+      "floati/solo.py": "70b14ee3ea30ced11a0153241e9bbc9c3b0f3213edd496cb76143ef435be00ad",
+      "floati/spawn_groups.py": "2922240a1efe5ef205eb9f51463db0cc9c5b0088624cb4c9ece51675332d697d",
+      "floati/state_receipts.py": "702ebd20233b4a30f305d626a86132bd49f91e63b9089eda5cb9c884e49cb6cd",
+      "floati/status_snapshot.py": "e56d60bd6a438e245df5387f11e692951baff28c7069622c4b80bb27ab3f2deb",
+      "floati/stop_hold.py": "b988faa8cf79b3775aa80c15290640326e8b628c54a74e009b3097cc1563d718",
+      "floati/stop_skip.py": "412e2ac0c2ad8b2948b963ea723c16d692c7182942a8529790a65d6c47bf72ef",
+      "floati/storage_identity.py": "0add53abf8039adef9b74b908450c5ba69a2fa8787e7dac219ad8a2e79f89093",
+      "floati/supervisor.py": "2a84006a8e2bdb340e157d89075a4e80078fc7cee9e055e5607d967e54b74679",
+      "floati/suspension.py": "3c2bc13a56e75b8107e5427cb63bf6f954658b4e649555f56727392c3d13a877",
+      "floati/thread_observations.py": "3c9d1c764b6f4ba7521a095465b2bd3244ffaf7419a52054a6bd2bf12c0f9b28",
+      "floati/thread_source.py": "962b5a8b3ee4bbb6a1f7bd77f24ec7ba02bfeaad85317f1065388b7c3c063ff6",
+      "floati/tide.py": "a2451fa2c3aa029480dcf95771b5719c43c4d0d29baf74a44acc5fb4a3e1ff46",
+      "floati/tide_catalog.py": "33458b92eba5db2c0024381ebd9ee1658c68c9a3b6d0f6eb61d8ac0ac05e9e40",
+      "floati/tide_policy.py": "4f2c2731b392aeb0860e2f414b357c722385d4fc36d1ba815fca5cd95a1b33cc",
+      "floati/timings.py": "ff4f8bd4daf332bfe4fcb6725d239ef2320f4f29ecc7621d003d5278867aca34",
+      "floati/tui.py": "4c6a9e1ff33c218bca8d8666b563221ef1f0aa4f7b3441d9adf1d1ad462c715d",
+      "floati/tui_approval.py": "03599341299aece9d4eb4fabf58b2ad5f6fb83a82b18e84a717054f3ce376dc1",
+      "floati/tui_capabilities.py": "821e22f45bead315852de50528356a28941c4d81c9b18285e537f240ec66c55b",
+      "floati/tui_choice.py": "c5c3057f84bebc32a35f502678c94cae34176c3e1ff09399cd82aef5dbb8e870",
+      "floati/tui_doors.py": "7fb7bd7f7ffb3ba313d0fb00b02f4eabcc7678b65502917ee8eb2e6525e1281e",
+      "floati/tui_protocol.py": "ca038b08c6ec080fb47d2ad3bd51e93c83f707f4d3ffe86dc25c0c5686e9eb1e",
+      "floati/tui_render.py": "868613e5efc9fd887874a9704c232201b554a2195e9733bb3f2ea60c17a1b02e",
+      "floati/uninstall.py": "00b007cdb6a31917ea30879287b156e7a3d695b9a2d3ba7ab27d7373756706f2",
+      "floati/update_apply.py": "e6da307fdd49aafc4bd686c0456db94714cd5875d83f3b27ee57db0dada7e035",
+      "floati/update_check.py": "a10ccf30f5ce80207ff9091139c2dc1baa12b1f706134fd752861f61c4b0051e",
+      "floati/update_consent.py": "f3f83ef906b84a079acfe9d3b3fb2b894f829de9b64e5ff0044a2f6aa94a1236",
+      "floati/update_ownership.py": "45b96786138c2ed52e76c930ffbff5fe34bce3364126dcc7084b59af825095d7",
+      "floati/update_status.py": "db2260af49fe07f918b80dd01f4f11365274b01a7bf55ffa1f3fad37f39e504c",
+      "floati/update_transport.py": "5145157db5458df1a5905d87babbd28c8dcaf7d969e1820a36c07d2b4f8436d9",
+      "floati/verification.py": "134a77b3da9bbf9e55a6f32fc5e53280331d9c433f3c58cc60f1aee1eaa4ab26",
+      "floati/version_skew.py": "a89a853db92c2b4ea487c204f6251f222a76dcc9998c995a26e9b36997bc5bfb",
+      "floati/waiter_bundle.py": "b1544d92b90385428548b28503791792b3f35d6dd16ee61a88d173add0381ed7",
+      "floati/waiter_consent.py": "d0b01d78cf82f41e2677de06bfea72c089693f3e59fbafd26257912ff75e068f",
+      "floati/waiter_invocation.py": "fe2f573d5605d64ac5c3a8b7e11e32fb630c9104e03882920fab017240e41b5b",
+      "floati/waiter_lock_retry.py": "18d999c64aa98c6541bbd9881769bcbf33814bfe39a360306e78bc8ec3dd95d6",
+      "floati/wake.py": "e533d28f89d4ff9c0c2b1cec81cd7444b7ceaa334bbc339711b7f032d19e5209",
+      "floati/wake_control.py": "1ca62c9487430c246239a2d7bb97bfe67e6e23f8710756be064c6a61073eaf25",
+      "floati/wake_daemon.py": "9f9c33498775b0c55f26a1dc43d262ebbfb648369d8fba74f757c6560017f5da",
+      "floati/wake_daemon_adapters.py": "ba2a8e46c0e432fef6bad3933c4e531de69293fa7676d060d0e45042b95f021a",
+      "floati/wake_daemon_contract.py": "5b4b85c84c94ae5c1b5da0845d71576fcff0dd9b114153c3633c72a196169b67",
+      "floati/wake_daemon_launchd.py": "5ba6ddc921f321fa541c990adc317a2da72511e26c78a019dcd88fdc53c4c1e4",
+      "floati/wake_daemon_roll.py": "cf40b65ba97e1198e356f2032102e245dd02f7a41ec4b1ddd4fa71d9a22b5b56",
+      "floati/wake_daemon_systemd.py": "ff494cc9479475039301d6a5e5068ed185d731136c695b42a52acaa614ec496d",
+      "floati/wake_exit.py": "18ea940c2f13116bb3277223181fb0d77390c69b78e80c7627fa13fddc96abbe",
+      "floati/wake_health.py": "0cf331a22306579cee48a3f992901dc74bb0eaf3dfbad7602c6dd0f8f11b1090",
+      "floati/wake_hints.py": "22e332391b0f378b1b4a9ab74ac18bd562a3fb83cbc7d1ad3237af2df87cd9b8",
+      "floati/wake_hold.py": "7852ee43f3e2cce9867436d001517318a704a70544140f35a50977afb92c6d37",
+      "floati/wiring_journal.py": "4928326a6d3f157b1ccacbf87b3c421e1b75a8cdbc1af16cfec443834e2804cf",
+      "floati/work.py": "9225bd00f8a0c26fa0aeb47893a0fbc62ae98b0f232ee03c6c8013825d27184c",
+      "floati/work_notification.py": "1006ef1439c37c9f90985597f2e2d2a5321220544724afaa4c1203773acc630f",
+      "floati/worker_adapter_runtime.py": "414998adb34cc0f455e35c7513d53f12c9229963c5d4cc5da7087b1ad685432b",
+      "floati/worker_bootstrap.py": "71a04671da483436ef6c906232b99edb14a49822f82cafd5e1d8347cf5ae0cd5",
+      "floati/worker_bootstrap_protocol.py": "8fc783004c7681064b81b9454659050a43ffe6e5341c82ea17a5828c15c52b2e",
+      "floati/worker_errors.py": "579efa2e3fcd29cd9ad8e9f7b6dcc7886c4a48800c932648a1cb0a46a920c59b",
+      "floati/worker_exec.py": "84c2c647475e3bc6fa80be04e65e93c0825a5174f7e7916a148fe9c3594c6b11",
+      "floati/worker_isolation.py": "985305ab020b4044e9b17e9afabbcb6f223d30b8d7bf35cf12d6baa013123b10",
+      "floati/worker_launch_anchors.py": "e6d177e6cfaad8f157dd39ee7fe7fa3315e659af25432ae828aa3ed7214a2913",
+      "floati/workers.py": "478147c25f86ef7c2973047c1d0186a3cd87e877e8a22dd4781f95b51d4ea564",
+      "floati/workspace_layout.py": "3399ca98c0d37121795c4faf588621181723865a3a2c3476eabb265ff39db1a4",
+      "floati/worktree_safety.py": "055a9331c310a580fe86cc50d4fa05a80f7c6836e59b5bb3cdebdf70c3000d1d",
+      "floati/zcode_hook_install.py": "c00c5d451e1304d5487850104db2ba580516516b41be36aa8a87d39eaf4aa6bb"
+    }
+  },
+  "predecessor": "c7.14",
+  "predecessor_contract_sha256": "e5279c53421464514e018d3b4b482a6b7e8c3e7797cca775326242301eac6991",
+  "ratifications": [],
+  "source_pin": "python-contract-slice-owner-neutral-v2",
+  "version": "c7.15"
+}

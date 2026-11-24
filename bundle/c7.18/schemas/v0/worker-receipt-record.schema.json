@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/worker-receipt-record.schema.json",
+  "title": "Floati Worker Receipt Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "session_id", "work_item_id", "node_id", "adapter", "transition",
+    "outcome_code", "authority_subject", "authority_epoch",
+    "artifact_bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^worker-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "worker_receipt"},
+    "session_id": {"type": "string", "pattern": "^worker-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "adapter": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"},
+    "transition": {"type": "string", "enum": ["claim", "spawn", "drive", "bind_artifact", "complete", "degrade"]},
+    "outcome_code": {
+      "type": ["string", "null"],
+      "enum": [
+        null, "adapter_error", "adapter_malformed_output",
+        "approval_required_unattended", "artifact_ambiguous",
+        "artifact_missing", "authority_deadline_unavailable",
+        "authority_expired_mid_claim",
+        "authority_state_unavailable",
+        "credential_network_boundary_unruled", "git_finalize_failed",
+        "process_cancelled", "process_died", "process_start_failed",
+        "process_timeout", "protocol_error", "turn_failed",
+        "worker_authority_changed", "workspace_invalid",
+        "workspace_mapping_missing"
+      ]
+    },
+    "authority_subject": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authority_epoch": {"type": "integer", "minimum": 1},
+    "artifact_bindings": {
+      "type": "array", "maxItems": 32, "uniqueItems": true,
+      "items": {"$ref": "work-item-record.schema.json#/$defs/artifact_binding"}
+    }
+  }
+}

@@ -754,29 +754,64 @@ def _uninstall_moment(scratch: Path) -> CaptureMoment:
     base = scratch / "uninstall"
     destination = base / "installed"
     base.mkdir(parents=True, exist_ok=True)
-    install = subprocess.run(
-        [
-            str(REPOSITORY_ROOT / "scripts/floati"),
-            "install",
-            "--source",
-            str(REPOSITORY_ROOT),
-            "--destination",
-            str(destination),
-            "--committed-tree",
-        ],
+    source = base / "source"
+    environment = {
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "HOME": os.environ.get("HOME", str(base)),
+    }
+    checkout = subprocess.run(
+        ["/usr/bin/git", "worktree", "add", "--detach", str(source), "HEAD"],
         cwd=REPOSITORY_ROOT,
-        env={
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "PYTHONDONTWRITEBYTECODE": "1",
-        },
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
     )
+    if checkout.returncode != 0:
+        raise CaptureRefusal(
+            "capture_source_checkout_failed",
+            f"scratch HEAD checkout exited {checkout.returncode}: {checkout.stderr.strip()}",
+            "repair the scratch Git checkout before capturing uninstall",
+        )
+    try:
+        install = subprocess.run(
+            [str(source / "scripts/floati"), "install", "--source", str(source),
+             "--destination", str(destination), "--committed-tree"],
+            cwd=source,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        cleanup = subprocess.run(
+            ["/usr/bin/git", "worktree", "remove", "--force", str(source)],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if cleanup.returncode != 0:
+            raise CaptureRefusal(
+                "capture_source_cleanup_failed",
+                f"scratch checkout cleanup exited {cleanup.returncode}: {cleanup.stderr.strip()}",
+                "remove the owned scratch worktree before retrying capture",
+            )
     if install.returncode != 0:
+        try:
+            artifact = json.loads(install.stdout)
+        except json.JSONDecodeError:
+            artifact = None
+        evidence = artifact.get("evidence") if isinstance(artifact, dict) else None
+        code = evidence.get("code") if isinstance(evidence, dict) else None
+        if not isinstance(code, str):
+            code = "unavailable"
         raise CaptureRefusal(
             "capture_install_failed",
-            f"scratch committed-tree install exited {install.returncode}: {install.stderr.strip()}",
+            f"scratch committed-tree install exited {install.returncode} "
+            f"(code: {code}): {install.stderr.strip()}",
             "repair the committed-tree install before capturing uninstall",
         )
     foreign = destination / "foreign.keep"
@@ -790,10 +825,7 @@ def _uninstall_moment(scratch: Path) -> CaptureMoment:
             "--dry-run",
         ],
         cwd=REPOSITORY_ROOT,
-        env={
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "PYTHONDONTWRITEBYTECODE": "1",
-        },
+        env=environment,
         check=False,
         capture_output=True,
         text=True,

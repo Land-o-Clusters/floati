@@ -30,6 +30,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from floati import fixture_ids as public_ids
 from floati.errors import ProtocolRefusal
@@ -37,6 +38,8 @@ from floati.mcp import run_cli_artifact
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.banked_sha_fixture import banked_send_repository
+from tests.waiter_timing import scripted_readiness
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -62,10 +65,17 @@ def _drain_command(message: str) -> str:
     return after.split("\n", 1)[1].split("\n", 1)[0]
 
 
-def _fallback_session_name() -> str:
-    from floati.cursor_wait import _fallback_session
+def _arm_cursor_workspace(root: FloatiRoot, workspace: Path) -> None:
+    from floati.codex_wait_contract import (
+        CodexWaitConsentLedger, resolve_participant, write_workspace_map,
+    )
 
-    return _fallback_session(NODE)
+    write_workspace_map(root.path, workspace, NODE)
+    participant = resolve_participant(root.path, workspace)
+    assert participant is not None
+    CodexWaitConsentLedger(root).arm(participant.binding,
+        hook_timeout_seconds=1800, wait_deadline_seconds=1500,
+        idempotency_key="cur-2-consent")
 
 
 class _Clock:
@@ -79,7 +89,7 @@ class _Clock:
         self.now += float(seconds)
 
 
-class CursorWaitTests(unittest.TestCase):
+class _CursorWaitFixture:
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
@@ -95,6 +105,7 @@ class CursorWaitTests(unittest.TestCase):
         self.runtime.mkdir()
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
+        _arm_cursor_workspace(self.root, self.workspace)
 
     def _run(self, payload: dict, *, unread, clock=None, mtime_after=None):
         from floati.cursor_wait import run_cursor_stop_wait
@@ -116,20 +127,22 @@ class CursorWaitTests(unittest.TestCase):
                 return 2.0
             return ledger_stat["mtime"]
 
-        code = run_cursor_stop_wait(
-            root=self.root.path,
-            node=NODE,
-            runtime=self.runtime,
-            deadline_seconds=15.0,
-            poll_seconds=3.0,
-            hook_timeout_seconds=1800.0,
-            payload=payload,
-            stdout=stdout,
-            clock=clock.monotonic,
-            sleep=clock.sleep,
-            peek_unread=peek,
-            ledger_mtime=ledger_mtime,
-        )
+        with mock.patch("floati.cursor_wait.Path.cwd", return_value=self.workspace):
+            code = run_cursor_stop_wait(
+                root=self.root.path,
+                node=NODE,
+                runtime=self.runtime,
+                deadline_seconds=15.0,
+                poll_seconds=3.0,
+                hook_timeout_seconds=1800.0,
+                payload={"conversation_id": CONV_A, **payload},
+                stdout=stdout,
+                clock=clock.monotonic,
+                sleep=clock.sleep,
+                wait_readable=scripted_readiness(clock.sleep, interval=3.0),
+                peek_unread=peek,
+                ledger_mtime=ledger_mtime,
+            )
         body = json.loads(stdout.getvalue() or "null")
         rows = []
         if self.journal.is_file():
@@ -140,6 +153,8 @@ class CursorWaitTests(unittest.TestCase):
             ]
         return code, body, rows
 
+
+class CursorWaitTests(_CursorWaitFixture, unittest.TestCase):
     def test_aborted_prints_empty_object(self) -> None:
         """Am.3: the first abort re-arms; {} is the second consecutive abort."""
 
@@ -209,7 +224,7 @@ class CursorWaitTests(unittest.TestCase):
         self.assertEqual("cursor_wait_deadline_invalid", raised.exception.code)
 
 
-class CursorHookInstallTests(unittest.TestCase):
+class _CursorHookInstallFixture:
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
@@ -222,6 +237,8 @@ class CursorHookInstallTests(unittest.TestCase):
         (self.runtime / "scripts").mkdir(parents=True)
         (self.runtime / "scripts" / "floati").write_text("#!/bin/sh\n", encoding="utf-8")
 
+
+class CursorHookInstallTests(_CursorHookInstallFixture, unittest.TestCase):
     def test_install_writes_project_hooks_json_with_explicit_root_and_node(self) -> None:
         code, artifact = run_cli_artifact(
             [
@@ -258,25 +275,31 @@ class CursorHookInstallTests(unittest.TestCase):
         self.assertIn("--harness cursor", command)
 
     def test_install_refuses_when_node_is_omitted(self) -> None:
-        from floati.cli import _parser
+        home = self.base / "home"
+        home.mkdir()
 
-        parser = _parser()
-        with self.assertRaises(ProtocolRefusal) as raised:
-            parser.parse_args(
-                [
-                    "hook",
-                    "install",
-                    "--harness",
-                    "cursor",
-                    "--root",
-                    str(self.root.path),
-                    "--workspace",
-                    str(self.workspace),
-                    "--runtime",
-                    str(self.runtime),
-                ]
-            )
-        self.assertEqual("arguments_invalid", raised.exception.code)
+        def snapshot():
+            state = {}
+            for path in (self.base, *self.base.rglob("*")):
+                metadata = path.lstat()
+                state[path.relative_to(self.base)] = (
+                    metadata.st_mode, metadata.st_mtime_ns, metadata.st_ctime_ns,
+                    path.read_bytes() if path.is_file() else None,
+                )
+            return state
+
+        before = snapshot()
+        with mock.patch.dict(os.environ, {"HOME": str(home), "CODEX_HOME": str(home / ".codex")}):
+            for harness in ("cursor", "codex", "zcode", "claude"):
+                with self.subTest(harness=harness):
+                    exit_code, artifact = run_cli_artifact([
+                        "hook", "install", "--harness", harness, "--root", str(self.root.path),
+                        "--workspace", str(self.workspace), "--runtime", str(self.runtime),
+                    ])
+                    self.assertEqual(20, exit_code, artifact)
+                    self.assertEqual(("refused", "arguments_invalid"),
+                                     (artifact["status"], artifact["evidence"]["code"]), artifact)
+                    self.assertEqual(before, snapshot())
 
 
 class CursorWaitAmendmentOneTests(unittest.TestCase):
@@ -299,6 +322,7 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
         self.runtime.mkdir()
         self.workspace = self.base / "workspace"
         self.workspace.mkdir()
+        _arm_cursor_workspace(self.root, self.workspace)
 
     def _wait(self, **overrides):
         """Call the waiter for real and capture both channels.
@@ -324,7 +348,9 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
             stdout=stdout,
         )
         arguments.update(overrides)
-        with contextlib.redirect_stderr(stderr):
+        arguments["payload"] = {"conversation_id": CONV_A, **arguments["payload"]}
+        with contextlib.redirect_stderr(stderr),\
+             mock.patch("floati.cursor_wait.Path.cwd", return_value=self.workspace):
             code = run_cursor_stop_wait(**arguments)
         return code, stdout.getvalue(), stderr.getvalue()
 
@@ -506,20 +532,40 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
         self.assertGreater(DEADLINE_MARGIN_SECONDS, 0)
 
     def test_f3_the_loop_sleep_never_overshoots_the_deadline(self) -> None:
-        started = time.monotonic()
-        code, out, _err = self._wait(deadline_seconds=5.0, poll_seconds=3.0)
-        elapsed = time.monotonic() - started
+        clock = _Clock()
+        waits = []
+
+        def advance(seconds):
+            self.assertGreater(seconds, 0)
+            self.assertLessEqual(seconds, 5.0 - clock.now,
+                                 "native wait overshot the original residual budget")
+            waits.append(seconds)
+            clock.sleep(seconds)
+
+        native_readiness = scripted_readiness(advance, interval=3.0)
+
+        def readiness(source, timeout):
+            self.assertGreater(timeout, 0)
+            self.assertLessEqual(timeout, 5.0 - clock.now,
+                                 "native readiness requested more than the original residual budget")
+            return native_readiness(source, timeout)
+
+        code, out, _err = self._wait(deadline_seconds=5.0, poll_seconds=3.0,
+            clock=clock.monotonic, sleep=advance, wait_readable=readiness)
         self.assertEqual(0, code)
         self.assertIn("Reply exactly: armed.", json.loads(out)["followup_message"])
-        self.assertLessEqual(
-            elapsed, 5.5, "a 5 s deadline returned at %.2f s" % elapsed
-        )
+        self.assertTrue(waits, "the native waiter never observed its quiet interval")
+        self.assertEqual(5.0, clock.now)
+        journal = self._journal_rows(self.root.path)
+        self.assertEqual("followup_rearm", journal[-1]["event"])
+        self.assertEqual(5.0, journal[-1]["waited_seconds"])
 
     # F4 — the command the followup hands the seat must run verbatim.
 
     def test_f4_drain_command_runs_verbatim_and_acknowledges(self) -> None:
         sender = public_ids.builder("b")
         Registry(self.root).register(sender, "worker")
+        repository, sha = banked_send_repository(self.base)
         code, artifact = run_cli_artifact(
             [
                 "send",
@@ -527,8 +573,9 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
                 "--from", sender,
                 "--to", NODE,
                 "--repo", "floati",
-                "--sha", "0" * 40,
-                "--doc", "docs/evidence/cur-2-am1-2026-09-11.md",
+                "--sha", sha,
+                "--repository", str(repository),
+                "--doc", "note.md",
                 "--note", "CUR-2 Am.1 drain construction",
             ]
         )
@@ -575,6 +622,7 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
 
         sender = public_ids.builder("c")
         Registry(self.root).register(sender, "worker")
+        repository, sha = banked_send_repository(self.base)
         code, artifact = run_cli_artifact(
             [
                 "send",
@@ -582,8 +630,9 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
                 "--from", sender,
                 "--to", NODE,
                 "--repo", "floati",
-                "--sha", "0" * 40,
-                "--doc", "docs/evidence/cur-2-am1-2026-09-11.md",
+                "--sha", sha,
+                "--repository", str(repository),
+                "--doc", "note.md",
                 "--note", "CUR-2 Am.2 N4 construction",
             ]
         )
@@ -602,7 +651,7 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
             command,
             "pasting the line hands the shell a stray parenthetical: %r" % command,
         )
-        self.assertTrue(command.endswith(_fallback_session_name()), command)
+        self.assertTrue(command.endswith(CONV_A), command)
 
         run = subprocess.run(
             ["bash", "-c", command],
@@ -619,18 +668,17 @@ class CursorWaitAmendmentOneTests(unittest.TestCase):
         )
         self.assertEqual("ok", json.loads(run.stdout)["status"])
 
-    def test_f4_absent_conversation_id_falls_back_to_a_stable_per_node_session(
+    def test_f4_absent_conversation_id_diagnoses_without_a_fallback_session(
         self,
     ) -> None:
-        from floati.cursor_wait import _drain_session
-
-        first = _drain_session({"status": "completed"}, NODE)
-        second = _drain_session({"conversation_id": 17}, NODE)
-        self.assertEqual(first, second)
-        self.assertIn(NODE, first)
-        from floati.wake_control import validate_session_id
-
-        self.assertEqual(first, validate_session_id(first))
+        for identity in (None, 17):
+            with self.subTest(identity=identity):
+                _code, out, _err = self._wait(
+                    payload={"status": "completed", "conversation_id": identity})
+                message = json.loads(out)["followup_message"]
+                self.assertIn("wake_session_invalid", message)
+                self.assertNotIn("--session", message)
+                self.assertNotIn("publication", self._journal_rows(self.root.path)[-1])
 
     # The larger finding — Cursor's auto-follow-up cap.
 
@@ -735,7 +783,7 @@ QUIRK_MOVE_ROOT = (
 )
 
 
-class CursorWaitAmendmentThreeTests(CursorWaitTests):
+class CursorWaitAmendmentThreeTests(_CursorWaitFixture, unittest.TestCase):
     """CUR-2 Am.3 — four fixture payloads against floati/cursor_wait.py."""
 
     def test_error_status_rearms_with_drain_followup(self) -> None:
@@ -803,6 +851,13 @@ class CursorWaitAmendmentThreeTests(CursorWaitTests):
             "loop_count": 0,
             "conversation_id": CONV_B,
         }
+        from floati.codex_wait_contract import (
+            CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant,
+        )
+        participant = resolve_participant(self.root.path, self.workspace)
+        consent = CodexWaitConsentLedger(self.root).require_armed(participant.binding)
+        CodexWaitSessionLedger(self.root).arm(participant.binding, consent, CONV_B,
+            idempotency_key="cur-2-new-conversation", take_over=True)
         code, body, rows = self._run(payload, unread=0)
         self.assertEqual(0, code)
         self.assertNotEqual({}, body)
@@ -811,7 +866,7 @@ class CursorWaitAmendmentThreeTests(CursorWaitTests):
         self.assertEqual(CONV_B, rows[-1]["conversation_id"])
 
 
-class CursorHookInstallAmendmentThreeTests(CursorHookInstallTests):
+class CursorHookInstallAmendmentThreeTests(_CursorHookInstallFixture, unittest.TestCase):
     def test_install_prints_the_scope_line_after_writing(self) -> None:
         code, artifact = run_cli_artifact(
             [

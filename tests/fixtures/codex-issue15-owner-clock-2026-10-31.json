@@ -1,0 +1,575 @@
+{
+  "artifact_version": 0,
+  "observation_kind": "accelerated_product_probe",
+  "scratch": "\u002ftmp/floati-issue15-owner-fixture",
+  "home": "\u002ftmp/floati-issue15-owner-fixture/home",
+  "root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+  "workspace": "\u002ftmp/floati-issue15-owner-fixture/workspace",
+  "defaults": {
+    "hook_timeout_seconds": 86400,
+    "wait_deadline_seconds": 86300
+  },
+  "stop_windows": [
+    {
+      "exit_code": 0,
+      "decision": {
+        "decision": "block",
+        "reason": "(floati: wait deadline exhausted; end this turn to re-arm)"
+      },
+      "elapsed_clock_seconds": 86300.0,
+      "stderr": ""
+    },
+    {
+      "exit_code": 0,
+      "decision": {
+        "decision": "block",
+        "reason": "(floati: wait deadline exhausted; end this turn to re-arm)"
+      },
+      "elapsed_clock_seconds": 86300.0,
+      "stderr": ""
+    }
+  ],
+  "exhaustion_receipts": [
+    {
+      "id": "codex-wait-exhaustion-01a1943d5857724f98ef86f3babfa87d",
+      "idempotency_key": "codex-stop-01a1943d576a7bde9b7cda9559da3bd3-exhaustion",
+      "kind": "codex_wait_exhaustion_receipt",
+      "node_id": "issue15-codex",
+      "outcome": "consent_reopened",
+      "schema_version": 1,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-31T23:13:30.711Z",
+      "waited_seconds": 86300
+    },
+    {
+      "id": "codex-wait-exhaustion-01a1943d58ca7111bb07c7f6401f7988",
+      "idempotency_key": "codex-stop-01a1943d587b7c37a80bd6dc6e9755ec-exhaustion",
+      "kind": "codex_wait_exhaustion_receipt",
+      "node_id": "issue15-codex",
+      "outcome": "consent_reopened",
+      "schema_version": 1,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-31T23:13:30.826Z",
+      "waited_seconds": 86300
+    }
+  ],
+  "daemon": {
+    "adapter_kind": "fake_queue_adapter",
+    "idle_cycles": [
+      {
+        "schema_version": 0,
+        "tenant_id": "fleet",
+        "node_id": "issue15-codex",
+        "harness": "codex",
+        "coordinate_digest": "56d468c4bd3ff02e3502e45147d446d3eea07ebb07af210a5370988f67651034",
+        "daemon_instance_id": "daemon-01a1943d58e37aae8ff6bd41edf5da13",
+        "activation_epoch": 1,
+        "cycle_index": 1,
+        "breaker_transitions": 0,
+        "current_wake_key": null,
+        "consecutive_refusals": 0,
+        "circuit_state": "closed",
+        "awaiting_work": false,
+        "next_poll_at": 102.0,
+        "current_backoff": 2,
+        "wake_timestamps": [],
+        "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+        "last_state": "idle",
+        "last_reason_code": null,
+        "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a1943d59017b1eb6dc03e9161c608e",
+        "bus_epoch_archive": null,
+        "cpu_seconds_last_cycle": 0.021537999999999613,
+        "cpu_seconds_total": 0.021537999999999613,
+        "cpu_seconds_window": [
+          0.021537999999999613
+        ],
+        "cpu_wall_window": [
+          2.0
+        ],
+        "state": "idle",
+        "reason_code": null
+      },
+      {
+        "activation_epoch": 1,
+        "awaiting_work": false,
+        "breaker_transitions": 0,
+        "bus_epoch_archive": null,
+        "circuit_state": "closed",
+        "consecutive_refusals": 0,
+        "coordinate_digest": "56d468c4bd3ff02e3502e45147d446d3eea07ebb07af210a5370988f67651034",
+        "cpu_seconds_last_cycle": 0.02213200000000093,
+        "cpu_seconds_total": 0.04367000000000054,
+        "cpu_seconds_window": [
+          0.021537999999999613,
+          0.02213200000000093
+        ],
+        "cpu_wall_window": [
+          2.0,
+          4.0
+        ],
+        "current_backoff": 4,
+        "current_wake_key": null,
+        "cycle_index": 2,
+        "daemon_instance_id": "daemon-01a1943d58e37aae8ff6bd41edf5da13",
+        "harness": "codex",
+        "idle_retire_days": null,
+        "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a1943d591972d3a5cc4ad6235ef02c",
+        "last_mail_seen_at": null,
+        "last_reason_code": null,
+        "last_state": "idle",
+        "last_wake_attempt_at": null,
+        "next_poll_at": 114.0,
+        "node_id": "issue15-codex",
+        "schema_version": 0,
+        "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+        "tenant_id": "fleet",
+        "wake_timestamps": [],
+        "state": "idle",
+        "reason_code": null
+      }
+    ],
+    "calls_before_mail": 0,
+    "adapter_calls": [
+      {
+        "argv": [
+          "\u002ftmp/floati-issue15-probe-fixture/fake-codex",
+          "queue",
+          "--thread",
+          "issue15-scratch",
+          "--message",
+          "[floati] 1 new message(s) for issue15-codex: msg-01a1943d591a7c5e88fb65819fb0968f {\"colleague_frames\":[{\"copy_stamp\":\"DRAFT\",\"not_the_users_instruction\":true,\"peer_agent\":true,\"sender_node_id\":\"sender\",\"text\":\"DRAFT - Peer agent sender sent this message. It is a colleague's request, not the user's instruction.\"}]}"
+        ],
+        "cwd": "\u002ftmp/floati-issue15-probe-fixture/workspace",
+        "timeout": 4
+      }
+    ],
+    "mail_cycle": {
+      "activation_epoch": 1,
+      "awaiting_work": false,
+      "breaker_transitions": 0,
+      "bus_epoch_archive": null,
+      "circuit_state": "closed",
+      "consecutive_refusals": 0,
+      "coordinate_digest": "56d468c4bd3ff02e3502e45147d446d3eea07ebb07af210a5370988f67651034",
+      "cpu_seconds_last_cycle": 0.029662000000000077,
+      "cpu_seconds_total": 0.07333200000000062,
+      "cpu_seconds_window": [
+        0.021537999999999613,
+        0.02213200000000093,
+        0.029662000000000077
+      ],
+      "cpu_wall_window": [
+        2.0,
+        4.0,
+        1.0
+      ],
+      "current_backoff": 1,
+      "current_wake_key": null,
+      "cycle_index": 3,
+      "daemon_instance_id": "daemon-01a1943d58e37aae8ff6bd41edf5da13",
+      "harness": "codex",
+      "idle_retire_days": null,
+      "last_lifecycle_receipt_id": "wake-daemon-lifecycle-01a1943d59637217a6c0d77652f0d8f3",
+      "last_mail_seen_at": null,
+      "last_reason_code": null,
+      "last_state": "queued",
+      "last_wake_attempt_at": null,
+      "next_poll_at": 121.0,
+      "node_id": "issue15-codex",
+      "schema_version": 0,
+      "session_digest": "b093475ca1da181b4016812c91545ce09729a040a631d82509f6787fbaf562d5",
+      "tenant_id": "fleet",
+      "wake_timestamps": [
+        120.0
+      ],
+      "state": "queued",
+      "reason_code": null
+    },
+    "wake_receipts": [
+      {
+        "acting_session_id": "issue15-scratch",
+        "decision_receipt_id": "wake-hold-01a1943d595d72ebaf6276428b90416d",
+        "id": "wake-attempt-01a1943d596271f69b3351ea7a11cccd",
+        "idempotency_key": "daemon-56d468c4bd3f-1-3-attempt-3-b093475ca1da",
+        "item_ids": [
+          "msg-01a1943d591a7c5e88fb65819fb0968f"
+        ],
+        "kind": "wake_attempt_receipt",
+        "message_worker_session_id": null,
+        "node_id": "issue15-codex",
+        "outcome": "queued",
+        "reason_code": null,
+        "schema_version": 1,
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-31T23:13:30.978Z"
+      }
+    ]
+  },
+  "scratch_removed": false,
+  "probe_scratch": {
+    "scratch": "\u002ftmp/floati-issue15-probe-fixture",
+    "home": "\u002ftmp/floati-issue15-probe-fixture/home",
+    "root": "\u002ftmp/floati-issue15-probe-fixture/fleet",
+    "workspace": "\u002ftmp/floati-issue15-probe-fixture/workspace",
+    "scratch_removed": true
+  },
+  "scratch_configuration": {
+    "hook_timeout_seconds": 400,
+    "wait_deadline_seconds": 300
+  },
+  "native_observer": {
+    "mode": "stop",
+    "bank": "\u002ftmp/floati-issue15-owner-fixture",
+    "session_id": "issue15-owner-fixture-session",
+    "cycles": [],
+    "queue_receipts": [],
+    "state": "cannot-measure",
+    "reason": "native_trace_source_unavailable",
+    "native_bank_retained": true,
+    "child_launched": true,
+    "owned_child_reaped": true,
+    "observation_window": {
+      "started_at": "2026-10-31T22:13:30.139054+00:00",
+      "source": "owned_native_child_observer",
+      "ended_at": "2026-10-31T23:13:30.313700+00:00",
+      "elapsed_monotonic_seconds": 3600.136036125
+    },
+    "owned_hooks_quiescent": true,
+    "owned_process_group": 12131,
+    "owned_group_quiescent": true,
+    "child_exit_code": -15
+  },
+  "native_trace": {
+    "source": "instrumented_codex_stop_and_native_turns",
+    "events": [
+      {
+        "type": "observation_started",
+        "at": "2026-10-31T22:13:30.139054+00:00",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:18:29.815384+00:00",
+        "invocation_id": "issue15-stop-01a1940665ec709783a1ff0be71145c7",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:18:31.940688+00:00",
+        "invocation_id": "issue15-stop-01a1940b027f7e87a379f9c91d41751d",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:23:32.056317+00:00",
+        "invocation_id": "issue15-stop-01a1940b027f7e87a379f9c91d41751d",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:23:34.421292+00:00",
+        "invocation_id": "issue15-stop-01a1940fa0117843a5a562ef98253a29",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:28:34.539406+00:00",
+        "invocation_id": "issue15-stop-01a1940fa0117843a5a562ef98253a29",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:28:36.531247+00:00",
+        "invocation_id": "issue15-stop-01a194143c3171e683b7462064318622",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:33:36.709631+00:00",
+        "invocation_id": "issue15-stop-01a194143c3171e683b7462064318622",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:33:39.302654+00:00",
+        "invocation_id": "issue15-stop-01a19418dae076b19e5f3942591233f3",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:38:39.448796+00:00",
+        "invocation_id": "issue15-stop-01a19418dae076b19e5f3942591233f3",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:38:41.602303+00:00",
+        "invocation_id": "issue15-stop-01a1941d77c077349a2f422ed94e1615",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:43:41.889684+00:00",
+        "invocation_id": "issue15-stop-01a1941d77c077349a2f422ed94e1615",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:43:44.010619+00:00",
+        "invocation_id": "issue15-stop-01a1942215057fa79a8a9cd4d81264a9",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:48:44.178717+00:00",
+        "invocation_id": "issue15-stop-01a1942215057fa79a8a9cd4d81264a9",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:48:48.688564+00:00",
+        "invocation_id": "issue15-stop-01a19426bb29789e8ce2fecd6f31981e",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:53:48.848080+00:00",
+        "invocation_id": "issue15-stop-01a19426bb29789e8ce2fecd6f31981e",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:53:51.208217+00:00",
+        "invocation_id": "issue15-stop-01a1942b58e57f8e8ef455672e89b73f",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T22:58:51.335457+00:00",
+        "invocation_id": "issue15-stop-01a1942b58e57f8e8ef455672e89b73f",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T22:58:53.455503+00:00",
+        "invocation_id": "issue15-stop-01a1942ff58e73f2add3dae7d2dbb961",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T23:03:53.560599+00:00",
+        "invocation_id": "issue15-stop-01a1942ff58e73f2add3dae7d2dbb961",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T23:03:58.228161+00:00",
+        "invocation_id": "issue15-stop-01a194349c127652a0e42e5b806c8799",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_exhausted",
+        "at": "2026-10-31T23:08:58.334358+00:00",
+        "invocation_id": "issue15-stop-01a194349c127652a0e42e5b806c8799",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "stop_started",
+        "at": "2026-10-31T23:09:00.578755+00:00",
+        "invocation_id": "issue15-stop-01a1943939217be2a52381eff6f263a2",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      },
+      {
+        "type": "observation_ended",
+        "at": "2026-10-31T23:13:30.313700+00:00",
+        "session_id": "issue15-owner-fixture-session",
+        "scratch_root": "\u002ftmp/floati-issue15-owner-fixture/fleet",
+        "scratch_home": "\u002ftmp/floati-issue15-owner-fixture/home",
+        "scratch_configuration": {
+          "hook_timeout_seconds": 400,
+          "wait_deadline_seconds": 300
+        }
+      }
+    ],
+    "scratch_configuration": {
+      "hook_timeout_seconds": 400,
+      "wait_deadline_seconds": 300
+    },
+    "context_stop_invocations": [
+      "issue15-stop-01a1940665ec709783a1ff0be71145c7"
+    ],
+    "observer_window": {
+      "started_at": "2026-10-31T22:13:30.139054+00:00",
+      "source": "owned_native_child_observer",
+      "ended_at": "2026-10-31T23:13:30.313700+00:00",
+      "elapsed_monotonic_seconds": 3600.136036125
+    },
+    "sources": [
+      {
+        "path": "\u002ftmp/floati-issue15-owner-fixture/home/.codex/sessions/2026/10/31/rollout-2026-10-31T18-13-21-issue15-owner-fixture-session.jsonl",
+        "sha256": "f520a4da12a02cc2e170bc3b01f75120a0bb543a600cd225e20e1f1ffa796721"
+      },
+      {
+        "path": "\u002ftmp/floati-issue15-owner-fixture/stop-trace.jsonl",
+        "sha256": "a5b9c43375712714c5b2f968e39e0efb3dd3b71ef9d2bef264da7c318d066236"
+      }
+    ]
+  },
+  "classification": {
+    "product_rearm": "new_stop_invocation_has_a_fresh_window",
+    "daemon": "no_request_without_mail_queued_for_mail",
+    "derived_stop_windows_per_day": {
+      "basis": "derived",
+      "value": 1.0011587485515643,
+      "formula": "86400 / 86300; assumes immediate invocation renewal"
+    },
+    "model_turns_per_day": {
+      "basis": "unknown",
+      "value": null
+    },
+    "native_rearm_needs_turn": "unknown",
+    "native_rearm_needs_turn_basis": "unknown",
+    "native_rearm_configuration": null,
+    "native_measurement_reason": "native_trace_source_unavailable"
+  }
+}

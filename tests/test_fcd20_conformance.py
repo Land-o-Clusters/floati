@@ -23,7 +23,8 @@ class FCD20HostPathTests(unittest.TestCase):
         ):
             with self.subTest(platform=platform), patch.object(
                 host_paths.sys, "platform", platform
-            ):
+            ), patch.dict(os.environ):
+                os.environ.pop(host_paths.HOST_TEMP_ROOT_VARIABLE, None)
                 self.assertEqual(expected, str(host_paths.fcd20_scratch_parent()))
 
     def test_host_paths_has_no_third_party_harness_candidate_policy(self) -> None:
@@ -349,17 +350,25 @@ class FCD20CommandTests(unittest.TestCase):
     def test_partial_measurement_exits_zero(self) -> None:
         from floati import fcd20_conformance as fcd20
 
-        executable = self._executable("codex", 'print("codex fixture 1.0")')
+        executable = self._executable(
+            "codex", "from pathlib import Path\nprint(Path.cwd().parent)"
+        )
         stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
+        with patch.dict(
+            os.environ, {host_paths.HOST_TEMP_ROOT_VARIABLE: str(self.root)}
+        ), contextlib.redirect_stdout(stdout):
             exit_code = fcd20.main(
                 ["--codex-executable", str(executable)],
                 probe=fcd20.probe_version,
                 host=self._host,
             )
-        self.assertEqual(0, exit_code)
+        self.assertEqual(0, exit_code, stdout.getvalue())
         artifact = json.loads(stdout.getvalue())
-        self.assertEqual("measured", artifact["evidence"]["rows"][0]["status"])
+        measured = artifact["evidence"]["rows"][0]
+        self.assertEqual("measured", measured["status"])
+        self.assertEqual(
+            self.root / "floati-fcd20", Path(measured["evidence"]["version"])
+        )
         self.assertEqual(
             {"measured", "host_condition"},
             {row["status"] for row in artifact["evidence"]["rows"]},

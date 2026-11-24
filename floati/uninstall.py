@@ -27,7 +27,9 @@ from .errors import DurabilityFailure, ProtocolRefusal
 from .storage_identity import INSTALL_METADATA_DIRECTORY
 from .update_ownership import validate_install_ownership
 from .wake_daemon_launchd import _default_pid_alive, _launchctl_print_pid
-from .wake_daemon_systemd import SYSTEMCTL_CANDIDATES
+from .wake_daemon_systemd import (
+    SYSTEMCTL_CANDIDATES, installed_unit_directories, remove_created_unit_directories,
+)
 
 
 _METADATA_RELATIVE = PurePosixPath(INSTALL_METADATA_DIRECTORY, "manifest.v0.json")
@@ -206,6 +208,8 @@ def _owned_tool_path(relative: PurePosixPath) -> bool:
         or value in {
             "scripts/floati",
             "scripts/floati-codex-wait",
+            "scripts/floati-desktop-observe",
+            "scripts/floati-opencode-observer.mjs",
             "scripts/floati-quota-statusline",
         }
         or value.startswith("floati/")
@@ -723,6 +727,7 @@ class UninstallWriter:
         # supervisor is proven stopped before anything is removed; one
         # unproven daemon refuses the whole uninstall with nothing touched.
         proven: List[Dict[str, Any]] = []
+        unit_directories: List[Tuple[Path, list[dict]]] = []
         for item in wake_found:
             if not item.get("identified", False):
                 raise ProtocolRefusal(
@@ -752,7 +757,24 @@ class UninstallWriter:
                     "uninstall",
                 )
             proven.append(proof)
+            if item["supervisor"] == "systemd":
+                from .root import FloatiRoot
+
+                root_path = Path(str(item["root"]))
+                # Legacy units without an install ledger claim no directories.
+                if (root_path / "receipts" / "wake-daemon").is_dir():
+                    root = FloatiRoot.open_direct_home(root_path)
+                    unit = Path(str(item["path"]))
+                    created = installed_unit_directories(
+                        root, str(item["node_id"]), str(item["harness"]),
+                        unit, hashlib.sha256(unit.read_bytes()).hexdigest()
+                    )
+                    unit_directories.append((unit, created))
         wake_removed = [_remove_proven_supervisor(item) for item in proven]
+        # Several units may share parents created by the first install.
+        # Prune only after every proven unit has left the shared directory.
+        for unit, created in unit_directories:
+            remove_created_unit_directories(unit, created)
 
         for entry in entries:
             relative = PurePosixPath(entry["path"])

@@ -33,8 +33,8 @@ class InGuardSendHealthTests(unittest.TestCase):
         self.registry.register("sender-z", "worker")
         self.registry.register("sender-a", "worker")
 
-    def _register_recipient(self) -> None:
-        self.registry.register("recipient-a", "worker")
+    def _register_recipient(self, harness: str = "worker") -> None:
+        self.registry.register("recipient-a", harness)
 
     def _send_at(self, timestamp: str, note: str, *, key: str) -> dict:
         with patch("floati.events.utc_now", return_value=timestamp):
@@ -54,17 +54,19 @@ class InGuardSendHealthTests(unittest.TestCase):
         after = self.log.path.read_bytes() if self.log.path.exists() else b""
         self.assertEqual(before, after)
 
-    def test_send_without_wake_arrangement_appends_and_warns(self) -> None:
-        """Catches send refusing a registered recipient without a lease instead of returning readiness testimony."""
-        self._register_recipient()
+    def test_send_without_hook_provenance_appends_and_reports_uncertainty(self) -> None:
+        """Catches treating missing recipient mechanisms as affirmative deafness."""
+        # Claude can carry hooks whose native configuration is unreadable;
+        # worker and smoke structurally cannot under the scoped F2 ruling.
+        self._register_recipient("Claude")
         result = self.log.send(
             "sender-a", "recipient-a", "repo", SHA, "doc", "note",
             idempotency_key="no-wake",
         )
         self.assertIn("recipient_readiness", result)
         readiness = result["recipient_readiness"]
-        self.assertEqual("recipient_not_listening", readiness["state"])
-        self.assertEqual("no_active_lease", readiness["reason"])
+        self.assertEqual("unknown", readiness["state"])
+        self.assertEqual("mechanism_evidence_incomplete", readiness["reason"])
         self.assertRegex(
             readiness["observed_at"],
             r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$",
