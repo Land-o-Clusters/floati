@@ -12,7 +12,7 @@ import stat
 import subprocess
 
 from . import jsonl as lane_jsonl
-from .bus_epoch import shared_epoch_operation
+from .bus_epoch import epoch_guard, shared_epoch_operation
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .fleet_update import _explicit_executable
 from .git_process import fixed_git_command, fixed_git_environment
@@ -113,6 +113,41 @@ def _walk_error(error):
     raise error
 
 
+def _lsof_warning_problem(stderr, workspace):
+    """Admit only stat warnings about filesystems outside the lane's scope."""
+    if not stderr:
+        return None
+    try:
+        workspace_device = workspace.stat().st_dev
+    except OSError:
+        return 'workspace filesystem could not be inspected'
+    continuation = False
+    for line in stderr.splitlines():
+        if continuation and line == '      Output information may be incomplete.':
+            continuation = False
+            continue
+        warning = re.fullmatch(
+            r"lsof: WARNING: can't stat\(\) [^\s]+ file system (/[^\x00-\x1f\x7f]*)", line)
+        if warning is None:
+            return f'unrecognized warning: {line}'
+        try:
+            mount = Path(warning.group(1)).resolve()
+        except (OSError, RuntimeError, ValueError):
+            return f'unresolvable warned mount: {line}'
+        if mount == workspace or mount in workspace.parents:
+            return f'warned mount contains the workspace: {line}'
+        try:
+            device = mount.stat().st_dev
+        except OSError:
+            # An unreadable foreign mount is precisely what this warning reports.
+            # Its resolved path still cannot contain the workspace.
+            device = None
+        if device == workspace_device:
+            return f'warned mount shares the workspace filesystem: {line}'
+        continuation = True
+    return None
+
+
 class LaneWorkspaces:
     def __init__(self, root, launch_agents=None, lsof_executable=None):
         if not isinstance(root, FloatiRoot):
@@ -169,11 +204,25 @@ class LaneWorkspaces:
             raise ProtocolRefusal('lane_workspace_inspection_unavailable', f'Git inspection failed for {repository}: {result.stderr.strip()}', remedy='restore the named Git coordinate and retry the lane operation')
         return result.stdout.strip()
 
-    def _common(self, repository):
-        top = self._required_git(repository, 'rev-parse', '--show-toplevel')
+    def _directories(self, repository, *, include_admin=False):
+        queries = [('--show-toplevel',), ('--path-format=absolute', '--git-common-dir')]
+        if include_admin:
+            queries.append(('--absolute-git-dir',))
+        output = self._required_git(repository, 'rev-parse',
+                                    *(argument for query in queries for argument in query))
+        directories = [value.strip() for value in output.split('\n')]
+        if len(directories) != len(queries):
+            # rev-parse has no NUL-delimited directory output. Preserve the
+            # independent-query interpretation of paths containing newlines.
+            directories = [self._required_git(repository, 'rev-parse', *query)
+                           for query in queries]
+        top, *paths = directories
         if Path(top) != repository:
             raise ProtocolRefusal('lane_workspace_identity_mismatch', f'The declared checkout is not its Git root: {repository}', remedy='restore the exact declared repository checkout; do not substitute a nested directory')
-        return Path(self._required_git(repository, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+        return tuple(Path(path) for path in paths)
+
+    def _common(self, repository):
+        return self._directories(repository)[0]
 
     def _worktrees(self, repository):
         output = self._required_git(repository, 'worktree', 'list', '--porcelain', '-z')
@@ -231,9 +280,9 @@ class LaneWorkspaces:
 
     def _actor(self, actor):
         actor = _identity(actor, 'node')
-        registry = Registry(self.root)
-        registry.require_active(actor)
-        registry.require_protocol_lease(actor, act='lane workspace operation')
+        with Registry(self.root).read_once(node_id=actor) as registry:
+            registry.require_active(actor)
+            registry.require_protocol_lease(actor, act='lane workspace operation')
         return actor
 
     def _append(self, record):
@@ -401,30 +450,34 @@ class LaneWorkspaces:
             result = subprocess.run([executable, '-nP', '-F', 'pn', '+D', str(workspace)],
                                     env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'},
                                     capture_output=True, text=True, timeout=15, check=False)
-        except (ProtocolRefusal, OSError, subprocess.SubprocessError):
+        except (ProtocolRefusal, OSError, UnicodeError, subprocess.SubprocessError):
             raise ProtocolRefusal('lane_workspace_inspection_unavailable', f'Open-file observation is unavailable for {workspace}', remedy='install or explicitly supply a readable canonical lsof executable before removing this lane')
         # lsof may return 1 with real process records (including on macOS).
         # Positive testimony still blocks removal when the scan was incomplete.
         if re.search(r'^p[0-9]+$', result.stdout, re.MULTILINE):
             return ['lsof: ' + result.stdout.strip()[:8192]]
-        if result.returncode != 1 or result.stdout.strip() or result.stderr.strip():
+        warning_problem = _lsof_warning_problem(result.stderr, workspace)
+        if result.returncode != 1 or result.stdout or warning_problem:
             diagnostic = json.dumps(result.stderr.strip()[:8192], ensure_ascii=True)
-            raise ProtocolRefusal('lane_workspace_inspection_unavailable', f'lsof could not establish no runtime references for {workspace}; stderr: {diagnostic}', remedy='resolve the lsof diagnostic and retry; force does not bypass unavailable runtime inspection')
+            problem = (f'; inadmissible warning: {warning_problem[:8192]}'
+                       if warning_problem else '')
+            raise ProtocolRefusal('lane_workspace_inspection_unavailable', f'lsof could not establish no runtime references for {workspace}; exit: {result.returncode}{problem}; stderr: {diagnostic}', remedy='resolve the lsof diagnostic and retry; force does not bypass unavailable runtime inspection')
         return []
 
-    def _preflight(self, record, lanes, repositories, force=False):
+    def _owned_binding(self, record, lanes, repositories):
         workspace = lanes / record['path']
         _canonical(str(workspace), 'recorded lane workspace', existing=True)
         if record['repo'] not in repositories:
             raise ProtocolRefusal('lane_repo_undeclared', f'Recorded repository {record["repo"]} is no longer declared', remedy='restore the original explicit repository declaration before closing its lane')
         repository = repositories[record['repo']]['path']
         common = self._common(repository)
-        if self._common(workspace) != common:
+        workspace_common, workspace_admin = self._directories(workspace, include_admin=True)
+        if workspace_common != common:
             raise ProtocolRefusal('lane_workspace_identity_mismatch', f'Lane {workspace} belongs to a different repository', remedy='restore the original recorded worktree; never replace or adopt foreign bytes')
         rows = [row for row in self._worktrees(repository) if row['worktree'] == str(workspace)]
         if len(rows) != 1 or rows[0].get('branch') != 'refs/heads/' + record['branch']:
             raise ProtocolRefusal('lane_workspace_identity_mismatch', f'Lane registration or branch differs: {workspace}', remedy='restore the recorded worktree and branch before closing it')
-        admin = _canonical(self._required_git(workspace, 'rev-parse', '--absolute-git-dir'),
+        admin = _canonical(str(workspace_admin),
                                    'lane Git administration', existing=True)
         marker = admin / MARKER
         try:
@@ -434,6 +487,62 @@ class LaneWorkspaces:
                 raise ValueError('ownership marker mismatch')
         except (OSError, ValueError):
             raise ProtocolRefusal('lane_workspace_identity_mismatch', f'Lane ownership marker differs: {workspace}', remedy='preserve the workspace and restore its original opening marker; do not adopt a replacement')
+        return {'workspace': workspace, 'repository_path': repository,
+                'git_common_dir': common, 'git_admin_dir': admin,
+                'branch': record['branch'], 'base_sha': record['base_sha'],
+                'row': record['row'], 'lane_opening_id': record['id']}
+
+    @contextmanager
+    def validated_binding(self, actor, opening_id, repository, *, require_clean=False):
+        """Authorize a fresh lane operation and hold its exact ownership binding."""
+        with self._binding_scope(actor, opening_id, repository, require_clean=require_clean,
+                                 authorize_operation=True) as binding:
+            yield binding
+
+    @contextmanager
+    def inspect_binding(self, actor, opening_id, repository, *, require_clean=False):
+        """Inspect exact recorded ownership without authorizing a fresh operation.
+
+        Registration and every row/marker/Git identity remain binding. A caller
+        recovering an expired exact lease must independently verify that lease;
+        this read-only accessor grants no launch, mutation or renewal authority.
+        """
+        with self._binding_scope(actor, opening_id, repository, require_clean=require_clean,
+                                 authorize_operation=False) as binding:
+            yield binding
+
+    @contextmanager
+    def _binding_scope(self, actor, opening_id, repository, *, require_clean, authorize_operation):
+        """Share the same native ownership checks between observation and action.
+
+        Descendant commits on the recorded branch are valid; the opening base
+        remains the receipt's base, rather than becoming the current HEAD.
+        """
+        with epoch_guard(self.root), lane_workspace_guard(self.root):
+            if authorize_operation:
+                actor = self._actor(actor)
+            else:
+                actor = _identity(actor, 'node')
+                Registry(self.root).require_active(actor)
+            lanes, repositories = self._declarations()
+            matches = [record for record in self._open_records(actor)
+                       if record['id'] == opening_id and record['repo'] == repository]
+            if len(matches) != 1:
+                raise ProtocolRefusal('lane_workspace_identity_mismatch', 'Opening is not this node\'s exact active repository row')
+            binding = self._owned_binding(matches[0], lanes, repositories)
+            ancestry = self._git(binding['workspace'], 'merge-base', '--is-ancestor',
+                                 binding['base_sha'], 'HEAD')
+            if ancestry.returncode != 0:
+                raise ProtocolRefusal('lane_workspace_identity_mismatch', 'Current owned branch no longer descends from its opening base')
+            if require_clean and self._required_git(binding['workspace'], 'status', '--porcelain=v1',
+                                                    '--untracked-files=all', '--ignored=matching'):
+                raise ProtocolRefusal('lane_workspace_dirty', 'Ad-hoc admission requires a clean recorded row')
+            yield binding
+            self._owned_binding(matches[0], lanes, repositories)
+
+    def _preflight(self, record, lanes, repositories, force=False):
+        binding = self._owned_binding(record, lanes, repositories)
+        workspace, repository = binding['workspace'], binding['repository_path']
         dirty = self._required_git(workspace, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching')
         if dirty and not force:
             raise ProtocolRefusal('lane_workspace_dirty', f'Lane has tracked or untracked changes: {workspace}', remedy='commit or preserve the lane changes, or pass --force --why with an explicit discard reason')
@@ -497,11 +606,14 @@ class LaneWorkspaces:
             lanes, repositories = self._declarations()
             board = self._board()
             registry = Registry(self.root)
+            from .registry_prefix import read_selected_nodes
+            nodes = self._nodes()
+            selected = read_selected_nodes(self.root, nodes)
             latest = {}
-            for row in registry.known_records():
+            for row in selected:
                 if row['kind'] == 'registry_entry':
                     latest[row['node_id']] = row
-            records = [r for node in self._nodes() for r in self._open_records(node)]
+            records = [r for node in nodes for r in self._open_records(node)]
             unmanaged = self._inventory(lanes, repositories, records)
             eligible = []
             for record in records:
@@ -514,7 +626,8 @@ class LaneWorkspaces:
             if apply:
                 for node in {r['node_id'] for r in eligible}:
                     if latest[node]['state'] != 'retired':
-                        registry.require_protocol_lease(node, act='lane sweep')
+                        with registry.read_once(node_id=node):
+                            registry.require_protocol_lease(node, act='lane sweep')
                 plans = [(record, self._preflight(record, lanes, repositories), self._closing_record(record, 'operation:sweep', None)) for record in eligible]
                 self._preflight_records([closed_record for _, _, closed_record in plans])
                 for record, coordinates, closed_record in plans:

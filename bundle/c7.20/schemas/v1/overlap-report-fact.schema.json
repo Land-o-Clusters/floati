@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/overlap-report-fact.schema.json",
+  "title": "Floati Overlap Report Fact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_binding",
+    "inputs",
+    "signals",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "attempt_binding": {"$ref": "#/$defs/attempt_binding"},
+    "inputs": {"$ref": "#/$defs/inputs"},
+    "signals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/signal"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/signal"}
+    }
+  },
+  "$defs": {
+    "attempt_binding": {
+      "oneOf": [
+        {"const": "absent_predispatch"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attempt_id",
+            "claim_id",
+            "lease_id",
+            "worker_session_id"
+          ],
+          "properties": {
+            "attempt_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "claim_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "lease_id": {"type": "string", "minLength": 1, "maxLength": 512},
+            "worker_session_id": {"type": "string", "minLength": 1, "maxLength": 512}
+          }
+        }
+      ]
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root",
+        "base_ref",
+        "base_sha",
+        "left_ref",
+        "left_sha",
+        "right_ref",
+        "right_sha"
+      ],
+      "properties": {
+        "repository_root": {"type": "string", "pattern": "^/", "maxLength": 4096},
+        "base_ref": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "left_ref": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "left_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "right_ref": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "right_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "coordinate", "stamp", "hard_lock", "detail"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "maxLength": 128},
+        "coordinate": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "stamp": {"enum": ["MEASURED", "DERIVED", "HEURISTIC", "UNKNOWN"]},
+        "hard_lock": {"type": "boolean"},
+        "detail": {"type": "string", "minLength": 1, "maxLength": 8192}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"stamp": {"const": "HEURISTIC"}}},
+          "then": {"properties": {"hard_lock": {"const": false}}}
+        }
+      ]
+    }
+  }
+}

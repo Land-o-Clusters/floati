@@ -205,7 +205,9 @@ exit classes.
 
 The example fleet is defined in `docs/FLEET.md`: `reviewer` uses Claude,
 `builder-app` uses Codex for `~/fleet/app`, and `builder-floati` uses Codex for
-`~/fleet/floati`. Each node registers itself. Nodes poll their own inbox at
+`~/fleet/floati`. Each node registers itself by operating convention; the
+low-level registration and retirement verbs do not bind NODE to the calling seat.
+Nodes poll their own inbox at
 boot and before stand-down. Delivery and acknowledgment remain receipts only;
 acknowledgment is not evidence of completion.
 

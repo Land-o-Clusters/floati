@@ -35,6 +35,76 @@ class LaneWorkspaceSafetyTests(unittest.TestCase):
         return service.close(actor="builder", row=row, force=True,
                              why="Explicit fixture cleanup request")
 
+    def _lsof_result(self, stderr, stdout="", returncode=1):
+        script = ("#!/bin/sh\nprintf '%s' " + shlex.quote(stdout)
+                  + "\nprintf '%s' " + shlex.quote(stderr)
+                  + " >&2\nexit " + str(returncode) + "\n")
+        self.fixture.lsof.write_bytes(script.encode("utf-8"))
+
+    def test_lsof_foreign_mount_warnings_allow_close(self):
+        """Unrelated unreadable mounts cannot prevent a clean lane's removal."""
+        warnings = (
+            "lsof: WARNING: can't stat() overlay file system /var/lib/docker/rootfs/overlayfs/fixture\n"
+            "      Output information may be incomplete.\n"
+            "lsof: WARNING: can't stat() nsfs file system /run/docker/netns/fixture\n"
+            "      Output information may be incomplete.\n",
+            "lsof: WARNING: can't stat() fixturefs file system /Volumes/Foreign Volume\n",
+        )
+        for index, warning in enumerate(warnings):
+            with self.subTest(warning=warning):
+                row = "foreign-warning-" + str(index)
+                service, workspace = self._open(row)
+                self._lsof_result(warning)
+                result = service.close(actor="builder", row=row)
+                self.assertEqual(str(workspace), result["removed"])
+                self.assertEqual("closed", result["record"]["state"])
+                self.assertFalse(workspace.exists())
+
+    def test_lsof_unsafe_mount_warnings_preserve_lane_and_name_warning(self):
+        """Warnings affecting this filesystem or unparsed diagnostics still refuse."""
+        service, workspace = self._open()
+        alias = self.fixture.base / "workspace-alias"
+        alias.symlink_to(workspace, target_is_directory=True)
+        same_filesystem = self.fixture.base / "same-filesystem"
+        same_filesystem.mkdir()
+        foreign = "lsof: WARNING: can't stat() overlay file system /foreign/mount\n"
+        warnings = [
+            "lsof: WARNING: can't stat() fixturefs file system " + str(path)
+            for path in (workspace, workspace.parent, Path("/"), alias, same_filesystem,
+                         workspace / ".." / workspace.name)
+        ] + [
+            "lsof: WARNING: can't stat() fixturefs file system relative/mount",
+            "lsof: WARNING: can't stat() fixturefs file system ",
+            "lsof: WARNING: incomplete scan",
+            "      Output information may be incomplete.",
+        ]
+        for warning in warnings:
+            with self.subTest(warning=warning):
+                # An orphan continuation is not legitimized by another warning.
+                self._lsof_result(warning + "\n" if warning.startswith(" ")
+                                  else foreign + warning + "\n")
+                refusal = self._refused(lambda: self._force(service),
+                                        "lane_workspace_inspection_unavailable")
+                self.assertIn(warning.strip(), refusal.detail)
+                self.assertTrue(workspace.is_dir())
+                self.assertEqual(["open"], [r["state"] for r in self.fixture._records()])
+
+    def test_lsof_foreign_warnings_do_not_hide_unexpected_results(self):
+        """Foreign diagnostics cannot turn a failed or nonempty scan into absence."""
+        service, workspace = self._open()
+        warning = "lsof: WARNING: can't stat() fixturefs file system /foreign/mount\n"
+        for returncode, stdout, code in (
+            (0, "", "lane_workspace_inspection_unavailable"),
+            (2, "", "lane_workspace_inspection_unavailable"),
+            (1, "unexpected output\n", "lane_workspace_inspection_unavailable"),
+            (1, "p123\nn" + str(workspace / "tracked.txt") + "\n", "lane_workspace_in_use"),
+        ):
+            with self.subTest(returncode=returncode, stdout=stdout):
+                self._lsof_result(warning, stdout, returncode)
+                self._refused(lambda: self._force(service), code)
+                self.assertTrue(workspace.is_dir())
+        self.assertEqual(["open"], [r["state"] for r in self.fixture._records()])
+
     def test_unrecorded_directory_survives_forced_close(self):
         """Catches treating a matching layout path as deletion authority."""
         service = self.fixture._service()
@@ -57,6 +127,25 @@ class LaneWorkspaceSafetyTests(unittest.TestCase):
         self._refused(lambda: self._force(service))
         self.assertTrue(workspace.is_dir())
         self.assertEqual(["open"], [record["state"] for record in self.fixture._records()])
+
+    def test_directory_testimony_preserves_embedded_newline_paths(self):
+        """Git's line-delimited directory output must not split a valid path."""
+        fixture = self.fixture
+        repository = fixture.base / "repository\nwith-newline"
+        fixture.repository.rename(repository)
+        fixture.repository = repository
+        fixture.lanes_root = fixture.base / "lanes\nwith-newline"
+        fixture._state("lanes-root.json", {"schema_version": 0, "path": str(fixture.lanes_root)})
+        fixture._state("lane-repositories.json", {"schema_version": 0, "repositories": {
+            "fixture": {"path": str(repository), "default_base": "refs/remotes/origin/main"}}})
+        service, workspace = self._open()
+        opening = fixture._records()[0]
+        with service.validated_binding("builder", opening["id"], "fixture") as binding:
+            self.assertEqual(workspace, binding["workspace"])
+            self.assertEqual(repository / ".git", binding["git_common_dir"])
+        service.close(actor="builder", row="safety-row")
+        self.assertFalse(workspace.exists())
+        self.assertEqual(["open", "closed"], [record["state"] for record in fixture._records()])
 
     def test_new_lane_overrides_fence_without_changing_shared_parent(self):
         """Catches either inherited seat fences or clearing another checkout's fence."""

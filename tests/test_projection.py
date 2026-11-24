@@ -3,7 +3,10 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import tempfile
+import fcntl
+import threading
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -64,7 +67,11 @@ class FleetProjectionTests(unittest.TestCase):
         self.assertNotIn("mode", snapshot)
         self.assertEqual([public_ids.worker('alpha'), "bravo"], [node["node_id"] for node in snapshot["nodes"]])
         self.assertEqual({"open": 1, "claimed": 0, "completed": 0}, snapshot["work_counts"])
-        self.assertEqual({"delivery": 1, "ack": 1, "denial": 1}, snapshot["receipt_counts"])
+        # BUS-DELIVERY-UNPRESENTED-1: the fixture's delivery carries no live
+        # presenter journal, so it receipts delivered_unpresented; the frozen
+        # contract's delivery counter stays presented-deliveries only, and the
+        # count itself lives on the seat board, not in this closed artifact.
+        self.assertEqual({"delivery": 0, "ack": 1, "denial": 1}, snapshot["receipt_counts"])
         self.assertEqual(0, snapshot["stale_lease_count"])
 
     def test_versioned_status_artifact_adds_contract_fields_and_report_only_mode(self) -> None:
@@ -180,6 +187,144 @@ class FleetProjectionTests(unittest.TestCase):
             artifact,
             Path("schemas/v1/effect-status-artifact.schema.json"),
         )
+
+
+class ReceiptHistorySnapshotTests(unittest.TestCase):
+    """Complete receipt output must not hold append locks over history I/O."""
+
+    def setUp(self) -> None:
+        from floati.message_consumption import MessageConsumption
+
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = FloatiRoot.open_direct_home(Path(self.temp.name) / "fleet", create=True)
+        registry = Registry(self.root)
+        registry.register("sender", "Codex")
+        registry.register("recipient", "Codex")
+        events = EventLog(self.root)
+        message = events.send("sender", "recipient", "floati", "a" * 40,
+            "docs/evidence/receipt-history.md", "receipt snapshot fixture",
+            idempotency_key="receipt-history")["message"]
+        _messages, delivery = events.present("recipient")
+        ack = SparseCursor(self.root).ack("recipient", [message["id"]], acting_session_id="receipt-session")
+        consumed = MessageConsumption(self.root).consume("recipient", message["id"], "receipt-session")
+        self.expected = dict(node_id="recipient", deliveries=[delivery], acks=[ack],
+                             consumptions=[consumed], denials=[])
+        self.paths = {family: self.root.resolve_relative("receipts/" + family + "/recipient.jsonl")
+                      for family in ("deliveries", "acks")}
+
+    def query(self):
+        from floati.projection import FleetProjection
+        return FleetProjection(self.root).receipts("recipient")
+
+    def observe_reads(self, callback):
+        from tests.test_incremental_jsonl import _ObservedHistoryReader
+        native_open = Path.open
+
+        def opening(path, mode="r", *args, **kwargs):
+            stream = native_open(path, mode, *args, **kwargs)
+            if mode == "rb" and path in self.paths.values():
+                return _ObservedHistoryReader(stream, lambda: callback(path))
+            return stream
+
+        return mock.patch.object(Path, "open", opening)
+
+    @staticmethod
+    def with_ledger_writer(path, callback=lambda: None):
+        with path.with_name(path.name + ".lock").open("a+b") as lock:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            try:
+                callback()
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        return True
+
+    def test_receipt_history_releases_delivery_and_ack_locks_during_reads_and_decode(self) -> None:
+        from floati import jsonl
+        reads, decodes = [], []
+        native_decode = jsonl._decode_path_records
+
+        def reading(path):
+            reads.append((path, self.with_ledger_writer(path)))
+
+        def decoding(path, *args, **kwargs):
+            if path in self.paths.values():
+                decodes.append((path, self.with_ledger_writer(path)))
+            return native_decode(path, *args, **kwargs)
+
+        with self.observe_reads(reading), mock.patch.object(jsonl, "_decode_path_records", decoding):
+            result = self.query()
+        self.assertEqual(self.expected, result)
+        self.assertEqual(set(self.paths.values()), {path for path, _available in reads})
+        self.assertEqual(set(self.paths.values()), {path for path, _available in decodes})
+        self.assertTrue(all(available for _path, available in reads),
+                        "receipt history retains a delivery or ACK ledger lock during file I/O")
+        self.assertTrue(all(available for _path, available in decodes),
+                        "receipt history retains a delivery or ACK ledger lock during decoding")
+
+    def assert_append_is_sealed(self, family):
+        from floati.framing import encode_frame
+
+        path = self.paths[family]
+        key = "deliveries" if family == "deliveries" else "acks"
+        original = self.expected[key][0]
+        prefix = "delivery-" if family == "deliveries" else "ack-"
+        appended = dict(original, id=prefix + uuid7_hex())
+        if "presentation_count" in appended:
+            appended["presentation_count"] += 1
+        did_append = []
+
+        def reading(selected):
+            if selected != path or did_append:
+                return
+            def append():
+                with path.open("ab") as stream:
+                    stream.write(encode_frame(appended))
+            self.assertTrue(self.with_ledger_writer(path, append))
+            did_append.append(True)
+
+        with self.observe_reads(reading):
+            result = self.query()
+        self.assertEqual([True], did_append)
+        self.assertEqual(self.expected, result, "receipt export escaped its sealed append boundary")
+        expected_next = dict(self.expected, **{key: [original, appended]})
+        self.assertEqual(expected_next, self.query())
+
+    def test_delivery_append_after_capture_is_visible_only_to_the_next_receipt_query(self) -> None:
+        self.assert_append_is_sealed("deliveries")
+
+    def test_ack_append_after_capture_is_visible_only_to_the_next_receipt_query(self) -> None:
+        self.assert_append_is_sealed("acks")
+
+    def test_receipt_history_retains_native_epoch_barrier_while_reading_both_planes(self) -> None:
+        from floati import bus_epoch
+        outcomes = []
+
+        def reading(path):
+            result = []
+            def contender():
+                try:
+                    with bus_epoch.epoch_guard(self.root, exclusive=True):
+                        result.append("epoch_writer_admitted")
+                except ProtocolRefusal as failure:
+                    result.append(failure.code)
+                except BaseException as failure:
+                    result.append(repr(failure))
+            writer = threading.Thread(target=contender)
+            writer.start()
+            writer.join(timeout=2)
+            self.assertFalse(writer.is_alive(), "native epoch contender exceeded its bounded attempt")
+            outcomes.append((path, result))
+
+        with mock.patch.object(bus_epoch, "EPOCH_LOCK_TIMEOUT_SECONDS", 0), self.observe_reads(reading):
+            result = self.query()
+        self.assertEqual(self.expected, result)
+        self.assertEqual(set(self.paths.values()), {path for path, _result in outcomes})
+        self.assertTrue(all(result == ["epoch_lock_timeout"] for _path, result in outcomes),
+                        "native epoch writer can replace a receipt plane while history bytes are read")
 
 
 if __name__ == "__main__":

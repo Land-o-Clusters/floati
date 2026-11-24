@@ -57,6 +57,7 @@ _ADAPTER_CONTRACTS = {
 _UUID7 = r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}"
 _HEX32 = re.compile(r"[0-9a-f]{32}\Z")
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+_REMOTE_GIT_OID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _OPERATION_ID = re.compile(r"effect-op-" + _UUID7 + r"\Z")
 _EVIDENCE_ID = re.compile(
     r"(?:effect-confirmed|effect-failed|effect-unknown|effect-reconciled)-"
@@ -338,10 +339,16 @@ def _confirmation(value: object, field: str) -> dict[str, object]:
     kind = value["kind"]
     if type(kind) is not str or kind not in _CONFIRMATION_KINDS:
         _refuse("reconciliation_protocol_confirmation_invalid", field + " kind is outside the closed set")
+    expected_digest = value["expected_digest"]
+    if kind == "git_remote_ref_equals":
+        if type(expected_digest) is not str or _REMOTE_GIT_OID.fullmatch(expected_digest) is None:
+            _refuse("reconciliation_protocol_confirmation_invalid", field + ".expected_digest must be one full remote Git object ID")
+    else:
+        expected_digest = _sha256(expected_digest, field + ".expected_digest")
     return {
         "kind": kind,
         "locator": _safe_string(value["locator"], field + ".locator", maximum=1024),
-        "expected_digest": _sha256(value["expected_digest"], field + ".expected_digest"),
+        "expected_digest": expected_digest,
     }
 
 
@@ -538,7 +545,7 @@ def _remote_observation(
     expected_scope = classify_remote_coordinate(request.target["coordinate"])
     if (
         type(observed) is not str
-        or _HEX64.fullmatch(observed) is None
+        or _REMOTE_GIT_OID.fullmatch(observed) is None
         or type(scope) is not str
         or scope != expected_scope
     ):

@@ -19,6 +19,8 @@ v1 schema — no encoder change, no epoch roll.
 from __future__ import annotations
 
 import io
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 import socket
@@ -33,9 +35,64 @@ from floati.confluence import ConfluenceGrantLedger, confluence_adopt, confluenc
 from floati.errors import ProtocolRefusal
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.banked_sha_fixture import banked_send_repository
 from tests.temp_roots import REAL_TEMP_ROOT
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
+
+
+@contextmanager
+def observe_bundle_ledger_byte_reads(root):
+    """Probe real ledger/epoch contention at each actual payload read."""
+    observed = []
+    ordinary_open = Path.open
+
+    class ObservedLedger:
+        def __init__(self, path, handle):
+            self.path, self.handle = path, handle
+
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+
+        def __exit__(self, *exception):
+            return self.handle.__exit__(*exception)
+
+        def __getattr__(self, name):
+            return getattr(self.handle, name)
+
+        def read(self, *arguments):
+            lock = self.path.with_name(self.path.name + ".lock")
+            with ordinary_open(lock, "rb") as contender:
+                try:
+                    fcntl.flock(contender.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    ledger_released = False
+                else:
+                    ledger_released = True
+                    fcntl.flock(contender.fileno(), fcntl.LOCK_UN)
+            epoch = os.open(root.path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                try:
+                    fcntl.flock(epoch, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    epoch_protected = True
+                else:
+                    epoch_protected = False
+                    fcntl.flock(epoch, fcntl.LOCK_UN)
+            finally:
+                os.close(epoch)
+            observed.append((self.path.relative_to(root.path).as_posix(), ledger_released, epoch_protected))
+            return self.handle.read(*arguments)
+
+    def open_observed(path, mode="r", *arguments, **keywords):
+        handle = ordinary_open(path, mode, *arguments, **keywords)
+        if mode == "rb" and path.suffix == ".jsonl" and root.path in path.parents:
+            return ObservedLedger(path, handle)
+        return handle
+
+    with mock.patch.object(Path, "open", open_observed):
+        yield observed
 
 
 class ConfluenceSeamTests(unittest.TestCase):
@@ -133,6 +190,21 @@ class ConfluenceSeamTests(unittest.TestCase):
             first.read_bytes(), second.read_bytes(),
             "the same root state produced two different bundles")
 
+    def test_complete_bundle_reads_release_ledger_lock_but_preserve_epoch_and_bytes(self) -> None:
+        from floati.confluence import materialize_bundle
+
+        self.ledger(self.root_a).grant("puddle", "bundle-sealed-read")
+        baseline = materialize_bundle(self.root_a, consumer="puddle", out=self.base / "baseline.json").read_bytes()
+        with observe_bundle_ledger_byte_reads(self.root_a) as reads:
+            output = materialize_bundle(self.root_a, consumer="puddle", out=self.base / "observed.json")
+        self.assertEqual(baseline, output.read_bytes(), "the complete bundle testimony must remain byte-identical")
+        self.assertEqual({"confluence/grants.jsonl", "receipts/deliveries/builder-b.jsonl"},
+                         {path for path, _released, _protected in reads})
+        self.assertTrue(all(released for _path, released, _protected in reads),
+                        "complete ledger byte reads must release their ledger lock before reading payload: " + repr(reads))
+        self.assertTrue(all(protected for _path, _released, protected in reads),
+                        "native epoch replacement must remain excluded while snapshot bytes detach: " + repr(reads))
+
     def test_bundle_is_stamped_with_the_grant_id(self) -> None:
         """Acceptance pin 5: the bundle names the grant it was produced
         under, and the document validates against the v1 bundle schema
@@ -220,14 +292,18 @@ class ConfluenceCliRoundTrip(unittest.TestCase):
         base = Path(temporary.name)
         root = base / "fleet"
 
-        def cli(*arguments: str, expect: int = 0) -> dict:
+        def cli(*arguments: str, expect: int = 0, cwd: Path | None = None) -> dict:
             completed = subprocess.run(
                 [sys.executable, "-m", "floati", *arguments],
-                cwd=str(REPOSITORY_ROOT),
+                cwd=str(REPOSITORY_ROOT if cwd is None else cwd),
                 capture_output=True,
                 text=True,
                 timeout=120,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                env={
+                    **os.environ,
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONPATH": str(REPOSITORY_ROOT),
+                },
             )
             self.assertEqual(
                 expect, completed.returncode,
@@ -240,11 +316,15 @@ class ConfluenceCliRoundTrip(unittest.TestCase):
             "--harness", "codex")
         cli("register", "--root", str(root), public_ids.builder("b"),
             "--harness", "codex")
+        # SEND-SHA-RESOLVES-1: the send runs from a repository that holds
+        # the sha it names, so the round trip exercises the seam, not the
+        # absent-sha fence.
+        repository, sha = banked_send_repository(base)
         cli("send", "--root", str(root), "--from", public_ids.builder("a"),
             "--to", public_ids.builder("b"),
-            "--repo", "smoke", "--sha",
-            "01a0530000007000800000000000000000000000",
-            "--doc", "docs/CONFLUENCE-v0.md", "--note", "confluence round trip")
+            "--repo", "smoke", "--sha", sha,
+            "--doc", "docs/CONFLUENCE-v0.md", "--note", "confluence round trip",
+            cwd=repository)
         cli("inbox", "--root", str(root),
             "--as", public_ids.builder("b"), "--peek")  # pull writes delivery receipts
         cli("confluence", "grant", "--root", str(root),

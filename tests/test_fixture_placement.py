@@ -45,6 +45,7 @@ import sys
 import tempfile
 import unittest
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from tests.export_inventory import (
@@ -118,6 +119,7 @@ def _anchored_on_repository(root: ast.AST | None) -> bool:
     return root is None or isinstance(root, (ast.Name, ast.Call))
 
 
+@lru_cache(maxsize=4096)
 def _guarded(function: ast.AST) -> bool:
     for node in ast.walk(function):
         if isinstance(node, ast.Call) and _call_name(node) in _GUARD_CALLS:
@@ -172,6 +174,14 @@ def _walk(tree: ast.AST) -> tuple[list[tuple[int, str, ast.AST | None, ast.AST |
     return found, dynamic
 
 
+@lru_cache(maxsize=2048)
+def _source_walk(source: bytes):
+    # Only syntax is retained. Every survey still reads the current tracked
+    # population, exact source bytes and export classification policy.
+    found, dynamic = _walk(ast.parse(source.decode("utf-8")))
+    return tuple(found), dynamic
+
+
 def survey(root: Path = REPOSITORY_ROOT) -> Survey:
     """Walk every shipped `tests/**/*.py` and report every path site it names."""
 
@@ -188,7 +198,7 @@ def survey(root: Path = REPOSITORY_ROOT) -> Survey:
         if relative not in shipped:
             continue
         walked += 1
-        found, module_dynamic = _walk(ast.parse(source.read_text(encoding="utf-8")))
+        found, module_dynamic = _source_walk(source.read_bytes())
         dynamic += module_dynamic
         for lineno, value, join_root, function in found:
             if not value or value.startswith("/") or "/" not in value:

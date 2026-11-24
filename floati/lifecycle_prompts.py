@@ -1,4 +1,4 @@
-"""LC-GEN: project per-seat lifecycle command files from the LC-1 taxonomy.
+"""LC-GEN: project lifecycle commands from the LC-1 taxonomy.
 
 Ruling ``docs/rulings/2026-09-05-lc-1-lifecycle-taxonomy-ruling.md`` §LC-1d:
 one generator verb (``node prompts``) projects, from the role template, the
@@ -10,7 +10,8 @@ names for every file name the adapter's pattern yields (LC-GEN-R1 a),
 and a file already under ``--out`` that does not carry the generator
 header is refused by path — only generator-headed files are overwritten
 (LC-GEN-R1 b); and the generator writes ONLY under the caller's
-``--out`` — it never installs.
+``--out``. The separate governed installer helper installs only the
+identity-free seat command pair in a harness's fixed workspace directory.
 """
 
 from __future__ import annotations
@@ -18,11 +19,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
 from .admin_registry import RegistryAdminBackend
 from .errors import ProtocolRefusal
+from .git_process import GIT_MAINTENANCE_OPTIONS
 from .role_library import RoleTemplateLibrary
 from .role_templates import RoleTemplate
 from .root import FloatiRoot, validate_identifier
@@ -61,7 +64,7 @@ def reserved_names() -> frozenset[str]:
 HARNESS_ADAPTERS: dict[str, dict] = {
     "codex": {
         "prompts_dir": ".codex/prompts",
-        "verbs": ("boot", "board", "drain", "pause", "resume", "prep-clear"),
+        "verbs": ("board", "drain", "pause", "resume", "prep-clear"),
         "file_pattern": "{verb}-{node}",
     },
     "claude": {
@@ -70,11 +73,18 @@ HARNESS_ADAPTERS: dict[str, dict] = {
         "file_pattern": "{verb}-{node}",
     },
     "zcode": {
-        "prompts_dir": None,  # the projection is BOOT.md's verb section
-        "verbs": ("boot", "prep-clear"),  # §1: the BOOT.md §clear calls prep-clear
-        "file_pattern": "boot-{node}",
+        "prompts_dir": ".",  # BOOT.md references the shared command pair
+        "verbs": ("prep-clear",),
+        "file_pattern": "{verb}-{node}",
+    },
+    "cursor": {
+        "prompts_dir": ".cursor/commands",
+        "verbs": ("board", "drain"),
+        "file_pattern": "{verb}-{node}",
     },
 }
+
+SEAT_COMMAND_HARNESSES = frozenset({"cursor", "codex", "zcode", "claude"})
 
 #: Honest dashes with their receipts (LC-1b): a cell is a dash, never a
 #: gap, when the harness cannot realize the verb today.
@@ -111,6 +121,20 @@ DASH_RECEIPTS: dict[tuple[str, str], str] = {
         "dash: WIND-DOWN then BOARD; the receipts link by the wake claim's "
         "predecessor id (LC-1 §1 TURNOVER)"
     ),
+    ("cursor", "pause"): (
+        "dash: wake pause/resume verbs by hand; no file wrapper (LC-1 §1 PAUSE/RESUME)"
+    ),
+    ("cursor", "resume"): (
+        "dash: wake pause/resume verbs by hand; no file wrapper (LC-1 §1 PAUSE/RESUME)"
+    ),
+    ("cursor", "prep-clear"): (
+        "dash: the product node prep-clear verb runs by hand; no file wrapper "
+        "(LC-1 §1 PREP-CLEAR)"
+    ),
+    ("cursor", "turnover"): (
+        "dash: WIND-DOWN then BOARD; the receipts link by the wake claim's "
+        "predecessor id (LC-1 §1 TURNOVER)"
+    ),
 }
 
 _GIT_CANDIDATES = ("/usr/bin/git", "/bin/git")
@@ -129,6 +153,7 @@ VERB_COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
     "pause": (("wake", "pause"),),
     "resume": (("wake", "resume"),),
     "prep-clear": (("node", "prep-clear"),),
+    "teardown": (("node", "teardown"),),
 }
 
 _PROVIDED = ("--root", "--as")
@@ -159,6 +184,8 @@ def _command_line(path: tuple[str, ...], root: str, node: str) -> str:
             continue
         placeholder = (action.metavar or action.dest).upper().replace("-", "_")
         parts.extend([option, placeholder])
+    if path == ("seat", "board"):
+        parts.append("--take-over")
     return " ".join(parts)
 
 
@@ -177,7 +204,7 @@ def harbor_sha() -> str:
         if not os.access(candidate, os.X_OK):
             continue
         result = subprocess.run(
-            [candidate, "rev-parse", "HEAD"],
+            [candidate, *GIT_MAINTENANCE_OPTIONS, "rev-parse", "HEAD"],
             cwd=str(REPOSITORY_ROOT),
             env=env,
             capture_output=True,
@@ -224,7 +251,7 @@ def _header(source: str, sha: str) -> str:
     )
 
 
-def _write_projection(target: Path, content: str) -> None:
+def _check_projection_target(target: Path) -> None:
     """LC-GEN-R1 (b): only generator-headed files under --out are ours.
 
     A file already under the output directory without the marker is
@@ -232,8 +259,23 @@ def _write_projection(target: Path, content: str) -> None:
     marker is this generator's and is overwritten, as the header says.
     """
 
+    if target.is_symlink() or any(parent.is_symlink() for parent in target.parents):
+        raise ProtocolRefusal(
+            "lifecycle_prompts_target_invalid", f"{target} is symlinked",
+            remedy="use ordinary command files inside the declared seat workspace",
+        )
     if target.exists():
+        if not target.is_file():
+            raise ProtocolRefusal(
+                "lifecycle_prompts_target_invalid", f"{target} is not a regular file",
+                remedy="use an ordinary command file inside the declared seat workspace",
+            )
         existing = target.read_text(encoding="utf-8", errors="replace")
+        if target.name == "SKILL.md" and existing.startswith("---\n"):
+            # Native skills require front matter before the ownership marker.
+            _, separator, body = existing[4:].partition("\n---\n")
+            if separator:
+                existing = body.lstrip("\n")
         if not existing.startswith(GENERATED_MARKER):
             raise ProtocolRefusal(
                 "lifecycle_prompts_target_foreign",
@@ -241,11 +283,154 @@ def _write_projection(target: Path, content: str) -> None:
                 "carry the generator header; it is not this generator's file",
                 remedy="project into an empty directory, or move the foreign file",
             )
+
+
+def _write_projection(target: Path, content: str) -> None:
+    _check_projection_target(target)
     target.write_text(content, encoding="utf-8")
 
 
 def _digest(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _seat_command_contents(
+    harness: str, sha: str | None = None, *, runtime: Path | None = None,
+) -> dict[str, str]:
+    """The shared pair contains no fleet, node, role, or session identity."""
+
+    def header(source: str) -> str:
+        if sha is not None:
+            return _header(source, sha)
+        # Installed bundles need no Git checkout to project these commands.
+        return f"{GENERATED_MARKER} ({source})\n     hand edits are overwritten -->"
+
+    common = [
+        "Run from the current seat workspace containing its governed `SEAT.json`.",
+        "The product resolves the root and node from that declaration and the registry.",
+        "An optional node argument is only an assertion; never choose another root or node.",
+        "If this chat is rooted elsewhere, stop and present the product's rooting remedy; "
+        "open the declared seat workspace before retrying.",
+        "Read the harness's actual current session id from its native runtime evidence. "
+        "Pass it explicitly as `--session SESSION`; never invent or omit a session id.",
+        "Pass an optional asserted node as `--node NODE`; omit that option when absent.",
+    ]
+    if harness == 'claude':
+        common.append('Command arguments supplied by the owner: $ARGUMENTS')
+    elif harness == 'codex':
+        common.append('Read command arguments from the current owner message.')
+    result = {}
+    for verb in ("boot", "teardown"):
+        executable = str(runtime / 'scripts/floati') if runtime is not None else 'floati'
+        invocation = shlex.join([executable, 'node', verb])
+        extra = []
+        if harness == 'claude' and verb == 'boot':
+            invocation += ' --settings SETTINGS'
+            extra = [
+                'Use the explicit absolute Claude settings path supplied in the command '
+                'arguments as SETTINGS. Never discover or default to account settings. '
+                'If no path was supplied, present the settings-required refusal and ask '
+                'for the explicit path before retrying.',
+            ]
+        if verb == "teardown":
+            invocation += " --repo REPO --doc DOC"
+            extra = [
+                "Resolve REPO and the existing committed retention report DOC from the "
+                "seat/session evidence or the command arguments; never invent or omit them.",
+            ]
+        result[f"{verb}-seat.md"] = "\n".join([
+            header(f"{harness} shared {verb} prompt"), "",
+            f"# {verb}-seat", "", *common, *extra, "",
+            f"Run `{invocation}` with the options resolved above.",
+            "Read the single JSON artifact and its receipts. Present a typed refusal "
+            "and its remedy unchanged; report success only when the artifact proves it.",
+            "",
+        ])
+    if harness == "zcode":
+        result["BOOT.md"] = "\n".join([
+            header("zcode shared lifecycle entrypoint"), "",
+            "# Seat lifecycle", "",
+            "To boot this seat, read `boot-seat.md` and perform its command.",
+            "To end this session, read `teardown-seat.md` and perform its command.",
+            "Both commands resolve identity from the current workspace's `SEAT.json`.",
+            "",
+        ])
+    return result
+
+
+def plan_seat_commands(
+    workspace: Path, harness: str, *, codex_home: Path | None = None,
+    runtime: Path | None = None,
+) -> tuple[Path, dict[str, str]]:
+    """Render and validate the shared commands without touching their targets."""
+
+    workspace = Path(workspace)
+    if harness not in SEAT_COMMAND_HARNESSES:
+        raise ProtocolRefusal(
+            "lifecycle_prompts_harness_unsupported",
+            f"shared seat commands are not implemented for {harness!r}",
+            remedy="use Cursor, Codex, zcode or Claude",
+        )
+    if not workspace.is_absolute() or workspace.is_symlink():
+        raise ProtocolRefusal(
+            "lifecycle_prompts_workspace_invalid",
+            "workspace must be an existing absolute nonsymlink directory",
+            remedy="run the governed hook installer for the declared seat workspace",
+        )
+    if codex_home is not None:
+        codex_home = Path(codex_home)
+        if harness != 'codex' or not codex_home.is_absolute() or codex_home.resolve() != codex_home:
+            raise ProtocolRefusal('lifecycle_prompts_target_invalid',
+                'native Codex commands require the explicit canonical Codex configuration home',
+                remedy='use the same ordinary Codex home as the governed hooks file')
+        # Codex 0.164 retains CODEX_HOME/skills; prompts are no longer loaded.
+        out_dir = codex_home / 'skills'
+    elif harness == 'codex':
+        out_dir = workspace / '.agents/skills'
+    else:
+        out_dir = workspace / HARNESS_ADAPTERS[harness]["prompts_dir"]
+    if harness == 'codex':
+        runtime = Path(runtime) if runtime is not None else REPOSITORY_ROOT
+        if not runtime.is_absolute() or runtime.resolve() != runtime or not runtime.is_dir():
+            raise ProtocolRefusal('lifecycle_prompts_target_invalid',
+                'native Codex commands require the canonical installed runtime directory',
+                remedy='use the runtime recorded by the governed hook installer')
+    contents = _seat_command_contents(harness, runtime=runtime)
+    if harness == 'codex':
+        contents = {
+            f'{Path(name).stem}/SKILL.md': (
+                f'---\nname: {Path(name).stem}\n'
+                f'description: {Path(name).stem.split("-")[0].capitalize()} the current '
+                'declared Floati seat only on an explicit owner request.\n---\n\n' + content
+            )
+            for name, content in contents.items()
+        }
+    for name in contents:
+        _check_projection_target(out_dir / name)
+    return out_dir, contents
+
+
+def install_seat_commands(
+    workspace: Path, harness: str, *, codex_home: Path | None = None,
+    runtime: Path | None = None,
+) -> dict:
+    """Install the shared pair through a governed hook installer, without a role."""
+
+    if not Path(workspace).is_dir():
+        raise ProtocolRefusal(
+            "lifecycle_prompts_workspace_invalid",
+            "workspace must be an existing absolute nonsymlink directory",
+            remedy="run the governed hook installer for the declared seat workspace",
+        )
+    out_dir, contents = plan_seat_commands(workspace, harness, codex_home=codex_home,
+                                            runtime=runtime)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = []
+    for name, content in sorted(contents.items()):
+        (out_dir / name).parent.mkdir(parents=True, exist_ok=True)
+        _write_projection(out_dir / name, content)
+        files.append({"path": name, "sha256": _digest(content)})
+    return {"harness": harness, "out": str(out_dir), "files": files}
 
 
 def _verb_body(
@@ -260,6 +445,13 @@ def _verb_body(
         f"**{verb.upper()}.**",
     ]
     lines.extend(_verb_lines(verb, root_path, node))
+    if verb == "board":
+        lines.extend([
+            "",
+            "On success, present the artifact's verified `takeover_report` verbatim: "
+            "`TOOK OVER <node> from <newly displaced session or none>`.",
+            "Replay preserves historical displacement and reports no new displacement.",
+        ])
     lines.extend([
         "",
         "Fill the uppercase placeholders from your seat declaration, never "
@@ -299,14 +491,33 @@ def project_prompts(root: FloatiRoot, node: str, harness: str, out_dir: Path) ->
         )
     node = validate_identifier(node, "node")
     backend = RegistryAdminBackend(root)
-    entry = backend.active_node(node)
-    if str(entry.get("role", "")).casefold() != harness.casefold():
-        raise ProtocolRefusal(
-            "lifecycle_prompts_harness_mismatch",
-            f"node {node!r} is registered on harness {entry.get('role')!r}, "
-            f"not {harness!r}",
-        )
-    role = backend.role_record(node)
+    with backend.read_once(node_id=node):
+        entry = backend.active_node(node)
+        if str(entry.get("role", "")).casefold() != harness.casefold():
+            registered_harness = str(entry.get("role", "")).casefold()
+            detail = (
+                f"node {node!r} is registered on harness {entry.get('role')!r}, "
+                f"not {harness!r}"
+            )
+            if registered_harness in HARNESS_ADAPTERS:
+                remedy = shlex.join([
+                    "floati", "node", "prompts", "--root", str(root.tenant_home),
+                    "--as", node, "--harness", registered_harness,
+                    "--out", str(out_dir),
+                ])
+            else:
+                detail += (
+                    "; the registered harness has no lifecycle adapter; the operator "
+                    "can correct the assignment with node switch or re-register "
+                    "the node using its intended harness and model"
+                )
+                remedy = "floati node switch --help"
+            raise ProtocolRefusal(
+                "lifecycle_prompts_harness_mismatch",
+                detail,
+                remedy=remedy,
+            )
+        role = backend.role_record(node)
     templates = RoleTemplateLibrary(root).templates()
     template = templates.get(str(role["template_role"]))
     if template is None:
@@ -318,9 +529,11 @@ def project_prompts(root: FloatiRoot, node: str, harness: str, out_dir: Path) ->
 
     parity: dict[str, str] = {}
     for verb in LIFECYCLE_VERBS:
-        if verb in adapter["verbs"]:
+        if harness in SEAT_COMMAND_HARNESSES and verb == "boot":
+            parity[verb] = "file:boot-seat.md"
+        elif verb in adapter["verbs"]:
             stem = _file_stem(
-                adapter, "boot" if harness == "zcode" else verb, node
+                adapter, verb, node
             )
             parity[verb] = f"file:{stem}.md"
         elif (harness, verb) in DASH_RECEIPTS:
@@ -331,29 +544,36 @@ def project_prompts(root: FloatiRoot, node: str, harness: str, out_dir: Path) ->
                 f"verb {verb!r} on harness {harness!r} is neither realized nor "
                 "an honest dash (LC-1 §1)",
             )
+    for verb in adapter["verbs"]:
+        if verb in parity:
+            continue
+        stem = _file_stem(
+            adapter, verb, node
+        )
+        parity[verb] = f"file:{stem}.md"
 
+    contents = {}
+    for verb in adapter["verbs"]:
+        if verb == 'boot' and harness in SEAT_COMMAND_HARNESSES:
+            continue
+        stem = _file_stem(adapter, verb, node)
+        assert_no_collision(stem)
+        contents[f"{stem}.md"] = "\n".join([
+            _header(f"{harness} {verb} prompt", sha), "",
+            _verb_body(verb, node, role, template, root_path), "",
+        ]) + "\n"
+    if harness in SEAT_COMMAND_HARNESSES:
+        contents.update(_seat_command_contents(harness, sha))
+        parity["teardown"] = "file:teardown-seat.md"
+    for name in contents:
+        assert_no_collision(Path(name).stem)
+        _check_projection_target(out_dir / name)
     out_dir.mkdir(parents=True, exist_ok=True)
     files: list[dict[str, str]] = []
-    if harness == "zcode":
-        stem = _file_stem(adapter, "boot", node)
-        assert_no_collision(stem)
-        content = _zcode_section(node, sha, parity, root_path)
-        target = out_dir / f"{stem}.md"
+    for name, content in contents.items():
+        target = out_dir / name
         _write_projection(target, content)
-        files.append({"path": target.name, "sha256": _digest(content)})
-    else:
-        for verb in adapter["verbs"]:
-            stem = _file_stem(adapter, verb, node)
-            assert_no_collision(stem)
-            content = "\n".join([
-                _header(f"{harness} {verb} prompt", sha),
-                "",
-                _verb_body(verb, node, role, template, root_path),
-                "",
-            ]) + "\n"
-            target = out_dir / f"{stem}.md"
-            _write_projection(target, content)
-            files.append({"path": target.name, "sha256": _digest(content)})
+        files.append({"path": name, "sha256": _digest(content)})
 
     files.sort(key=lambda file_entry: file_entry["path"])
     return {

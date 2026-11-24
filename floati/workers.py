@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Mapping, Optional, Protocol, Sequence
 
-from .errors import IntegrityFailure, ProtocolRefusal
+from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import append_record, read_records_snapshot, transact
+from .jsonl import append_record, read_records_snapshot, _transact_worker_receipt
 from .records import WORKER_OUTCOME_CODES, validate_artifact_bindings, validate_record
 from .registry import Registry
 from .root import FloatiRoot
@@ -27,6 +27,7 @@ from .worker_isolation import (
     apply_worker_isolation,
     cleanup_worker_isolation,
     prepare_worker_isolation,
+    prepare_borrowed_worker_isolation,
 )
 from .worker_errors import WorkerAdapterFailure
 from .worker_bootstrap_protocol import (
@@ -36,6 +37,8 @@ from .worker_bootstrap_protocol import (
     isolation_policy_to_payload,
     validate_builtin_adapter_spec,
     validate_isolation_backend,
+    validate_native_thread_context,
+    require_borrowed_native_readiness,
 )
 from .worker_adapter_runtime import run_adapter_session
 from .worker_exec import (
@@ -114,7 +117,7 @@ _WORKER_PROCESS_LOSS_DOMAIN = _RETIRED_NAME + "-worker-effect-process-loss-v1"
 def _cleanup_unused_prepared_workspace(policy: WorkerIsolationPolicy) -> None:
     """Remove only the still-identical empty workspace from a pre-ready failure."""
 
-    if policy.workspace is None or policy.workspace_identity is None:
+    if policy.workspace_mode != "fresh" or policy.workspace is None or policy.workspace_identity is None:
         return
     path = policy.workspace
     try:
@@ -213,6 +216,8 @@ def _adapter_process(
     isolation_policy: Optional[WorkerIsolationPolicy] = None,
 ) -> None:
     try:
+        from .worker_launch_anchors import close_inherited_worker_anchors
+        close_inherited_worker_anchors()
         os.setsid()
         if isolation_policy is not None:
             backend = validate_isolation_backend(
@@ -304,38 +309,47 @@ class WorkerReceipts:
         }
         validate_record(record, self.root.tenant_id, frozenset(WORKER_KINDS), integrity=False)
 
-        def decide(records: list[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
-            projected = self._project(records)
-            prior = [existing for existing in records if existing["session_id"] == session_id]
-            if not prior:
-                if transition != "claim":
-                    raise ProtocolRefusal("worker_transition_invalid", "worker session must begin with claim")
-                if any(row["work_item_id"] == work_item_id for row in projected):
-                    raise ProtocolRefusal(
-                        "worker_claim_already_bound", "work claim already has a worker session"
-                    )
-            else:
-                latest = prior[-1]
-                if (
-                    latest["work_item_id"] != work_item_id
-                    or latest["node_id"] != node_id
-                    or latest["adapter"] != adapter
-                    or latest["authority_subject"] != item["authority_subject"]
-                    or latest["authority_epoch"] != item["authority_epoch"]
-                ):
-                    raise ProtocolRefusal("worker_session_mismatch", "worker session identity cannot change")
-                if transition not in self._NEXT.get(str(latest["transition"]), set()):
-                    raise ProtocolRefusal("worker_transition_invalid", "worker receipt transition is out of order")
-                if transition == "complete" and latest["artifact_bindings"] != record["artifact_bindings"]:
-                    raise ProtocolRefusal(
-                        "worker_completion_mismatch",
-                        "bound artifacts must match the work completion",
-                    )
-            return record, record
+        def prepare(records):
+            # Import and full chronology replay happen before taking the
+            # receipt lock, including on a controller's first append.
+            from .archive_execution_replay import _advance_worker_record
 
-        return transact(
-            self.root, self.relative_path, decide, allowed_kinds=WORKER_KINDS
-        )
+            projected = {str(row["session_id"]): row for row in self._project(records)}
+            work_sessions = {str(row["work_item_id"]): session for session, row in projected.items()}
+            latest_by_session = {str(row["session_id"]): row for row in records}
+
+            def accept(suffix):
+                for row in suffix:
+                    _advance_worker_record(row, projected, work_sessions, self._NEXT, self._STATES)
+                    latest_by_session[str(row["session_id"])] = row
+                latest = latest_by_session.get(session_id)
+                if latest is None:
+                    if transition != "claim":
+                        raise ProtocolRefusal("worker_transition_invalid", "worker session must begin with claim")
+                    if work_item_id in work_sessions:
+                        raise ProtocolRefusal(
+                            "worker_claim_already_bound", "work claim already has a worker session"
+                        )
+                else:
+                    if (
+                        latest["work_item_id"] != work_item_id
+                        or latest["node_id"] != node_id
+                        or latest["adapter"] != adapter
+                        or latest["authority_subject"] != item["authority_subject"]
+                        or latest["authority_epoch"] != item["authority_epoch"]
+                    ):
+                        raise ProtocolRefusal("worker_session_mismatch", "worker session identity cannot change")
+                    if transition not in self._NEXT.get(str(latest["transition"]), set()):
+                        raise ProtocolRefusal("worker_transition_invalid", "worker receipt transition is out of order")
+                    if transition == "complete" and latest["artifact_bindings"] != record["artifact_bindings"]:
+                        raise ProtocolRefusal(
+                            "worker_completion_mismatch",
+                            "bound artifacts must match the work completion",
+                        )
+
+            return accept
+
+        return _transact_worker_receipt(self.root, record, prepare)
 
     def _completion_record(self, work_item_id: str) -> Optional[Dict[str, object]]:
         records = read_records_snapshot(
@@ -354,55 +368,8 @@ class WorkerReceipts:
         return self._project(self.records())
 
     def _project(self, records: Sequence[Dict[str, object]]) -> list[Dict[str, object]]:
-        projected: Dict[str, Dict[str, object]] = {}
-        work_sessions: Dict[str, str] = {}
-        for record in records:
-            session_id = str(record["session_id"])
-            row = projected.get(session_id)
-            if row is None:
-                if record["transition"] != "claim":
-                    raise IntegrityFailure(
-                        "worker_transition_invalid", "durable worker session does not begin with claim"
-                    )
-                work_item_id = str(record["work_item_id"])
-                if work_item_id in work_sessions:
-                    raise IntegrityFailure(
-                        "worker_claim_already_bound", "durable work claim has multiple worker sessions"
-                    )
-                work_sessions[work_item_id] = session_id
-                row = {
-                    "session_id": session_id,
-                    "work_item_id": record["work_item_id"],
-                    "node_id": record["node_id"],
-                    "adapter": record["adapter"],
-                    "authority_subject": record["authority_subject"],
-                    "authority_epoch": record["authority_epoch"],
-                    "artifact_bindings": [],
-                }
-                projected[session_id] = row
-            else:
-                if (
-                    row["work_item_id"] != record["work_item_id"]
-                    or row["node_id"] != record["node_id"]
-                    or row["adapter"] != record["adapter"]
-                    or row["authority_subject"] != record["authority_subject"]
-                    or row["authority_epoch"] != record["authority_epoch"]
-                ):
-                    raise IntegrityFailure(
-                        "worker_session_mismatch", "durable worker session identity changed"
-                    )
-                if record["transition"] not in self._NEXT.get(str(row["transition"]), set()):
-                    raise IntegrityFailure(
-                        "worker_transition_invalid", "durable worker transition is out of order"
-                    )
-            row["transition"] = record["transition"]
-            row["state"] = self._STATES[str(record["transition"])]
-            row["outcome_code"] = record["outcome_code"]
-            row["last_activity"] = record["timestamp"]
-            for binding in record["artifact_bindings"]:
-                if binding not in row["artifact_bindings"]:
-                    row["artifact_bindings"].append(binding)
-        return list(projected.values())
+        from .archive_execution_replay import _project_worker_records
+        return _project_worker_records(records, self._NEXT, self._STATES)
 
 
 class WorkerRefusals:
@@ -499,6 +466,142 @@ class WorkerRunner:
             "alive_after_cleanup": [],
             "isolation_backend": None,
         }
+        self.last_native_deadline = None
+        self.last_native_events: list[dict] = []
+        self.last_native_failure_code: Optional[str] = None
+        self.last_native_transport: Optional[dict] = None
+
+    def run_exact(self, node_id: str, adapter_name: str, work_item_id: str, *,
+                  native_thread_context: dict, on_native_event: Callable,
+                  startup_prompt: Optional[str] = None,
+                  now: Optional[datetime] = None) -> Dict[str, object]:
+        """Authenticate one borrowed dispatch, then use the shared process owner."""
+        from .adhoc_journal import AdhocJournal
+        from .adhoc_profiles import AdhocProfiles
+        from .planes import AuthorityGrantStore
+        current = self._observe(now)
+        self.last_native_deadline = None
+        self.last_native_events = []
+        self.last_native_failure_code = None
+        self.last_native_transport = None
+        self.last_process_audit = {"adapter_pid": None, "registered_process_groups": [],
+            "alive_after_cleanup": [], "isolation_backend": None}
+        context = validate_native_thread_context(native_thread_context)
+        if startup_prompt is not None:
+            try:
+                prompt_size = len(startup_prompt.encode("utf-8")) if type(startup_prompt) is str else 1_048_577
+            except UnicodeError:
+                prompt_size = 1_048_577
+            if prompt_size > 1_048_576:
+                raise ProtocolRefusal("native_protocol_limit", "startup mail exceeds the serialized prompt budget",
+                    remedy="reduce the frozen startup batch before admitting a new dispatch; do not acknowledge omitted mail")
+        if context["node_id"] != node_id or context["work_item_id"] != work_item_id:
+            raise ProtocolRefusal("adhoc_dispatch_authentication_failed", "exact run selectors differ from native context")
+        spec = self._effect_adapter_specs.get(adapter_name)
+        if spec is None or spec.kind != adapter_name or spec.workspace_mode != "borrowed":
+            raise ProtocolRefusal("adhoc_write_confinement_unsupported",
+                f"W1 UNSUPPORTED for {adapter_name}: exact borrowed run requires a closed borrowed built-in spec")
+        journal = AdhocJournal(self.root)
+        admission = journal.show(context["dispatch_id"])
+        if any(admission[key] != context[key] for key in
+                ("profile_id", "profile_digest", "dispatch_digest")) or admission["actor"] != node_id:
+            raise ProtocolRefusal("adhoc_dispatch_authentication_failed", "native context differs from its durable admission")
+        dispatch = admission["dispatch"]
+        if (dispatch["work_item_id"] != work_item_id or dispatch["operation"] != context["operation"]
+            or dispatch["permission"] != context["permission"]):
+            raise ProtocolRefusal("adhoc_dispatch_authentication_failed", "native context differs from the exact authenticated dispatch")
+        with AdhocProfiles(self.root).validated(context["profile_id"], now=current, require_clean=True) as (profile, binding):
+            expected_binding = {"profile_id": profile["id"], "lane_opening_id": profile["lane_opening_id"],
+                "node_lease_id": profile["node_lease_id"], "workspace": profile["workspace"]}
+            expected_slot = {"path": str(self.root.tenant_home / profile["provider_state"]),
+                **profile["filesystem_bindings"]["provider_state"]}
+            item = self.work.show(work_item_id)[0]
+            if (profile["adapter"] != adapter_name or profile["digest"] != context["profile_digest"]
+                or profile["node_lease_id"] != context["node_lease_id"]
+                or context["workspace_binding"] != expected_binding
+                or item.get("adhoc_binding") != expected_binding
+                or context["provider_state_binding"] != expected_slot):
+                raise ProtocolRefusal("adhoc_binding_changed", "exact native workspace or provider slot differs")
+            journal._authenticate(profile, binding, admission["envelope_id"], dispatch, node_id)
+            journal._require_work(profile, binding, dispatch, node_id, current)
+            effect = context["effect_binding"]
+            if self.effect_controller is None:
+                raise ProtocolRefusal("effect_controller_invalid", "exact borrowed run requires its real parent EffectController")
+            preflight_effect_context = self._governed_effect_context(adapter_name, adapter=None, adapter_spec=spec,
+                run_id=effect["run_id"], item_id=effect["item_id"], attempt_id=effect["attempt_id"],
+                claimed_work_item_id=work_item_id)
+            preflight_spawn_context = self._governed_spawn_context(adapter_name, adapter=None, adapter_spec=spec,
+                run_id=effect["run_id"], item_id=effect["item_id"], attempt_id=effect["attempt_id"],
+                claimed_work_item_id=work_item_id)
+            run = self.effect_controller.run_ledger.project().run(effect["run_id"])
+            if run["dispatches"][effect["attempt_id"]].get("chosen_worker") != node_id:
+                raise ProtocolRefusal("effect_launch_binding_invalid", "native effect dispatch belongs to another worker")
+            grant = AuthorityGrantStore(self.root).exact_tail(dispatch["authority_subject"])
+            self.last_native_deadline = min(float(dispatch["requested_duration"]),
+                (_parse_time(grant["expires_at"]) - current).total_seconds(),
+                (_parse_time(profile["lease_expires_at"]) - current).total_seconds())
+            if self.last_native_deadline <= 0:
+                raise ProtocolRefusal("adhoc_lease_ended", "exact borrowed launch authority has ended")
+            from .native_thread_protocol import NativeThreadProtocol, _NATIVE_PROTOCOL_ACCEPT_CODE
+            receiver = getattr(on_native_event, "__self__", None)
+            body = getattr(on_native_event, "__func__", None)
+            if (type(receiver) is not NativeThreadProtocol
+                or getattr(body, "__code__", None) is not _NATIVE_PROTOCOL_ACCEPT_CODE
+                or body is not NativeThreadProtocol.accept
+                or receiver.context != context or receiver.effects is not self.effect_controller):
+                raise ProtocolRefusal("adhoc_dispatch_authentication_failed", "native parent callback requires the exact authenticated protocol owner")
+            receiver._validate_owners()
+        # The direct borrowed entry is an authority boundary too. An ordinary
+        # effect owner cannot substitute for the profile's explicit human act.
+        from .adhoc_launch import CAPABILITY, WORKER_PROFILE, require_adhoc_launch
+        from .adhoc_execution import authorize_adhoc_capability
+        launch = require_adhoc_launch(self.root, profile, admission, now=current)
+        snapshot = run["capability_sets"].get(effect["attempt_id"])
+        expected_run = "run-" + context["dispatch_id"].removeprefix("adhoc-dispatch-")
+        if (effect["run_id"] != expected_run or snapshot is None
+            or self.effect_controller.policy.digest != launch["policy"].digest
+            or launch["launch_grant"]["id"] not in {row["grant_id"]
+                for row in snapshot["effective_grants"] if row["capability_name"] == CAPABILITY}):
+            raise ProtocolRefusal("effect_launch_binding_invalid",
+                "borrowed launch requires its exact human-approved native capability snapshot",
+                remedy="prepare the exact admitted dispatch through worker adhoc run; retain its human profile grant")
+        authorize_adhoc_capability(self.root, run, work_item_id, node_id, WORKER_PROFILE,
+            snapshot["routing_rank"], self.effect_controller.policy, current)
+        require_borrowed_native_readiness(spec)
+        # Preflight the actual encoded launch size before the durable claim.
+        # The frame budget includes JSON escaping and the fixed launch metadata.
+        from .worker_bootstrap_protocol import _encode_envelope
+        session_id = "worker-" + uuid7_hex()
+        policy = None
+        try:
+            policy = prepare_borrowed_worker_isolation(self.root, expected_binding, session_id)
+            launch_item = dict(item)
+            if startup_prompt is not None:
+                launch_item["native_prompt"] = startup_prompt
+            try:
+                _encode_envelope(("launch", {"schema_version": 1, "session_id": session_id,
+                    "adapter": builtin_adapter_spec_to_payload(spec), "item": launch_item,
+                    "deadline_millis": max(10, int(self.last_native_deadline * 1000)),
+                    "spawn_context": preflight_spawn_context, "effect_context": preflight_effect_context,
+                    "isolation_policy": isolation_policy_to_payload(policy), "native_thread_context": context}))
+            except WorkerAdapterFailure as exc:
+                raise ProtocolRefusal("native_protocol_limit", "startup mail and launch metadata exceed the serialized frame budget",
+                    remedy="reduce the frozen startup batch before admitting a new dispatch; retain this dispatch without launching") from exc
+            result = self.run(node_id, adapter_name, now=now,
+                run_id=effect["run_id"], item_id=effect["item_id"], attempt_id=effect["attempt_id"],
+                _native={"context": context, "callback": on_native_event, "grant": grant,
+                    "session_id": session_id, "policy": policy, "startup_prompt": startup_prompt,
+                    "deadline": self.last_native_deadline, "lease_expires_at": profile["lease_expires_at"]})
+            if result.get("outcome_code") == "effect_worker_isolation_unavailable":
+                raise ProtocolRefusal("adhoc_write_confinement_unsupported",
+                    f"W1 UNSUPPORTED for {adapter_name}: the required native confinement boundary could not be established")
+            return result
+        except WorkerAdapterFailure as exc:
+            raise ProtocolRefusal("adhoc_write_confinement_unsupported",
+                f"W1 UNSUPPORTED for {adapter_name}: " + (exc.detail or "exact borrowed confinement is unavailable")) from exc
+        finally:
+            if policy is not None:
+                cleanup_worker_isolation(policy)
 
     def run(
         self,
@@ -510,7 +613,12 @@ class WorkerRunner:
         run_id: Optional[str] = None,
         item_id: Optional[str] = None,
         attempt_id: Optional[str] = None,
+        _native: Optional[dict] = None,
     ) -> Dict[str, object]:
+        if _native is not None:
+            caller = sys._getframe(1)
+            if caller.f_code is not WorkerRunner.run_exact.__code__ or caller.f_locals.get("self") is not self:
+                raise ProtocolRefusal("adhoc_dispatch_authentication_failed", "borrowed launches require the exact admission path")
         self.last_process_audit = {
             "adapter_pid": None,
             "registered_process_groups": [],
@@ -530,6 +638,15 @@ class WorkerRunner:
                 pass
             raise
         effect_enabled = self.effect_controller is not None
+        if (_native is None and type(self.effect_controller) is _EFFECT_CONTROLLER_TYPE
+            and run_id is not None and attempt_id is not None):
+            run = self.effect_controller.run_ledger.project().run(run_id)
+            snapshot = run["capability_sets"].get(attempt_id)
+            if snapshot is not None and any(grant["capability_name"] == "native_launch"
+                for grant in snapshot["effective_grants"]):
+                raise ProtocolRefusal("effect_launch_binding_invalid",
+                    "native launch approval cannot authorize an ordinary worker run",
+                    remedy="use the authenticated worker adhoc run path for the approved profile")
         adapter_spec = (
             self._effect_adapter_specs.get(adapter_name)
             if effect_enabled
@@ -540,7 +657,7 @@ class WorkerRunner:
             self.refusals.append(node_id, adapter_name, None, "worker_adapter_absent", now=current)
             raise ProtocolRefusal("worker_adapter_absent", "requested worker adapter is unavailable")
         try:
-            grant = self._active_authority(node_id, current)
+            grant = self._active_authority(node_id, current) if _native is None else _native["grant"]
         except ProtocolRefusal as refusal:
             self.refusals.append(
                 node_id, adapter_name, None, refusal.code, now=current
@@ -559,12 +676,14 @@ class WorkerRunner:
                 "validated authority state is unavailable",
             ) from failure
         try:
-            item = self.work.claim_owned_oldest(
-                node_id,
-                str(grant["subject_id"]),
-                int(grant["epoch"]),
-                now=current,
-            )
+            if _native is None:
+                item = self.work.claim_owned_oldest(node_id, str(grant["subject_id"]), int(grant["epoch"]), now=current)
+            else:
+                exact_id = _native["context"]["work_item_id"]
+                self.work.claim(exact_id, node_id, str(grant["subject_id"]), int(grant["epoch"]), now=current)
+                item = self.work.show(exact_id)[0]
+                if _native["startup_prompt"] is not None:
+                    item = {**item, "native_prompt": _native["startup_prompt"]}
         except IntegrityFailure as failure:
             reason = (
                 "consumption_state_unavailable"
@@ -605,7 +724,7 @@ class WorkerRunner:
                 node_id, adapter_name, None, "worker_claim_lost", now=current
             )
             raise
-        session_id = "worker-" + uuid7_hex()
+        session_id = "worker-" + uuid7_hex() if _native is None else _native["session_id"]
         last = self.receipts.append(
             session_id, str(item["id"]), node_id, adapter_name, "claim", None, [], now=self._observe(now)
         )
@@ -691,9 +810,10 @@ class WorkerRunner:
         ttl_remaining = (
             _parse_time(grant["expires_at"]) - launch_observed
         ).total_seconds() - 1.0
-        effective_deadline = min(
-            float(grant["deadline_seconds"]), ttl_remaining, self.call_timeout
-        )
+        effective_deadline = (min(float(grant["deadline_seconds"]), ttl_remaining, self.call_timeout)
+            if _native is None else min(_native["deadline"],
+                (_parse_time(grant["expires_at"]) - launch_observed).total_seconds(),
+                (_parse_time(_native["lease_expires_at"]) - launch_observed).total_seconds()))
         if effective_deadline <= 0:
             return self.receipts.append(
                 session_id,
@@ -745,10 +865,33 @@ class WorkerRunner:
         spawn_result_handler: Optional[
             Callable[[Optional[datetime]], Dict[str, object]]
         ] = None
-        isolation_policy: Optional[WorkerIsolationPolicy] = None
+        isolation_policy: Optional[WorkerIsolationPolicy] = None if _native is None else _native["policy"]
         isolation_cleanup_attempted = False
         isolation_backend: Optional[str] = None
         terminal_failure: Optional[str] = None
+        execution_controller = None
+        execution_invocation = None
+
+        def native_guard() -> None:
+            if _native is None:
+                return
+            observed = self._observe(now)
+            try:
+                lease = Registry(self.root).require_protocol_lease(node_id, now=observed, act="native worker")
+                if (lease.get("node_lease_id") != _native["context"]["node_lease_id"]
+                    or self._authority_status(grant, node_id, observed) != "current"):
+                    self.last_native_failure_code = "adhoc_lease_ended"
+                    raise WorkerAdapterFailure("process_timeout")
+            except (ProtocolRefusal, IntegrityFailure) as exc:
+                self.last_native_failure_code = "adhoc_lease_ended"
+                raise WorkerAdapterFailure("process_timeout") from exc
+
+        def close_native_process_group() -> None:
+            # Keep the original child waitable while signaling its confirmed
+            # group. Reaping the leader first loses this ownership proof.
+            if type(process) is not SpawnedWorkerProcess or not process.shutdown_process_group():
+                self.last_native_failure_code = "adhoc_physical_cleanup_unknown"
+                raise WorkerAdapterFailure("process_died")
 
         def clean_isolation_after_exit() -> None:
             nonlocal isolation_cleanup_attempted
@@ -766,447 +909,494 @@ class WorkerRunner:
             except Exception as exc:
                 raise WorkerAdapterFailure("adapter_error") from exc
 
-        try:
-            if effect_context is not None:
-                bootstrap_path = _validated_bootstrap_path(
-                    _WORKER_BOOTSTRAP_PATH
-                )
-                try:
-                    self.root.resolve_relative(Path("effects")).mkdir(
-                        mode=0o700, exist_ok=True,
-                    )
-                except OSError as exc:
-                    raise WorkerAdapterFailure("adapter_error") from exc
-                workspace = Path(str(item["workspace"]))
-                isolation_policy = prepare_worker_isolation(
-                    self.root.tenant_home, workspace, session_id,
-                )
+        from .worker_launch_anchors import worker_runner_anchor
+        launch_finalized = False
+        with worker_runner_anchor(self.root, node_id, session_id,
+                finalized=lambda: launch_finalized) as launch_anchored:
+            if not launch_anchored:
+                return self.receipts.append(session_id, str(item['id']), node_id,
+                    adapter_name, 'degrade', 'process_start_failed', [], now=self._observe(now))
             try:
                 if effect_context is not None:
-                    if adapter_spec is None or isolation_policy is None:
-                        raise WorkerAdapterFailure(
-                            "effect_worker_isolation_unavailable"
-                        )
-                    launch_payload = {
-                        "schema_version": 1,
-                        "session_id": session_id,
-                        "adapter": builtin_adapter_spec_to_payload(adapter_spec),
-                        "item": dict(item),
-                        "deadline_millis": max(
-                            10, min(60_000, int(effective_deadline * 1_000))
-                        ),
-                        "spawn_context": spawn_context,
-                        "effect_context": effect_context,
-                        "isolation_policy": isolation_policy_to_payload(
-                            isolation_policy
-                        ),
-                    }
-                    process, parent = spawn_effect_worker(
-                        bootstrap_path, launch_payload,
+                    bootstrap_path = _validated_bootstrap_path(
+                        _WORKER_BOOTSTRAP_PATH
                     )
-                else:
-                    context = multiprocessing.get_context("fork")
-                    parent, child = context.Pipe()
-                    process_type = context.Process
-                    process = process_type(
-                        target=_adapter_process,
-                        args=(
-                            child, adapter, item, effective_deadline,
-                            spawn_context, effect_context, isolation_policy,
-                        ),
-                        name="floati-worker-adapter",
-                    )
-                    process.start()
-                process_started = True
-                if child is not None:
-                    child.close()
-                    child = None
-                if effect_context is not None:
-                    if (
-                        self.effect_controller is None
-                        or type(getattr(process, "pid", None)) is not int
-                        or parent is None
-                    ):
-                        raise ProtocolRefusal(
-                            "effect_application_capability_invalid",
-                            "one started WorkerRunner process and live parent pipe must own effect application",
+                    try:
+                        self.root.resolve_relative(Path("effects")).mkdir(
+                            mode=0o700, exist_ok=True,
                         )
-                    effect_application_identity = object()
-                    effect_application_active = [True]
-                    effect_application_owner_pid = os.getpid()
-                    effect_application_frame = sys._getframe()
-                    effect_application_controller = self.effect_controller
-                    effect_application_process = process
-                    effect_application_connection = parent
-                    effect_application_context = effect_context
-
-                    def authorize_effect_application(
-                        candidate: object,
-                        controller: object,
-                        candidate_context: object,
-                    ) -> object:
+                    except OSError as exc:
+                        raise WorkerAdapterFailure("adapter_error") from exc
+                    workspace = Path(str(item["workspace"]))
+                    if _native is None:
+                        isolation_policy = prepare_worker_isolation(self.root.tenant_home, workspace, session_id)
+                try:
+                    if effect_context is not None:
+                        if adapter_spec is None or isolation_policy is None:
+                            raise WorkerAdapterFailure(
+                                "effect_worker_isolation_unavailable"
+                            )
+                        launch_payload = {
+                            "schema_version": 1,
+                            "session_id": session_id,
+                            "adapter": builtin_adapter_spec_to_payload(adapter_spec),
+                            "item": dict(item),
+                            "deadline_millis": max(
+                                10, int(effective_deadline * 1_000) if _native is not None else min(60_000, int(effective_deadline * 1_000))
+                            ),
+                            "spawn_context": spawn_context,
+                            "effect_context": effect_context,
+                            "isolation_policy": isolation_policy_to_payload(
+                                isolation_policy
+                            ),
+                        }
+                        if _native is not None:
+                            launch_payload["native_thread_context"] = _native["context"]
+                        process, parent = spawn_effect_worker(
+                            bootstrap_path, launch_payload,
+                        )
+                    else:
+                        context = multiprocessing.get_context("fork")
+                        parent, child = context.Pipe()
+                        process_type = context.Process
+                        process = process_type(
+                            target=_adapter_process,
+                            args=(
+                                child, adapter, item, effective_deadline,
+                                spawn_context, effect_context, isolation_policy,
+                            ),
+                            name="floati-worker-adapter",
+                        )
+                        process.start()
+                    process_started = True
+                    if child is not None:
+                        child.close()
+                        child = None
+                    if effect_context is not None:
                         if (
-                            not effect_application_active[0]
-                            or os.getpid() != effect_application_owner_pid
-                            or candidate is not effect_application_identity
-                            or controller is not effect_application_controller
-                            or candidate_context is not effect_application_context
-                            or effect_application_process is not process
-                            or effect_application_connection is not parent
+                            self.effect_controller is None
+                            or type(getattr(process, "pid", None)) is not int
+                            or parent is None
                         ):
-                            return None
-                        return (
-                            effect_application_process,
-                            effect_application_connection,
-                            effect_application_owner_pid,
-                            effect_application_frame,
+                            raise ProtocolRefusal(
+                                "effect_application_capability_invalid",
+                                "one started WorkerRunner process and live parent pipe must own effect application",
+                            )
+                        effect_application_identity = object()
+                        effect_application_active = [True]
+                        effect_application_owner_pid = os.getpid()
+                        effect_application_frame = sys._getframe()
+                        effect_application_controller = self.effect_controller
+                        effect_application_process = process
+                        effect_application_connection = parent
+                        effect_application_context = effect_context
+
+                        def authorize_effect_application(
+                            candidate: object,
+                            controller: object,
+                            candidate_context: object,
+                        ) -> object:
+                            if (
+                                not effect_application_active[0]
+                                or os.getpid() != effect_application_owner_pid
+                                or candidate is not effect_application_identity
+                                or controller is not effect_application_controller
+                                or candidate_context is not effect_application_context
+                                or effect_application_process is not process
+                                or effect_application_connection is not parent
+                            ):
+                                return None
+                            return (
+                                effect_application_process,
+                                effect_application_connection,
+                                effect_application_owner_pid,
+                                effect_application_frame,
+                            )
+
+                        def release_effect_application() -> None:
+                            effect_application_active[0] = False
+
+                        (
+                            intent, dispatched, acknowledged, failed, unknown,
+                            resolve_operation, uncertain_operations,
+                            require_pipe_receive,
+                        ) = effect_operations
+                        effect_application = (
+                            effect_application_controller, effect_application_context,
+                            intent, dispatched, acknowledged, failed, unknown,
+                            resolve_operation, uncertain_operations,
+                            require_pipe_receive, effect_application_identity,
+                            authorize_effect_application,
                         )
-
-                    def release_effect_application() -> None:
-                        effect_application_active[0] = False
-
-                    (
-                        intent, dispatched, acknowledged, failed, unknown,
-                        resolve_operation, uncertain_operations,
-                        require_pipe_receive,
-                    ) = effect_operations
-                    effect_application = (
-                        effect_application_controller, effect_application_context,
-                        intent, dispatched, acknowledged, failed, unknown,
-                        resolve_operation, uncertain_operations,
-                        require_pipe_receive, effect_application_identity,
-                        authorize_effect_application,
-                    )
-                    end_effect_application = release_effect_application
-                if (
-                    spawn_context is not None
-                    and spawn_context["subagents_mode"] in {"observed_only", "managed"}
-                ):
+                        end_effect_application = release_effect_application
                     if (
-                        self.spawn_controller is None
-                        or type(getattr(process, "pid", None)) is not int
-                        or parent is None
+                        spawn_context is not None
+                        and spawn_context["subagents_mode"] in {"observed_only", "managed"}
                     ):
-                        raise ProtocolRefusal(
-                            "spawn_launch_capability_invalid",
-                            "one started WorkerRunner process and live parent pipe must own descendant authority",
-                        )
-                    launch_identity = object()
-                    launch_active = [True]
-                    launch_owner_pid = os.getpid()
-                    launch_frame = sys._getframe()
-                    launch_controller = self.spawn_controller
-                    launch_process = process
-                    launch_connection = parent
-                    launch_run_id = str(run_id)
-                    launch_attempt_id = str(attempt_id)
-                    launch_adapter = adapter_name
-
-                    def authorize_launch(
-                        candidate: object,
-                        controller: object,
-                        candidate_run_id: str,
-                        candidate_attempt_id: str,
-                        candidate_adapter: str,
-                    ) -> object:
                         if (
-                            not launch_active[0]
-                            or os.getpid() != launch_owner_pid
-                            or candidate is not launch_identity
-                            or controller is not launch_controller
-                            or (
-                                candidate_run_id,
-                                candidate_attempt_id,
-                                candidate_adapter,
-                            ) != (
+                            self.spawn_controller is None
+                            or type(getattr(process, "pid", None)) is not int
+                            or parent is None
+                        ):
+                            raise ProtocolRefusal(
+                                "spawn_launch_capability_invalid",
+                                "one started WorkerRunner process and live parent pipe must own descendant authority",
+                            )
+                        launch_identity = object()
+                        launch_active = [True]
+                        launch_owner_pid = os.getpid()
+                        launch_frame = sys._getframe()
+                        launch_controller = self.spawn_controller
+                        launch_process = process
+                        launch_connection = parent
+                        launch_run_id = str(run_id)
+                        launch_attempt_id = str(attempt_id)
+                        launch_adapter = adapter_name
+
+                        def authorize_launch(
+                            candidate: object,
+                            controller: object,
+                            candidate_run_id: str,
+                            candidate_attempt_id: str,
+                            candidate_adapter: str,
+                        ) -> object:
+                            if (
+                                not launch_active[0]
+                                or os.getpid() != launch_owner_pid
+                                or candidate is not launch_identity
+                                or controller is not launch_controller
+                                or (
+                                    candidate_run_id,
+                                    candidate_attempt_id,
+                                    candidate_adapter,
+                                ) != (
+                                    launch_run_id,
+                                    launch_attempt_id,
+                                    launch_adapter,
+                                )
+                                or launch_process is not process
+                                or launch_connection is not parent
+                            ):
+                                return None
+                            return (
+                                launch_process,
+                                launch_connection,
+                                launch_owner_pid,
+                                launch_frame,
+                            )
+
+                        def close_observation(
+                            observed_at: Optional[datetime],
+                        ) -> Dict[str, object]:
+                            return launch_controller.close_descendant_observation(
                                 launch_run_id,
                                 launch_attempt_id,
-                                launch_adapter,
+                                _launch_capability=launch_identity,
+                                _launch_authorizer=authorize_launch,
+                                now=observed_at,
                             )
-                            or launch_process is not process
-                            or launch_connection is not parent
-                        ):
-                            return None
-                        return (
-                            launch_process,
-                            launch_connection,
-                            launch_owner_pid,
-                            launch_frame,
-                        )
 
-                    def close_observation(
-                        observed_at: Optional[datetime],
-                    ) -> Dict[str, object]:
-                        return launch_controller.close_descendant_observation(
+                        def release_launch() -> None:
+                            launch_active[0] = False
+
+                        from .spawn_groups import SpawnGroupController
+
+                        if not isinstance(launch_controller, SpawnGroupController):
+                            raise ProtocolRefusal(
+                                "spawn_observation_controller_missing",
+                                "observed launch requires the parent-owned controller before fork",
+                            )
+                        descendant_application = (
+                            SpawnGroupController.record_untracked_descendant
+                        )
+                        spawn_descendant_application = (
+                            launch_controller,
                             launch_run_id,
                             launch_attempt_id,
-                            _launch_capability=launch_identity,
-                            _launch_authorizer=authorize_launch,
-                            now=observed_at,
+                            launch_identity,
+                            authorize_launch,
+                            descendant_application,
                         )
-
-                    def release_launch() -> None:
-                        launch_active[0] = False
-
-                    from .spawn_groups import SpawnGroupController
-
-                    if not isinstance(launch_controller, SpawnGroupController):
-                        raise ProtocolRefusal(
-                            "spawn_observation_controller_missing",
-                            "observed launch requires the parent-owned controller before fork",
-                        )
-                    descendant_application = (
-                        SpawnGroupController.record_untracked_descendant
-                    )
-                    spawn_descendant_application = (
-                        launch_controller,
-                        launch_run_id,
-                        launch_attempt_id,
-                        launch_identity,
-                        authorize_launch,
-                        descendant_application,
-                    )
-                    spawn_result_handler = close_observation
-                    end_spawn_launch = release_launch
-            except (OSError, RuntimeError, ValueError) as exc:
-                raise WorkerAdapterFailure("process_start_failed") from exc
-            if effect_context is not None:
-                isolation_backend = self._receive_isolation_ready(
-                    parent, process, process_deadline,
-                )
-            status, value = self._receive(
-                parent, process, process_deadline, child_process_groups,
-                spawn_descendant_application,
-                effect_application=effect_application,
-            )
-            if status == "failure":
-                code = str(value)
-                raise WorkerAdapterFailure(code if code in WORKER_OUTCOME_CODES else "adapter_error")
-            if status != "spawned":
-                raise WorkerAdapterFailure("adapter_error")
-            last = self.receipts.append(
-                session_id, str(item["id"]), node_id, adapter_name, "spawn", None, [], now=self._observe(now)
-            )
-            last = self.receipts.append(
-                session_id, str(item["id"]), node_id, adapter_name, "drive", None, [], now=self._observe(now)
-            )
-            if on_drive is not None:
-                # `on_drive` is the DRILL's gate and nothing else reaches it:
-                # floati/orchestrate.py builds it only from the drill's
-                # reached/release pair, and it blocks for as long as the drill
-                # chooses. That pause used to burn the worker's own process
-                # deadline, so a slow drill made the WORKER report the timeout
-                # — the instrument charging its subject for the instrument's
-                # own round trip.
-                #
-                # The pause is REFUNDED, never re-granted. Two reasons the
-                # deadline is not simply started here instead: the pre-gate
-                # phase (process start, isolation ready, the spawn frame) is
-                # real worker time and must stay bounded, and `effective_deadline`
-                # was already clamped by the GRANT'S WALL-CLOCK EXPIRY — so a
-                # fresh budget would let a drill buy a worker time outside the
-                # authority it holds. The refund therefore moves the deadline
-                # by exactly what the gate held, and no further than the grant.
-                gate_entered = time.monotonic()
-                on_drive()
-                gate_held = time.monotonic() - gate_entered
-                authority_remaining = (
-                    _parse_time(grant["expires_at"]) - self._observe(now)
-                ).total_seconds() - 1.0
-                process_deadline = min(
-                    process_deadline + gate_held,
-                    time.monotonic() + max(authority_remaining, 0.0),
-                )
-            status, value = self._receive(
-                parent, process, process_deadline, child_process_groups,
-                spawn_descendant_application, spawn_result_handler,
-                effect_application=effect_application,
-            )
-            if status == "failure":
-                code = str(value)
-                raise WorkerAdapterFailure(code if code in WORKER_OUTCOME_CODES else "adapter_error")
-            if status != "result":
-                raise WorkerAdapterFailure("adapter_error")
-            result_bindings = value
-            if effect_application is not None:
-                try:
-                    parent.send(("effect_reporting_closed", None))
-                except (BrokenPipeError, EOFError, OSError) as exc:
-                    raise WorkerAdapterFailure("process_died") from exc
-                effect_status, effect_value = self._receive(
-                    parent, process, process_deadline, child_process_groups,
-                    effect_application=effect_application,
-                    effect_events_allowed=False,
-                )
-                if (
-                    effect_status != "effect_reporting_closed_ack"
-                    or effect_value is not None
-                ):
-                    raise WorkerAdapterFailure("adapter_error")
-                if not (
-                    spawn_context is not None
-                    and spawn_context["subagents_mode"] in {"observed_only", "managed"}
-                ):
-                    self._finish_effect_process(
+                        spawn_result_handler = close_observation
+                        end_spawn_launch = release_launch
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise WorkerAdapterFailure("process_start_failed") from exc
+                if effect_context is not None:
+                    isolation_backend = self._receive_isolation_ready(
                         parent, process, process_deadline,
                     )
-                    effect_boundary_closed = True
-            if spawn_context is not None and spawn_context["subagents_mode"] in {"observed_only", "managed"}:
-                if spawn_result_handler is None:
-                    raise WorkerAdapterFailure("spawn_observation_controller_missing")
-                try:
-                    parent.send(("observation_closed", None))
-                except (BrokenPipeError, EOFError, OSError) as exc:
-                    raise WorkerAdapterFailure("process_died") from exc
-                final_status, final_value = self._receive(
+                status, value = self._receive(
                     parent, process, process_deadline, child_process_groups,
+                    spawn_descendant_application,
                     effect_application=effect_application,
-                    effect_events_allowed=False,
+                    native_callback=None if _native is None else _native["callback"],
+                    native_guard=native_guard if _native is not None else None,
                 )
-                if final_status == "failure":
-                    code = str(final_value)
-                    raise WorkerAdapterFailure(
-                        code if code in WORKER_OUTCOME_CODES else "adapter_error"
-                    )
-                if final_status != "observation_closed_ack" or final_value is not None:
+                if status == "failure":
+                    code = str(value)
+                    raise WorkerAdapterFailure(code if code in WORKER_OUTCOME_CODES else "adapter_error")
+                if status != "spawned":
                     raise WorkerAdapterFailure("adapter_error")
+                last = self.receipts.append(
+                    session_id, str(item["id"]), node_id, adapter_name, "spawn", None, [], now=self._observe(now)
+                )
+                if item.get("car_binding") is not None:
+                    try:
+                        from .seat_execution import SeatExecutionController
+                        execution_controller = SeatExecutionController(self.root)
+                        execution_invocation = execution_controller.bind_worker(
+                            last, Path(item.get("workspace") or Path.cwd()).resolve(),
+                            run_id=run_id, attempt_id=attempt_id)
+                    except (ProtocolRefusal, IntegrityFailure, DurabilityFailure, OSError) as report_error:
+                        self.last_execution_report = {"status": "unknown", "reason": getattr(report_error, "code", "execution_report_unavailable")}
+                last = self.receipts.append(
+                    session_id, str(item["id"]), node_id, adapter_name, "drive", None, [], now=self._observe(now)
+                )
+                if on_drive is not None:
+                    # `on_drive` is the DRILL's gate and nothing else reaches it:
+                    # floati/orchestrate.py builds it only from the drill's
+                    # reached/release pair, and it blocks for as long as the drill
+                    # chooses. That pause used to burn the worker's own process
+                    # deadline, so a slow drill made the WORKER report the timeout
+                    # — the instrument charging its subject for the instrument's
+                    # own round trip.
+                    #
+                    # The pause is REFUNDED, never re-granted. Two reasons the
+                    # deadline is not simply started here instead: the pre-gate
+                    # phase (process start, isolation ready, the spawn frame) is
+                    # real worker time and must stay bounded, and `effective_deadline`
+                    # was already clamped by the GRANT'S WALL-CLOCK EXPIRY — so a
+                    # fresh budget would let a drill buy a worker time outside the
+                    # authority it holds. The refund therefore moves the deadline
+                    # by exactly what the gate held, and no further than the grant.
+                    gate_entered = time.monotonic()
+                    on_drive()
+                    gate_held = time.monotonic() - gate_entered
+                    authority_remaining = (
+                        _parse_time(grant["expires_at"]) - self._observe(now)
+                    ).total_seconds() - 1.0
+                    process_deadline = min(
+                        process_deadline + gate_held,
+                        time.monotonic() + max(authority_remaining, 0.0),
+                    )
+                status, value = self._receive(
+                    parent, process, process_deadline, child_process_groups,
+                    spawn_descendant_application, spawn_result_handler,
+                    effect_application=effect_application,
+                    native_callback=None if _native is None else _native["callback"],
+                    native_guard=native_guard if _native is not None else None,
+                    native_transport_allowed=_native is not None,
+                )
+                if status == "failure":
+                    code = str(value)
+                    raise WorkerAdapterFailure(code if code in WORKER_OUTCOME_CODES else "adapter_error")
+                if status != "result":
+                    raise WorkerAdapterFailure("adapter_error")
+                if _native is not None and (self.last_native_transport is None
+                    or not self.last_native_events or self.last_native_events[-1].get("event") != "terminal"
+                    or self.last_native_events[-1].get("outcome") != "success"):
+                    raise WorkerAdapterFailure("protocol_error")
+                result_bindings = value
                 if effect_application is not None:
-                    self._finish_effect_process(
-                        parent, process, process_deadline,
+                    try:
+                        parent.send(("effect_reporting_closed", None))
+                    except (BrokenPipeError, EOFError, OSError) as exc:
+                        raise WorkerAdapterFailure("process_died") from exc
+                    effect_status, effect_value = self._receive(
+                        parent, process, process_deadline, child_process_groups,
+                        effect_application=effect_application,
+                        effect_events_allowed=False,
                     )
-                    effect_boundary_closed = True
-            clean_isolation_after_exit()
-            try:
-                bindings = validate_artifact_bindings(result_bindings)
-            except ProtocolRefusal as exc:
-                raise WorkerAdapterFailure("adapter_malformed_output") from exc
-            observed = self._observe(now)
-            try:
-                authority_status = self._authority_status(
-                    grant, node_id, observed
-                )
-            except IntegrityFailure as exc:
-                self.refusals.append(
-                    node_id,
-                    adapter_name,
-                    str(item["id"]),
-                    "authority_state_unavailable",
-                    now=observed,
-                )
-                raise WorkerAdapterFailure("authority_state_unavailable") from exc
-            if authority_status != "current":
-                self.refusals.append(
-                    node_id,
-                    adapter_name,
-                    str(item["id"]),
-                    "worker_authority_changed",
-                    now=observed,
-                )
-                raise WorkerAdapterFailure(
-                    "authority_expired_mid_claim"
-                    if authority_status == "expired"
-                    else "worker_authority_changed"
-                )
-            last = self.receipts.append(
-                session_id, str(item["id"]), node_id, adapter_name, "bind_artifact", None, bindings, now=self._observe(now)
-            )
-            self.work.complete(str(item["id"]), node_id, bindings, now=self._observe(now))
-            last = self.receipts.append(
-                session_id, str(item["id"]), node_id, adapter_name, "complete", None, bindings, now=self._observe(now)
-            )
-        except WorkerAdapterFailure as failure:
-            if (
-                effect_application is not None
-                and not effect_boundary_closed
-                and failure.code in {"process_died", "process_timeout"}
-            ):
-                self._record_worker_effect_uncertainty(
-                    effect_application, now=self._observe(now),
-                )
-            terminal_failure = (
-                failure.code
-                if failure.code in WORKER_OUTCOME_CODES
-                else "adapter_error"
-            )
-        except KeyboardInterrupt:
-            if effect_application is not None and not effect_boundary_closed:
-                self._record_worker_effect_uncertainty(
-                    effect_application, now=self._observe(now),
-                )
-            terminal_failure = "process_cancelled"
-        finally:
-            if end_effect_application is not None:
-                end_effect_application()
-            if end_spawn_launch is not None:
-                end_spawn_launch()
-            if process is not None and process_started:
-                for process_group in sorted(child_process_groups):
-                    self._terminate_process_group(process_group)
-                if type(process) is SpawnedWorkerProcess:
-                    # A validated readiness frame binds this exact still-
-                    # waitable group. Escalate while its unreaped leader
-                    # prevents numeric reuse; only then may join observe exit.
-                    if not process.shutdown_process_group():
-                        process.terminate()
-                else:
-                    process.join(0.1)
-                    self._terminate_process_group(process.pid)
-                process.join(1)
-                if process.is_alive():
-                    if type(process) is SpawnedWorkerProcess:
-                        process.kill()
-                    else:
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except (ProcessLookupError, PermissionError):
-                            pass
-                    process.join(1)
-            if parent is not None:
-                parent.close()
-            if child is not None:
-                child.close()
-            adapter_pid = None if process is None else process.pid
-            if type(process) is SpawnedWorkerProcess:
-                candidates = list(sorted(child_process_groups))
-                if (
-                    process_started
-                    and process.is_alive()
-                    and isinstance(adapter_pid, int)
-                ):
-                    candidates.append(adapter_pid)
-            else:
-                candidates = [
-                    value
-                    for value in [adapter_pid, *sorted(child_process_groups)]
-                    if isinstance(value, int)
-                ]
-            cleanup_deadline = time.monotonic() + 0.5
-            alive = [value for value in candidates if self._process_group_alive(value)]
-            while alive and time.monotonic() < cleanup_deadline:
-                time.sleep(0.01)
-                alive = [value for value in candidates if self._process_group_alive(value)]
-            self.last_process_audit = {
-                "adapter_pid": adapter_pid,
-                "registered_process_groups": sorted(child_process_groups),
-                "alive_after_cleanup": alive,
-                "isolation_backend": isolation_backend,
-            }
-            try:
+                    if (
+                        effect_status != "effect_reporting_closed_ack"
+                        or effect_value is not None
+                    ):
+                        raise WorkerAdapterFailure("adapter_error")
+                    if not (
+                        spawn_context is not None
+                        and spawn_context["subagents_mode"] in {"observed_only", "managed"}
+                    ):
+                        self._finish_effect_process(
+                            parent, process, process_deadline,
+                            **({"before_reap": close_native_process_group} if _native is not None else {}),
+                        )
+                        effect_boundary_closed = True
+                if spawn_context is not None and spawn_context["subagents_mode"] in {"observed_only", "managed"}:
+                    if spawn_result_handler is None:
+                        raise WorkerAdapterFailure("spawn_observation_controller_missing")
+                    try:
+                        parent.send(("observation_closed", None))
+                    except (BrokenPipeError, EOFError, OSError) as exc:
+                        raise WorkerAdapterFailure("process_died") from exc
+                    final_status, final_value = self._receive(
+                        parent, process, process_deadline, child_process_groups,
+                        effect_application=effect_application,
+                        effect_events_allowed=False,
+                    )
+                    if final_status == "failure":
+                        code = str(final_value)
+                        raise WorkerAdapterFailure(
+                            code if code in WORKER_OUTCOME_CODES else "adapter_error"
+                        )
+                    if final_status != "observation_closed_ack" or final_value is not None:
+                        raise WorkerAdapterFailure("adapter_error")
+                    if effect_application is not None:
+                        self._finish_effect_process(
+                            parent, process, process_deadline,
+                            **({"before_reap": close_native_process_group} if _native is not None else {}),
+                        )
+                        effect_boundary_closed = True
                 clean_isolation_after_exit()
-            except WorkerAdapterFailure:
-                terminal_failure = "adapter_error"
-        if terminal_failure is not None:
-            last = self.receipts.append(
-                session_id,
-                str(item["id"]),
-                node_id,
-                adapter_name,
-                "degrade",
-                terminal_failure,
-                [],
-                now=self._observe(now),
-            )
-        return last
+                native_guard()
+                try:
+                    bindings = validate_artifact_bindings(result_bindings)
+                except ProtocolRefusal as exc:
+                    raise WorkerAdapterFailure("adapter_malformed_output") from exc
+                observed = self._observe(now)
+                try:
+                    authority_status = self._authority_status(
+                        grant, node_id, observed
+                    )
+                except IntegrityFailure as exc:
+                    self.refusals.append(
+                        node_id,
+                        adapter_name,
+                        str(item["id"]),
+                        "authority_state_unavailable",
+                        now=observed,
+                    )
+                    raise WorkerAdapterFailure("authority_state_unavailable") from exc
+                if authority_status != "current":
+                    self.refusals.append(
+                        node_id,
+                        adapter_name,
+                        str(item["id"]),
+                        "worker_authority_changed",
+                        now=observed,
+                    )
+                    raise WorkerAdapterFailure(
+                        "authority_expired_mid_claim"
+                        if authority_status == "expired"
+                        else "worker_authority_changed"
+                    )
+                last = self.receipts.append(
+                    session_id, str(item["id"]), node_id, adapter_name, "bind_artifact", None, bindings, now=self._observe(now)
+                )
+                if _native is None:
+                    self.work.complete(str(item["id"]), node_id, bindings, now=self._observe(now))
+                    last = self.receipts.append(
+                        session_id, str(item["id"]), node_id, adapter_name, "complete", None, bindings, now=self._observe(now)
+                    )
+            except WorkerAdapterFailure as failure:
+                if (
+                    effect_application is not None
+                    and not effect_boundary_closed
+                    and failure.code in {"process_died", "process_timeout"}
+                ):
+                    self._record_worker_effect_uncertainty(
+                        effect_application, now=self._observe(now),
+                    )
+                terminal_failure = (
+                    failure.code
+                    if failure.code in WORKER_OUTCOME_CODES
+                    else "adapter_error"
+                )
+            except KeyboardInterrupt:
+                if effect_application is not None and not effect_boundary_closed:
+                    self._record_worker_effect_uncertainty(
+                        effect_application, now=self._observe(now),
+                    )
+                terminal_failure = "process_cancelled"
+            finally:
+                if end_effect_application is not None:
+                    end_effect_application()
+                if end_spawn_launch is not None:
+                    end_spawn_launch()
+                if process is not None and process_started:
+                    for process_group in sorted(child_process_groups):
+                        self._terminate_process_group(process_group)
+                    if type(process) is SpawnedWorkerProcess:
+                        # A validated readiness frame binds this exact still-
+                        # waitable group. Escalate while its unreaped leader
+                        # prevents numeric reuse; only then may join observe exit.
+                        if not process.shutdown_process_group():
+                            process.terminate()
+                    else:
+                        process.join(0.1)
+                        self._terminate_process_group(process.pid)
+                    process.join(1)
+                    if process.is_alive():
+                        if type(process) is SpawnedWorkerProcess:
+                            process.kill()
+                        else:
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except (ProcessLookupError, PermissionError):
+                                pass
+                        process.join(1)
+                if parent is not None:
+                    parent.close()
+                if child is not None:
+                    child.close()
+                adapter_pid = None if process is None else process.pid
+                if type(process) is SpawnedWorkerProcess:
+                    candidates = list(sorted(child_process_groups))
+                    if (
+                        process_started
+                        and ((_native is not None and isolation_backend is not None) or process.is_alive())
+                        and isinstance(adapter_pid, int)
+                    ):
+                        candidates.append(adapter_pid)
+                else:
+                    candidates = [
+                        value
+                        for value in [adapter_pid, *sorted(child_process_groups)]
+                        if isinstance(value, int)
+                    ]
+                cleanup_deadline = time.monotonic() + 0.5
+                alive = [value for value in candidates if self._process_group_alive(value)]
+                while alive and time.monotonic() < cleanup_deadline:
+                    time.sleep(0.01)
+                    alive = [value for value in candidates if self._process_group_alive(value)]
+                self.last_process_audit = {
+                    "adapter_pid": adapter_pid,
+                    "registered_process_groups": sorted(child_process_groups),
+                    "alive_after_cleanup": alive,
+                    "isolation_backend": isolation_backend,
+                }
+                if _native is not None and alive:
+                    self.last_native_failure_code = "adhoc_physical_cleanup_unknown"
+                    terminal_failure = "process_died"
+                try:
+                    clean_isolation_after_exit()
+                except WorkerAdapterFailure:
+                    terminal_failure = "adapter_error"
+            if terminal_failure is not None:
+                last = self.receipts.append(
+                    session_id,
+                    str(item["id"]),
+                    node_id,
+                    adapter_name,
+                    "degrade",
+                    terminal_failure,
+                    [],
+                    now=self._observe(now),
+                )
+            # Only this point has both artifact/work finalization and the owned
+            # child cleanup audit. An adapter turn/completed is not this boundary.
+            terminal_report_confirmed = execution_invocation is None
+            if execution_invocation is not None:
+                try:
+                    self.last_execution_report = execution_controller.callback(execution_invocation, {
+                        "event": "unknown" if self.last_process_audit["alive_after_cleanup"] else "ended",
+                        "code": "worker_cleanup_unconfirmed" if self.last_process_audit["alive_after_cleanup"] else (terminal_failure or "worker_completed_cleanup"),
+                        "detail": json.dumps(self.last_process_audit, sort_keys=True),
+                    })
+                    terminal_report_confirmed = True
+                except (ProtocolRefusal, IntegrityFailure, DurabilityFailure, OSError) as report_error:
+                    self.last_execution_report = {"status": "unknown", "reason": getattr(report_error, "code", "execution_report_unavailable")}
+            launch_finalized = not self.last_process_audit['alive_after_cleanup'] and terminal_report_confirmed
+            return last
 
     def _observe(self, fixed: Optional[datetime]) -> datetime:
         return _now(fixed if fixed is not None else self.clock())
@@ -1224,6 +1414,9 @@ class WorkerRunner:
         *,
         effect_application: Optional[tuple[object, ...]] = None,
         effect_events_allowed: bool = True,
+        native_callback: Optional[Callable] = None,
+        native_guard: Optional[Callable] = None,
+        native_transport_allowed: bool = False,
     ) -> tuple[str, object]:
         descendant_application = None
         if spawn_descendant_application is not None:
@@ -1231,8 +1424,16 @@ class WorkerRunner:
             if not callable(descendant_application):
                 raise WorkerAdapterFailure("adapter_error")
         while True:
+            if native_guard is not None:
+                native_guard()
             remaining = deadline - time.monotonic()
-            if remaining <= 0 or not connection.poll(remaining):
+            if remaining <= 0:
+                if process.is_alive():
+                    raise WorkerAdapterFailure("process_timeout")
+                raise WorkerAdapterFailure("process_died")
+            if not connection.poll(min(remaining, 0.1) if native_guard is not None else remaining):
+                if native_guard is not None:
+                    continue
                 if process.is_alive():
                     raise WorkerAdapterFailure("process_timeout")
                 raise WorkerAdapterFailure("process_died")
@@ -1259,6 +1460,54 @@ class WorkerRunner:
             if not isinstance(result, tuple) or len(result) != 2:
                 raise WorkerAdapterFailure("adapter_error")
             status, value = result
+            if status == "native_transport":
+                from .worker_bootstrap_protocol import NATIVE_THREAD_BOUNDS
+                fields = {"stdout_bytes", "stderr_bytes", "combined_bytes", "protocol_records",
+                    "stdout_sha256", "stderr_sha256", "exit_code"}
+                if (native_callback is None or not native_transport_allowed or self.last_native_transport is not None
+                    or type(value) is not dict or set(value) != fields):
+                    raise WorkerAdapterFailure("protocol_error")
+                for key in ("stdout_bytes", "stderr_bytes", "combined_bytes", "protocol_records"):
+                    if type(value[key]) is not int or not 0 <= value[key] <= NATIVE_THREAD_BOUNDS[key]:
+                        raise WorkerAdapterFailure("protocol_error")
+                if (value["combined_bytes"] != value["stdout_bytes"] + value["stderr_bytes"]
+                    or type(value["exit_code"]) is not int or value["exit_code"] != 0):
+                    raise WorkerAdapterFailure("protocol_error")
+                for key in ("stdout_sha256", "stderr_sha256"):
+                    if (type(value[key]) is not str or len(value[key]) != 64
+                        or any(character not in "0123456789abcdef" for character in value[key])):
+                        raise WorkerAdapterFailure("protocol_error")
+                self.last_native_transport = dict(value)
+                continue
+            if status == "native_failure":
+                from .native_thread_protocol import _FAILURES
+                if (native_callback is None or type(value) is not dict
+                    or set(value) != {"reason_code", "worker_failure"}
+                    or type(value["reason_code"]) is not str
+                    or value["reason_code"] not in _FAILURES
+                    or value["worker_failure"] != _FAILURES[value["reason_code"]]):
+                    raise WorkerAdapterFailure("protocol_error")
+                self.last_native_failure_code = value["reason_code"]
+                return "failure", value["worker_failure"]
+            if status == "native_thread":
+                if native_callback is None:
+                    raise WorkerAdapterFailure("protocol_error")
+                try:
+                    acknowledgement = native_callback(value)
+                    self.last_native_events.append(json.loads(json.dumps(value, allow_nan=False)))
+                    if native_guard is not None:
+                        native_guard()
+                    if type(value) is dict and value.get("event") == "opened":
+                        connection.send(("native_thread_ack", acknowledgement), deadline=deadline)
+                except (ProtocolRefusal, IntegrityFailure) as exc:
+                    from .native_thread_protocol import _FAILURES
+                    if exc.code in _FAILURES:
+                        self.last_native_failure_code = exc.code
+                        raise WorkerAdapterFailure(_FAILURES[exc.code]) from exc
+                    raise WorkerAdapterFailure("protocol_error") from exc
+                except (EOFError, OSError, TimeoutError) as exc:
+                    raise WorkerAdapterFailure("process_died") from exc
+                continue
             if (
                 status == "process_group"
                 and type(process) is SpawnedWorkerProcess
@@ -1404,6 +1653,8 @@ class WorkerRunner:
         connection: object,
         process: object,
         deadline: float,
+        *,
+        before_reap: Optional[Callable] = None,
     ) -> None:
         """Drain the closed reporting pipe through child exit or fail closed."""
 
@@ -1418,6 +1669,9 @@ class WorkerRunner:
                     raise WorkerAdapterFailure("process_timeout")
                 raise WorkerAdapterFailure("protocol_error")
             if _bootstrap_channel_at_eof(connection):
+                if before_reap is not None:
+                    before_reap()
+                    before_reap = None
                 process.join(min(0.05, max(0.0, deadline - time.monotonic())))
                 if process.is_alive():
                     continue
@@ -1429,6 +1683,9 @@ class WorkerRunner:
                     raise WorkerAdapterFailure("process_timeout") from exc
                 raise WorkerAdapterFailure("protocol_error") from exc
             except EOFError:
+                if before_reap is not None:
+                    before_reap()
+                    before_reap = None
                 process.join(min(0.05, max(0.0, deadline - time.monotonic())))
                 if process.is_alive():
                     continue

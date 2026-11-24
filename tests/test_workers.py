@@ -44,6 +44,7 @@ from floati.worker_bootstrap_protocol import (
 from floati.worker_isolation import cleanup_worker_isolation, prepare_worker_isolation
 from tests.test_spawn_groups import _Task2Case
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.readiness import Readiness, wait_until
 from floati.identity_fence import RETIRED_PRODUCT_NAME as _RETIRED_NAME
 
 
@@ -317,10 +318,12 @@ class _EffectReportingAdapter:
         return [{"repo": "floati-proof", "sha": "a" * 40, "doc": "README.md"}]
 
 
-class _EffectWorkerCase:
+class _EffectWorkerFixture:
     """One real Run/Work/Effect fixture for the Worker private pipe."""
 
-    def __init__(self, testcase: unittest.TestCase, adapter: object) -> None:
+    def __init__(
+        self, testcase: unittest.TestCase, adapter: object, *, workspace_parent: Path,
+    ) -> None:
         self.testcase = testcase
         self.run = _Task2Case(testcase)
         self.run.prepare_parent(mode="disabled")
@@ -336,7 +339,7 @@ class _EffectWorkerCase:
             "owner": "node-a",
             "artifact_bindings": [],
         }
-        workspace = worker_workspace_root() / self.run.parent
+        workspace = workspace_parent / self.run.parent
         shutil.rmtree(workspace, ignore_errors=True)
         testcase.addCleanup(shutil.rmtree, workspace, True)
         work_item["workspace"] = str(workspace)
@@ -486,6 +489,18 @@ class _EffectWorkerCase:
             "node-a", "codex", now=self.run.now(8), on_drive=on_drive,
             **coordinates,
         )
+
+
+class _EffectWorkerCase(_EffectWorkerFixture):
+    """Legacy callers retain the fixed-parent prerequisite and serial census."""
+
+    def __init__(self, testcase: unittest.TestCase, adapter: object) -> None:
+        # The parent lives beneath this process's own host temporary root, so
+        # no creator in another process (or an earlier run) can supply it.
+        # Create it as the real adapters do: private, and only if absent.
+        parent = worker_workspace_root()
+        parent.mkdir(mode=0o700, exist_ok=True)
+        super().__init__(testcase, adapter, workspace_parent=parent)
 
 
 def _governed_two_way_success_child(connection: object) -> None:
@@ -1103,7 +1118,9 @@ class WorkerContractTests(unittest.TestCase):
             )
 
             result = WorkerRunner(
-                root, {"codex": adapter}, call_timeout=0.3
+                # The hang must begin before the outer timeout can prove reap.
+                # Keep startup time separate from the property under test.
+                root, {"codex": adapter}, call_timeout=4
             ).run(public_ids.builder('a'), "codex", now=current)
 
             self.assertEqual("process_timeout", result["outcome_code"])
@@ -1251,14 +1268,12 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     pass
 
         self.addCleanup(stop_foreign)
-        deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline:
+        def group_ready():
             try:
-                if os.getpgid(foreign.pid) == foreign.pid:
-                    break
+                return os.getpgid(foreign.pid) == foreign.pid
             except ProcessLookupError:
                 self.fail("foreign positive-control process exited before the test")
-            time.sleep(0.01)
+        wait_until(group_ready, "foreign positive-control process group ready")
         self.assertEqual(foreign.pid, os.getpgid(foreign.pid))
 
         parent_socket, child_socket = socket.socketpair(
@@ -1337,7 +1352,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
             ):
                 process, channel = spawn_effect_worker(bootstrap.resolve(), payload)
             self.addCleanup(channel.close)
-            self.assertTrue(channel.poll(10.0))
+            wait_until(lambda: channel.poll(0), "exec prelude publishes first frame")
             first_frame = channel.recv()
             self.assertIn(
                 first_frame[0], {"failure", "isolation_ready"}, first_frame,
@@ -1463,7 +1478,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
 
             process, channel = spawn_effect_worker(bootstrap.resolve(), payload)
             self.addCleanup(channel.close)
-            self.assertTrue(channel.poll(10.0))
+            wait_until(lambda: channel.poll(0), "exec prelude publishes first frame")
             first_frame = channel.recv()
             self.assertIn(
                 first_frame[0], {"failure", "isolation_ready"}, first_frame,
@@ -1524,10 +1539,31 @@ class WorkerEffectPipeTests(unittest.TestCase):
 
         self.assertTrue(hasattr(worker_exec, "_relocate_launch_descriptors"))
         descriptors = [3, 7, 4, 6, 5]
-        with mock.patch(
-            "floati.worker_exec.fcntl.fcntl", side_effect=[8, 9, 10, 11, 12],
-        ) as duplicate, mock.patch("floati.worker_exec.os.close") as close:
-            relocated = worker_exec._relocate_launch_descriptors(descriptors)
+        close = mock.Mock()
+        worker_os = types.SimpleNamespace(close=close)
+        unrelated_read, unrelated_write = os.pipe()
+        try:
+            with mock.patch(
+                "floati.worker_exec.fcntl.fcntl", side_effect=[8, 9, 10, 11, 12],
+            ) as duplicate, mock.patch.object(worker_exec, "os", worker_os):
+                # Unrelated cleanup must still close its real descriptor while
+                # the worker's launch-descriptor dependency is fault-injected.
+                os.close(unrelated_read)
+                with self.assertRaises(OSError) as closed_pipe:
+                    os.fstat(unrelated_read)
+                self.assertEqual(errno.EBADF, closed_pipe.exception.errno)
+                unrelated_read = None
+                relocated = worker_exec._relocate_launch_descriptors(descriptors)
+        finally:
+            try:
+                if unrelated_read is not None:
+                    try:
+                        os.close(unrelated_read)
+                    except OSError as exc:
+                        if exc.errno != errno.EBADF:
+                            raise
+            finally:
+                os.close(unrelated_write)
         self.assertEqual([8, 9, 10, 11, 12], relocated)
         self.assertEqual(
             [mock.call(descriptor, fcntl.F_DUPFD_CLOEXEC, 8) for descriptor in descriptors],
@@ -1828,8 +1864,12 @@ class WorkerEffectPipeTests(unittest.TestCase):
             symbolic = root / "bootstrap-link.py"
             symbolic.symlink_to(regular)
             invalid = (Path("worker_bootstrap.py"), root, symbolic)
-            for candidate in invalid:
-                with self.subTest(candidate=candidate):
+            for case_index, candidate in enumerate(invalid):
+                with self.subTest(case=(
+                    "relative-bootstrap",
+                    "directory-bootstrap",
+                    "symlink-bootstrap",
+                )[case_index]):
                     with mock.patch("floati.worker_exec.os.posix_spawn") as spawn:
                         with self.assertRaises(WorkerAdapterFailure):
                             spawn_effect_worker(candidate, {})
@@ -2153,10 +2193,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     process.start()
                 child.close()
                 messages = []
-                deadline = time.monotonic() + 2.0
+                readiness = Readiness("noncanonical backend child publishes refusal")
                 try:
-                    while time.monotonic() < deadline:
-                        if parent.poll(0.05):
+                    while True:
+                        if parent.poll(min(0.05, readiness.remaining())):
                             try:
                                 message = parent.recv()
                             except EOFError:
@@ -2302,12 +2342,18 @@ class WorkerEffectPipeTests(unittest.TestCase):
 
     def test_effect_exec_isolation_ready_is_first_accepted_child_frame(self) -> None:
         """Catches adapter callbacks or spawn acknowledgement preceding isolation."""
+        temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
+        self.addCleanup(temporary.cleanup)
+        tenant_home = Path(temporary.name).resolve()
+        (tenant_home / "effects").mkdir(mode=0o700)
+        policy = prepare_worker_isolation(tenant_home, None, "effect-ready-order")
+        self.addCleanup(cleanup_worker_isolation, policy)
         context = multiprocessing.get_context("fork")
         parent, child = context.Pipe()
         adapter = _EffectReportingAdapter((_EffectWorkerCase.intent_event(),))
         process = context.Process(
             target=_adapter_process,
-            args=(child, adapter, {"id": "work-a"}, 2.0, None, {}, object()),
+            args=(child, adapter, {"id": "work-a"}, 2.0, None, {}, policy),
         )
         process.start()
         child.close()

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/adhoc-thread-status.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["profiles"],
+  "properties": {"profiles": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/profile"}}},
+  "$defs": {
+    "nullable_id": {"type": ["string", "null"], "maxLength": 512},
+    "profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile_id", "node_id", "node_lease_id", "lane_opening_id", "adapter", "dispatch_id", "phase", "work_item_id", "work_state", "worker_receipt_ids", "native_receipt_id", "provider_coordinate", "provider_status", "observation_reason", "lease_active", "history_state", "provider_state_bytes"],
+      "properties": {
+        "profile_id": {"type": "string", "pattern": "^adhoc-profile-[0-9a-f]{32}$"},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "node_lease_id": {"type": "string", "pattern": "^lease-[0-9a-f]{32}$"},
+        "lane_opening_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "adapter": {"enum": ["codex", "claude", "pi"]},
+        "dispatch_id": {"$ref": "#/$defs/nullable_id"},
+        "phase": {"enum": ["profiled", "admitted", "inbox_presented", "spawn_reserved", "provider_opened", "provider_terminal", "process_closed", "work_completed", "result_published", "teardown_completed", "failed", "unknown"]},
+        "work_item_id": {"$ref": "#/$defs/nullable_id"},
+        "work_state": {"enum": [null, "open", "claimed", "completed"]},
+        "worker_receipt_ids": {"type": "array", "maxItems": 100000, "items": {"type": "string", "pattern": "^worker-receipt-[0-9a-f]{32}$"}},
+        "native_receipt_id": {"$ref": "#/$defs/nullable_id"},
+        "provider_coordinate": {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["provider", "session_id", "session_file"], "properties": {"provider": {"enum": ["codex_local", "claude_local", "pi_local"]}, "session_id": {"type": "string", "minLength": 1, "maxLength": 512}, "session_file": {"type": ["string", "null"], "maxLength": 4096}}}]},
+        "provider_status": {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"const": "unknown"}, "evidence_class": {"const": "unknown"}}},
+        "observation_reason": {"const": "not_observed"},
+        "lease_active": {"type": "boolean"},
+        "history_state": {"enum": ["retained", "inactive_non_resumable"]},
+        "provider_state_bytes": {"oneOf": [
+          {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class"], "properties": {"value": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}, "evidence_class": {"const": "measured"}}},
+          {"type": "object", "additionalProperties": false, "required": ["value", "evidence_class", "reason"], "properties": {"value": {"type": "null"}, "evidence_class": {"const": "unknown"}, "reason": {"const": "provider_state_unsafe"}}}
+        ]}
+      }
+    }
+  }
+}

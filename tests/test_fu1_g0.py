@@ -53,7 +53,7 @@ def _tree_bytes(root: Path) -> dict[str, bytes]:
     }
 
 
-class FU1G0Tests(unittest.TestCase):
+class _FU1G0Fixture:
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="floati-fu1-g0-")
         self.addCleanup(self.temporary.cleanup)
@@ -306,6 +306,8 @@ class FU1G0Tests(unittest.TestCase):
             idempotency_key=idempotency_key,
         )
 
+
+class FU1G0Tests(_FU1G0Fixture, unittest.TestCase):
     def test_g0_00_help_names_explicit_preview_and_apply_only(self) -> None:
         """Catches FU-1 growing ambient discovery or an automatic mutation mode."""
 

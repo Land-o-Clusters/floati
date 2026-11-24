@@ -17,12 +17,11 @@ from floati.registry import utc_now
 from floati.records import validate_record
 from floati.update_consent import UpdateConsentLedger
 from tests.schema_validation import SchemaValidationError, validate_json_schema
-from tests.test_fu1_g0 import FU1G0Tests, REPOSITORY_ROOT, _tree_bytes
+from tests import test_fu1_g0
+from tests.test_fu1_g0 import REPOSITORY_ROOT, _tree_bytes
 
 
-class FU1G1Tests(FU1G0Tests):
-    """The production change that must fail these tests is omitting G1 receipt state."""
-
+class _FU1G1Fixture(test_fu1_g0._FU1G0Fixture):
     def setUp(self) -> None:
         super().setUp()
         self.transport = "floati-installed-v0"
@@ -372,6 +371,11 @@ class FU1G1Tests(FU1G0Tests):
         ]}, sort_keys=True), encoding="utf-8")
         return first, second
 
+
+# Keep the G0 methods exercising the installed trust registry as well.
+class FU1G1Tests(_FU1G1Fixture, test_fu1_g0.FU1G0Tests):
+    """The production change that must fail these tests is omitting G1 receipt state."""
+
     def test_g1_00_shared_runtime_digest_names_complete_inventory(self) -> None:
         """Catches planner/installer divergence or an abbreviated waiter inventory."""
 
@@ -505,8 +509,12 @@ class FU1G1Tests(FU1G0Tests):
         foreign = self.base / "foreign"; foreign.mkdir()
         hooks, store = self._binding(6, root=foreign)
         self.binding_path.write_text(json.dumps({"schema_version": 0, "bindings": [{"kind": "codex_stop_hook", "configuration": str(hooks), "store": str(store)}]}), encoding="utf-8")
-        for mappings in ([], [(self.base / "retired-workspace", "retired")], [(self.base / "claude-workspace", "claude")]):
-            with self.subTest(mappings=mappings):
+        for case_index, mappings in enumerate(([], [(self.base / "retired-workspace", "retired")], [(self.base / "claude-workspace", "claude")])):
+            with self.subTest(case=(
+                "empty-workspace-map",
+                "retired-codex-workspace-map",
+                "claude-workspace-map",
+            )[case_index]):
                 if mappings:
                     mappings[0][0].mkdir(exist_ok=True)
                     Registry(self.root).register(mappings[0][1], "Codex" if mappings[0][1] == "retired" else "Claude")
@@ -1205,8 +1213,14 @@ class FU1G1Tests(FU1G0Tests):
             [{**row, "current_schema_version": False, "target_schema_version": True}],
             [{**row, "compatibility_after_update": "compatible"}],
         )
-        for readers in variants:
-            with self.subTest(readers=readers):
+        for case_index, readers in enumerate(variants):
+            with self.subTest(case=(
+                "duplicate-reader-row",
+                "unknown-reader",
+                "unexpected-files-added-field",
+                "boolean-current-and-target-versions",
+                "invented-compatible-status",
+            )[case_index]):
                 malformed = dict(
                     start,
                     reader_consequences=readers,
@@ -1749,7 +1763,10 @@ class FU1G1Tests(FU1G0Tests):
         hooks = self.base / "runtime-hooks.json"
         hooks.write_text(json.dumps({"hooks": {"Stop": []}}), encoding="utf-8")
         destination = self.base / "runtime-store"
-        receipt = CodexHookInstaller(source_root=runtime_source, bus_home=self.root.path, hooks_path=hooks, destination=destination).install(workspace, "seat-a", hook_timeout_seconds=10, wait_deadline_seconds=2)
+        from tests.test_codex_hook_install import expected_stop_block, operator_pair
+        # Empty Stop list: this install changes the definition; the pair is the fixture's.
+        pair = operator_pair(None, expected_stop_block(destination, self.root.path, 10))
+        receipt = CodexHookInstaller(source_root=runtime_source, bus_home=self.root.path, hooks_path=hooks, destination=destination).install(workspace, "seat-a", hook_timeout_seconds=10, wait_deadline_seconds=2, acknowledge_stop_hook_change=pair)
         expected = waiter_runtime_digest(runtime_source)
         self.assertEqual(expected, receipt["bundle_digest"])
         self.assertEqual(expected, Path(receipt["installed_path"]).name)

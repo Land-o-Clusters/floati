@@ -16,6 +16,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, Optional
 from unittest.mock import patch
 
@@ -31,6 +32,42 @@ from floati.worker_errors import WorkerAdapterFailure
 
 _DENIED = {errno.EACCES, errno.EPERM}
 _DENIED_LINK_OR_RENAME = _DENIED | {errno.EXDEV}
+
+
+class BorrowedGrantMetadataTests(unittest.TestCase):
+    def test_borrowed_grants_require_safe_descriptor_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            row = Path(directory) / "row"
+            slot = Path(directory) / "slot"
+            row.mkdir()
+            slot.mkdir()
+            pointer = row / ".git"
+            pointer.touch()
+            candidate = row / "entry"
+            candidate.touch(mode=0o600)
+            candidate_identity = _identity(candidate)
+            policy = SimpleNamespace(
+                workspace_mode="borrowed", workspace=row, workspace_identity=_identity(row),
+                provider_state=slot, provider_state_identity=_identity(slot),
+                gitfile_identity=_identity(pointer),
+            )
+            actual_fstat = os.fstat
+            for attribute, value in (("st_uid", os.getuid() + 1),
+                                     ("st_mode", stat.S_IFREG | 0o622), ("st_nlink", 2)):
+                def reported_metadata(descriptor):
+                    metadata = actual_fstat(descriptor)
+                    if (metadata.st_dev, metadata.st_ino) != candidate_identity:
+                        return metadata
+                    fields = ("st_dev", "st_ino", "st_uid", "st_mode", "st_nlink")
+                    return SimpleNamespace(**{
+                        field: value if field == attribute else getattr(metadata, field) for field in fields
+                    })
+
+                with self.subTest(attribute=attribute), patch.object(os, "O_PATH", os.O_RDONLY, create=True):
+                    with patch.object(os, "fstat", side_effect=reported_metadata):
+                        with self.assertRaises(ValueError):
+                            targets = worker_isolation._linux_rule_targets(policy)
+                            worker_isolation._close_rule_targets(targets)
 
 
 def _mode(path: Path) -> int:
@@ -265,11 +302,16 @@ class WorkerIsolationTests(unittest.TestCase):
 
         reused_workspace = self.workspaces / "reused"
         reused_workspace.mkdir(mode=0o700)
+        retained = reused_workspace / "result.txt"
+        retained.write_bytes(b"retained project bytes\n")
+        identity = _identity(reused_workspace)
         self.assert_typed_refusal(
             lambda: prepare_worker_isolation(
                 self.tenant_home, reused_workspace, "session-reused"
             )
         )
+        self.assertEqual(b"retained project bytes\n", retained.read_bytes())
+        self.assertEqual(identity, _identity(reused_workspace))
 
         policy = self.prepare("drift")
         drifted = dataclasses.replace(
@@ -286,7 +328,14 @@ class WorkerIsolationTests(unittest.TestCase):
             },
         )
 
+    def _use_owned_temp_root(self) -> None:
+        """Plant replacement scratch beneath this fixture, never the shared temp root."""
+        owned = self.root / "owned-temp-root"
+        owned.mkdir(mode=0o700)
+        self._use_temp_root(owned)
+
     def test_prepare_failure_cleanup_preserves_replacement_probe_and_scratch(self) -> None:
+        self._use_owned_temp_root()
         real_close = os.close
         real_mkdtemp = tempfile.mkdtemp
         real_open = os.open
@@ -419,12 +468,16 @@ class WorkerIsolationTests(unittest.TestCase):
         shutil.rmtree(scratch)
 
     def test_cleanup_removes_only_matching_probe_and_scratch(self) -> None:
+        self._use_owned_temp_root()
         matching = self.prepare("matching")
+        artifact = matching.workspace / "result.txt"
+        artifact.write_bytes(b"retained legacy artifact\n")
         (matching.scratch / "nested").mkdir()
         (matching.scratch / "nested" / "data").write_text("owned", encoding="utf-8")
         cleanup_worker_isolation(matching)
         self.assertFalse(matching.write_probe.exists())
         self.assertFalse(matching.scratch.exists())
+        self.assertEqual(b"retained legacy artifact\n", artifact.read_bytes())
 
         probe_drift = self.prepare("probe-drift")
         # Allocate the replacement while the original probe still holds its inode:
@@ -653,6 +706,48 @@ with tempfile.TemporaryDirectory() as temporary:
         finally:
             if original_workers is not None:
                 sys.modules["floati.workers"] = original_workers
+
+    def test_macos_descriptor_inventory_is_bounded_and_keeps_high_inherited_fds(self) -> None:
+        target = self.tenant_home / "effects" / "inherited"
+        calls = []
+
+        def getpath(descriptor, operation, buffer):
+            calls.append(descriptor)
+            if len(calls) > 3:
+                self.fail("descriptor inspection scanned beyond the actual open inventory")
+            if descriptor != 98765:
+                raise OSError(errno.EBADF, "not a path descriptor")
+            return os.fsencode(target) + b"\0"
+
+        from unittest.mock import Mock
+        facilities = Mock()
+        facilities.getrlimit.return_value = (1_000_000, 1_000_000)
+        facilities.RLIMIT_NOFILE = 7
+        facilities.RLIM_INFINITY = -1
+        resolver = Mock()
+        resolver.fcntl.side_effect = getpath
+        with patch.object(worker_isolation, "_fcntl", resolver),\
+             patch.object(worker_isolation, "_resource", facilities),\
+             patch.object(worker_isolation.os, "listdir", return_value=["0", "1", "98765"]) as inventory:
+            self.assertEqual({98765: target}, worker_isolation._resolved_macos_descriptors())
+        inventory.assert_called_once_with("/dev/fd")
+        self.assertEqual([0, 1, 98765], calls)
+
+    def test_macos_descriptor_inventory_failure_refuses_without_a_scan_fallback(self) -> None:
+        from unittest.mock import Mock
+        policy = self.prepare("descriptor-inventory-refusal")
+        resolver = Mock()
+        resolver.fcntl.side_effect = OSError(errno.EBADF, "no open path descriptors")
+        facilities = Mock()
+        facilities.getrlimit.return_value = (2, 2)
+        with patch.object(worker_isolation, "_fcntl", resolver),\
+             patch.object(worker_isolation.sys, "platform", "darwin"),\
+             patch.object(worker_isolation, "_resource", facilities),\
+             patch.object(worker_isolation, "_apply_macos", side_effect=AssertionError("activation without inventory")) as activate,\
+             patch.object(worker_isolation.os, "listdir", side_effect=PermissionError("inventory unavailable")):
+            self.assert_typed_refusal(lambda: worker_isolation.apply_worker_isolation(policy))
+        activate.assert_not_called()
+        resolver.fcntl.assert_not_called()
 
     def test_landlock_syscalls_are_closed_to_known_64_bit_architectures(self) -> None:
         for machine in ("x86_64", "aarch64", "arm64"):

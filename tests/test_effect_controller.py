@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_queue, wait_event
 from floati import fixture_ids as public_ids
 
 import hashlib
@@ -80,7 +81,7 @@ def _managed_acceptance_process(
     def observed_guard(selected_root):
         with original_guard(selected_root):
             acquired.set()
-            if not release.wait(5):
+            if not wait_event(release, 'effect_controller: release synchronization', timeout=120):
                 raise RuntimeError("managed acceptance release timed out")
             yield
 
@@ -1066,12 +1067,12 @@ class EffectControllerAuthorityTests(unittest.TestCase):
 
                 def gated_now(value):
                     entered_body.set()
-                    if not replacement_installed.wait(3):
+                    if not wait_event(replacement_installed, 'effect_controller: replacement_installed synchronization'):
                         raise RuntimeError("policy replacement was not installed")
                     return original_now(value)
 
                 def replace_during_call() -> None:
-                    if not entered_body.wait(3):
+                    if not wait_event(entered_body, 'effect_controller: entered_body synchronization'):
                         attacker_errors.append("controller body was not entered")
                         replacement_installed.set()
                         return
@@ -1079,7 +1080,7 @@ class EffectControllerAuthorityTests(unittest.TestCase):
                         effects_module, helper, side_effect=replacement,
                     ):
                         replacement_installed.set()
-                        if not call_finished.wait(3):
+                        if not wait_event(call_finished, 'effect_controller: call_finished synchronization'):
                             attacker_errors.append("controller call did not finish")
 
                 attacker = threading.Thread(target=replace_during_call)
@@ -1103,8 +1104,11 @@ class EffectControllerAuthorityTests(unittest.TestCase):
 
     def test_controller_policy_seal_preserves_method_metadata(self) -> None:
         """Catches authority wrappers erasing public method introspection."""
-        for method in (EffectController.__init__, EffectController.intent):
-            with self.subTest(method=method):
+        for case_index, method in enumerate((EffectController.__init__, EffectController.intent)):
+            with self.subTest(case=(
+                "EffectController.__init__",
+                "EffectController.intent",
+            )[case_index]):
                 body = _recovered_controller_body(method)
                 self.assertEqual(body.__name__, method.__name__)
                 self.assertEqual(body.__annotations__, method.__annotations__)
@@ -1135,11 +1139,11 @@ class EffectControllerAuthorityTests(unittest.TestCase):
         managed.start()
         try:
             self.assertTrue(
-                acquired.wait(3),
+                wait_event(acquired, 'effect_controller: acquired synchronization'),
                 "managed acceptance batch must acquire the real common guard",
             )
             effect.start()
-            self.assertTrue(effect_started.wait(3))
+            self.assertTrue(wait_event(effect_started, 'effect_controller: effect_started synchronization'))
             effect.join(0.2)
             self.assertTrue(
                 effect.is_alive(),
@@ -1156,7 +1160,7 @@ class EffectControllerAuthorityTests(unittest.TestCase):
                     process.join(5)
         self.assertEqual(0, managed.exitcode)
         self.assertEqual(0, effect.exitcode)
-        observed = {results.get(timeout=3) for _ in range(2)}
+        observed = {wait_queue(results, 'effect_controller: results frame') for _ in range(2)}
         self.assertIn(("managed_ok", acceptance["id"]), observed)
         self.assertIn(("effect_refused", "effect_attempt_accepted"), observed)
         self.assertEqual([], EffectLedger(case.root).records())
@@ -1647,11 +1651,11 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
         )
         process.start()
         try:
-            self.assertTrue(started.wait(3))
+            self.assertTrue(wait_event(started, 'effect_controller: started synchronization'))
             process.join(10)
             self.assertFalse(process.is_alive())
             self.assertEqual(0, process.exitcode)
-            outcome = results.get(timeout=3)
+            outcome = wait_queue(results, 'effect_controller: results frame')
         finally:
             if process.is_alive():
                 process.terminate()
@@ -2026,8 +2030,11 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
                 "verb": "unknown",
             },
         )
-        for event in forbidden:
-            with self.subTest(event=event):
+        for case_index, event in enumerate(forbidden):
+            with self.subTest(case=(
+                "child-confirmation-event",
+                "child-raw-effect-unknown-record",
+            )[case_index]):
                 case = _EffectWorkerCase(
                     self, _EffectReportingAdapter((event,)),
                 )

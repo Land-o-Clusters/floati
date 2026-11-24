@@ -19,9 +19,10 @@ from floati import fixture_ids as public_ids
 from floati.cursor import SparseCursor
 from floati.events import EventLog
 from floati.framing import encode_frame
-from floati.records import READER_VERSION
+from floati.records import READER_VERSION, WAKE_HOLD_KINDS
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.banked_sha_fixture import banked_send_repository
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -124,6 +125,7 @@ class Skew2UnknownEventAndReceiptKindTests(unittest.TestCase):
         """RED today: send exits 33 malformed_evidence after a future kind."""
 
         self.append_unknown_event()
+        repository, sha = banked_send_repository(self.base)
         code, artifact = self.run_cli(
             "send",
             "--root",
@@ -135,9 +137,11 @@ class Skew2UnknownEventAndReceiptKindTests(unittest.TestCase):
             "--repo",
             "floati",
             "--sha",
-            "b" * 40,
+            sha,
+            "--repository",
+            str(repository),
             "--doc",
-            "docs/evidence/x.md",
+            "note.md",
             "--note",
             "after unknown",
             "--idempotency-key",
@@ -177,7 +181,7 @@ class Skew2UnknownEventAndReceiptKindTests(unittest.TestCase):
         rows, unrecognized = read_records_compatible_snapshot(
             self.root,
             relative,
-            allowed_kinds={"ack_receipt", "delivery_receipt", "wake_hold_receipt"},
+            allowed_kinds=set(WAKE_HOLD_KINDS) | {"ack_receipt"},
         )
         self.assertEqual([], rows)
         self.assertEqual(1, len(unrecognized))

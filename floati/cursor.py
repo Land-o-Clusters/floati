@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence
 
 from .bus_epoch import shared_epoch_operation
+from .epoch_rotation import automatic_epoch_operation
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import read_records, read_records_snapshot, transact
+from .jsonl import read_records, read_records_sealed_snapshot, read_records_snapshot
 from .records import WAKE_HOLD_KINDS
 from .root import FloatiRoot, validate_identifier
 
@@ -106,18 +107,25 @@ class SparseCursor:
         *,
         worker_session_id: Optional[str] = None,
         retracted_ids: FrozenSet[str] | set[str] = frozenset(),
+        snapshot: bool = False,
+        sealed: bool = False,
     ) -> tuple[FrozenSet[str], FrozenSet[str]]:
         node = validate_identifier(recipient, "node")
         if worker_session_id is not None:
             self._session_component(worker_session_id)
         acknowledged = set()
-        delivered = self.validate_deliveries(
-            node,
-            events,
-            worker_session_id=worker_session_id,
-        )
+        if sealed:
+            presented, ackable = self.validate_deliveries(
+                node, events, worker_session_id=worker_session_id, sealed=True)
+        elif snapshot:
+            presented, ackable = self.validate_deliveries(
+                node, events, worker_session_id=worker_session_id, snapshot=True)
+        else:
+            presented, ackable = self.validate_deliveries(
+                node, events, worker_session_id=worker_session_id)
         event_by_id = {str(item["id"]): item for item in events}
-        for receipt in read_records(
+        reader = read_records_sealed_snapshot if sealed else (read_records_snapshot if snapshot else read_records)
+        for receipt in reader(
             self.root,
             self._relative_path_for(node, worker_session_id=worker_session_id),
             allowed_kinds={"ack_receipt"},
@@ -133,11 +141,28 @@ class SparseCursor:
                     event is None
                     or event.get("recipient") != node
                     or event.get("worker_session_id") != worker_session_id
-                    or item_id not in delivered
+                    or item_id not in ackable
                 ):
                     raise IntegrityFailure("ack_evidence_invalid", "ack does not correspond to delivered session evidence")
             acknowledged.update(item_ids)
-        return delivered, frozenset(acknowledged)
+        return presented, frozenset(acknowledged)
+
+    def ack_references_for(self, recipient: str, message: Dict[str, object]) -> List[Dict[str, object]]:
+        """Select a current consumption ACK without replacing full projections.
+
+        The consumption caller retains its native coordination guard and
+        candidate envelope/retraction/session checks. Whole-plane validation
+        on a cache miss remains a prerequisite to this selected native join.
+        """
+        node = validate_identifier(recipient, "node")
+        if (not isinstance(message, dict) or message.get("tenant_id") != self.root.tenant_id
+                or message.get("kind") != "message_envelope" or message.get("recipient") != node):
+            raise IntegrityFailure("ack_evidence_invalid", "selected ACK has no matching recipient envelope")
+        worker = message.get("worker_session_id")
+        if worker is not None:
+            self._session_component(worker)
+        from .cursor_prefix import selected_ack_references
+        return selected_ack_references(self.root, node, message)
 
     def validate_deliveries(
         self,
@@ -145,13 +170,25 @@ class SparseCursor:
         events: Sequence[Dict[str, object]],
         *,
         worker_session_id: Optional[str] = None,
-    ) -> FrozenSet[str]:
+        snapshot: bool = False,
+        sealed: bool = False,
+    ) -> tuple[FrozenSet[str], FrozenSet[str]]:
+        """Classify one plane read into presented and ackable item ids.
+
+        Only a plain ``delivery_receipt`` proves presentation, so only its
+        items suppress re-presentation.  A ``delivered_unpresented`` receipt
+        (BUS-DELIVERY-UNPRESENTED-1) is still delivery evidence for an
+        acknowledgment - the seat demonstrably saw the item to ack it - but it
+        never stands in for presentation.
+        """
         node = validate_identifier(recipient, "node")
         if worker_session_id is not None:
             self._session_component(worker_session_id)
         event_by_id = {str(item["id"]): item for item in events}
-        delivered = set()
-        for receipt in read_records(
+        presented = set()
+        ackable = set()
+        reader = read_records_sealed_snapshot if sealed else (read_records_snapshot if snapshot else read_records)
+        for receipt in reader(
             self.root,
             self._delivery_relative_path_for(node, worker_session_id=worker_session_id),
             allowed_kinds=set(WAKE_HOLD_KINDS),
@@ -169,10 +206,14 @@ class SparseCursor:
                         "delivery_evidence_invalid",
                         "delivery references missing or wrong-session recipient evidence",
                     )
-                delivered.add(str(item_id))
-        return frozenset(delivered)
+                item_id = str(item_id)
+                ackable.add(item_id)
+                if receipt.get("kind") == "delivery_receipt":
+                    presented.add(item_id)
+        return frozenset(presented), frozenset(ackable)
 
-    @shared_epoch_operation
+    @automatic_epoch_operation("ack")
+    @shared_epoch_operation(selected_writer=True)
     def ack(
         self,
         recipient: str,
@@ -221,25 +262,22 @@ class SparseCursor:
         ack_relative = self._relative_path_for(
             node, worker_session_id=worker_session_id
         )
-        delivery_relative = Path("receipts/deliveries").joinpath(
-            *ack_relative.relative_to("receipts/acks").parts
-        )
-        frames = self._event_records()
-        event_records = [row for row in frames if row["kind"] == "message_envelope"]
-        retracted_ids = {
-            str(row["retracted_message_id"])
-            for row in frames
-            if row["kind"] == "message_retracted"
-        }
+        from .send_prefix import event_references
+        from .cursor_prefix import delivery_membership, transact_ack
+
+        # Certify the authoritative prefix before consulting recipient evidence,
+        # retaining the native integrity-failure precedence. Every delivery
+        # reference is still validated, including unrequested historical items.
+        _events, _retracted, proof = event_references(self.root, requested)
+        ackable = delivery_membership(self.root, node, requested,
+            worker_session_id=worker_session_id, proof=proof)
+        event_records, retracted_ids, _proof = event_references(self.root, requested, previous=proof)
         events = {str(record["id"]): record for record in event_records}
-        delivered = self.validate_deliveries(
-            node, event_records, worker_session_id=worker_session_id
-        )
 
         for item_id in requested:
             event = events.get(item_id)
             if event is None:
-                if self._item_was_archived(item_id, delivery_relative):
+                if self._item_was_archived(item_id, node, worker_session_id=worker_session_id):
                     raise ProtocolRefusal(
                         "ack_item_archived",
                         f"message {item_id} moved to an owned epoch archive",
@@ -251,8 +289,8 @@ class SparseCursor:
                 raise ProtocolRefusal("ack_session_mismatch", f"message {item_id} belongs to another worker session")
             if item_id in retracted_ids:
                 raise ProtocolRefusal("ack_item_retracted", f"message {item_id} has been retracted")
-            if item_id not in delivered:
-                if self._item_was_archived(item_id, delivery_relative):
+            if item_id not in ackable:
+                if self._item_was_archived(item_id, node, worker_session_id=worker_session_id):
                     raise ProtocolRefusal(
                         "ack_item_archived",
                         f"message {item_id} moved to an owned epoch archive",
@@ -296,36 +334,14 @@ class SparseCursor:
                     return existing, None
             return receipt, receipt
 
-        return transact(
-            self.root,
-            ack_relative,
-            decide,
-            allowed_kinds={"ack_receipt"},
-        )
+        return transact_ack(self.root, ack_relative, requested, acting_session, decide,
+            worker_session_id=worker_session_id)
 
-    def _item_was_archived(self, item_id: str, delivery_relative: Path) -> bool:
-        from .events import EVENT_KINDS
-        from .snapshot import _owned_epoch_archives
+    def _item_was_archived(self, item_id: str, recipient: str, *,
+                           worker_session_id: Optional[str] = None) -> bool:
+        from .send_prefix import current_epoch_has_no_roll_head
+        if current_epoch_has_no_roll_head(self.root):
+            return False
+        from .epoch_history import archived_item_membership
 
-        for archive in _owned_epoch_archives(self.root):
-            archive_relative = archive.relative_to(self.root.tenant_home)
-            archived_events = read_records_snapshot(
-                self.root,
-                archive_relative / "events.jsonl",
-                allowed_kinds=set(EVENT_KINDS),
-            )
-            if any(
-                row.get("kind") == "message_envelope" and row.get("id") == item_id
-                for row in archived_events
-            ):
-                return True
-            archived_deliveries = read_records_snapshot(
-                self.root,
-                archive_relative / delivery_relative,
-                allowed_kinds=set(WAKE_HOLD_KINDS),
-            )
-            if any(
-                item_id in row.get("item_ids", []) for row in archived_deliveries
-            ):
-                return True
-        return False
+        return archived_item_membership(self.root, item_id, recipient, worker_session_id)

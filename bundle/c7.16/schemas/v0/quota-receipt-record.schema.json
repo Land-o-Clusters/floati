@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/quota-receipt-record.schema.json",
+  "title": "Floati Quota Receipt Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "provider", "endpoint_id", "facts", "idempotency_key", "receipt_digest"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^quota-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "quota_receipt_record"},
+    "provider": {"$ref": "#/$defs/identifier"},
+    "endpoint_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "facts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/fact"}
+    },
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128},
+    "receipt_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "surface", "state", "stamp", "source", "evidence_digest", "observed_at", "resets_at"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/identifier"},
+        "surface": {"type": "string", "minLength": 1, "maxLength": 256},
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {"enum": ["consumed_fraction", "session_tokens", "unknown"]},
+            "value": {"type": ["string", "null"]}
+          }
+        },
+        "stamp": {"enum": ["MEASURED", "DERIVED", "ESTIMATE"]},
+        "source": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "evidence_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "resets_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    }
+  }
+}

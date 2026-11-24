@@ -40,16 +40,39 @@ _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256 = (
 _GOVERNED_PROTOCOL_ASSET_ROOTS = (
     "schemas/v0",
     "schemas/v1",
+    "schemas/v2",
+    "schemas/v3",
+    "schemas/v4",
 )
-_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 162
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 201
 _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # Versioned schemas may evolve in place, but their reviewed membership is
     # fixed. Content bytes deliberately do not participate in this pin. The
     # pin moves because the SET grew, by governed-schema additions only
     # (the closed schema-v1 hook burn record and the role template write
-    # receipt; SN-R1 Am.4 adds timing-receipt.schema.json); the frozen
-    # published bundle count above is untouched.
-    "bc477e864d8fbf0e707999ba1a6461c04d35899b38fe715dd791558521f99cc1"
+    # receipt; SN-R1 Am.4 adds timing-receipt.schema.json; BL-10 adds
+    # seat-migration-record.schema.json); the frozen published bundle count
+    # above is untouched.
+    # F2-READINESS-1 adds shared Stop testimony and send observations.
+    # F2-SEAT-STALL-VISIBLE-1 adds execution and structured work-car v1 schemas.
+    # F2-WAKE-UNACKED-LOOP-1 adds the closed conversation-presentation receipt.
+    # BUS-CONSUMED-RECEIPT-1 adds its separate ACTED receipt (seat27 §23).
+    # F2-SEAT-TEARDOWN-1 adds its closed exact-session receipt schema.
+    # F2-SEAT-TEARDOWN-SCALE-1 adds the closed v2 bounded-prefix schema.
+    # BUS-AUTO-ROTATE-1 adds closed epoch-bound teardown verification.
+    # BUS-ARCHIVE-RETENTION-1 adds the separate v1 native history commit family.
+    # WD-3-RELEASE-TESTIMONY-1 adds the v2 wake-hold receipt; LX-U1 adds the
+    # separate wake-daemon directory ownership record.
+    # WAITER-ARM-CPU-1 R3 adds the v3 wake-hold receipt and the closed epoch carry
+    # verification.
+    # NEEDS-YOU-INBOX-1 adds the v1 needs-item bound record.
+    # Dispatch records add the v1 dispatch revision, return and close records.
+    # Fleet night mode adds the v1 fleet presence receipt.
+    # Codex launch projection adds the v0 headless launch projection and the
+    # v1 native dispatch launcher record.
+    # Upgrade preparation adds the v1 epoch carry verification.
+    # NEEDS-YOU-OBSERVED-1 adds the v1 needs-observed item.
+    '0b06bd7dbde1f4ce573374f626ddff818c1532c7c9b19f523935a47be27f433a'
 )
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (
@@ -59,8 +82,10 @@ _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (
 )
 
 
-def _protocol_json_paths(relative_roots: tuple[str, ...], label: str) -> list[Path]:
-    root = Path.cwd()
+def _protocol_json_paths(
+    relative_roots: tuple[str, ...], label: str, *, root: Path | None = None,
+) -> list[Path]:
+    root = Path.cwd() if root is None else root
     paths: list[Path] = []
     for relative_root in relative_roots:
         asset_root = root / relative_root
@@ -85,11 +110,13 @@ def _protocol_paths_sha256(paths: list[Path]) -> str:
     ).hexdigest()
 
 
-def _frozen_protocol_snapshot() -> tuple[int, str, str]:
+def _frozen_protocol_snapshot(*, root: Path | None = None) -> tuple[int, str, str]:
     """Return the reviewer-approved published-bundle byte snapshot."""
 
-    root = Path.cwd()
-    paths = _protocol_json_paths(_FROZEN_PROTOCOL_ASSET_ROOTS, "frozen protocol")
+    root = Path.cwd() if root is None else root
+    paths = _protocol_json_paths(
+        _FROZEN_PROTOCOL_ASSET_ROOTS, "frozen protocol", root=root,
+    )
     snapshot_sha256 = hashlib.sha256()
     for path in paths:
         relative = path.as_posix().encode("utf-8")
@@ -97,11 +124,13 @@ def _frozen_protocol_snapshot() -> tuple[int, str, str]:
     return len(paths), _protocol_paths_sha256(paths), snapshot_sha256.hexdigest()
 
 
-def _governed_protocol_snapshot() -> tuple[int, str, int, str]:
+def _governed_protocol_snapshot(*, root: Path | None = None) -> tuple[int, str, int, str]:
     """Return governed schema membership and shared JSON-object shape."""
 
-    root = Path.cwd()
-    paths = _protocol_json_paths(_GOVERNED_PROTOCOL_ASSET_ROOTS, "governed protocol")
+    root = Path.cwd() if root is None else root
+    paths = _protocol_json_paths(
+        _GOVERNED_PROTOCOL_ASSET_ROOTS, "governed protocol", root=root,
+    )
     common_keys: set[str] | None = None
     for path in paths:
         try:
@@ -145,6 +174,15 @@ class ManifestTests(unittest.TestCase):
         digest = hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
         return {"path": relative, "sha256": digest}
 
+    def copied_protocol_assets(self, relative_roots: tuple[str, ...]) -> Path:
+        """Keep mutation witnesses away from the checkout used by other tests."""
+        root = self.root / "protocol-copy"
+        for relative in relative_roots:
+            shutil.copytree(
+                REPOSITORY_ROOT / relative, root / relative, symlinks=True,
+            )
+        return root
+
     def write_manifest(self, **overrides) -> None:
         payload = {
             "schema_version": 0,
@@ -164,6 +202,45 @@ class ManifestTests(unittest.TestCase):
     def test_exact_bundle_passes(self) -> None:
         self.write_manifest()
         self.assertEqual([], verify_manifest(self.root))
+
+    def test_later_release_names_inside_each_installed_class_are_deployable(self) -> None:
+        for relative in (
+            "scripts/floati-newtool", "scripts/floati-new-observer.mjs",
+            "floati/future/nested.py", "schemas/v23/future.json",
+            "bundle/c7.23/future/asset.json", "roles/shipped/future-role.json",
+        ):
+            with self.subTest(path=relative):
+                self.write_manifest()
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"{}\n")
+                manifest = json.loads((self.root / "bundle-manifest.v0.json").read_text())
+                manifest["files"].append(self.entry(relative))
+                self.write_manifest(files=sorted(manifest["files"], key=lambda entry: entry["path"]))
+                try:
+                    self.assertEqual([], verify_manifest(self.root))
+                finally:
+                    path.unlink()
+
+    def test_target_cannot_widen_the_installed_deployable_class(self) -> None:
+        for relative in (
+            "scripts/evil.sh", "scripts/floatix", "scripts/floati-",
+            "scripts/floati-newtool/child", "floati/locks/private.py",
+            "floati/__pycache__/private.py", "roles/custom/future.json",
+            "schemas/unversioned/future.json", "bundle/c8.1/future.json",
+        ):
+            with self.subTest(path=relative):
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"{}\n")
+                self.write_manifest()
+                manifest = json.loads((self.root / "bundle-manifest.v0.json").read_text())
+                manifest["files"].append(self.entry(relative))
+                self.write_manifest(files=sorted(manifest["files"], key=lambda entry: entry["path"]))
+                self.assertIn(
+                    "manifest_path_outside_deployable_class:" + relative,
+                    verify_manifest(self.root),
+                )
 
     def test_wrong_protocol_or_canonical_ref_is_distinguishable(self) -> None:
         self.write_manifest(protocol_version="1")
@@ -250,6 +327,7 @@ class ManifestTests(unittest.TestCase):
             ]
         )
         self.assertIn("tracked_set_mismatch", verify_manifest(self.root))
+        self.assertIn("manifest_path_untracked:floati/t3.py", verify_manifest(self.root))
 
     def _git(self, *args: str) -> None:
         env = os.environ.copy()
@@ -753,9 +831,11 @@ class ManifestTests(unittest.TestCase):
     def test_governed_protocol_json_content_is_not_byte_pinned(self) -> None:
         """Catches schema content edits being mistaken for published-bundle drift."""
 
-        schema = Path("schemas/v1/doctor-artifact.schema.json")
+        root = self.copied_protocol_assets(
+            _GOVERNED_PROTOCOL_ASSET_ROOTS + _FROZEN_PROTOCOL_ASSET_ROOTS,
+        )
+        schema = root / "schemas/v1/doctor-artifact.schema.json"
         original = schema.read_bytes()
-        self.addCleanup(schema.write_bytes, original)
         payload = json.loads(original)
         payload["description"] = "governed schema content may evolve"
         schema.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
@@ -766,7 +846,7 @@ class ManifestTests(unittest.TestCase):
                 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256,
                 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256,
             ),
-            _frozen_protocol_snapshot(),
+            _frozen_protocol_snapshot(root=root),
         )
 
     def test_governed_protocol_json_inventory_and_shape_match_the_reviewed_set(self) -> None:
@@ -785,8 +865,8 @@ class ManifestTests(unittest.TestCase):
     def test_adding_a_governed_schema_moves_the_membership_pin(self) -> None:
         """Catches an unreviewed schema addition escaping governed membership."""
 
-        added = Path("schemas/v1/unreviewed-addition.schema.json")
-        self.addCleanup(added.unlink, missing_ok=True)
+        root = self.copied_protocol_assets(_GOVERNED_PROTOCOL_ASSET_ROOTS)
+        added = root / "schemas/v1/unreviewed-addition.schema.json"
         added.write_text('{"$schema":"https://json-schema.org/draft/2020-12/schema"}\n')
 
         self.assertNotEqual(
@@ -796,21 +876,21 @@ class ManifestTests(unittest.TestCase):
                 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
                 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
             ),
-            _governed_protocol_snapshot(),
+            _governed_protocol_snapshot(root=root),
         )
 
     def test_governed_schema_must_parse_and_keep_the_shared_shape(self) -> None:
         """Catches malformed JSON or removal of a key shared by every schema."""
 
-        schema = Path("schemas/v1/doctor-artifact.schema.json")
+        root = self.copied_protocol_assets(_GOVERNED_PROTOCOL_ASSET_ROOTS)
+        schema = root / "schemas/v1/doctor-artifact.schema.json"
         original = schema.read_bytes()
-        self.addCleanup(schema.write_bytes, original)
         schema.write_text("not-json\n", encoding="utf-8")
         with self.assertRaisesRegex(
             AssertionError,
             r"governed protocol asset is not valid JSON: schemas/v1/doctor-artifact\.schema\.json",
         ):
-            _governed_protocol_snapshot()
+            _governed_protocol_snapshot(root=root)
 
         payload = json.loads(original)
         payload.pop("$schema")
@@ -822,15 +902,15 @@ class ManifestTests(unittest.TestCase):
                 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT,
                 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256,
             ),
-            _governed_protocol_snapshot(),
+            _governed_protocol_snapshot(root=root),
         )
 
     def test_changing_a_frozen_bundle_asset_moves_the_byte_pin(self) -> None:
         """Catches published bundle drift while naming the perturbed asset."""
 
-        asset = Path("bundle/c7.1/bundle-index.json")
+        root = self.copied_protocol_assets(_FROZEN_PROTOCOL_ASSET_ROOTS)
+        asset = root / "bundle/c7.1/bundle-index.json"
         original = asset.read_bytes()
-        self.addCleanup(asset.write_bytes, original)
         asset.write_bytes(original + b" ")
 
         self.assertNotEqual(
@@ -839,7 +919,7 @@ class ManifestTests(unittest.TestCase):
                 _FLOATI_FROZEN_PROTOCOL_PATHS_SHA256,
                 _FLOATI_FROZEN_PROTOCOL_SNAPSHOT_SHA256,
             ),
-            _frozen_protocol_snapshot(),
+            _frozen_protocol_snapshot(root=root),
             f"frozen protocol byte drift was not detected: {asset}",
         )
 

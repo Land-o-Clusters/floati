@@ -125,7 +125,10 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
         in both directions: it refuses a platform being dropped silently, and it
         equally refuses ``macos-latest`` being restored here. Do not "fix" this
         test by adding hosted macOS back — that is the retired policy, and the
-        workflow is what the current one says.
+        workflow is what the current one says. On 2026-11-01 the Linux runner was
+        pinned from ``ubuntu-latest`` to ``ubuntu-24.04``: ``ubuntu-latest`` had moved
+        to Ubuntu 26.04, which has no Python 3.9 build, so setup failed before any
+        test ran (public run 41331855255); 3.9 is the product's supported floor.
         """
 
         workflow = self.load_json_yaml(".github/workflows/release-gate.yml")
@@ -141,7 +144,7 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
             selftest["if"],
         )
         self.assertEqual(
-            {"fail-fast": False, "matrix": {"os": ["ubuntu-latest"]}},
+            {"fail-fast": False, "matrix": {"os": ["ubuntu-24.04"]}},
             selftest["strategy"],
         )
         self.assertEqual("${{ matrix.os }}", selftest["runs-on"])
@@ -164,7 +167,7 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
             fences["if"],
         )
         self.assertEqual("full-selftest", fences["needs"])
-        self.assertEqual("ubuntu-latest", fences["runs-on"])
+        self.assertEqual("ubuntu-24.04", fences["runs-on"])
         self.assertEqual({"PYTHONDONTWRITEBYTECODE": "1"}, fences["env"])
         self.assertEqual(
             [
@@ -191,14 +194,16 @@ class PublicRepositoryHygieneTests(unittest.TestCase):
         self.assertEqual({"workflow_dispatch": {}}, workflow["on"])
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         job = workflow["jobs"]["export-public"]
+        source_repository = json.loads(policy_path.read_bytes())["public_repository"] + "-harbor"
         self.assertEqual(
             (
-                "github.repository == 'Land-o-Clusters/floati-harbor' && "
+                f"github.repository == '{source_repository}' && "
                 "github.ref == 'refs/heads/main'"
             ),
             job["if"],
         )
-        self.assertEqual("ubuntu-latest", job["runs-on"])
+        # ubuntu-latest became Ubuntu 26.04 (no Python 3.9 build); pinned 2026-11-01.
+        self.assertEqual("ubuntu-24.04", job["runs-on"])
         self.assertEqual({"PYTHONDONTWRITEBYTECODE": "1"}, job["env"])
 
         steps = job["steps"]

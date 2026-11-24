@@ -29,10 +29,73 @@
       "properties": {
         "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
         "role": {"type": "string", "minLength": 1, "maxLength": 64},
+        "lifetime": {"enum": ["permanent", "temporary"]},
         "liveness": {"enum": ["present", "silent", "expired", "unknown"]},
         "authority": {"enum": ["active", "expired", "none"]},
         "mutex": {"enum": ["active", "expired", "none"]},
         "inbox_depth": {"type": "integer", "minimum": 0},
+        "message_progress": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "delivered",
+                "acknowledged",
+                "consumed"
+              ],
+              "properties": {
+                "delivered": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "acknowledged": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "consumed": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "reason_code",
+                "delivered",
+                "acknowledged",
+                "consumed"
+              ],
+              "properties": {
+                "state": {
+                  "const": "unknown"
+                },
+                "reason_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9_]{0,127}$",
+                  "not": {
+                    "pattern": "[^a-z0-9_]"
+                  }
+                },
+                "delivered": {
+                  "type": "null"
+                },
+                "acknowledged": {
+                  "type": "null"
+                },
+                "consumed": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "delivered_unpresented": {"type": "integer", "minimum": 0},
         "last_activity": {"type": "string", "format": "date-time"},
         "tide": {
           "type": "object",
@@ -46,16 +109,31 @@
       }
     },
     "stale": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plane", "subject_id", "holder", "epoch", "expires_at"],
-      "properties": {
-        "plane": {"enum": ["authority", "mutex"]},
-        "subject_id": {"type": "string", "minLength": 1, "maxLength": 64},
-        "holder": {"type": "string", "minLength": 1, "maxLength": 64},
-        "epoch": {"type": "integer", "minimum": 1},
-        "expires_at": {"type": "string", "format": "date-time"}
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plane", "subject_id", "holder", "epoch", "expires_at"],
+          "properties": {
+            "plane": {"enum": ["authority", "mutex"]},
+            "subject_id": {"type": "string", "minLength": 1, "maxLength": 64},
+            "holder": {"type": "string", "minLength": 1, "maxLength": 64},
+            "epoch": {"type": "integer", "minimum": 1},
+            "expires_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plane", "node_id", "expires_at", "retire_command"],
+          "properties": {
+            "plane": {"const": "node"},
+            "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+            "expires_at": {"type": "string", "format": "date-time"},
+            "retire_command": {"type": "string", "minLength": 1, "maxLength": 4096}
+          }
+        }
+      ]
     },
     "worker": {
       "type": "object",

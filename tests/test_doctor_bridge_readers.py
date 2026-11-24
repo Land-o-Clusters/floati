@@ -13,10 +13,12 @@ silence.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from floati import fixture_ids as public_ids
@@ -104,13 +106,17 @@ class DoctorBridgeReaderTests(unittest.TestCase):
             ["/usr/bin/git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True,
         ).stdout.strip()
-        rows = self.findings("bridge_reader_current")
+        rows = self.findings("bridge_legacy_reader")
         self.assertEqual(1, len(rows), rows)
         observation = rows[0]["bridge"]
         self.assertEqual(str(REPOSITORY_ROOT), observation["repo"])
         self.assertEqual(expected, observation["commit"])
         self.assertEqual(READER_VERSION, observation["reader_schema_version"])
         self.assertTrue(observation["hook_repo_pinned"])
+        self.assertEqual("warning", rows[0]["severity"])
+        required = self.findings("bridge_adoption_required")
+        self.assertTrue(required)
+        self.assertIn("re-apply", required[0]["remediation"])
 
     def test_doctor_flags_a_bridge_older_than_the_ledgers_newest_kind(
         self,
@@ -183,6 +189,23 @@ class ParseBridgeCommandTests(unittest.TestCase):
     def test_a_command_without_the_bridge_is_none(self) -> None:
         self.assertIsNone(
             parse_bridge_command("/usr/bin/python3 /tools/other.py"))
+
+    def test_malformed_legacy_shell_is_unnameable(self) -> None:
+        self.assertIsNone(parse_bridge_command("/bin/sh -c 'exec stop-hook-bridge.py"))
+
+
+class BridgeReaderLiteralTests(unittest.TestCase):
+    def test_numeric_literal_is_read_without_executing_source(self):
+        from floati.bridge_bank import _reader_version
+        self.assertEqual("7", _reader_version(b"raise RuntimeError('must not run')\nREADER_VERSION='7'\n", Path("records.py")))
+
+    def test_missing_dynamic_duplicate_and_nonnumeric_versions_refuse(self):
+        from floati.bridge_bank import BridgeBankUnavailable, _reader_version
+        for payload in (b"VALUE='0'\n", b"READER_VERSION=str(1)\n",
+                        b"READER_VERSION='0'\nREADER_VERSION='1'\n", b"READER_VERSION='bad'\n"):
+            with self.subTest(payload=payload), self.assertRaises(BridgeBankUnavailable):
+                _reader_version(payload, Path("records.py"))
+
 
 
 if __name__ == "__main__":

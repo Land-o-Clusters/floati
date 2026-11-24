@@ -1,0 +1,72 @@
+{
+  "$id": "https://landoclusters.com/floati/schemas/v1/send-readiness-observation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "description": "Closed send testimony. Native event validation additionally binds all observation timestamps, parties and idempotency key to the referenced envelope; standard JSON Schema does not compare sibling or cross-record values.",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "envelope_id", "sender", "recipient", "observed_at", "readiness", "idempotency_key"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "id": {"type": "string", "pattern": "^send-readiness-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/node"},
+    "timestamp": {"$ref": "#/$defs/time"},
+    "kind": {"const": "send_readiness_observation"},
+    "envelope_id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "sender": {"$ref": "#/$defs/node"},
+    "recipient": {"$ref": "#/$defs/node"},
+    "observed_at": {"$ref": "#/$defs/time"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true},
+    "readiness": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "reason", "observed_at", "checked_mechanisms", "mechanism_evidence"],
+      "properties": {
+        "state": {"enum": ["recipient_wake_arranged", "recipient_not_listening", "unknown"]},
+        "reason": {"enum": ["active_lease", "stop_hook", "seat_board", "all_mechanisms_absent", "mechanism_evidence_incomplete"]},
+        "observed_at": {"$ref": "#/$defs/time"},
+        "checked_mechanisms": {"const": ["lease", "stop_hook", "seat_board"]},
+        "mechanism_evidence": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "prefixItems": [
+            {"allOf": [{"$ref": "#/$defs/mechanism"}, {"properties": {"mechanism": {"const": "lease"}}}]},
+            {"allOf": [{"$ref": "#/$defs/mechanism"}, {"properties": {"mechanism": {"const": "stop_hook"}}}]},
+            {"allOf": [{"$ref": "#/$defs/mechanism"}, {"properties": {"mechanism": {"const": "seat_board"}}}]}
+          ], "items": false
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"state": {"const": "recipient_not_listening"}}},
+         "then": {"properties": {"reason": {"const": "all_mechanisms_absent"}, "mechanism_evidence": {"items": {"properties": {"state": {"const": "absent"}}}}}}},
+        {"if": {"properties": {"state": {"const": "unknown"}}},
+         "then": {"properties": {"reason": {"const": "mechanism_evidence_incomplete"}, "mechanism_evidence": {"contains": {"properties": {"state": {"const": "unknown"}}}, "items": {"properties": {"state": {"enum": ["absent", "unknown"]}}}}}}},
+        {"if": {"properties": {"state": {"const": "recipient_wake_arranged"}}},
+         "then": {"oneOf": [
+           {"properties": {"reason": {"const": "active_lease"}, "mechanism_evidence": {"contains": {"properties": {"mechanism": {"const": "lease"}, "state": {"const": "arranged"}}}}}},
+           {"properties": {"reason": {"const": "stop_hook"}, "mechanism_evidence": {"contains": {"properties": {"mechanism": {"const": "stop_hook"}, "state": {"const": "arranged"}}}}}},
+           {"properties": {"reason": {"const": "seat_board"}, "mechanism_evidence": {"contains": {"properties": {"mechanism": {"const": "seat_board"}, "state": {"const": "arranged"}}}}}}
+         ]}}
+      ]
+    }
+  },
+  "$defs": {
+    "node": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "time": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "record_id"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096, "x-floati-terminal-unsafe": true},
+        "record_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true}
+      }
+    },
+    "mechanism": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mechanism", "state", "reason", "sources"],
+      "properties": {
+        "mechanism": {"enum": ["lease", "stop_hook", "seat_board"]},
+        "state": {"enum": ["arranged", "absent", "unknown"]},
+        "reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$"},
+        "sources": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/source"}}
+      }
+    }
+  }
+}

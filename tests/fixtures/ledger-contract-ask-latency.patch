@@ -1,0 +1,33 @@
+diff --git a/floati/ask.py b/floati/ask.py
+index e239842e..c67a590a 100644
+--- a/floati/ask.py
++++ b/floati/ask.py
+@@ -65,8 +65,13 @@ def perform_ask(
+     session: str,
+     idempotency_key: str,
+     wait_seconds: int,
++    timing: Optional[Dict[str, int]] = None,
+ ) -> Dict[str, object]:
+-    """Append one question and wait for its correlated terminal."""
++    """Append one question and wait for its correlated terminal.
++
++    An optional local instrument receives monotonic boundaries, never ledger
++    fields: after question publication and on correlated answer observation.
++    """
+ 
+     sender_id, recipient_id = _parties(root, sender, recipient)
+     question = _publish_question(
+@@ -80,7 +85,12 @@ def perform_ask(
+         session=session,
+         idempotency_key=idempotency_key,
+     )
+-    return wait_for_question(root, question, wait_seconds)
++    if timing is not None:
++        timing["question_sent_ns"] = time.monotonic_ns()
++    result = wait_for_question(root, question, wait_seconds)
++    if timing is not None and result["state"] == "answered":
++        timing["answer_received_ns"] = time.monotonic_ns()
++    return result
+ 
+ 
+ def wait_for_question(root, question, wait_seconds):

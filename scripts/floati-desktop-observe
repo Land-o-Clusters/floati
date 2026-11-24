@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+"""Repository-owned native Notification observer; owner installs explicitly."""
+from pathlib import Path
+import sys
+
+bundle_root = Path(__file__).resolve().parents[1]
+if str(bundle_root) not in sys.path:
+    sys.path.insert(0, str(bundle_root))
+
+from floati.desktop_host_notifications import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

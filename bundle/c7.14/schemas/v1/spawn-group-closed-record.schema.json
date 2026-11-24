@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/spawn-group-closed-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "spawn_group_id",
+    "plan_amendment_id",
+    "parent_attempt_id",
+    "member_item_ids",
+    "accepted_item_ids",
+    "terminal_item_ids",
+    "rejected_item_ids",
+    "join_mode",
+    "required_count",
+    "outcome",
+    "close_reason",
+    "cancel_scope_resolved_id",
+    "closed_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^spawn-group-closed-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "kind": {
+      "const": "spawn_group_closed"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "spawn_group_id": {
+      "type": "string",
+      "pattern": "^spawn-group-created-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "plan_amendment_id": {
+      "type": "string",
+      "pattern": "^plan-amendment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "parent_attempt_id": {
+      "type": "string",
+      "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    },
+    "member_item_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+        "not": {
+          "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+        }
+      }
+    },
+    "accepted_item_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+        "not": {
+          "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+        }
+      }
+    },
+    "terminal_item_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+        "not": {
+          "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+        }
+      }
+    },
+    "rejected_item_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+        "not": {
+          "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+        }
+      }
+    },
+    "join_mode": {
+      "enum": [
+        "all_accepted",
+        "all_terminal",
+        "quorum",
+        "first_accepted"
+      ]
+    },
+    "required_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 8
+    },
+    "outcome": {
+      "enum": [
+        "satisfied",
+        "failed",
+        "cancelled",
+        "deadline",
+        "needs_operator"
+      ]
+    },
+    "close_reason": {
+      "enum": [
+        "all_members_accepted",
+        "all_members_terminal",
+        "quorum_reached",
+        "first_accepted",
+        "join_impossible",
+        "deadline_expired",
+        "untracked_descendant_unknown",
+        "member_needs_operator",
+        "child_failure",
+        "parent_cancelled"
+      ]
+    },
+    "cancel_scope_resolved_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^cancel-scope-resolved-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$",
+      "allOf": [
+        {
+          "if": {
+            "type": "string"
+          },
+          "then": {
+            "not": {
+              "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+            }
+          }
+        }
+      ]
+    },
+    "closed_at_testimony": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+      "not": {
+        "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "quorum"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "first_accepted"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_count": {
+            "const": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "enum": [
+              "all_accepted",
+              "all_terminal"
+            ]
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_count": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": {
+              "const": "satisfied"
+            },
+            "close_reason": {
+              "enum": [
+                "all_members_accepted",
+                "all_members_terminal",
+                "quorum_reached",
+                "first_accepted"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "failed"
+            },
+            "close_reason": {
+              "enum": [
+                "child_failure",
+                "join_impossible"
+              ]
+            },
+            "cancel_scope_resolved_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "cancelled"
+            },
+            "close_reason": {
+              "const": "parent_cancelled"
+            },
+            "cancel_scope_resolved_id": {
+              "type": "string",
+              "not": {
+                "pattern": "[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u180E\\u200B-\\u200D\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uD800-\\uDFFF\\uFEFF𛲠-𛲣𝅳-𝅺󠀁󠀠-󠁿]"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "deadline"
+            },
+            "close_reason": {
+              "const": "deadline_expired"
+            },
+            "cancel_scope_resolved_id": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "needs_operator"
+            },
+            "close_reason": {
+              "enum": [
+                "untracked_descendant_unknown",
+                "member_needs_operator"
+              ]
+            },
+            "cancel_scope_resolved_id": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

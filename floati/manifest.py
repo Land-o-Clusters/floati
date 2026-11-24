@@ -10,7 +10,6 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Set
 
 from .git_process import fixed_git_command, fixed_git_environment
-from .role_templates import SHIPPED_ROLE_NAMES
 
 
 EXPECTED_PROTOCOL_VERSION = "0"
@@ -18,6 +17,39 @@ EXPECTED_CANONICAL_REF = "refs/heads/lane/hm0"
 MANIFEST_NAME = "bundle-manifest.v0.json"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _DARK_DEPLOYMENT_PREFIXES = ("floati/locks/",)
+_DEPLOYABLE_PATTERNS = (
+    "LICENSE", "schemas/LICENSE", "bundle/c7.*/**/*", "floati/**/*.py",
+    "schemas/v*/*.json", "roles/shipped/*.json", "scripts/floati", "scripts/floati-*",
+)
+
+
+def _is_deployable_path(relative: str) -> bool:
+    """The installed reader owns the class; the target supplies only names.
+
+    Keep this independent of target Python modules and role declarations so
+    a newer release cannot expand the reader's deployment authority.
+    """
+    pure = PurePosixPath(relative)
+    if (pure.is_absolute() or pure.as_posix() != relative
+            or any(part in (".", "..", "__pycache__") for part in pure.parts)
+            or relative.startswith(_DARK_DEPLOYMENT_PREFIXES)):
+        return False
+    parts = pure.parts
+    if relative in {"LICENSE", "schemas/LICENSE"}:
+        return True
+    if len(parts) >= 2 and parts[0] == "floati":
+        return parts[-1].endswith(".py")
+    if len(parts) >= 3 and parts[0] == "bundle":
+        return parts[1].startswith("c7.")
+    if len(parts) == 3 and parts[0] == "schemas":
+        return parts[1].startswith("v") and parts[2].endswith(".json")
+    if len(parts) == 3 and parts[:2] == ("roles", "shipped"):
+        return parts[2].endswith(".json")
+    if len(parts) == 2 and parts[0] == "scripts":
+        return parts[1] == "floati" or (
+            parts[1].startswith("floati-") and len(parts[1]) > len("floati-")
+        )
+    return False
 
 
 def _git_tracked_files(
@@ -67,28 +99,12 @@ def _git_tracked_files(
 
 def _deployable_paths(repo_root: Path, *, git_executable: str = "git") -> List[str]:
     paths = []
-    for pattern in (
-        "LICENSE",
-        "bundle/c7.1/**/*",
-        "bundle/c7.1/LICENSE",
-        "bundle/c7.2/**/*",
-        "bundle/c7.2/LICENSE",
-        "schemas/LICENSE",
-        "floati/**/*.py",
-        "schemas/v[0-9]*/*.json",
-        "scripts/floati",
-        "scripts/floati-codex-wait",
-        "scripts/floati-quota-statusline",
-    ):
+    for pattern in _DEPLOYABLE_PATTERNS:
         for path in repo_root.glob(pattern):
-            if path.is_file() and "__pycache__" not in path.parts:
+            if path.is_file():
                 relative = path.relative_to(repo_root).as_posix()
-                if not relative.startswith(_DARK_DEPLOYMENT_PREFIXES):
+                if _is_deployable_path(relative):
                     paths.append(relative)
-    for role in SHIPPED_ROLE_NAMES:
-        path = repo_root / "roles" / "shipped" / f"{role}.json"
-        if path.is_file():
-            paths.append(path.relative_to(repo_root).as_posix())
     tracked = _git_tracked_files(repo_root, git_executable=git_executable)
     if tracked is not None:
         paths = [path for path in paths if path in tracked]
@@ -190,6 +206,12 @@ def verify_manifest(repo_root: Path, *, git_executable: str = "git") -> List[str
     errors.extend(inventory_errors)
     if "manifest_files_invalid" in inventory_errors:
         return errors
+    tracked = _git_tracked_files(root, git_executable=git_executable)
+    for relative in listed:
+        if not _is_deployable_path(relative):
+            errors.append(f"manifest_path_outside_deployable_class:{relative}")
+        if tracked is not None and relative not in tracked:
+            errors.append(f"manifest_path_untracked:{relative}")
     expected = _deployable_paths(root, git_executable=git_executable)
     if set(listed) != set(expected):
         errors.append("tracked_set_mismatch")

@@ -17,6 +17,32 @@ def register(key: str, value: str, surface: str) -> str:
     return value
 
 
+README_OPENCODE_LIMIT = register(
+    "readme.opencode_limit",
+    "OpenCode has a headless adapter. Direct CLI resume retained its conversation "
+    "after a Floati node lease expired. With an explicit free model, a governed "
+    "worker completed across lease expiry; a fresh expired-node claim was refused "
+    "before spawn. Governed native-session resume remains unmeasured.",
+    "README compatibility",
+)
+README_OPENCODE_MATRIX_NOTE = register(
+    "readme.opencode_matrix_note",
+    "Worker completes across expiry; fresh expired claim refused; governed resume unmeasured",
+    "README capability matrix note",
+)
+
+CLAUDE_INBOX_DOORBELL = register(
+    "claude.inbox.doorbell", "Floati mail is waiting for this seat.",
+    "Claude idle doorbell; DRAFT-OPUS 2026-10-28",
+)
+README_CLAUDE_INBOX = register(
+    "readme.claude_inbox",
+    "Idle wake uses Claude Code's undocumented session inbox socket, verified on "
+    "[2.1.309](docs/evidence/claude-inbox-idle-public-2026-10-29.md).",
+    "README Claude harness matrix; DRAFT-OPUS 2026-10-28",
+)
+
+
 EFFECT_OPERATION_INVALID_DETAIL = register(
     "effect.input.operation_id_invalid",
     "effect operation must use the effect operation UUIDv7 prefix",
@@ -62,6 +88,16 @@ DOCTOR_LIVE_DIRS_EXPECTED_ABSENT_DETAIL = register(
     "live directories absent, as the bus-only profile expects",
     "Doctor finding row",
 )
+DOCTOR_DISK_WATCH_REMEDIATION = register(
+    "doctor.disk_watch.below_floor",
+    "Free space is below the stated fleet floor. Doctor reports; it does not delete.",
+    "Doctor finding row",
+)
+DOCTOR_DISK_WATCH_UNMEASURED = register(
+    "doctor.disk_watch.cannot_measure",
+    "Host free space or a fleet tree could not be measured. Doctor reports; it does not delete.",
+    "Doctor finding row",
+)
 GH_AUTHENTICATION_REMEDY = register(
     "intake.github.authentication_absent",
     "Floati does not read gh auth login credentials; export GH_TOKEN or GITHUB_TOKEN.",
@@ -98,6 +134,11 @@ WAKE_DAEMON_GROK_BOUND_DISPLAY = register(
     f"exact {_GROK_PRODUCT} session binding recorded.",
     "Wake daemon lifecycle",
 )
+WAKE_DAEMON_ZCODE_BOUND_DISPLAY = register(
+    "wake.daemon.zcode_bound",
+    "exact zcode session binding recorded.",
+    "Wake daemon lifecycle",
+)
 WAKE_DAEMON_CONSENTED_DISPLAY = register(
     "wake.daemon.consented",
     "wake daemon consent is active for this exact coordinate.",
@@ -106,6 +147,11 @@ WAKE_DAEMON_CONSENTED_DISPLAY = register(
 WAKE_DAEMON_INSTALLED_DISPLAY = register(
     "wake.daemon.installed",
     "exact wake daemon LaunchAgent is installed but not started.",
+    "Wake daemon lifecycle",
+)
+WAKE_DAEMON_SYSTEMD_INSTALLED_DISPLAY = register(
+    "wake.daemon.systemd_installed",
+    "exact wake daemon user unit is installed but not started.",
     "Wake daemon lifecycle",
 )
 WAKE_DAEMON_RUNNING_DISPLAY = register(
@@ -121,6 +167,11 @@ WAKE_DAEMON_STOPPED_DISPLAY = register(
 WAKE_DAEMON_REMOVED_DISPLAY = register(
     "wake.daemon.removed",
     "exact wake daemon LaunchAgent was removed.",
+    "Wake daemon lifecycle",
+)
+WAKE_DAEMON_SYSTEMD_REMOVED_DISPLAY = register(
+    "wake.daemon.systemd_removed",
+    "exact wake daemon user unit was removed.",
     "Wake daemon lifecycle",
 )
 WAKE_DAEMON_REVOKED_DISPLAY = register(
@@ -341,6 +392,7 @@ TUI_DOOR_COPY = {
 
 def copy_ledger_markdown() -> str:
     from . import brand  # noqa: F401 - import registers brand labels
+    from . import colleague_frame  # noqa: F401 - import registers the presentation frame
     from . import graph_render  # noqa: F401 - import registers graph labels
     from . import helptext  # noqa: F401 - import registers the static help bank
     from . import registry  # noqa: F401 - import registers retirement refusal copy

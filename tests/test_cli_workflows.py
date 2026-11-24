@@ -7,6 +7,7 @@ from floati import fixture_ids as public_ids
 import hashlib
 import io
 import json
+import multiprocessing
 import os
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from floati.events import EventLog
@@ -35,6 +37,8 @@ from floati.workers import WorkerReceipts
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+_DARWIN_VARIABLE = "__CF_USER_TEXT_ENCODING"
+_DARWIN_SENTINEL = "0x0:0xfeed:0xface"
 NOW = datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc)
 SHA = "a" * 40
 
@@ -126,6 +130,88 @@ class CliWorkflowTests(unittest.TestCase):
     def artifact(result: subprocess.CompletedProcess[str]) -> dict:
         return json.loads(result.stdout)
 
+    def test_dispatch_rebuilds_roster_and_flags_returns_to_old_briefs(self) -> None:
+        from floati.cli import main
+        from tests.git_fixture_cache import fixture_git
+        from tests.schema_validation import validate_json_schema
+
+        checkout = Path(self.temp.name) / "checkout"
+        checkout.mkdir()
+        git = [fixture_git("/usr/bin/git"), "-C", str(checkout)]
+        subprocess.run([*git, "init", "-q", "-b", "review"], check=True)
+        subprocess.run(
+            [*git, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "commit", "-qm", "Fixture", "--allow-empty"], check=True,
+        )
+        brief = Path(self.temp.name) / "brief.txt"
+        original = "Review the first proposal.\n"
+        brief.write_text(original, encoding="utf-8")
+        actor = public_ids.worker("alpha")
+
+        def dispatch(command, *args, ok=True, fresh=False):
+            argv = ("dispatch", command, "--root", str(self.home), *args)
+            if fresh:
+                result = self.run_cli(*argv)
+                status, output = result.returncode, result.stdout
+            else:
+                stream = io.StringIO()
+                with redirect_stdout(stream):
+                    status = main(argv)
+                output = stream.getvalue()
+            self.assertEqual(0 if ok else 20, status, output)
+            return json.loads(output)["evidence"]
+
+        def record(key, *args, dispatch_id="review-one", recipient="bravo", **options):
+            return dispatch("record", "--id", dispatch_id, "--as", actor,
+                            "--to", recipient, "--branch", "review", "--brief-file", str(brief),
+                            "--external", "native task", "--idempotency-key", key, *args, **options)
+
+        first = record("original")["record"]
+        validate_json_schema(first, REPOSITORY_ROOT / "schemas/v1/dispatch-revision-record.schema.json")
+        self.assertEqual(first, record("original")["record"])
+        self.assertEqual("observed", first["brief"]["provenance"])
+        self.assertEqual("claimed", first["carrier"]["provenance"])
+        brief.write_text("Review the revised proposal.\n", encoding="utf-8")
+        self.assertEqual("supersedes_not_head", record("accidental", ok=False)["code"])
+        record("correction", "--supersedes", first["id"])
+        record("another", dispatch_id="review-two", recipient="native-reviewer")
+
+        def returned(key, *args, by=actor, **options):
+            return dispatch(
+                "return", "--id", "review-one", "--as", by,
+                "--repository", str(checkout), "--ref", "refs/heads/review",
+                "--artifact", "result.md", "--statement", "Review completed",
+                "--idempotency-key", key, *args, **options,
+            )
+
+        self.assertEqual("dispatch_actor_mismatch",
+                         returned("child", "--revision", "2", by="bravo", ok=False)["code"])
+        self.assertEqual("coordinate_unresolved", returned("future", "--revision", "3", ok=False)["code"])
+        stale = returned("old", "--revision", "1")["record"]
+        validate_json_schema(stale, REPOSITORY_ROOT / "schemas/v1/dispatch-return-record.schema.json")
+        brief.unlink()
+        view = dispatch("show", "--json", fresh=True)
+        self.assertEqual("bound-record", view["contract"])
+        self.assertEqual(
+            [("bravo", "review", 2, "returned_stale"), ("native-reviewer", "review", 1, "out")],
+            [(r["recipient"], r["branch"], r["revision"], r["state"]) for r in view["roster"]],
+        )
+        prior = next(entry for entry in view["records"] if entry["record"] == stale)
+        self.assertEqual("stale", prior["freshness"]["state"])
+        self.assertEqual({"what": "brief", "dispatch_id": "review-one", "from": 1, "to": 2},
+                         prior["freshness"]["coordinates"][0]["moved"][0])
+        self.assertFalse(next(entry["chain"]["head"] for entry in view["records"] if entry["record"] == first))
+        self.assertNotIn(original.strip(), json.dumps(view))
+        self.assertEqual(original, dispatch("brief", "--id", "review-one", "--revision", "1",
+                                            "--as", actor)["text"])
+
+        returned("current", "--revision", "2")
+        self.assertEqual("returned", dispatch("show", "--id", "review-one")["roster"][0]["state"])
+        close = dispatch("close", "--id", "review-one", "--as", actor, "--reason", "Review complete",
+                         "--idempotency-key", "closed")["record"]
+        validate_json_schema(close, REPOSITORY_ROOT / "schemas/v1/dispatch-close-record.schema.json")
+        self.assertEqual("closed", dispatch("show", "--id", "review-one")["roster"][0]["state"])
+
     def test_status_and_supervise_share_three_plane_snapshot(self) -> None:
         status = self.run_cli(
             "status", "--root", str(self.home), "--destination", str(self.destination),
@@ -140,12 +226,28 @@ class CliWorkflowTests(unittest.TestCase):
         status_nodes = self.artifact(status)["evidence"]["nodes"]
         supervised_nodes = self.artifact(supervise)["evidence"]["nodes"]
         self.assertTrue(all("wake_health" in node for node in status_nodes))
+        self.assertTrue(all("wake_health" not in node for node in supervised_nodes))
+
+        def shared_node(node: dict) -> dict:
+            self.assertIn("seat_attention", node)
+            attention = node["seat_attention"]
+            observed = datetime.fromisoformat(attention["observed_at"].replace("Z", "+00:00"))
+            self.assertIsNotNone(observed.utcoffset())
+            age = attention["oldest_waiting_age_seconds"]
+            self.assertTrue(age is None or isinstance(age, (int, float)))
+            # These CLI commands observe at separate times. Keep the complete
+            # stable fact; exact timed parity is covered at one native clock.
+            return {
+                **{key: value for key, value in node.items() if key != "wake_health"},
+                "seat_attention": {
+                    key: value for key, value in attention.items()
+                    if key not in {"observed_at", "oldest_waiting_age_seconds"}
+                },
+            }
+
         self.assertEqual(
-            [
-                {key: value for key, value in node.items() if key != "wake_health"}
-                for node in status_nodes
-            ],
-            supervised_nodes,
+            [shared_node(node) for node in status_nodes],
+            [shared_node(node) for node in supervised_nodes],
         )
         self.assertEqual({"liveness", "authority", "mutex"},
                          {key for key in status_nodes[0] if key in {"liveness", "authority", "mutex"}})
@@ -323,6 +425,19 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual(0, added_result.returncode, added_result.stderr)
         item_id = self.artifact(added_result)["evidence"]["id"]
 
+        duplicate = self.run_cli(
+            "work", "add", "--root", str(self.home), "--title", "build board",
+            "--owner", public_ids.worker('alpha'), "--repo", "floati", "--sha", SHA,
+            "--doc", "docs/evidence/input.md",
+        )
+        self.assertEqual(20, duplicate.returncode, duplicate.stderr)
+        self.assertEqual("work_duplicate_open", self.artifact(duplicate)["evidence"]["code"])
+
+        projected = self.run_cli("work", "show", "--root", str(self.home), "--id", item_id,
+                                 "--as", public_ids.worker('alpha'))
+        self.assertEqual(0, projected.returncode, projected.stderr)
+        self.assertIn("eligibility", self.artifact(projected)["evidence"]["items"][0])
+
         claimed = self.run_cli(
             "work", "claim", "--root", str(self.home), "--id", item_id,
             "--as", public_ids.worker('alpha'), "--authority-subject", "work-claims",
@@ -343,6 +458,371 @@ class CliWorkflowTests(unittest.TestCase):
         self.assertEqual("completed", item["state"])
         self.assertEqual(public_ids.worker('alpha'), item["holder"])
         self.assertEqual("docs/evidence/output.md", item["artifact_bindings"][-1]["doc"])
+
+    def test_work_handoff_records_run_results_and_rechecks_its_own_checkout(self) -> None:
+        from floati.cli import main
+
+        def handoff(*args, expected=0):
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                status = main(args)
+            self.assertEqual(expected, status, stdout.getvalue() or stderr.getvalue())
+            return json.loads(stdout.getvalue())["evidence"]
+
+        actor = public_ids.worker("alpha")
+        work = WorkLog(self.root)
+        item = work.add("Prepare a handoff", actor, [])
+        claim = work.claim(item["id"], actor, "work-claims", self.grant["epoch"], now=NOW)
+        completion = work.complete(item["id"], actor, [], now=NOW)
+        repository = Path(self.temp.name).resolve() / "repo"
+        repository.mkdir()
+
+        def git(*args):
+            return subprocess.check_output(
+                ["/usr/bin/git", "-c", "core.hooksPath=/dev/null", "-C", str(repository), *args],
+                text=True, stderr=subprocess.PIPE,
+            ).strip()
+
+        git("init")
+        git("config", "user.name", "Test Author")
+        git("config", "user.email", "author@example.invalid")
+        (repository / "test_sample.py").write_text(
+            "import os, unittest\n"
+            "class Sample(unittest.TestCase):\n"
+            "    def test_pass(self): os.write(1, b'9')\n"
+            "    def test_fail(self): self.fail()\n",
+            encoding="utf-8",
+        )
+        (repository / "test_empty.py").write_text("# No tests\n", encoding="utf-8")
+        note = repository / "result.txt"
+        note.write_text("Evidence\n", encoding="utf-8")
+        git("add", ".")
+        git("commit", "-m", "Record evidence")
+        original = git("rev-parse", "HEAD")
+        coordinate = ("--root", str(self.home), "--id", item["id"])
+        show_args = ("work", "handoff", "show", *coordinate, "--json")
+        empty = handoff(*show_args)
+        self.assertEqual(("bound-record", 1, [], "none"),
+                         (empty["contract"], empty["contract_version"], empty["records"], empty["evidence_state"]))
+
+        record_args = (
+            "work", "handoff", "record", *coordinate, "--as", actor,
+            "--repository", str(repository), "--unittest", "test_sample",
+            "--run", json.dumps([str(Path(sys.executable).resolve()), "-c",
+                                 "with open('ran', 'a') as marker: marker.write('run'); raise SystemExit(7)"]),
+            "--artifact", "result.txt", "--remaining", "Investigate the failing test",
+            "--statement", "212 tests, exit 0",
+            "--idempotency-key", "first",
+        )
+        row = handoff(*record_args)["handoff"]
+        from tests.schema_validation import validate_json_schema
+
+        validate_json_schema(row, REPOSITORY_ROOT / "schemas/v1/work-handoff-record.schema.json")
+        self.assertEqual({"kind": "ref", "ref": "HEAD", "paths": [], "commit": original,
+                          "repository": str(repository), "provenance": "observed"}, row["coordinates"][0])
+        self.assertEqual({"claim_id": claim["id"], "completion_id": completion["id"], "provenance": "observed"},
+                         row["work_receipts"])
+        self.assertEqual([{"text": "Investigate the failing test", "provenance": "claimed"}], row["remaining"])
+        self.assertEqual([{"text": "212 tests, exit 0", "provenance": "claimed"}], row["statements"])
+        self.assertEqual("observed", row["coordinates"][1]["provenance"])
+        self.assertIsNone(row["supersedes"])
+        self.assertEqual([(7, None), (1, 2)],
+                         [(run["exit_code"], run["test_count"]) for run in row["runs"]])
+        self.assertTrue(all(run["provenance"] == "observed" for run in row["runs"]))
+
+        current = handoff(*show_args)["records"][0]
+        self.assertEqual("current", current["freshness"]["state"])
+        self.assertEqual("recorded", current["evidence_state"])
+        self.assertEqual(row, handoff(*record_args)["handoff"])
+        self.assertEqual("run", (repository / "ran").read_text())
+
+        partial = handoff(
+            "work", "handoff", "record", *coordinate, "--as", actor,
+            "--repository", str(repository), "--remaining", "Run checks",
+            "--idempotency-key", "second",
+        )["handoff"]
+        self.assertEqual(row["id"], partial["supersedes"])
+        self.assertEqual(partial, handoff(*show_args)["records"][0]["record"])
+        self.assertEqual("none", handoff(*show_args)["records"][0]["evidence_state"])
+        conflict = handoff(
+            "work", "handoff", "record", *coordinate, "--as", actor,
+            "--repository", str(repository), "--supersedes", row["id"],
+            "--idempotency-key", "late-correction", expected=20,
+        )
+        self.assertEqual("supersedes_not_head", conflict["code"])
+        zero = handoff(
+            "work", "handoff", "record", *coordinate, "--as", actor,
+            "--repository", str(repository), "--unittest", "test_empty",
+            "--idempotency-key", "third",
+        )["handoff"]["runs"][0]
+        self.assertEqual(("observed", 0, 0), (zero["provenance"], zero["exit_code"], zero["test_count"]))
+        handoff(
+            "work", "handoff", "record", *coordinate, "--as", actor,
+            "--repository", str(repository), "--statement", "212 tests, exit 0",
+            "--idempotency-key", "fourth",
+        )
+        claimed = handoff(*show_args)["records"][0]
+        self.assertEqual("claimed", claimed["evidence_state"])
+        self.assertEqual([], claimed["record"]["runs"])
+        original_handoff = (*show_args, "--handoff-id", row["id"])
+        historical = handoff(*original_handoff)["records"][0]
+        self.assertEqual(row, historical["record"])
+        self.assertEqual({"head": False, "superseded_by": partial["id"]}, historical["chain"])
+        note.unlink()
+        note.mkdir()
+        unreadable = handoff(*original_handoff)["records"][0]["freshness"]
+        self.assertEqual("unknown", unreadable["state"])
+        self.assertIsNotNone(unreadable["coordinates"][1]["cause"])
+        note.rmdir()
+        artifact_only = handoff(*original_handoff)["records"][0]["freshness"]
+        digest = row["coordinates"][1]["files"][0]["sha256"]
+        missing = {"what": "file", "path": "result.txt", "from": digest, "to": None}
+        self.assertEqual("stale", artifact_only["state"])
+        self.assertEqual([missing], artifact_only["coordinates"][1]["moved"])
+        git("add", "-u")
+        git("commit", "-m", "Remove evidence file")
+        before = tree_digest(self.home)
+        stale = handoff(*original_handoff)["records"][0]
+        self.assertEqual(row, stale["record"])
+        self.assertEqual("stale", stale["freshness"]["state"])
+        self.assertEqual([{"what": "ref", "ref": "HEAD", "from": original, "to": git("rev-parse", "HEAD")}],
+                         stale["freshness"]["coordinates"][0]["moved"])
+        self.assertEqual([missing], stale["freshness"]["coordinates"][1]["moved"])
+        repository.rename(repository.with_name("moved-repo"))
+        unreadable = handoff(*original_handoff)["records"][0]["freshness"]
+        self.assertEqual("unknown", unreadable["state"])
+        self.assertTrue(all(result["cause"] for result in unreadable["coordinates"]))
+        self.assertEqual(before, tree_digest(self.home))
+
+    def test_work_handoff_observation_leaves_the_journal_available_and_has_a_deadline(self):
+        from floati.errors import ProtocolRefusal
+        from floati.work_handoff import WorkHandoffs
+        from tests.git_fixture_cache import fixture_git
+
+        actor = public_ids.worker("alpha")
+        work = WorkLog(self.root)
+        item = work.add("Capture independent evidence", actor, [])
+        work.claim(item["id"], actor, "work-claims", self.grant["epoch"], now=NOW)
+        repository = Path(self.temp.name).resolve() / "observed"
+        repository.mkdir()
+        git = [fixture_git("/usr/bin/git"), "-C", str(repository)]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run(
+            [*git, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "commit", "-qm", "Fixture", "--allow-empty"],
+            check=True,
+        )
+        handoffs = WorkHandoffs(self.root)
+        python = str(Path(sys.executable).resolve())
+        common = ["work", "handoff", "record", "--root", str(self.home), "--id", item["id"],
+                  "--as", actor, "--repository", str(repository)]
+
+        def record(program, key):
+            return handoffs.record(item["id"], actor, str(repository), [[python, "-c", program]],
+                                   [], [], [], [], key)
+
+        with self.subTest(property="journal remains available"):
+            nested = (
+                f"import sys; sys.path.insert(0, {str(REPOSITORY_ROOT)!r}); "
+                "from floati.cli import main; "
+                f"sys.exit(main({common + ['--idempotency-key', 'nested']!r}))"
+            )
+            observed = record(nested, "outer")
+            self.assertEqual(0, observed["runs"][0]["exit_code"])
+            self.assertIsNotNone(observed["supersedes"])
+
+        with self.subTest(property="a stalled command has a bounded observation"):
+            # The child has its own watchdog so a regression returns to the test.
+            stalled = "import signal; signal.alarm(2); signal.pause()"
+            before = handoffs.show(item["id"])
+            with patch("floati.work_handoff._RUN_TIMEOUT_SECONDS", 0.1, create=True):
+                with self.assertRaises(ProtocolRefusal) as caught:
+                    record(stalled, "stalled")
+            self.assertEqual("handoff_run_timeout", caught.exception.code)
+            self.assertEqual(before["records"], handoffs.show(item["id"])["records"])
+
+    def test_handoff_children_receive_only_the_declared_environment(self):
+        from floati.work_handoff import _UNNITEST_PROGRAM, _observe_run
+
+        checkout = Path(self.temp.name).resolve()
+        snapshot = checkout / "child-environment.json"
+        python = str(Path(sys.executable).resolve())
+        capture = "import json, os\nopen('child-environment.json', 'w').write(json.dumps(dict(os.environ)))\n"
+        (checkout / "test_capture.py").write_text(
+            capture + "import unittest\nclass Capture(unittest.TestCase):\n"
+            "    def test_count(self): pass\n",
+            encoding="utf-8",
+        )
+
+        for instrumented, argv in (
+            (False, [python, "-I", "-B", "-c", capture]),
+            (True, [python, "-I", "-B", "-c", _UNNITEST_PROGRAM, "test_capture"]),
+        ):
+            with self.subTest(instrumented=instrumented), patch.dict(
+                os.environ, {"GITHUB_TOKEN": "fixture credential", _DARWIN_VARIABLE: _DARWIN_SENTINEL}
+            ):
+                run = _observe_run(checkout, argv, is_unittest=instrumented)
+                self.assertEqual(0, run["exit_code"])
+                child_env = json.loads(snapshot.read_text(encoding="utf-8"))
+                self.assertFalse("GITHUB_TOKEN" in child_env, "handoff forwarded a parent credential variable")
+                # CoreFoundation sets this variable inside every Darwin process
+                # that starts from an empty environment. The planted value is
+                # never handed down; a different value is the process's own.
+                self.assertNotEqual(_DARWIN_SENTINEL, child_env.get(_DARWIN_VARIABLE),
+                                    "handoff forwarded a parent variable that the platform also sets")
+                declared = {"HOME", "TMPDIR", "PATH", "LANG", "LC_ALL"}
+                self.assertTrue(declared <= set(child_env), sorted(child_env))
+                self.assertEqual(set(), set(child_env) - declared - (
+                    {_DARWIN_VARIABLE} if sys.platform == "darwin" else set()), sorted(child_env))
+                self.assertEqual(child_env["HOME"], child_env["TMPDIR"])
+                self.assertFalse(Path(child_env["HOME"]).exists(), "handoff scratch was retained")
+
+    def test_work_add_reports_missing_notification_inputs(self) -> None:
+        result = self.run_cli(
+            "work", "add", "--root", str(self.home), "--title", "unrouted work",
+            "--owner", public_ids.worker('alpha'),
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = self.artifact(result)["evidence"]
+        self.assertIn("findings", evidence)
+        finding = evidence["findings"][0]
+        self.assertEqual("work_add_unnotified", finding["code"])
+        self.assertEqual({"dispatcher", "artifact"}, set(finding["missing"]))
+        self.assertEqual({"--as", "--repo", "--sha", "--doc"}, set(finding["missing_flags"]))
+        self.assertIn("--as", finding["remedy"])
+        self.assertIn("--repo", finding["remedy"])
+        self.assertEqual([], EventLog(self.root).event_records())
+
+    def test_work_complete_reports_missing_dispatcher_and_artifact(self) -> None:
+        work = WorkLog(self.root)
+        item = work.add("complete without mail", public_ids.worker('alpha'), [])
+        work.claim(item["id"], public_ids.worker('alpha'), "work-claims", self.grant["epoch"], now=NOW)
+        result = self.run_cli(
+            "work", "complete", "--root", str(self.home), "--id", item["id"],
+            "--as", public_ids.worker('alpha'), "--now", "2026-07-31T12:00:02Z",
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        findings = self.artifact(result)["evidence"].get("findings", [])
+        self.assertTrue(findings)
+        self.assertEqual("work_complete_unnotified", findings[0]["code"])
+        self.assertEqual({"dispatcher", "artifact"}, set(findings[0]["missing"]))
+
+    def test_work_completion_notice_and_ack_link_back_to_work(self) -> None:
+        from floati.cursor import SparseCursor
+        from floati.message_consumption import MessageConsumption
+
+        work = WorkLog(self.root)
+        item = work.add("finish routed work", public_ids.worker('alpha'), [], dispatcher="bravo")
+        work.claim(item["id"], public_ids.worker('alpha'), "work-claims", self.grant["epoch"], now=NOW)
+        dispatch = EventLog(self.root).send(
+            "bravo", public_ids.worker('alpha'), "floati",
+            "b8f95f22b737b4c0dc9fd52c91998f57d5bd7a00", "docs/input.md",
+            "Complete this work", idempotency_key="completion-consume-control",
+        )
+        EventLog(self.root).present(public_ids.worker('alpha'))
+        dispatch_ack = SparseCursor(self.root).ack(
+            public_ids.worker('alpha'), [dispatch["id"]], acting_session_id="test-session",
+        )
+        result = self.run_cli(
+            "work", "complete", "--root", str(self.home), "--id", item["id"],
+            "--as", public_ids.worker('alpha'), "--repo", "floati", "--sha",
+            "b8f95f22b737b4c0dc9fd52c91998f57d5bd7a00", "--doc", "docs/evidence/output.md",
+            "--consume", dispatch["id"], "--session", "test-session",
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        envelopes = [row for row in EventLog(self.root).event_records()
+                     if row["kind"] == "message_envelope" and row["recipient"] == "bravo"]
+        self.assertEqual(1, len(envelopes))
+        self.assertIn(item["id"], envelopes[0]["note"])
+        EventLog(self.root).present("bravo")
+        SparseCursor(self.root).ack("bravo", [envelopes[0]["id"]], acting_session_id="test-session")
+        shown = self.run_cli("work", "show", "--root", str(self.home), "--id", item["id"])
+        self.assertEqual(0, shown.returncode, shown.stderr)
+        notifications = self.artifact(shown)["evidence"]["items"][0]["notifications"]
+        completion = [row for row in notifications if row["phase"] == "sent" and row["transition"] == "complete"]
+        self.assertEqual(1, len(completion))
+        self.assertEqual(envelopes[0]["id"], completion[0]["envelope_id"])
+        self.assertEqual(self.artifact(result)["evidence"]["id"], completion[0]["transition_id"])
+        consumed = MessageConsumption(self.root).records(public_ids.worker('alpha'))
+        self.assertEqual(1, len(consumed))
+        self.assertEqual("work_complete", consumed[0]["source"])
+        self.assertEqual(item["id"], consumed[0]["work_item_id"])
+        self.assertEqual(dispatch["id"], consumed[0]["message_id"])
+        self.assertEqual(dispatch_ack["id"], consumed[0]["ack_receipt_id"])
+
+    def test_work_add_notifies_eligible_node_with_caller_artifact(self) -> None:
+        banked_sha = "b8f95f22b737b4c0dc9fd52c91998f57d5bd7a00"
+        Registry(self.root).register("charlie", "Codex")
+        now = datetime.now(timezone.utc)
+        grants = AuthorityGrantStore(self.root)
+        grants.grant_exact("available-work", "charlie", 1, now)
+        grants.grant_exact("available-work", public_ids.worker('alpha'), 2, now)
+        grants.grant_exact("dispatcher-work", "bravo", 1, now)
+        AuthorityGrantStore(self.root).claim(
+            "work-claims", public_ids.worker('alpha'), 60, 60, now
+        )
+        result = self.run_cli(
+            "work", "add", "--root", str(self.home), "--title", "notify work",
+            "--owner", public_ids.worker('alpha'), "--as", "bravo",
+            "--repo", "floati", "--sha", banked_sha, "--doc", "docs/input.md",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        item_id = self.artifact(result)["evidence"]["id"]
+        envelopes = [r for r in EventLog(self.root).event_records() if r["kind"] == "message_envelope"]
+        self.assertEqual(2, len(envelopes))
+        self.assertCountEqual([public_ids.worker('alpha'), "bravo"], [r["recipient"] for r in envelopes])
+        self.assertEqual("bravo", envelopes[0]["sender"])
+        self.assertIn(item_id, envelopes[0]["note"])
+        self.assertEqual(("floati", banked_sha, "docs/input.md"),
+                         (envelopes[0]["repo"], envelopes[0]["sha"], envelopes[0]["doc"]))
+        from floati.wake_hold import WakeHoldController
+        for envelope in envelopes:
+            recipient = envelope["recipient"]
+            self.assertEqual("work-add-" + item_id + "-" + recipient, envelope["idempotency_key"])
+            self.assertEqual("normal", envelope.get("message_class", "normal"))
+            selection = WakeHoldController(self.root).evaluate(recipient, idempotency_key="notification-" + recipient)
+            self.assertEqual("fresh_work", selection["state"])
+            self.assertEqual([envelope["id"]], [r["id"] for r in selection["fresh_messages"]])
+        shown = WorkLog(self.root).show(item_id, actor="charlie")[0]
+        self.assertEqual("authority_superseded", shown["eligibility"]["code"])
+        self.assertEqual(["intent", "sent", "sent"], [r["phase"] for r in shown["notifications"]])
+        duplicate = self.run_cli(
+            "work", "add", "--root", str(self.home), "--title", "notify work",
+            "--owner", public_ids.worker('alpha'), "--as", "bravo",
+            "--repo", "floati", "--sha", banked_sha, "--doc", "docs/input.md",
+        )
+        self.assertEqual(20, duplicate.returncode)
+        self.assertEqual("work_duplicate_open", self.artifact(duplicate)["evidence"]["code"])
+
+    def test_interrupted_work_fanout_replays_each_recipient_once(self) -> None:
+        from floati.cli import main
+
+        now = datetime.now(timezone.utc)
+        AuthorityGrantStore(self.root).claim("work-claims", public_ids.worker('alpha'), 60, 60, now)
+        AuthorityGrantStore(self.root).claim("other-claims", "bravo", 60, 60, now)
+        send = EventLog.send
+        calls = []
+
+        def interrupted(log, *args, **kwargs):
+            calls.append(args[1])
+            if len(calls) == 2:
+                raise RuntimeError("simulated interruption")
+            return send(log, *args, **kwargs)
+
+        with patch.object(EventLog, "send", interrupted), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "simulated interruption"):
+                main(["work", "add", "--root", str(self.home), "--title", "recover fanout",
+                      "--owner", public_ids.worker('alpha'), "--as", "bravo", "--repo", "floati",
+                      "--sha", "b8f95f22b737b4c0dc9fd52c91998f57d5bd7a00", "--doc", "docs/input.md"])
+        item_id = WorkLog(self.root).show()[0]["id"]
+        for _ in range(2):
+            result = self.run_cli("work", "notify", "--root", str(self.home), "--id", item_id, "--as", "bravo")
+            self.assertEqual(0, result.returncode, result.stderr)
+        envelopes = [r for r in EventLog(self.root).event_records() if r["kind"] == "message_envelope"]
+        self.assertCountEqual([public_ids.worker('alpha'), "bravo"], [r["recipient"] for r in envelopes])
 
     def test_work_add_workspace_records_the_exact_derived_live_mapping(self) -> None:
         result = self.run_cli(
@@ -788,6 +1268,23 @@ class SoloWorkflowTests(unittest.TestCase):
 
         self.assertEqual("solo_authority_expired", caught.exception.code)
 
+        work = WorkLog(root)
+        claimed = work.add("claimed before expiry", "me", [], now=NOW)
+        available = work.add("available after expiry", "me", [], now=NOW)
+        work.claim(claimed["id"], "me", "solo-work", 1, now=NOW)
+        ledger = self.home / "work" / "items.jsonl"
+        before = ledger.read_bytes()
+        for item, code in ((claimed, "work_already_claimed"),
+                           (available, "solo_authority_expired")):
+            with self.subTest(code=code):
+                result = self.run_cli(
+                    "work", "claim", "--root", str(self.home), "--id", item["id"],
+                    "--now", "2026-08-01T12:00:00.000Z",
+                )
+                self.assertEqual(20, result.returncode, result.stderr)
+                self.assertEqual(code, self.artifact(result)["evidence"]["code"])
+                self.assertEqual(before, ledger.read_bytes())
+
     def test_malformed_solo_identity_is_integrity_failure_not_configuration_refusal(self) -> None:
         self.home.mkdir()
         (self.home / "solo.json").write_text(
@@ -852,7 +1349,41 @@ class OrchestrationCliOutcomeTests(unittest.TestCase):
         home, plan = self.prepare(name)
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with patch("floati.cli.CodexAppServerAdapter", return_value=adapter):
+        parent_pid = os.getpid()
+        readings = iter((0.0,))
+        degraded = multiprocessing.get_context("fork").Event()
+        original_append = WorkerReceipts.append
+
+        def append_and_signal(store: WorkerReceipts, *args: object, **kwargs: object) -> dict:
+            record = original_append(store, *args, **kwargs)
+            if record["transition"] == "degrade" and record["outcome_code"] == "turn_failed":
+                # Signal only after the real terminal receipt has been committed.
+                degraded.set()
+            return record
+
+        def late_clock() -> float:
+            if os.getpid() != parent_pid:
+                return time.monotonic()
+            if name == "degraded":
+                # CLI classification must not race the host's scheduling speed.
+                return 0.0
+            # Force deadline expiry without waiting for real time to pass.
+            return next(readings, float(deadline) + 1.0)
+
+        def wait_for_receipt(seconds: float) -> None:
+            if os.getpid() == parent_pid and name == "degraded":
+                # A hang bound, not an expected completion time. The product
+                # reads the receipt and determines the outcome after this gate.
+                self.assertTrue(degraded.wait(30), "no terminal turn_failed receipt")
+            else:
+                time.sleep(seconds)
+
+        clock = SimpleNamespace(monotonic=late_clock, sleep=wait_for_receipt)
+        with patch("floati.cli.CodexAppServerAdapter", return_value=adapter), patch(
+            "floati.orchestrate.time", clock
+        ), patch(
+            "floati.workers.WorkerReceipts.append", append_and_signal
+        ):
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = main(
                     [
@@ -875,12 +1406,23 @@ class OrchestrationCliOutcomeTests(unittest.TestCase):
         self.assertEqual("deadline", deadline["status"])
         self.assertEqual(35, degraded_code)
         self.assertEqual("degraded", degraded["status"])
+        self.assertTrue(any(
+            row["state"] == "degraded" and row["outcome_code"] == "turn_failed"
+            for row in degraded["evidence"]["terminal_sessions"]
+        ), degraded)
         self.assertIn("WORK DAG", deadline_frames)
         self.assertIn("TURN FAILED", degraded_frames)
 
 
 class SendUnbankedShaFenceTests(unittest.TestCase):
-    """RB-1: `send` refuses a `--sha` reachable from no remote ref (Am.1 §2)."""
+    """RB-1: `send` refuses a `--sha` reachable from no remote ref (Am.1 §2).
+
+    SEND-SHA-RESOLVES-1 extends the same fence to the checkout itself: a
+    well-formed `--sha` that names no commit in the checkout `send` runs
+    from is refused (`sha_absent`), and a send from no repository at all
+    states, typed, that it could not check (`sha_unchecked`) — so an
+    envelope never points a seat at nothing.
+    """
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -910,7 +1452,7 @@ class SendUnbankedShaFenceTests(unittest.TestCase):
             capture_output=True, text=True,
         ).stdout.strip()
 
-    def run_send(self, sha: str) -> subprocess.CompletedProcess[str]:
+    def run_send(self, sha: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 sys.executable, "-m", "floati", "send",
@@ -921,7 +1463,7 @@ class SendUnbankedShaFenceTests(unittest.TestCase):
                 "--doc", "docs/note.md",
                 "--note", "fence fixture",
             ],
-            cwd=str(self.checkout),
+            cwd=str(self.checkout if cwd is None else cwd),
             check=False, capture_output=True, text=True,
             env={
                 **os.environ,
@@ -946,13 +1488,30 @@ class SendUnbankedShaFenceTests(unittest.TestCase):
         self.assertEqual("sha_unbanked", evidence["code"])
         self.assertIn("refs/remotes/origin/other", evidence["detail"])
 
-    def test_send_passes_a_sha_absent_from_the_checkout_to_the_verify_fence(self) -> None:
-        """The send-side fence owns the committed-but-unpushed incident only."""
-        absent = "b" * 40
+    def test_send_refuses_a_well_formed_sha_absent_from_the_checkout(self) -> None:
+        """SEND-SHA-RESOLVES-1: an invented sha names no commit the named
+        repository can resolve, so the send is refused (RB-1's old
+        pass-through to the verify fence pointed envelopes at nothing)."""
         self._git("update-ref", "refs/remotes/origin/main", self.local_sha)
+        absent = "b" * 40
         result = self.run_send(absent)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("ok", json.loads(result.stdout)["status"])
+        self.assertEqual(20, result.returncode, result.stdout)
+        evidence = json.loads(result.stdout)["evidence"]
+        self.assertEqual("sha_absent", evidence["code"])
+        self.assertIn(absent, evidence["detail"])
+        self.assertIn(str(self.checkout), evidence["detail"])
+
+    def test_send_states_it_could_not_check_when_no_repository_is_present(self) -> None:
+        """SEND-SHA-RESOLVES-1: from a directory that is no Git repository
+        the fence cannot check the sha at all, so it refuses with a typed
+        code instead of passing the envelope through unchecked."""
+        nowhere = self.home.parent / "no-repository"
+        nowhere.mkdir()
+        result = self.run_send(self.local_sha, cwd=nowhere)
+        self.assertEqual(20, result.returncode, result.stdout)
+        evidence = json.loads(result.stdout)["evidence"]
+        self.assertEqual("sha_unchecked", evidence["code"])
+        self.assertIn(str(nowhere), evidence["detail"])
 
     def test_send_still_accepts_a_sha_reachable_from_a_remote_ref(self) -> None:
         self._git("update-ref", "refs/remotes/origin/main", self.local_sha)

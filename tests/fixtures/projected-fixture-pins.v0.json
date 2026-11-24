@@ -1,0 +1,61 @@
+{
+  "fixtures": {
+    "tests/fixtures/bus-scale-census/native-command-amendment-7d0c404e.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "504592b97655a9b8ed2e4e3d61f389338800491ced8ffaef242ecb0ebdafb4b3",
+      "source_sha256": "0aae1d48ec08b1ffb4bf8997e96bdc37e890bdc152819cf7af297bd7026c45b8"
+    },
+    "tests/fixtures/bus-scale-census/native-command-amendment-d6263c86.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "b48610a9e09ea09559903ad86c8f5428f72ce3fa4af03997f16be606f0bf976d",
+      "source_sha256": "49ebe13c9764e4f7653466a05364301615d15e13f23675f4517df80e4abf3f49"
+    },
+    "tests/fixtures/bus-scale-census/native-command-contract-1f2f40f6.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "87e260846a0d7f96d50e6679b41b493df1850f8c292340bd56845a2444f0f9c4",
+      "source_sha256": "a1fb6f496762b9c56164ecef3eb6d6c189f3698cd9c0c38b27206fd2328560f8"
+    },
+    "tests/fixtures/bus-scale-census/native-command-contract-dca44932.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "713a72b274d32ed54a367465d3345f2851781f71076afe3684b6b3a9a20838be",
+      "source_sha256": "cf70f08cec6725a53cb58066833495fa68a4b68e16c81bf5b0507b9b2f31889b"
+    },
+    "tests/fixtures/bus-scale-census/native-command-contract-f971841e.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "22f77cfdbc3e4914b98367f680a12b6a9f3d77163753cf0b0aea92d407491c47",
+      "source_sha256": "81ebacc8fa0a9661d3e4e8fb268eac3fd88ee4a4b3f544bb0964556572502faf"
+    },
+    "tests/fixtures/g1-witness-artifact/native-completed.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "841fa767b17bcc65d71776a58b2d82dba47e98cf744ef25aabcec94836de4d08",
+      "source_sha256": "9542c2030e6a4a08412e46ebac89205144768333e2bb0f64ceea3f9025cac30d"
+    },
+    "tests/fixtures/node-spinup-command-contract.v0.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "11facaa9fc2d6d99f204e4ebde92695c59e4da753f651a789c5b9358ec97fd71",
+      "source_sha256": "57c5fd86638fff7456513814f152d5abfe2102253e55fc60aeaa6093087d1e80"
+    },
+    "tests/fixtures/update-prepare-command-contract.v0.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "4247a354cb4f0d8bd9ddf20a282fdddd5a4ebf025df624915bee3aac6b495775",
+      "source_sha256": "0b7be914b7be262b9337d65e27e09483d701095f4a1e4b6e33b53a62f91d76e1"
+    }
+  },
+  "schema_version": 0
+}

@@ -52,9 +52,19 @@ export PYTHONDONTWRITEBYTECODE=1
 # Keep the caller cwd for seat and repository authority checks. Isolation blocks
 # PYTHONPATH, user-site and cwd startup imports; only then add the installed tree.
 # -B is explicit because -I ignores PYTHONDONTWRITEBYTECODE.
-exec "$FLOATI_LAUNCHER_INTERPRETER" -I -B -c '
-import runpy
+if [ "${1:-}" = hook ] && [ "${2:-}" = relay ]; then
+  # This zero-dependency hook also skips site initialization before its gate.
+  # Other commands retain their ordinary interpreter startup contract.
+  exec "$FLOATI_LAUNCHER_INTERPRETER" -I -S -B -c '
 import sys
 sys.path.insert(0, sys.argv.pop(1))
+from floati.claude_hook_relay import main
+sys.exit(main(sys.argv[3:]))
+' "$SCRIPT_DIR/.." "$@"
+fi
+exec "$FLOATI_LAUNCHER_INTERPRETER" -I -B -c '
+import sys
+sys.path.insert(0, sys.argv.pop(1))
+import runpy
 runpy.run_module("floati", run_name="__main__", alter_sys=True)
 ' "$SCRIPT_DIR/.." "$@"

@@ -170,6 +170,9 @@ class NodeProjectionTests(unittest.TestCase):
 
     def test_boot_projects_live_role_fleet_wake_and_exact_managed_bus_shape(self) -> None:
         """Catches a prompt omitting role fences or teaching a seat to guess bus flags."""
+        from floati.fleet_presence import set_presence
+        from floati.registry import Registry
+
         projected = self.boot.project()
 
         self.assertEqual("node_boot_projection", projected["kind"])
@@ -213,6 +216,15 @@ class NodeProjectionTests(unittest.TestCase):
         self.assertIn("--as builder-a --session <session-id>", projected["prompt"])
         self.assertIn("floati wake resume --root", projected["prompt"])
         self.assertIn("floati wake status --root", projected["prompt"])
+
+        Registry(self.root).register("architect-a", "codex")
+        away = set_presence(self.root, "architect-a", "AWAY", "overnight")
+        self.assertIn("AWAY", self.boot.project()["prompt"].splitlines()[0])
+        set_presence(self.root, "architect-a", "PRESENT", "morning")
+        line = self.boot.project()["prompt"].splitlines()[0]
+        self.assertIn("PRESENT", line)
+        self.assertIn("builder-a", line)
+        self.assertIn(away["since"], line)
 
     def test_boot_json_and_plain_render_are_deterministic_ascii_twins(self) -> None:
         """Catches a human board diverging from the machine projection or using unsafe output."""

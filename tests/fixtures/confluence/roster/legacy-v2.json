@@ -1,0 +1,9 @@
+{
+  "schema_version": 2,
+  "kind": "receipts_read_bundle",
+  "tenant_id": "legacy-fleet",
+  "snapshot_at": "2026-09-28T12:00:00.000Z",
+  "grant_id": "confluence-grant-018f7e9b3c117abc8def0123456789ab",
+  "entries": [],
+  "excluded_wake_hold_receipt_count": 0
+}

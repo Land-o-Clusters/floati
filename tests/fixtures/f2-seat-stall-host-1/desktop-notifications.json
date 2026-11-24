@@ -1,0 +1,43 @@
+{
+  "contract_version": 1,
+  "survey_date": "2026-10-25",
+  "claude": {
+    "source": "https://code.claude.com/docs/en/hooks#notification",
+    "required": ["session_id", "cwd", "transcript_path", "hook_event_name", "notification_type", "message"],
+    "optional": ["prompt_id", "title", "permission_mode", "scratchpad_dir", "effort", "agent_id", "agent_type"],
+    "event_field": "hook_event_name",
+    "event_value": "Notification",
+    "type_field": "notification_type",
+    "types": ["permission_prompt", "idle_prompt"],
+    "prompt_field": "prompt_id",
+    "prompt_format": "uuid",
+    "producer_requires_prompt": true
+  },
+  "opencode": {
+    "source": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.23/packages/opencode/src/plugin/index.ts",
+    "sdk_source": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.23/packages/sdk/js/src/v2/gen/types.gen.ts",
+    "host_version": "1.18.23",
+    "required": ["cwd", "worktree", "event"],
+    "optional": [],
+    "event_fields": ["id", "type", "properties"],
+    "event_types": ["permission.asked", "session.idle"],
+    "native_session_field": "event.properties.sessionID",
+    "native_occurrence_field": "event.id",
+    "directory_source": "plugin host context"
+  },
+  "grok-build": {
+    "source": "https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md",
+    "installed_version": "1.0.13 (5e9a58528b76)",
+    "installed_guide_sha256": "3690762505faa65d6a82e6462abeaa20fe3a127de611021c171f9088f2c2e56f",
+    "required": ["hookEventName", "sessionId", "cwd", "workspaceRoot", "timestamp", "permissionMode", "notificationType", "message"],
+    "optional": ["promptId", "subagentType", "hook_event_name"],
+    "optional_event_alias": {"hook_event_name": "Notification"},
+    "event_field": "hookEventName",
+    "event_value": "notification",
+    "type_field": "notificationType",
+    "types": ["permission_prompt", "idle_prompt"],
+    "prompt_field": "promptId",
+    "prompt_format": "opaque_session_scoped",
+    "idle_identity": "session_and_dispatch_timestamp"
+  }
+}

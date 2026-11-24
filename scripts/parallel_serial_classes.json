@@ -1,0 +1,10 @@
+{
+  "tests.test_effect_reconciliation_exec.EffectReconciliationExecTests": "Real observer cleanup asserts fixed 0.8-second and 2.0-second deadlines and has failed under load; avoid parallel CPU contention until its clock contract changes (tests/test_effect_reconciliation_exec.py).",
+  "tests.test_workers.WorkerEffectPipeTests": "Real preparation requires the fixed work parent; retain native serial ordering with its creators (floati/worker_isolation.py).",
+  "tests.test_effect_controller.WorkerEffectAuthorityTests": "Real effect-worker preparation requires the same fixed work parent; retain native serial ordering with its creators (tests/test_effect_controller.py and floati/worker_isolation.py).",
+  "tests.test_gauntlet_fuzz.EffectLedgerPrefixFuzzTests": "The forged-effect/mutated-pipe test calls _EffectWorkerCase.execute(), reaching real prepare_worker_isolation with a workspace under the fixed work parent despite its apply_worker_isolation patch. Keep the whole owning class in native serial order with the parent creators (tests/test_gauntlet_fuzz.py:2828 and floati/worker_isolation.py:349).",
+  "tests.test_gate_z2_of_fl_1.GateNothingOutlivesTheWithBlock": "Launches one CPU hog per logical CPU to prove owned-child quiescence under contention; keep exclusive so this intentional saturation cannot distort unrelated fixture deadlines. The maintenance observer is now scoped by exact fixture marker and PID birth identity (tests/test_gate_z2_of_fl_1.py).",
+  "tests.test_native_io.NativeIOTests": "Only explicit short/original startup and drain deadlines, delayed spawn, and inherited-pipe cleanup observations remain; ordinary framing uses the readiness watchdog in OrdinaryNativeIOTests.",
+  "tests.test_native_thread_protocol.NativeThreadProtocolTests": "Only real parent contenders, transition threads, child startup/ACK deadlines and saturated transport timeout controls remain; private-root synchronous cases are in SynchronousNativeThreadProtocolTests.",
+  "tests.test_native_thread_protocol.NativeChannelDeadlineTests": "Real socket/trickle deadlines with tight elapsed-time slack; some execute even while the new APIs are absent."
+}

@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Tup
 
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
-from .jsonl import MAX_LEDGER_RECORDS, _append_frame, _encode_record, _ensure_directory, _locked_path, _read_path_records
+from .jsonl import MAX_LEDGER_RECORDS, _append_frame, _durability_failure, _encode_record, _ensure_directory, _locked_path, _read_path_records
 from .records import segment_seal_digest
 from .root import FloatiRoot
 
@@ -150,7 +150,9 @@ class SegmentedRunStore:
         self.allowed_kinds = allowed_kinds
         self.config = config
         self._cached_state: Optional[_ActiveState] = None
-        self._cached_signature: Optional[Tuple[Tuple[str, int, int, int], ...]] = None
+        self._cached_signature: Optional[Tuple[Tuple[str, str], ...]] = None
+        self._file_hashers: Dict[str, Any] = {}
+        self._pending_writes: Optional[List[Tuple[Path, bytes]]] = None
 
     @property
     def _legacy(self) -> Path:
@@ -311,7 +313,7 @@ class SegmentedRunStore:
             return self._cached_state
         state = self._validate_active_uncached()
         self._cached_state = state
-        self._cached_signature = self._state_signature()
+        self._cached_signature = signature
         return state
 
     def _active_snapshot(self, state: _ActiveState) -> RunStoreSnapshot:
@@ -339,7 +341,7 @@ class SegmentedRunStore:
             )
         return digest
 
-    def _state_signature(self) -> Tuple[Tuple[str, int, int, int], ...]:
+    def _ledger_paths(self) -> List[Path]:
         paths = [self._legacy]
         if self._segments.exists():
             paths.extend(
@@ -347,20 +349,60 @@ class SegmentedRunStore:
                 for path in self._segments.iterdir()
                 if path.is_file() and path.name != "writer.lock"
             )
+        return paths
+
+    def _relative(self, path: Path) -> str:
+        return path.relative_to(self.root.tenant_home).as_posix()
+
+    def _read_ledger_bytes(self, path: Path) -> bytes:
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise _durability_failure(exc, path) from exc
+
+    def _remember_bytes(self, path: Path, data: bytes) -> None:
+        hasher = hashlib.sha256()
+        hasher.update(data)
+        self._file_hashers[self._relative(path)] = hasher
+
+    def _signature_from_hashers(self) -> Tuple[Tuple[str, str], ...]:
+        return tuple(
+            (relative, hasher.hexdigest())
+            for relative, hasher in sorted(self._file_hashers.items())
+        )
+
+    def _state_signature(self) -> Tuple[Tuple[str, str], ...]:
+        hashers: Dict[str, Any] = {}
         signature = []
-        for path in sorted(paths):
+        for path in sorted(self._ledger_paths()):
             if not path.exists():
                 continue
-            metadata = path.stat()
-            signature.append(
-                (
-                    path.relative_to(self.root.tenant_home).as_posix(),
-                    metadata.st_size,
-                    metadata.st_mtime_ns,
-                    metadata.st_ctime_ns,
-                )
-            )
+            data = self._read_ledger_bytes(path)
+            hasher = hashlib.sha256()
+            hasher.update(data)
+            relative = self._relative(path)
+            hashers[relative] = hasher
+            signature.append((relative, hasher.hexdigest()))
+        self._file_hashers = hashers
         return tuple(signature)
+
+    def _write_frame(self, path: Path, encoded: bytes) -> None:
+        _append_frame(path, encoded)
+        if self._pending_writes is not None:
+            self._pending_writes.append((path, encoded))
+
+    def _extend_signature(self, writes: List[Tuple[Path, bytes]]) -> None:
+        if not self._file_hashers:
+            self._cached_signature = self._state_signature()
+            return
+        for path, data in writes:
+            relative = self._relative(path)
+            hasher = self._file_hashers.get(relative)
+            if hasher is None:
+                hasher = hashlib.sha256()
+                self._file_hashers[relative] = hasher
+            hasher.update(data)
+        self._cached_signature = self._signature_from_hashers()
 
     def _validate_active_uncached(self) -> _ActiveState:
         if not self._metadata.exists():
@@ -449,14 +491,19 @@ class SegmentedRunStore:
     def _append_cached(
         self, state: _ActiveState, candidates: List[Dict[str, object]]
     ) -> None:
+        self._pending_writes = []
         try:
             self._append_candidates(state, candidates)
         except BaseException:
             self._cached_state = None
             self._cached_signature = None
+            self._file_hashers = {}
+            self._pending_writes = None
             raise
+        writes = self._pending_writes
+        self._pending_writes = None
         self._cached_state = state
-        self._cached_signature = self._state_signature()
+        self._extend_signature(writes)
 
     def _append_legacy_candidates(
         self, existing: List[Dict[str, object]], candidates: List[Dict[str, object]]
@@ -500,7 +547,7 @@ class SegmentedRunStore:
             if not pending:
                 return
             path = self._segment_path(int(state.opening["segment_number"]))
-            _append_frame(path, b"".join(encoded for _candidate, encoded in pending))
+            self._write_frame(path, b"".join(encoded for _candidate, encoded in pending))
             first = int(state.opening["first_global_ordinal"])
             for candidate, encoded in pending:
                 state.segment_records.append(candidate)
@@ -546,14 +593,14 @@ class SegmentedRunStore:
             if not path.is_file() or path.stat().st_size != 0:
                 raise IntegrityFailure("unexpected_segment_file", "unopened successor is not exact zero bytes")
         else:
-            _append_frame(path, b"")
+            self._write_frame(path, b"")
         opened = self._opened(
             next_number,
             int(seal["last_global_ordinal"]) + 1,
             str(seal["seal_digest"]),
             self._timestamp(datetime.now(timezone.utc)),
         )
-        _append_frame(self._metadata, _encode_record(opened, self.root.tenant_id, _METADATA_KINDS))
+        self._write_frame(self._metadata, _encode_record(opened, self.root.tenant_id, _METADATA_KINDS))
         state.opening = opened
         state.segment_records = []
         state.segment_bytes = 0
@@ -562,7 +609,7 @@ class SegmentedRunStore:
     def _rotate(self, state: _ActiveState) -> None:
         number = int(state.opening["segment_number"])
         path = self._segment_path(number)
-        data = path.read_bytes()
+        data = self._read_ledger_bytes(path)
         now = self._timestamp(datetime.now(timezone.utc))
         seal: Dict[str, object] = {
             "schema_version": 1,
@@ -579,7 +626,7 @@ class SegmentedRunStore:
             "seal_digest": "",
         }
         seal["seal_digest"] = segment_seal_digest(seal)
-        _append_frame(self._metadata, _encode_record(seal, self.root.tenant_id, _METADATA_KINDS))
+        self._write_frame(self._metadata, _encode_record(seal, self.root.tenant_id, _METADATA_KINDS))
         next_number = number + 1
         opened = self._opened(
             next_number,
@@ -587,8 +634,8 @@ class SegmentedRunStore:
             str(seal["seal_digest"]),
             now,
         )
-        _append_frame(self._segment_path(next_number), b"")
-        _append_frame(self._metadata, _encode_record(opened, self.root.tenant_id, _METADATA_KINDS))
+        self._write_frame(self._segment_path(next_number), b"")
+        self._write_frame(self._metadata, _encode_record(opened, self.root.tenant_id, _METADATA_KINDS))
         state.opening = opened
         state.segment_records = []
         state.segment_bytes = 0

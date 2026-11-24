@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.readiness import wait_until
+
 import hashlib
 import json
 import os
@@ -10,6 +12,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+from unittest import mock
 from dataclasses import replace
 from pathlib import Path
 
@@ -235,6 +238,7 @@ class QuotaAdapterTests(unittest.TestCase):
                     #!/usr/bin/env python3
                     import json
                     import sys
+                    import threading
                     from pathlib import Path
 
                     here = Path(__file__)
@@ -246,6 +250,9 @@ class QuotaAdapterTests(unittest.TestCase):
                         if message['method'] == 'initialize':
                             print(json.dumps({'id': message['id'], 'result': {}}), flush=True)
                         elif message['method'] == 'account/rateLimits/read':
+                            # Publish the complete transcript before the final
+                            # response makes collector cleanup permissible.
+                            here.with_suffix('.methods').write_text(json.dumps(seen))
                             print(json.dumps({
                                 'id': message['id'],
                                 'result': {
@@ -261,8 +268,10 @@ class QuotaAdapterTests(unittest.TestCase):
                                     }
                                 },
                             }), flush=True)
+                            # Deliberately yield all post-response progress to
+                            # the collector's real termination/reaping path.
+                            threading.Event().wait()
                             break
-                    here.with_suffix('.methods').write_text(json.dumps(seen))
                     """
                 ),
                 encoding="utf-8",
@@ -312,6 +321,7 @@ class QuotaAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             executable = Path(temporary) / "codex-hang"
             pid_path = executable.with_suffix(".pid")
+            ready_path = executable.with_suffix(".ready")
             executable.write_text(
                 textwrap.dedent(
                     """\
@@ -325,6 +335,7 @@ class QuotaAdapterTests(unittest.TestCase):
                     here = Path(__file__)
                     here.with_suffix('.pid').write_text(str(os.getpid()))
                     print('sk-test-secret \x2fUsers/private-account', file=sys.stderr, flush=True)
+                    here.with_suffix('.ready').write_text('stderr flushed')
                     initialize = json.loads(sys.stdin.readline())
                     print(json.dumps({'id': initialize['id'], 'result': {}}), flush=True)
                     sys.stdin.readline()
@@ -336,35 +347,67 @@ class QuotaAdapterTests(unittest.TestCase):
             )
             executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
 
-            with self.assertRaises(ProtocolRefusal) as raised:
-                module.collect_codex_app_server(
-                    executable,
-                    observed_at=OBSERVED_AT,
-                    idempotency_key="codex-timeout-1",
-                    timeout_seconds=0.5,
+            # Keep the native 0.5 s enforcement deadline. The diagnostic
+            # contract additionally requires stderr to exist: stage the real
+            # child's flushed bytes before starting that deadline, rather than
+            # assuming a cold interpreter starts within it on a loaded host.
+            startup_budget = time_bounds.derived_codex_handshake_budget_seconds()
+            child = subprocess.Popen(
+                [str(executable), "app-server", "--listen", "stdio://"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=False, bufsize=0,
+            )
+            try:
+                wait_until(lambda: ready_path.exists() or child.poll() is not None,
+                    "diagnostic fixture flushed stderr", timeout=startup_budget)
+                self.assertIsNone(child.poll(), "diagnostic fixture exited before readiness")
+                with mock.patch.object(module.subprocess, "Popen", return_value=child) as launch:
+                    with self.assertRaises(ProtocolRefusal) as raised:
+                        module.collect_codex_app_server(
+                            executable,
+                            observed_at=OBSERVED_AT,
+                            idempotency_key="codex-timeout-1",
+                            timeout_seconds=0.5,
+                        )
+                launch.assert_called_once_with(
+                    [str(executable), "app-server", "--listen", "stdio://"],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=False, bufsize=0,
                 )
-
-            self.assertEqual("quota_provider_timeout", raised.exception.code)
-            diagnostic = b"sk-test-secret \x2fUsers/private-account\n"
-            self.assertNotIn("sk-test-secret", raised.exception.detail)
-            self.assertNotIn("\x2fUsers/private-account", raised.exception.detail)
-            self.assertIn(
-                "stderr_sample_sha256=" + hashlib.sha256(diagnostic).hexdigest(),
-                raised.exception.detail,
-            )
-            self.assertIn(
-                "stderr_sample_bytes=" + str(len(diagnostic)), raised.exception.detail
-            )
-            self.assertIn("stderr_truncated=false", raised.exception.detail)
-            pid = int(pid_path.read_text(encoding="utf-8"))
-            for _ in range(20):
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.01)
-            else:
-                self.fail("timed-out Codex app-server child survived collector cleanup")
+                self.assertEqual("quota_provider_timeout", raised.exception.code)
+                diagnostic = b"sk-test-secret \x2fUsers/private-account\n"
+                self.assertNotIn("sk-test-secret", raised.exception.detail)
+                self.assertNotIn("\x2fUsers/private-account", raised.exception.detail)
+                self.assertIn(
+                    "stderr_sample_sha256=" + hashlib.sha256(diagnostic).hexdigest(),
+                    raised.exception.detail,
+                )
+                self.assertIn(
+                    "stderr_sample_bytes=" + str(len(diagnostic)), raised.exception.detail
+                )
+                self.assertIn("stderr_truncated=false", raised.exception.detail)
+                pid = int(pid_path.read_text(encoding="utf-8"))
+                for _ in range(20):
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(0.01)
+                else:
+                    self.fail("timed-out Codex app-server child survived collector cleanup")
+            finally:
+                # Cleanup cannot satisfy the reaping assertion above. It owns
+                # only this fixture child and also covers readiness failures.
+                if child.poll() is None:
+                    child.terminate()
+                    try:
+                        child.wait(timeout=1.0)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        child.wait(timeout=1.0)
+                for stream in (child.stdin, child.stdout, child.stderr):
+                    if stream is not None:
+                        stream.close()
 
     def test_claude_statusline_collector_appends_one_receipt_and_emits_one_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

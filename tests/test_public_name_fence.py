@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+from tests import export_inventory
 from tests.export_inventory import export_include_set, materialise_exposed_tree
 from tests.private_artifacts import require_private_artifact
 
@@ -76,6 +79,61 @@ DERIVED_SEAT_POPULATION_HEX = (
 )
 
 
+# HARBOR-SPEED-R-C: the two whole-projection tests below each materialised the
+# exposed tree and ran the full fence over it (~12.6 s apiece at harbor main
+# 1fa68e48: half adaptation, half scan_tree tokenizing 668 Python files), then
+# kept different slices of the SAME findings. The tree is still materialised
+# on every call (adaptation is memoised by tests.export_inventory), and the
+# scan is reused only for a byte-identical tree: the key is the digest of
+# every entry scan_tree can see -- each path, whether it is a symlink, and the
+# sha256 of its bytes, read back from disk -- plus the identity of every
+# global of the loaded fence module. A planted, edited or removed byte is a
+# new key and a fresh scan. Findings are stored frozen; callers get copies.
+_EXPOSED_SCAN_MEMO: dict[tuple[object, ...], tuple[tuple[tuple[str, object], ...], ...]] = {}
+# The fence globals a live key names, held so their ids cannot be reused.
+_EXPOSED_SCAN_HELD: list[tuple[object, ...]] = []
+
+
+def _tree_digest(root: Path) -> str:
+    digest = hashlib.sha256()
+    for directory, directories, files in os.walk(root):
+        directories.sort()
+        for name in sorted(directories + files):
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                digest.update(b"L\0" + relative.encode("utf-8") + b"\0")
+                digest.update(os.readlink(path).encode("utf-8") + b"\0")
+            elif path.is_dir():
+                digest.update(b"D\0" + relative.encode("utf-8") + b"\0")
+            else:
+                digest.update(b"F\0" + relative.encode("utf-8") + b"\0")
+                digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def exposed_tree_findings(
+    module, root: Path = REPOSITORY_ROOT
+) -> list[dict[str, object]]:
+    """``module.scan_tree`` over the exposed tree, reused only for identical bytes."""
+
+    fence_identity = tuple(
+        (name, id(value)) for name, value in sorted(vars(module).items())
+    )
+    with tempfile.TemporaryDirectory() as temporary:
+        exposed = Path(temporary) / "exposed"
+        materialise_exposed_tree(exposed, root=root)
+        key = (_tree_digest(exposed), fence_identity)
+        frozen = _EXPOSED_SCAN_MEMO.get(key)
+        if frozen is None:
+            frozen = tuple(
+                tuple(sorted(finding.items())) for finding in module.scan_tree(exposed)
+            )
+            _EXPOSED_SCAN_MEMO[key] = frozen
+            _EXPOSED_SCAN_HELD.append(tuple(vars(module).values()))
+    return [dict(items) for items in frozen]
+
+
 class PublicNameFenceTests(unittest.TestCase):
     def module(self):
         spec = importlib.util.find_spec("scripts.public_name_fence")
@@ -92,21 +150,25 @@ class PublicNameFenceTests(unittest.TestCase):
 
             self.assertEqual([], module.scan_tree(root))
 
-    def test_public_product_source_has_no_private_seat_vocabulary(self) -> None:
-        """An exact seat id reaching an export-exposed byte surface is rejected."""
+    def test_public_product_source_has_no_private_seat_or_coordinate_vocabulary(
+        self,
+    ) -> None:
+        """An exact seat id or private coordinate in the exposed tree is rejected."""
 
         require_private_artifact(self, POLICY_RELATIVE)
+        from floati.tenant_fence import FORBIDDEN_TOKEN_DIGESTS
+
         module = self.module()
-        population = set(export_include_set())
-        with tempfile.TemporaryDirectory() as temporary:
-            exposed = Path(temporary) / "exposed"
-            materialise_exposed_tree(exposed)
-            findings = [
-                finding
-                for finding in module.scan_tree(exposed)
-                if finding["code"] in {"seat_name", "seat_name_path"}
-                and finding["path"] in population
-            ]
+        codes = {
+            "seat_name",
+            "seat_name_path",
+            "private_coordinate_declaration_invalid",
+            *(code for code, _, _ in FORBIDDEN_TOKEN_DIGESTS),
+        }
+        findings = [
+            finding for finding in exposed_tree_findings(module)
+            if finding["code"] in codes
+        ]
 
         self.assertEqual([], findings)
 
@@ -117,17 +179,14 @@ class PublicNameFenceTests(unittest.TestCase):
         module = self.module()
         population = set(MEASURED_ARCHITECT_RESIDUE_PATHS)
         self.assertLessEqual(population, set(export_include_set()))
-        with tempfile.TemporaryDirectory() as temporary:
-            exposed = Path(temporary) / "exposed"
-            materialise_exposed_tree(exposed)
-            findings = sorted(
-                {
-                    finding["path"]
-                    for finding in module.scan_tree(exposed)
-                    if finding["code"] in {"seat_name", "seat_name_path"}
-                    and finding["path"] in population
-                }
-            )
+        findings = sorted(
+            {
+                finding["path"]
+                for finding in exposed_tree_findings(module)
+                if finding["code"] in {"seat_name", "seat_name_path"}
+                and finding["path"] in population
+            }
+        )
 
         self.assertEqual([], findings)
 
@@ -739,6 +798,72 @@ class PublicNameFenceTests(unittest.TestCase):
             (root / "scanner_test.py").write_bytes(Path(__file__).read_bytes())
 
             self.assertEqual([], module.scan_tree(root))
+
+
+class ExposedTreeMemoIsContentKeyedTests(unittest.TestCase):
+    """HARBOR-SPEED-R-C: neither the adaptation memo nor the scan memo serves stale bytes."""
+
+    def _harbor_shaped_root(self, root: Path) -> None:
+        for relative in (
+            "scripts/export_public.py",
+            POLICY_RELATIVE,
+            ".github/public-export-baseline.v0.json",
+        ):
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((REPOSITORY_ROOT / relative).read_bytes())
+        (root / "README.md").write_text("clean public prose\n", encoding="utf-8")
+        (root / "tests").mkdir()
+        (root / "tests" / "memo_probe.py").write_text("VALUE = 1\n", encoding="utf-8")
+        subprocess.run(["/usr/bin/git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(["/usr/bin/git", "add", "-A"], cwd=root, check=True)
+
+    def _seat_findings(self, module, root: Path) -> list[dict[str, object]]:
+        return [
+            finding
+            for finding in exposed_tree_findings(module, root=root)
+            if finding["code"] in {"seat_name", "seat_name_path"}
+        ]
+
+    def test_planted_edited_and_reverted_bytes_are_re_adapted_and_re_scanned(self) -> None:
+        require_private_artifact(self, POLICY_RELATIVE)
+        module = PublicNameFenceTests().module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "harbor"
+            root.mkdir()
+            self._harbor_shaped_root(root)
+            self.assertEqual([], self._seat_findings(module, root))
+
+            # Both memos are live: an unchanged tree adds no entry to either.
+            adapted = len(export_inventory._ADAPTATION_MEMO["entries"])
+            scanned = len(_EXPOSED_SCAN_MEMO)
+            self.assertEqual([], self._seat_findings(module, root))
+            self.assertEqual(adapted, len(export_inventory._ADAPTATION_MEMO["entries"]))
+            self.assertEqual(scanned, len(_EXPOSED_SCAN_MEMO))
+
+            # A seat id in executable source survives adaptation: the fence reds.
+            probe = root / "tests" / "memo_probe.py"
+            probe.write_text(f"VALUE = {ARCHITECT_SEAT!r}\n", encoding="utf-8")
+            self.assertEqual(
+                [{"code": "seat_name", "line": 1, "path": "tests/memo_probe.py"}],
+                self._seat_findings(module, root),
+            )
+
+            # A seat id in prose is adapted away: the exposed bytes are the
+            # adapter's, never the memoised clean bytes and never the raw seat.
+            readme = root / "README.md"
+            readme.write_text(f"assigned to {ARCHITECT_SEAT}\n", encoding="utf-8")
+            exposed = Path(temporary) / "exposed"
+            materialise_exposed_tree(exposed, root=root)
+            text = (exposed / "README.md").read_text(encoding="utf-8")
+            self.assertNotEqual("clean public prose\n", text)
+            self.assertNotIn(ARCHITECT_SEAT, text)
+            self.assertTrue(text.startswith("assigned to "), text)
+
+            # Reverting every byte is served the original, clean answer.
+            readme.write_text("clean public prose\n", encoding="utf-8")
+            probe.write_text("VALUE = 1\n", encoding="utf-8")
+            self.assertEqual([], self._seat_findings(module, root))
 
 
 def _fl4_planted_world(seats: list[str]) -> list[dict[str, str]]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_event, wait_join
 import copy
 import hashlib
 import json
@@ -489,11 +490,8 @@ class C7_2SegmentAmendmentTests(unittest.TestCase):
             writer_errors: list[BaseException] = []
 
             def append_after_capture_starts() -> None:
-                if not release_writer.wait(timeout=5):
-                    writer_errors.append(TimeoutError("capture never released concurrent writer"))
-                    writer_finished.set()
-                    return
                 try:
+                    wait_event(release_writer, "test_c7_2_bundle release_writer")
                     self._bind(
                         trace,
                         [
@@ -521,7 +519,7 @@ class C7_2SegmentAmendmentTests(unittest.TestCase):
                 if relative == c7_bundle.RUN_LEDGER and not run_capture_started:
                     run_capture_started = True
                     release_writer.set()
-                    self.assertTrue(writer_finished.wait(timeout=5))
+                    self.assertTrue(wait_event(writer_finished, "test_c7_2_bundle writer_finished"))
                 return captured
 
             destination = Path(directory) / "c7.2"
@@ -535,7 +533,7 @@ class C7_2SegmentAmendmentTests(unittest.TestCase):
                     build_c7_2_bundle(root, destination, repository="owner/repo")
             finally:
                 release_writer.set()
-                writer.join(timeout=5)
+                wait_join(writer, "test_c7_2_bundle writer")
 
             self.assertTrue(run_capture_started)
             self.assertFalse(writer.is_alive())

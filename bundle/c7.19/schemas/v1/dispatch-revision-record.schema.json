@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/dispatch-revision-record.schema.json",
+  "title": "Floati Dispatch Revision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "actor",
+    "dispatch_id",
+    "coordinates",
+    "supersedes",
+    "idempotency_key",
+    "request_digest",
+    "revision",
+    "recipient",
+    "branch",
+    "brief",
+    "carrier"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "dispatch_revision"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^dispatch-revision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "dispatch_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "coordinates": {
+      "const": []
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^dispatch-revision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "request_digest": {
+      "$ref": "bound-record-common.schema.json#/$defs/sha256"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "recipient": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 480,
+      "pattern": "^(?!-|refs/)"
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "bytes",
+        "provenance"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "bound-record-common.schema.json#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "provenance": {
+          "const": "observed"
+        }
+      }
+    },
+    "carrier": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "envelope_id",
+            "provenance"
+          ],
+          "properties": {
+            "kind": {
+              "const": "envelope"
+            },
+            "envelope_id": {
+              "type": "string",
+              "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+            },
+            "provenance": {
+              "const": "observed"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "label",
+            "provenance"
+          ],
+          "properties": {
+            "kind": {
+              "const": "external"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "provenance": {
+              "const": "claimed"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

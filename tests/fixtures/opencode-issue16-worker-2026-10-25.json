@@ -1,0 +1,522 @@
+{
+  "artifact_version": 0,
+  "model": "opencode/glm-5.3-flash-free",
+  "home": "owner",
+  "source_sha": "69456ee07676c08ef00b9c89bc97e3a38262dd30",
+  "run_invocations": [
+    {
+      "phase": "round_trip",
+      "item": {
+        "schema_version": 0,
+        "id": "work-01a17421a98f7149ab2ea2d6c9a116e9",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:35:25.583Z",
+        "kind": "work_item",
+        "title": "Do nothing else.",
+        "owner": "oc-temp",
+        "artifact_bindings": [],
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a17421a98f7149ab2ea2d6c9a116e9"
+      },
+      "started_at": "2026-10-25T17:35:25.584+00:00",
+      "lease_at_start": {
+        "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+        "state": "active",
+        "expires_at": "2026-10-25T17:36:25.580Z"
+      },
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--model",
+        "opencode/glm-5.3-flash-free",
+        "--format",
+        "json",
+        "--",
+        "Write OK to \u002fprivate/tmp/floati-work/work-01a17421a98f7149ab2ea2d6c9a116e9/answer.txt.",
+        "Do nothing else."
+      ],
+      "result": {
+        "schema_version": 0,
+        "id": "worker-receipt-01a17421c44c7fda9bae441c852edfc6",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:35:32.428Z",
+        "kind": "worker_receipt",
+        "session_id": "worker-01a17421a992704b941a8db169d212a1",
+        "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9",
+        "node_id": "oc-temp",
+        "adapter": "opencode",
+        "transition": "complete",
+        "outcome_code": null,
+        "authority_subject": "oc-claims",
+        "authority_epoch": 1,
+        "artifact_bindings": [
+          {
+            "repo": "local/work-01a17421a98f7149ab2ea2d6c9a116e9",
+            "sha": "c70da5847091ad5b778296be5b82ec6f7360e9af",
+            "doc": "answer.txt"
+          }
+        ]
+      },
+      "ended_at": "2026-10-25T17:35:32.428+00:00",
+      "lease_at_end": {
+        "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+        "state": "active",
+        "expires_at": "2026-10-25T17:36:25.580Z"
+      },
+      "process_audit": {
+        "adapter_pid": 20938,
+        "registered_process_groups": [
+          20940
+        ],
+        "alive_after_cleanup": [],
+        "isolation_backend": null
+      },
+      "receipts": [
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17421a99276868e4912c6e95a71df",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a17421a992704b941a8db169d212a1",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:35:25.586Z",
+          "transition": "claim",
+          "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17421a9a87d04a30c5df085fa399d",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a17421a992704b941a8db169d212a1",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:35:25.607Z",
+          "transition": "spawn",
+          "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17421a9a978afaaced262564d5727",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a17421a992704b941a8db169d212a1",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:35:25.609Z",
+          "transition": "drive",
+          "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [
+            {
+              "doc": "answer.txt",
+              "repo": "local/work-01a17421a98f7149ab2ea2d6c9a116e9",
+              "sha": "c70da5847091ad5b778296be5b82ec6f7360e9af"
+            }
+          ],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17421c44a73e3bae47359c7eeca16",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a17421a992704b941a8db169d212a1",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:35:32.426Z",
+          "transition": "bind_artifact",
+          "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [
+            {
+              "doc": "answer.txt",
+              "repo": "local/work-01a17421a98f7149ab2ea2d6c9a116e9",
+              "sha": "c70da5847091ad5b778296be5b82ec6f7360e9af"
+            }
+          ],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17421c44c7fda9bae441c852edfc6",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a17421a992704b941a8db169d212a1",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:35:32.428Z",
+          "transition": "complete",
+          "work_item_id": "work-01a17421a98f7149ab2ea2d6c9a116e9"
+        }
+      ],
+      "work_after": {
+        "id": "work-01a17421a98f7149ab2ea2d6c9a116e9",
+        "title": "Do nothing else.",
+        "owner": "oc-temp",
+        "state": "completed",
+        "holder": "oc-temp",
+        "authority_subject": "oc-claims",
+        "authority_epoch": 1,
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a17421a98f7149ab2ea2d6c9a116e9",
+        "needs": [],
+        "artifact_bindings": [
+          {
+            "doc": "answer.txt",
+            "repo": "local/work-01a17421a98f7149ab2ea2d6c9a116e9",
+            "sha": "c70da5847091ad5b778296be5b82ec6f7360e9af"
+          }
+        ],
+        "last_activity": "2026-10-25T17:35:32.427Z",
+        "readiness": "done"
+      },
+      "stderr": "",
+      "artifacts": [
+        {
+          "binding": {
+            "repo": "local/work-01a17421a98f7149ab2ea2d6c9a116e9",
+            "sha": "c70da5847091ad5b778296be5b82ec6f7360e9af",
+            "doc": "answer.txt"
+          },
+          "content": "OK\n"
+        }
+      ]
+    },
+    {
+      "phase": "expiry_boundary",
+      "item": {
+        "schema_version": 0,
+        "id": "work-01a17421c45478d696a16aebeb9cc0a7",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:35:32.436Z",
+        "kind": "work_item",
+        "title": "Do nothing else.",
+        "owner": "oc-temp",
+        "artifact_bindings": [],
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a17421c45478d696a16aebeb9cc0a7"
+      },
+      "started_at": "2026-10-25T17:36:23.664+00:00",
+      "lease_at_start": {
+        "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+        "state": "active",
+        "expires_at": "2026-10-25T17:36:25.580Z"
+      },
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "run",
+        "--model",
+        "opencode/glm-5.3-flash-free",
+        "--format",
+        "json",
+        "--",
+        "Write OK to \u002fprivate/tmp/floati-work/work-01a17421c45478d696a16aebeb9cc0a7/answer.txt.",
+        "Do nothing else."
+      ],
+      "result": {
+        "schema_version": 0,
+        "id": "worker-receipt-01a17422aeca7d188f1b65a092363966",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:36:32.458Z",
+        "kind": "worker_receipt",
+        "session_id": "worker-01a174228c72729a9337abbda33a9077",
+        "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7",
+        "node_id": "oc-temp",
+        "adapter": "opencode",
+        "transition": "complete",
+        "outcome_code": null,
+        "authority_subject": "oc-claims",
+        "authority_epoch": 1,
+        "artifact_bindings": [
+          {
+            "repo": "local/work-01a17421c45478d696a16aebeb9cc0a7",
+            "sha": "6638e1acba5780902e3d6cfb69bc19bea2c0d4df",
+            "doc": "answer.txt"
+          }
+        ]
+      },
+      "ended_at": "2026-10-25T17:36:32.459+00:00",
+      "lease_at_end": {
+        "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+        "state": "expired",
+        "expires_at": "2026-10-25T17:36:25.580Z"
+      },
+      "process_audit": {
+        "adapter_pid": 21186,
+        "registered_process_groups": [
+          21188
+        ],
+        "alive_after_cleanup": [],
+        "isolation_backend": null
+      },
+      "receipts": [
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a174228c727447b04530503354f540",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a174228c72729a9337abbda33a9077",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:36:23.666Z",
+          "transition": "claim",
+          "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a174228c8077b5a5471229bb52f626",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a174228c72729a9337abbda33a9077",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:36:23.679Z",
+          "transition": "spawn",
+          "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a174228c817841bb3e36a45eba4a1b",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a174228c72729a9337abbda33a9077",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:36:23.681Z",
+          "transition": "drive",
+          "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [
+            {
+              "doc": "answer.txt",
+              "repo": "local/work-01a17421c45478d696a16aebeb9cc0a7",
+              "sha": "6638e1acba5780902e3d6cfb69bc19bea2c0d4df"
+            }
+          ],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17422aec87ba587fd5499bfc6741f",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a174228c72729a9337abbda33a9077",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:36:32.456Z",
+          "transition": "bind_artifact",
+          "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7"
+        },
+        {
+          "adapter": "opencode",
+          "artifact_bindings": [
+            {
+              "doc": "answer.txt",
+              "repo": "local/work-01a17421c45478d696a16aebeb9cc0a7",
+              "sha": "6638e1acba5780902e3d6cfb69bc19bea2c0d4df"
+            }
+          ],
+          "authority_epoch": 1,
+          "authority_subject": "oc-claims",
+          "id": "worker-receipt-01a17422aeca7d188f1b65a092363966",
+          "kind": "worker_receipt",
+          "node_id": "oc-temp",
+          "outcome_code": null,
+          "schema_version": 0,
+          "session_id": "worker-01a174228c72729a9337abbda33a9077",
+          "tenant_id": "fleet",
+          "timestamp": "2026-10-25T17:36:32.458Z",
+          "transition": "complete",
+          "work_item_id": "work-01a17421c45478d696a16aebeb9cc0a7"
+        }
+      ],
+      "work_after": {
+        "id": "work-01a17421c45478d696a16aebeb9cc0a7",
+        "title": "Do nothing else.",
+        "owner": "oc-temp",
+        "state": "completed",
+        "holder": "oc-temp",
+        "authority_subject": "oc-claims",
+        "authority_epoch": 1,
+        "workspace": "\u002fprivate/tmp/floati-work/work-01a17421c45478d696a16aebeb9cc0a7",
+        "needs": [],
+        "artifact_bindings": [
+          {
+            "doc": "answer.txt",
+            "repo": "local/work-01a17421c45478d696a16aebeb9cc0a7",
+            "sha": "6638e1acba5780902e3d6cfb69bc19bea2c0d4df"
+          }
+        ],
+        "last_activity": "2026-10-25T17:36:32.457Z",
+        "readiness": "done"
+      },
+      "stderr": "",
+      "artifacts": [
+        {
+          "binding": {
+            "repo": "local/work-01a17421c45478d696a16aebeb9cc0a7",
+            "sha": "6638e1acba5780902e3d6cfb69bc19bea2c0d4df",
+            "doc": "answer.txt"
+          },
+          "content": "OK\n"
+        }
+      ]
+    }
+  ],
+  "started_at": "2026-10-25T17:35:25.579+00:00",
+  "preflight_attempts": [
+    {
+      "artifact_version": 0,
+      "model": "opencode/glm-5.3-flash-free",
+      "home": "owner",
+      "source_sha": "69456ee07676c08ef00b9c89bc97e3a38262dd30",
+      "run_invocations": [],
+      "started_at": "2026-10-25T17:35:13.830+00:00",
+      "node_add": {
+        "records": [
+          {
+            "schema_version": 0,
+            "id": "registry-01a174217ba7719582409789812bdeef",
+            "tenant_id": "fleet",
+            "timestamp": "2026-10-25T17:35:13.831Z",
+            "kind": "registry_entry",
+            "node_id": "oc-temp",
+            "role": "OpenCode",
+            "state": "active"
+          },
+          {
+            "schema_version": 0,
+            "id": "lease-01a174217ba772e598e4e01a8cedc16f",
+            "tenant_id": "fleet",
+            "timestamp": "2026-10-25T17:35:13.831Z",
+            "kind": "node_lease",
+            "node_id": "oc-temp",
+            "workspace": "\u002fprivate/tmp/floati-issue16-worker-j0l_llob/fleet/nodes/oc-temp",
+            "expires_at": "2026-10-25T17:36:13.831Z",
+            "state": "active"
+          }
+        ],
+        "workspace": "\u002fprivate/tmp/floati-issue16-worker-j0l_llob/fleet/nodes/oc-temp",
+        "lifetime": "temporary",
+        "boot_command": "floati node boot --root \u002fprivate/tmp/floati-issue16-worker-j0l_llob/fleet --node oc-temp --declared-roots '<declared-roots-file>' --managed-executable '<managed-bus-executable>' --profile '<managed-profile>'",
+        "teardown_command": "floati node retire --root \u002fprivate/tmp/floati-issue16-worker-j0l_llob/fleet --node oc-temp",
+        "tide_metrics": []
+      },
+      "lease_before": {
+        "node_lease_id": "lease-01a174217ba772e598e4e01a8cedc16f",
+        "state": "active",
+        "expires_at": "2026-10-25T17:36:13.831Z"
+      },
+      "scratch_removed": true,
+      "work_workspaces_removed": true,
+      "ended_at": "2026-10-25T17:35:13.836+00:00"
+    }
+  ],
+  "node_add": {
+    "records": [
+      {
+        "schema_version": 0,
+        "id": "registry-01a17421a98c7e02a1db592b1b1b5934",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:35:25.580Z",
+        "kind": "registry_entry",
+        "node_id": "oc-temp",
+        "role": "OpenCode",
+        "state": "active"
+      },
+      {
+        "schema_version": 0,
+        "id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:35:25.580Z",
+        "kind": "node_lease",
+        "node_id": "oc-temp",
+        "workspace": "\u002fprivate/tmp/floati-issue16-worker-a0j5lag3/fleet/nodes/oc-temp",
+        "expires_at": "2026-10-25T17:36:25.580Z",
+        "state": "active"
+      }
+    ],
+    "workspace": "\u002fprivate/tmp/floati-issue16-worker-a0j5lag3/fleet/nodes/oc-temp",
+    "lifetime": "temporary",
+    "boot_command": "floati node boot --root \u002fprivate/tmp/floati-issue16-worker-a0j5lag3/fleet --node oc-temp --declared-roots '<declared-roots-file>' --managed-executable '<managed-bus-executable>' --profile '<managed-profile>'",
+    "teardown_command": "floati node retire --root \u002fprivate/tmp/floati-issue16-worker-a0j5lag3/fleet --node oc-temp",
+    "tide_metrics": []
+  },
+  "lease_before": {
+    "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+    "state": "active",
+    "expires_at": "2026-10-25T17:36:25.580Z"
+  },
+  "expired_start": {
+    "started_at": "2026-10-25T17:36:32.468+00:00",
+    "item": {
+      "schema_version": 0,
+      "id": "work-01a17422aed37989a8d66765e985ad98",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-25T17:36:32.467Z",
+      "kind": "work_item",
+      "title": "Reply OK. No tools.",
+      "owner": "oc-temp",
+      "artifact_bindings": [],
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a17422aed37989a8d66765e985ad98"
+    },
+    "refusal": {
+      "code": "node_lease_expired",
+      "detail": "work claim by actor refused: node oc-temp lease lease-01a17421a98c798ba8749f74d35b2ab0 expired at 2026-10-25T17:36:25.580Z"
+    },
+    "process_audit": {
+      "adapter_pid": null,
+      "registered_process_groups": [],
+      "alive_after_cleanup": [],
+      "isolation_backend": null
+    },
+    "worker_receipts": [],
+    "refusal_receipts": [
+      {
+        "adapter": "opencode",
+        "id": "worker-refusal-01a17422aed57274abb031250ea1c0a4",
+        "kind": "worker_refusal",
+        "node_id": "oc-temp",
+        "reason_code": "worker_claim_lost",
+        "schema_version": 0,
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-25T17:36:32.468Z",
+        "work_item_id": null
+      }
+    ]
+  },
+  "lease_after": {
+    "node_lease_id": "lease-01a17421a98c798ba8749f74d35b2ab0",
+    "state": "expired",
+    "expires_at": "2026-10-25T17:36:25.580Z"
+  },
+  "scratch_removed": true,
+  "work_workspaces_removed": true,
+  "ended_at": "2026-10-25T17:36:32.475+00:00"
+}

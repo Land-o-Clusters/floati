@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/work-notification-record.schema.json",
+  "title": "Floati Work Notification Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "work_item_id", "phase", "transition", "dispatcher", "recipient",
+    "transition_id", "envelope_id", "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^work-notification-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "work_notification_record"},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "phase": {"enum": ["intent", "sent"]},
+    "transition": {"enum": ["add", "complete"]},
+    "dispatcher": {"$ref": "#/$defs/identifier"},
+    "recipient": {"anyOf": [{"$ref": "#/$defs/identifier"}, {"type": "null"}]},
+    "transition_id": {"type": ["string", "null"], "pattern": "^transition-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "envelope_id": {"type": ["string", "null"], "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "idempotency_key": {"type": ["string", "null"], "minLength": 1, "maxLength": 128}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"const": "intent"}}},
+      "then": {"properties": {
+        "transition": {"const": "add"}, "recipient": {"type": "null"},
+        "transition_id": {"type": "null"}, "envelope_id": {"type": "null"},
+        "idempotency_key": {"type": "null"}
+      }},
+      "else": {"properties": {
+        "recipient": {"type": "string"}, "envelope_id": {"type": "string"},
+        "idempotency_key": {"type": "string"}
+      }}
+    },
+    {
+      "if": {"properties": {"transition": {"const": "add"}}},
+      "then": {"properties": {"transition_id": {"type": "null"}}},
+      "else": {"properties": {"transition_id": {"type": "string"}}}
+    }
+  ],
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+  }
+}

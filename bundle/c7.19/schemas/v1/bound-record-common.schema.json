@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/bound-record-common.schema.json",
+  "title": "Floati Bound Record Common Definitions v1",
+  "$defs": {
+    "provenance": {"enum": ["observed", "claimed"]},
+    "claimed_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "provenance"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 512},
+        "provenance": {"const": "claimed"}
+      }
+    },
+    "repository": {"type": "string", "pattern": "^/", "maxLength": 4096},
+    "object_id": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "path": {
+      "type": "string", "minLength": 1, "maxLength": 512,
+      "pattern": "^(?!(?:.*\\/)?(?:\\.\\.?|\\.[gG][iI][tT])(?:\\/|$))[^/]+(?:/[^/]+)*$"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repository", "ref", "commit", "paths", "provenance"],
+      "properties": {
+        "kind": {"const": "ref"},
+        "repository": {"$ref": "#/$defs/repository"},
+        "ref": {"type": "string", "minLength": 1, "maxLength": 512},
+        "commit": {"$ref": "#/$defs/object_id"},
+        "paths": {
+          "type": "array", "maxItems": 64, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        },
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repository", "commit", "provenance"],
+      "properties": {
+        "kind": {"const": "commit"},
+        "repository": {"$ref": "#/$defs/repository"},
+        "commit": {"$ref": "#/$defs/object_id"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repository", "files", "provenance"],
+      "properties": {
+        "kind": {"const": "files"},
+        "repository": {"$ref": "#/$defs/repository"},
+        "files": {
+          "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": {"$ref": "#/$defs/path"},
+              "sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dispatch_id", "revision", "provenance"],
+      "properties": {
+        "kind": {"const": "brief"},
+        "dispatch_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "revision": {"type": ["integer", "null"], "minimum": 1, "maximum": 9223372036854775807},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "coordinate": {
+      "oneOf": [
+        {"$ref": "#/$defs/ref"}, {"$ref": "#/$defs/commit"},
+        {"$ref": "#/$defs/files"}, {"$ref": "#/$defs/brief"}
+      ]
+    },
+    "coordinates": {"type": "array", "maxItems": 4, "items": {"$ref": "#/$defs/coordinate"}}
+  }
+}

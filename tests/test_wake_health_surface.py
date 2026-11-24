@@ -15,6 +15,7 @@ from floati.codex_wait_contract import (
 )
 from floati.doctor import Doctor
 from floati.events import EventLog
+from floati.errors import ProtocolRefusal
 from floati.projection import FleetProjection
 from floati.registry import Registry
 from floati.root import FloatiRoot
@@ -93,16 +94,42 @@ class WakeHealthSurfaceTests(unittest.TestCase):
         notice, command_text = str(fact['remedy']).split(' to: ', 1)
         self.assertIn('Acting session is not known', notice)
         self.assertIn('--session', notice)
+        self.assertIn('takeover_report', notice)
         command = shlex.split(command_text)
         self.assertEqual(["seat", "board"], command[1:3])
         self.assertEqual(str(self.workspace), command[command.index("--workspace") + 1])
         self.assertEqual(str(self.root.path), command[command.index("--root") + 1])
         self.assertEqual(public_ids.builder("health"), command[command.index("--as") + 1])
-        self.assertNotIn("--take-over", command)
+        self.assertIn("--take-over", command)
         self.assertNotIn('--session', command)
         self.assertNotIn(fact['claim_session'], command)
 
         validate_json_schema(fact, Path("schemas/v1/wake-health-fact.schema.json"))
+
+    def test_superseded_exit_projects_a_schema_valid_health_fact(self) -> None:
+        from floati.wake_exit import WakeExitLedger
+        from floati.wake_health import WakeHealthProjection
+        import hashlib
+
+        node = public_ids.builder("health")
+        WakeExitLedger(self.root).record(
+            node_id=node,
+            session_digest=hashlib.sha256(b"seat-former").hexdigest(),
+            reason_code="superseded_session", waited_seconds=1,
+            idempotency_key="health-superseded-exit",
+        )
+        fact = WakeHealthProjection(self.root).fact(node, self.observation)
+        self.assertEqual("superseded_session", fact["waiter_exit_reason"])
+        validate_json_schema(fact, Path("schemas/v1/wake-health-fact.schema.json"))
+
+    def test_health_schema_change_only_widens_exit_reason(self) -> None:
+        old = json.loads((REPOSITORY_ROOT / "tests/fixtures/f2-wake-health-v1-before.schema.json").read_text())
+        new = json.loads((REPOSITORY_ROOT / "tests/fixtures/f2-wake-health-v1-recent-before.schema.json").read_text())
+        old_enum = old["properties"]["waiter_exit_reason"]["enum"]
+        new_enum = new["properties"]["waiter_exit_reason"]["enum"]
+        self.assertEqual([*old_enum, "superseded_session"], new_enum)
+        new["properties"]["waiter_exit_reason"]["enum"] = old_enum
+        self.assertEqual(old, new)
 
     def test_queued_attempt_does_not_prove_claimant_observed_mail(self) -> None:
         from floati.wake_hold import WakeHoldController, WakeAttemptLedger
@@ -121,6 +148,45 @@ class WakeHealthSurfaceTests(unittest.TestCase):
         fact = WakeHealthProjection(self.root).fact(node, self.observation)
         self.assertIsNone(fact["last_seen_session"])
         self.assertEqual("stale_claim_with_unread_mail", fact["state"])
+
+    def test_refused_only_claimant_with_unread_mail_stays_stale_and_doctor_errors(self) -> None:
+        """Catches a refused wake falsely upgrading the current claim's health."""
+        from floati.wake_hold import WakeHoldController, WakeAttemptLedger
+        from floati.wake_health import WakeHealthProjection
+
+        node = public_ids.builder("health")
+        decision = WakeHoldController(self.root).evaluate(node, idempotency_key="health-refused")
+        with self.assertRaises(ProtocolRefusal):
+            WakeAttemptLedger(self.root).record(
+                recipient=node, acting_session_id="seat-claim", item_ids=[self.message["id"]],
+                decision_receipt_id=decision["receipt"]["id"], message_worker_session_id=None,
+                idempotency_key="health-refused-attempt", outcome="refused", reason_code="wake_prompt_failed",
+            )
+        EventLog(self.root).send(
+            "architect", node, "floati", "a" * 40, "docs/evidence/wake-health.md",
+            "later mail", idempotency_key="health-refused-later",
+        )
+        fact = WakeHealthProjection(self.root).fact(node, self.observation)
+        self.assertIsNone(fact["last_seen_session"])
+        self.assertEqual("stale_claim_with_unread_mail", fact["state"])
+        with mock.patch("floati.doctor._utc_now", return_value=self.observation):
+            artifact, _status = Doctor(REPOSITORY_ROOT, self.root.path, ref="HEAD").artifact()
+        finding = next(row for row in artifact["findings"]
+            if row.get("code") == "wake_health" and row.get("subject") == node)
+        self.assertEqual("error", finding["severity"])
+
+    def test_doctor_uses_one_clock_for_all_recent_session_windows(self) -> None:
+        """Catches doctor sampling a different hour boundary for each node."""
+        Registry(self.root).register(public_ids.builder("second-health"), "Cursor")
+        from datetime import timedelta
+
+        ticks = iter(self.observation + timedelta(seconds=value) for value in range(100))
+        with mock.patch("floati.doctor._utc_now", side_effect=lambda: next(ticks)):
+            artifact, _status = Doctor(REPOSITORY_ROOT, self.root.path, ref="HEAD").artifact()
+        facts = [row["wake_health"] for row in artifact["findings"] if row.get("code") == "wake_health"]
+        self.assertEqual(3, len(facts))
+        self.assertTrue(all("recent_sessions" in fact for fact in facts), "doctor omits recent session windows")
+        self.assertEqual(1, len({fact["recent_sessions"]["window_end"] for fact in facts}))
 
     def test_status_and_doctor_share_the_same_wake_health_fact(self) -> None:
         status = FleetProjection(self.root).status_artifact(self.observation)

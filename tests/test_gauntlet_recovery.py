@@ -3,9 +3,9 @@ from __future__ import annotations
 from floati import fixture_ids as public_ids
 
 import errno
+import io
 import json
 import os
-import select
 import shutil
 import subprocess
 import sys
@@ -21,6 +21,8 @@ from floati.jsonl import read_records
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.runtruth import RunLedger
+from tests.test_process_atomicity import assert_send_companions
+from tests.readiness import communicate, wait_process, wait_readable
 from tests.hm3i_gauntlet_fixtures import (
     axis_coverage_from_traces,
     assert_physical_projection,
@@ -118,10 +120,10 @@ class RecoveryGauntletTests(unittest.TestCase):
             self.assertIsInstance(caught, FloatiError)
             self.assertEqual("disk_full", caught.code)
             self.assertEqual(before, path.read_bytes())
-            self.assertEqual(
-                1,
-                len(read_records(root, "events.jsonl", allowed_kinds={"message_envelope"})),
-            )
+            physical = read_records(root, "events.jsonl",
+                allowed_kinds={"message_envelope", "send_readiness_observation"})
+            self.assertEqual(2, len(physical))
+            self.assertEqual(1, len(assert_send_companions(self, physical)))
 
     def test_read_only_root_mid_operation_is_typed_without_append(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -171,8 +173,8 @@ class RecoveryGauntletTests(unittest.TestCase):
                     str(destination),
                     "--interval",
                     "0.05",
-                    "--iterations",
-                    "3",
+                    # Keep the fixture live until the deletion event. A
+                    # delayed parent must not miss a three-tick lifetime.
                 ],
                 cwd=REPO_ROOT,
                 stdout=subprocess.PIPE,
@@ -185,8 +187,7 @@ class RecoveryGauntletTests(unittest.TestCase):
             )
             try:
                 self.assertIsNotNone(process.stdout)
-                ready, _, _ = select.select([process.stdout], [], [], 2)
-                self.assertTrue(ready, "watch did not emit its initial frame")
+                wait_readable(process.stdout, "watch did not emit its initial frame")
                 first = process.stdout.readline()
                 initial = json.loads(first)
                 self.assertEqual(1, initial["schema_version"])
@@ -198,17 +199,85 @@ class RecoveryGauntletTests(unittest.TestCase):
                     initial["evidence"]["delta"]["snapshot"]["installer_shadow"]["outcome"],
                 )
                 shutil.rmtree(root.path)
-                stdout, stderr = process.communicate(timeout=3)
+                stdout, stderr = communicate(process, "watch termination after root deletion")
             finally:
                 if process.poll() is None:
                     process.terminate()
-                    process.wait(timeout=2)
+                    wait_process(process, "owned recovery watch cleanup")
+                if process.stdout is not None:
+                    process.stdout.close()
+                if process.stderr is not None:
+                    process.stderr.close()
 
             output = first + stdout + stderr
             self.assertEqual(35, process.returncode, output.decode("utf-8", "replace"))
             self.assertIn(b'"code":"root_deleted"', stdout)
             self.assertEqual(b"", stderr)
             self.assertNotIn(b"Traceback", output)
+
+    def test_status_root_deleted_after_resolution_exits_typed_without_traceback(self) -> None:
+        from floati import cli
+
+        for flags in ([], ["--json"]):
+            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as directory:
+                root = self.seeded_root(directory)
+                resolve = cli.resolve_command_scope
+
+                def delete_after_resolution(*args, **kwargs):
+                    resolved = resolve(*args, **kwargs)
+                    shutil.rmtree(root.path)
+                    return resolved
+
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with mock.patch.object(cli, "resolve_command_scope", delete_after_resolution), (
+                    mock.patch("sys.stdout", stdout)
+                ), mock.patch("sys.stderr", stderr):
+                    exit_code = cli.main(["status", "--root", str(root.path), *flags])
+
+                artifact = json.loads(stdout.getvalue())
+                self.assertEqual(35, exit_code, artifact)
+                self.assertEqual("degraded", artifact["status"])
+                self.assertEqual("root_deleted", artifact["evidence"]["code"])
+                self.assertEqual("", stderr.getvalue())
+                self.assertNotIn("Traceback", stdout.getvalue())
+                self.assertFalse(root.path.exists())
+
+    def test_guarded_readers_report_deleted_root_without_recreating_it(self) -> None:
+        from floati import cut_prefix, mail_summary, registry_prefix, send_prefix
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.seeded_root(directory)
+            send_prefix.warm(root)
+            observation = mail_summary.observe(root)
+            self.assertIsNotNone(observation)
+            shutil.rmtree(root.path)
+            readers = {
+                "cut warm": lambda: cut_prefix.warm(root),
+                "certified event source": lambda: cut_prefix.certified_source(root, "bob"),
+                "retained mail observation": observation.current,
+                "fresh mail observation": lambda: mail_summary.observe(root),
+                "registry cut": lambda: registry_prefix.read_cut(root),
+                "archive head": lambda: send_prefix.current_epoch_has_no_roll_head(root),
+                "optimistic event references": lambda: send_prefix.event_references(
+                    root, [], optimistic=True),
+            }
+            for reader, query in readers.items():
+                with self.subTest(reader=reader):
+                    with self.assertRaises(FloatiError) as caught:
+                        query()
+                    self.assertEqual("root_deleted", caught.exception.code, reader)
+                    self.assertFalse(root.path.exists(), reader)
+
+    def test_existing_root_epoch_open_failure_stays_a_lock_failure(self) -> None:
+        from floati.bus_epoch import epoch_guard
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = self.seeded_root(directory)
+            with mock.patch("floati.bus_epoch.os.open", side_effect=PermissionError(errno.EACCES, "denied")):
+                with self.assertRaises(FloatiError) as caught, epoch_guard(root):
+                    self.fail("unavailable lock admitted a reader")
+            self.assertEqual("epoch_lock_unavailable", caught.exception.code)
+            self.assertTrue(root.path.is_dir())
 
     def test_decision_disk_full_and_root_disappearance_are_typed_without_partial_projection(self) -> None:
         """Catches a decision proposal that leaves partial evidence after ENOSPC or yields a stale capsule after its root disappears."""
@@ -245,7 +314,7 @@ class RecoveryGauntletTests(unittest.TestCase):
             traces = build_full_run_trace_set(base)
             self.assertTrue(all(axis_coverage_from_traces("recovery", traces).values()))
             for trace in traces:
-                with self.subTest(run_id=trace.run_id):
+                with self.subTest(trace_family=trace.root.path.relative_to(base.resolve(strict=False)).as_posix()):
                     expected = assert_physical_projection(trace)
                     expected_ids = [record["id"] for record in trace.records]
                     reopened = FloatiRoot.open_direct_home(trace.root.path, create=False)

@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.test_cli import LAUNCHER, SHA
+from tests.test_cli import LAUNCHER
+from tests.banked_sha_fixture import banked_send_repository
 
 from floati import fixture_ids as public_ids
 from floati.events import EventLog
@@ -40,10 +41,10 @@ class Drain1Tests(unittest.TestCase):
         )
         self.assertEqual(0, holder.returncode, holder.stderr)
 
-    def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(self, *arguments: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [str(LAUNCHER), *arguments],
-            cwd=REPOSITORY_ROOT,
+            cwd=REPOSITORY_ROOT if cwd is None else cwd,
             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
             text=True,
             capture_output=True,
@@ -55,6 +56,9 @@ class Drain1Tests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def send_mail(self) -> str:
+        # SEND-SHA-RESOLVES-1: the send runs from a repository that holds
+        # the sha it names.
+        repository, sha = banked_send_repository(Path(self.temporary.name))
         sent = self.run_cli(
             "send",
             "--root",
@@ -66,11 +70,12 @@ class Drain1Tests(unittest.TestCase):
             "--repo",
             "floati",
             "--sha",
-            SHA,
+            sha,
             "--doc",
             "docs/evidence/scratch.md",
             "--note",
             "drain-1 fixture",
+            cwd=repository,
         )
         self.assertEqual(0, sent.returncode, sent.stderr)
         return str(self.artifact(sent)["evidence"]["message"]["id"])

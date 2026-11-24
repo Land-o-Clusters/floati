@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/harbor-chart-traffic.schema.json",
+  "title": "Floati Harbor Chart Traffic v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tenant_id", "pairs", "unrecognized_kinds"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unrecognized_kind"}},
+    "pairs": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sender", "recipient", "envelope_count", "denial_count"],
+        "properties": {
+          "sender": {"type": "string", "minLength": 1, "maxLength": 64},
+          "recipient": {"type": "string", "minLength": 1, "maxLength": 64},
+          "envelope_count": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+          "denial_count": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "unrecognized_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "count", "first_id"],
+      "properties": {
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$"},
+        "count": {"type": "integer", "minimum": 1},
+        "first_id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    }
+  }
+}

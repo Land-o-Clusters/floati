@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_queue, wait_event
 from floati import fixture_ids as public_ids
 
 import dataclasses
@@ -35,7 +36,7 @@ def _race_grant_and_authority_release(
 ):
     try:
         root = FloatiRoot.open_direct_home(Path(root_path), create=False)
-        start.wait(5)
+        wait_event(start, 'capability_grants: start synchronization')
         if action == "grant":
             result = CapabilityGrantLedger(root).grant(
                 public_ids.worker('alpha'), "workspace_write", Policy.load(Path(policy_path)),
@@ -160,7 +161,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
         for process in processes:
             process.join(6)
             self.assertEqual(0, process.exitcode)
-        results = [queue.get(timeout=1) for _ in processes]
+        results = [wait_queue(queue, 'capability_grants: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})
         self.assertEqual(1, sum(value == "authority_grant" for _, value in results))
         self.assertLessEqual(sum(value == "capability_grant" for _, value in results), 1)

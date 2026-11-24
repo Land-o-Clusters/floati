@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/seat-teardown-epoch-verification.schema.json",
+  "title": "Floati Roll-Time Seat Teardown Verification v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "tenant_id",
+    "id",
+    "timestamp",
+    "teardown_receipt_id",
+    "teardown_context_sha256",
+    "outgoing_epoch_id",
+    "roll_receipt_id",
+    "roll_receipt_sha256",
+    "report_envelope_id",
+    "report_envelope_sha256",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 0
+    },
+    "kind": {
+      "const": "seat_teardown_epoch_verification"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^seat-teardown-epoch-verification-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
+    "teardown_receipt_id": {
+      "type": "string",
+      "pattern": "^seat-teardown-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "teardown_context_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "outgoing_epoch_id": {
+      "type": "string",
+      "pattern": "^epoch-[0-9a-f]{32}$"
+    },
+    "roll_receipt_id": {
+      "type": "string",
+      "pattern": "^bus-epoch-roll-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "roll_receipt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "report_envelope_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+        }
+      ]
+    },
+    "report_envelope_sha256": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "failure_code",
+        "remedy"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "verified",
+            "failed"
+          ]
+        },
+        "failure_code": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          ]
+        },
+        "remedy": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "x-floati-terminal-unsafe": true
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "const": "verified"
+            },
+            "failure_code": {
+              "type": "null"
+            },
+            "remedy": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "const": "failed"
+            },
+            "failure_code": {
+              "type": "string"
+            },
+            "remedy": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "report_envelope_id": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "report_envelope_sha256": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "report_envelope_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  ]
+}

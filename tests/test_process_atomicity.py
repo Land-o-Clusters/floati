@@ -17,6 +17,26 @@ from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.work import WorkLog
 from floati.ids import uuid7_hex
+from tests.fixtures.epoch_hint_capture import capture_epoch_hint_failure
+
+
+def assert_send_companions(case, records):
+    """Missing, duplicate or misbound companions break native send atomicity."""
+    envelopes = [row for row in records if row["kind"] == "message_envelope"]
+    observations = [row for row in records if row["kind"] == "send_readiness_observation"]
+    case.assertEqual(len(envelopes), len(observations))
+    by_envelope = {row["envelope_id"]: row for row in observations}
+    case.assertEqual(len(observations), len(by_envelope))
+    case.assertEqual({row["id"] for row in envelopes}, set(by_envelope))
+    for envelope in envelopes:
+        companion = by_envelope[envelope["id"]]
+        for field in ("sender", "recipient", "idempotency_key"):
+            case.assertEqual(envelope[field], companion[field])
+        for timestamp in (companion["timestamp"], companion["observed_at"],
+                          companion["readiness"]["observed_at"]):
+            case.assertEqual(envelope["timestamp"], timestamp)
+        case.assertEqual(records.index(envelope) + 1, records.index(companion))
+    return envelopes
 
 
 def _run_created_worker(base: str, start: object, results: object, record: dict) -> None:
@@ -41,15 +61,17 @@ def _register_worker(base: str, start: object, results: object, node: str) -> No
 def _send_worker(base: str, start: object, results: object) -> None:
     root = FloatiRoot.open(Path(base), "alpha")
     events = EventLog(root)
-    start.wait()
-    try:
-        results.put(("ok", events.send(
-            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
-            "docs/evidence/checkpoint.md", "HM-0.5 delivered",
-            idempotency_key="same-key",
-        )["id"]))
-    except ProtocolRefusal as exc:
-        results.put(("refused", exc.code))
+    # Child-local delegation cannot leave parent mocks in later suite tests.
+    with capture_epoch_hint_failure(root):
+        start.wait()
+        try:
+            results.put(("ok", events.send(
+                public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                "docs/evidence/checkpoint.md", "HM-0.5 delivered",
+                idempotency_key="same-key",
+            )["id"]))
+        except ProtocolRefusal as exc:
+            results.put(("refused", exc.code))
 
 
 def _ack_worker(base: str, start: object, results: object, item_id: str) -> None:
@@ -115,7 +137,10 @@ class ProcessAtomicityTests(unittest.TestCase):
         outcomes = self.race(_send_worker, ())
         self.assertEqual({"ok"}, {status for status, _ in outcomes})
         self.assertEqual(1, len({value for _, value in outcomes}))
-        rows = read_records(self.root, "events.jsonl", allowed_kinds={"message_envelope"})
+        physical = read_records(self.root, "events.jsonl",
+                                allowed_kinds={"message_envelope", "send_readiness_observation"})
+        self.assertEqual(2, len(physical))
+        rows = assert_send_companions(self, physical)
         self.assertEqual(1, len(rows))
 
     def test_sparse_ack_idempotency_is_process_atomic(self) -> None:

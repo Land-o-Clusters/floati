@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/timing-receipt.schema.json",
+  "title": "Floati Timing Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "command",
+    "argv_digest",
+    "node_id",
+    "started_at",
+    "wall_seconds",
+    "cpu_seconds",
+    "outcome",
+    "refusal_code"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^timing-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "timing_receipt"},
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Verb path as one string: inbox, doctor, wake resume."
+    },
+    "argv_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the argv tuple after the root is resolved. Argv itself is never recorded."
+    },
+    "node_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"}
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "House UTC clock at invocation start."
+    },
+    "wall_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Monotonic clock delta in seconds, three decimal places."
+    },
+    "cpu_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "User+sys RUSAGE_SELF delta in seconds, three decimal places."
+    },
+    "outcome": {"enum": ["ok", "refused", "degraded", "no_result", "error"]},
+    "refusal_code": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1, "maxLength": 128}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"enum": ["ok", "no_result"]}}, "required": ["outcome"]},
+      "then": {"properties": {"refusal_code": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"outcome": {"enum": ["refused", "degraded", "error"]}}, "required": ["outcome"]},
+      "then": {"properties": {"refusal_code": {"type": "string", "minLength": 1}}}
+    }
+  ]
+}

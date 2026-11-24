@@ -297,7 +297,8 @@ def bootstrap_main(descriptor: int = 3) -> int:
         ) = _trusted_imports()
         channel = BootstrapChannel(descriptor)
         verb, payload = channel.recv()
-        if verb != "launch" or type(payload) is not dict or set(payload) != _LAUNCH_KEYS:
+        if (verb != "launch" or type(payload) is not dict
+            or set(payload) not in (_LAUNCH_KEYS, _LAUNCH_KEYS | {"native_thread_context"})):
             raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         if channel.poll(0.0):
             raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
@@ -305,6 +306,12 @@ def bootstrap_main(descriptor: int = 3) -> int:
             raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         _validate_session_id(payload["session_id"])
         spec = builtin_adapter_spec_from_payload(payload["adapter"])
+        native_context = payload.get("native_thread_context")
+        if spec.workspace_mode == "borrowed":
+            from floati.worker_bootstrap_protocol import validate_native_thread_context
+            native_context = validate_native_thread_context(native_context)
+        elif "native_thread_context" in payload:
+            raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         item = _validate_detached_object(payload["item"], optional=False)
         spawn_context = _validate_detached_object(
             payload["spawn_context"], optional=True
@@ -315,10 +322,13 @@ def bootstrap_main(descriptor: int = 3) -> int:
         deadline_millis = payload["deadline_millis"]
         if (
             type(deadline_millis) is not int
-            or not 10 <= deadline_millis <= 60_000
+            or deadline_millis < 10
+            or (spec.workspace_mode == "fresh" and deadline_millis > 60_000)
         ):
             raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         policy = isolation_policy_from_payload(payload["isolation_policy"])
+        if spec.workspace_mode != policy.workspace_mode:
+            raise WorkerAdapterFailure("effect_worker_isolation_unavailable")
         backend = validate_isolation_backend(apply_worker_isolation(policy))
         channel.send(("isolation_ready", {"backend": backend}))
         ready = True
@@ -334,6 +344,7 @@ def bootstrap_main(descriptor: int = 3) -> int:
             effect_context,
             policy,
             process_group_mode="inherited",
+            native_thread_context=native_context,
         )
         channel = None
         return 0

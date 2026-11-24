@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from . import mail_summary, send_prefix
 from .errors import IntegrityFailure, ProtocolRefusal
 from .events import EventLog
 from .jsonl import read_records_snapshot
@@ -43,6 +44,39 @@ def _aware_now(now: Optional[datetime]) -> datetime:
     return current.astimezone(timezone.utc)
 
 
+def _sender_frames(root: FloatiRoot, sender: str) -> List[Dict[str, object]]:
+    """Read an existing sender certificate; cold observation never repairs it."""
+    try:
+        prefix = mail_summary._load_events(root)
+        tree = mail_summary.bank_tree(prefix)
+        head = prefix.get("mail-sender-v1", sender)
+        pending = [] if head is None else [head]
+        selected, seen = [], set()
+        while pending:
+            digest = pending.pop()
+            if digest in seen:
+                raise send_prefix.CacheMiss()
+            seen.add(digest)
+            node = tree.node(digest)
+            if "item" not in node:
+                pending.extend(node["children"].values())
+                continue
+            item = node["item"]
+            row = prefix.get("id", item["id"])
+            if (row is None or row.get("kind") != "message_envelope"
+                    or row.get("sender") != sender or row.get("timestamp") != item["timestamp"]
+                    or prefix.get("mail-ordinal-v1", item["id"]) != item["ordinal"]):
+                raise send_prefix.CacheMiss()
+            selected.append((item["ordinal"], row))
+        if (len(selected) != tree.count(head)
+                or prefix.payload["identity"] != send_prefix._identity(prefix.path)):
+            raise send_prefix.CacheMiss()
+        return [row for _ordinal, row in sorted(selected, key=lambda pair: pair[0])]
+    except send_prefix._CACHE_ERRORS:
+        return [row for row in EventLog(root).event_records()
+            if row.get("kind") == "message_envelope" and row.get("sender") == sender]
+
+
 def _receipt_paths(root: FloatiRoot, directory: str, recipient: str) -> Iterable[Path]:
     base = Path("receipts") / directory
     plain = base / f"{recipient}.jsonl"
@@ -62,7 +96,11 @@ def _receipt_times(
     directory: str,
     kind: str,
 ) -> Dict[str, datetime]:
-    allowed = set(WAKE_HOLD_KINDS) if kind == "delivery_receipt" else {kind}
+    allowed = (
+        set(WAKE_HOLD_KINDS)
+        if kind in ("delivery_receipt", "delivered_unpresented")
+        else {kind}
+    )
     result: Dict[str, datetime] = {}
     for recipient in sorted(set(recipients)):
         for relative in _receipt_paths(root, directory, recipient):
@@ -105,17 +143,21 @@ class SentProjection:
     ) -> List[Dict[str, object]]:
         actor = Registry(self.root).resolve_node_id(sender, field="sender")
         current = _aware_now(now)
-        envelopes = [
-            row
-            for row in EventLog(self.root).event_records()
-            if row.get("kind") == "message_envelope" and row.get("sender") == actor
-        ]
+        envelopes = _sender_frames(self.root, actor)
         recipients = [str(row["recipient"]) for row in envelopes]
         delivered_at = _receipt_times(
             self.root,
             recipients,
             directory="deliveries",
             kind="delivery_receipt",
+        )
+        # BUS-DELIVERY-UNPRESENTED-1: an unpresented delivery is a distinct
+        # receipt kind and never renders as delivered.
+        unpresented_at = _receipt_times(
+            self.root,
+            recipients,
+            directory="deliveries",
+            kind="delivered_unpresented",
         )
         acknowledged_at = _receipt_times(
             self.root,
@@ -128,8 +170,9 @@ class SentProjection:
             message_id = str(envelope["id"])
             sent_at = _timestamp(envelope.get("timestamp"), "message.timestamp")
             delivery = delivered_at.get(message_id)
+            unpresented = unpresented_at.get(message_id)
             acknowledgment = acknowledged_at.get(message_id)
-            if acknowledgment is not None and delivery is None:
+            if acknowledgment is not None and delivery is None and unpresented is None:
                 raise IntegrityFailure(
                     "mail_receipt_order_invalid",
                     "acknowledgment exists without delivery evidence",
@@ -139,6 +182,8 @@ class SentProjection:
                 if acknowledgment is not None
                 else "delivered_unacknowledged"
                 if delivery is not None
+                else "delivered_unpresented"
+                if unpresented is not None
                 else "undelivered"
             )
             items.append(
@@ -154,6 +199,11 @@ class SentProjection:
                     else delivery.isoformat(timespec="milliseconds").replace(
                         "+00:00", "Z"
                     ),
+                    "delivered_unpresented_at": None
+                    if unpresented is None
+                    else unpresented.isoformat(timespec="milliseconds").replace(
+                        "+00:00", "Z"
+                    ),
                     "acknowledged_at": None
                     if acknowledgment is None
                     else acknowledgment.isoformat(timespec="milliseconds").replace(
@@ -164,11 +214,16 @@ class SentProjection:
                     if delivery is None
                     else _seconds(delivery, sent_at, "delivery"),
                     "acknowledgment_latency_seconds": None
-                    if acknowledgment is None
+                    if acknowledgment is None or delivery is None
                     else _seconds(acknowledgment, delivery, "acknowledgment"),
                     "attention_age_seconds": None
-                    if delivery is None or acknowledgment is not None
-                    else _seconds(current, delivery, "observation"),
+                    if (delivery is None and unpresented is None)
+                    or acknowledgment is not None
+                    else _seconds(
+                        current,
+                        delivery if delivery is not None else unpresented,
+                        "observation",
+                    ),
                 }
             )
         return items

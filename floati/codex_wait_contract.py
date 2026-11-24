@@ -9,17 +9,22 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, Union
 
-from .errors import ProtocolRefusal
+from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot, transact
-from .bus_epoch import shared_epoch_operation
+from .bus_epoch import epoch_guard, shared_epoch_operation
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
 
 
 WORKSPACE_MAP_RELATIVE = Path("codex-wait/workspaces.v0.json")
+# WAITER-IDLE-WINDOW-1: ruled product maximum with a 100-second hook margin.
+# The harness observation is a censored survival lower bound, not a natural
+# completion or an unbounded ceiling. Live adoption requires fresh hook trust.
+DEFAULT_HOOK_TIMEOUT_SECONDS = 86400
+DEFAULT_WAIT_DEADLINE_SECONDS = 86300
 
 CODEX_WAIT_REOPEN_KIND = "codex_wait_reopen_fact"
 CODEX_WAIT_REOPEN_OUTCOMES = frozenset(
@@ -313,52 +318,83 @@ def _contained(path: Path, parent: Path) -> bool:
     return True
 
 
-def resolve_workspace_binding(bus_home: Path, workspace: Path) -> Optional[WorkspaceBinding]:
+def mapped_workspaces(bus_home: Path) -> list[tuple[Path, str]]:
+    """The (workspace, node_id) pairs exactly as the map records them.
+
+    BL-10: the doctor's seat_declaration_absent sweep reads the same file the
+    boarding resolver reads, as a read-only projection. It never decides
+    boarding authority; a workspace's real resolution stays with
+    resolve_workspace_binding.
+    """
+    home = Path(bus_home).expanduser()
+    try:
+        raw = json.loads((home / WORKSPACE_MAP_RELATIVE).read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, dict) or not isinstance(raw.get("mappings"), list):
+        return []
+    out: list[tuple[Path, str]] = []
+    for entry in raw["mappings"]:
+        if isinstance(entry, dict) and set(entry) == {"workspace", "node_id"}:
+            out.append((Path(str(entry["workspace"])), str(entry["node_id"])))
+    return out
+
+
+def resolve_workspace_binding(bus_home: Path, workspace: Path, *, _strict=False) -> Optional[WorkspaceBinding]:
     """Resolve one workspace without consulting ambient identity or transport state."""
+
+    def invalid(detail):
+        if _strict:
+            raise ProtocolRefusal("codex_wait_workspace_map_invalid", detail)
+        return None
 
     home = Path(bus_home).expanduser()
     current = Path(workspace).expanduser()
     if not home.is_absolute() or home.is_symlink() or not current.is_absolute():
-        return None
+        return invalid("workspace map coordinates are not canonical")
     map_path = home / WORKSPACE_MAP_RELATIVE
+    if _strict and (map_path.is_symlink() or map_path.parent.is_symlink()):
+        return invalid("workspace map is symlinked")
     try:
         encoded = map_path.read_bytes()
         raw = json.loads(encoded)
+    except FileNotFoundError:
+        return None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
+        return invalid("workspace map is unreadable")
     if not isinstance(raw, dict) or set(raw) != {"schema_version", "tenant_id", "mappings"}:
-        return None
+        return invalid("workspace map shape is invalid")
     if raw["schema_version"] != 0 or isinstance(raw["schema_version"], bool):
-        return None
+        return invalid("workspace map version is invalid")
     try:
         tenant = validate_identifier(raw["tenant_id"], "tenant")
     except Exception:
-        return None
+        return invalid("workspace map tenant is invalid")
     if tenant != home.name or not isinstance(raw["mappings"], list):
-        return None
+        return invalid("workspace map identity is invalid")
     try:
         resolved_current = current.resolve(strict=True)
     except OSError:
-        return None
+        return invalid("current workspace is unavailable")
     candidates: list[tuple[int, Path, str]] = []
     prior: tuple[str, str] | None = None
     for entry in raw["mappings"]:
         if not isinstance(entry, dict) or set(entry) != {"workspace", "node_id"}:
-            return None
+            return invalid("workspace mapping shape is invalid")
         coordinate = entry["workspace"]
         if not isinstance(coordinate, str):
-            return None
+            return invalid("workspace mapping coordinate is invalid")
         lexical = Path(coordinate).expanduser()
         if not lexical.is_absolute() or lexical.is_symlink():
-            return None
+            return invalid("workspace mapping coordinate is not canonical")
         try:
             canonical = lexical.resolve(strict=True)
             node = validate_identifier(entry["node_id"], "node")
         except (OSError, ProtocolRefusal):
-            return None
+            return invalid("workspace mapping coordinate is unavailable")
         ordering = (canonical.as_posix(), node)
         if prior is not None and ordering <= prior:
-            return None
+            return invalid("workspace mappings are not strictly ordered")
         prior = ordering
         if _contained(resolved_current, canonical):
             candidates.append((len(canonical.parts), canonical, node))
@@ -372,10 +408,11 @@ def resolve_workspace_binding(bus_home: Path, workspace: Path) -> Optional[Works
     )
 
 
-def resolve_participant(bus_home: Path, workspace: Path) -> Optional[CodexWaitParticipant]:
+def resolve_participant(bus_home: Path, workspace: Path, *, _strict=False) -> Optional[CodexWaitParticipant]:
     """Resolve a mapped workspace through the same active registry as send."""
 
-    binding = resolve_workspace_binding(bus_home, workspace)
+    binding = (resolve_workspace_binding(bus_home, workspace, _strict=True) if _strict
+               else resolve_workspace_binding(bus_home, workspace))
     if binding is None:
         return None
     try:
@@ -384,6 +421,8 @@ def resolve_participant(bus_home: Path, workspace: Path) -> Optional[CodexWaitPa
     except ProtocolRefusal as exc:
         from .installed_reader import raise_reader_failure
         raise_reader_failure(exc)
+        if _strict:
+            raise
         return None
     return CodexWaitParticipant(
         binding=WorkspaceBinding(binding.workspace, node, binding.map_digest),
@@ -421,6 +460,13 @@ def _write_workspace_map_atomically(path: Path, encoded: bytes) -> None:
 
 
 def write_workspace_map(bus_home: Path, workspace: Path, node_id: str) -> str:
+    """Serialize native map publication against exclusive source acceptance."""
+    root = FloatiRoot.open_direct_home(Path(bus_home))
+    with epoch_guard(root):
+        return _write_workspace_map_already_guarded(bus_home, workspace, node_id)
+
+
+def _write_workspace_map_already_guarded(bus_home: Path, workspace: Path, node_id: str) -> str:
     """Map one workspace onto one node in the v0 workspace map.
 
     The one writer for the map every waiter resolves through: it
@@ -476,15 +522,30 @@ def write_workspace_map(bus_home: Path, workspace: Path, node_id: str) -> str:
         retained.append(entry)
     if not found:
         retained.append({"workspace": canonical, "node_id": node_id})
-    retained.sort(key=lambda row: (row["workspace"], row["node_id"]))
-    encoded = json.dumps(
-        {"schema_version": 0, "tenant_id": home.name, "mappings": retained},
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8") + b"\n"
+    encoded = encode_workspace_map(home.name, retained)
     if not map_path.exists() or map_path.read_bytes() != encoded:
         _write_workspace_map_atomically(map_path, encoded)
+        from .root import FloatiRoot
+        from .wake_hints import publish_root_hint
+        publish_root_hint(FloatiRoot.open_direct_home(home))
     return hashlib.sha256(encoded).hexdigest()
+
+
+def encode_workspace_map(tenant, mappings):
+    ordered = sorted(mappings, key=lambda row: (row["workspace"], row["node_id"]))
+    return json.dumps({"schema_version": 0, "tenant_id": tenant, "mappings": ordered},
+        sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+
+
+def armed_consent_record(tenant, binding, hook_timeout_seconds, wait_deadline_seconds,
+                         idempotency_key, *, record_id=None, timestamp=None):
+    return {"schema_version": 1, "id": "codex-wait-consent-" + (record_id or uuid7_hex()),
+            "tenant_id": tenant, "timestamp": timestamp or utc_now(),
+            "kind": "codex_wait_consent_receipt", "node_id": binding.node_id,
+            "workspace": binding.workspace.as_posix(), "workspace_map_digest": binding.map_digest,
+            "hook_timeout_seconds": hook_timeout_seconds,
+            "wait_deadline_seconds": wait_deadline_seconds, "state": "armed",
+            "idempotency_key": idempotency_key}
 
 
 class CodexWaitConsentLedger:
@@ -499,12 +560,13 @@ class CodexWaitConsentLedger:
     def _relative(node_id: str) -> Path:
         return consent_ledger_relative(node_id)
 
+    @shared_epoch_operation
     def arm(
         self,
         binding: WorkspaceBinding,
         *,
         hook_timeout_seconds: int,
-        wait_deadline_seconds: int,
+        wait_deadline_seconds: int = DEFAULT_WAIT_DEADLINE_SECONDS,
         idempotency_key: str,
     ) -> Dict[str, object]:
         node = Registry(self.root).resolve_node_id(binding.node_id, field="node")
@@ -521,20 +583,9 @@ class CodexWaitConsentLedger:
             )
         if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key) <= 128:
             raise ProtocolRefusal("idempotency_key_invalid", "idempotency key is out of bounds")
-        row: Dict[str, object] = {
-            "schema_version": 1,
-            "id": "codex-wait-consent-" + uuid7_hex(),
-            "tenant_id": self.root.tenant_id,
-            "timestamp": utc_now(),
-            "kind": "codex_wait_consent_receipt",
-            "node_id": node,
-            "workspace": binding.workspace.as_posix(),
-            "workspace_map_digest": binding.map_digest,
-            "hook_timeout_seconds": hook_timeout_seconds,
-            "wait_deadline_seconds": wait_deadline_seconds,
-            "state": "armed",
-            "idempotency_key": idempotency_key,
-        }
+        row = armed_consent_record(self.root.tenant_id,
+            WorkspaceBinding(binding.workspace, node, binding.map_digest),
+            hook_timeout_seconds, wait_deadline_seconds, idempotency_key)
 
         def decide(prior: list[Dict[str, object]]) -> tuple[Dict[str, object], Optional[Dict[str, object]]]:
             for existing in prior:
@@ -577,6 +628,16 @@ class CodexWaitConsentLedger:
                 "workspace has no current consent receipt",
             )
         return matching[-1]
+
+
+@dataclass(frozen=True)
+class CodexWaitParticipation:
+    """One transient classification from the validated native claim snapshot."""
+
+    state: str
+    authority: Optional[Dict[str, object]]
+    calling_session_id: str
+    current_session_id: str
 
 
 class CodexWaitSessionLedger:
@@ -658,16 +719,28 @@ class CodexWaitSessionLedger:
         ) -> tuple[Dict[str, object], Optional[Dict[str, object]]]:
             matching = self._matching(prior, binding)
             current = matching[-1] if matching else None
+            superseded_dead: Optional[Dict[str, object]] = None
             if current is not None and current["acting_session_id"] != session and not take_over:
                 from .wake_control import is_session_paused
                 if not is_session_paused(self.root, node, str(current["acting_session_id"])):
                     claimant = str(current["acting_session_id"])
-                    raise ProtocolRefusal(
-                        "seat_board_claim_contested",
-                        "claimant " + claimant +
-                        " owns the workspace; pass --take-over to replace it",
-                        "pass --take-over to replace claimant " + claimant,
-                    )
+                    from .wake_daemon import claimant_runtime_missing
+                    if not claimant_runtime_missing(self.root, node, claimant):
+                        bound_at = str(current.get("timestamp") or "")
+                        bound = f" (bound {bound_at})" if bound_at else ""
+                        raise ProtocolRefusal(
+                            "seat_board_claim_contested",
+                            "claimant " + claimant + bound +
+                            " owns the workspace; pass --take-over to replace it",
+                            "pass --take-over to replace claimant " + claimant,
+                        )
+                    # BL-13: the claimant's own wake coordinate reads
+                    # runtime_missing — provably gone, superseded without a
+                    # takeover, and the receipt names the evidence.
+                    superseded_dead = {
+                        "claimant": claimant,
+                        "evidence": "runtime_missing",
+                    }
             for existing in prior:
                 if existing.get("idempotency_key") != key:
                     continue
@@ -705,6 +778,8 @@ class CodexWaitSessionLedger:
                 "consent_receipt_id": consent["id"],
                 "idempotency_key": key,
             }
+            if superseded_dead is not None:
+                row["claim_superseded_dead"] = superseded_dead
             return row, row
 
         return transact(
@@ -720,26 +795,47 @@ class CodexWaitSessionLedger:
         with wake_coordination_guard(self.root, binding.node_id):
             return self._participate_already_guarded(binding, consent, session_id)
 
+    @shared_epoch_operation
+    def participate_classified(
+        self, binding, consent, session_id, *,
+        on_authorized: Optional[Callable[[], None]] = None,
+    ) -> CodexWaitParticipation:
+        """Classify and publish startup testimony before releasing the seat guard."""
+        from .wake_hold import wake_coordination_guard
+        with wake_coordination_guard(self.root, binding.node_id):
+            result = self._participate_already_guarded(
+                binding, consent, session_id, classified=True,
+            )
+            if result.state == "authorized" and on_authorized is not None:
+                on_authorized()
+            return result
+
     def _participate_already_guarded(
         self,
         binding: WorkspaceBinding,
         consent: Dict[str, object],
         session_id: object,
-    ) -> Optional[Dict[str, object]]:
+        *, classified: bool = False,
+    ) -> Union[Optional[Dict[str, object]], CodexWaitParticipation]:
         node, session = self._identity(binding, consent, session_id)
         key = "codex-wait-claim-" + hashlib.sha256(
             (node + "\0" + binding.workspace.as_posix() + "\0" + session).encode("utf-8")
         ).hexdigest()[:32]
 
-        def decide(
-            prior: list[Dict[str, object]],
-        ) -> tuple[Optional[Dict[str, object]], Optional[Dict[str, object]]]:
+        def result(state, authority, current_session):
+            if not classified:
+                return authority
+            return CodexWaitParticipation(state, authority, session, current_session)
+
+        def decide(prior: list[Dict[str, object]]):
             matching = self._matching(prior, binding)
             if matching:
                 current = matching[-1]
                 if current.get("acting_session_id") == session:
-                    return current, None
-                return None, None
+                    return result("authorized", current, session), None
+                former = any(row.get("acting_session_id") == session for row in matching)
+                state = "superseded_session" if former else "not_claimant"
+                return result(state, None, str(current["acting_session_id"])), None
             row: Dict[str, object] = {
                 "schema_version": 1,
                 "id": "codex-wait-session-" + uuid7_hex(),
@@ -756,7 +852,7 @@ class CodexWaitSessionLedger:
                 "consent_receipt_id": consent["id"],
                 "idempotency_key": key,
             }
-            return row, row
+            return result("authorized", row, session), row
 
         return transact(
             self.root,
@@ -795,8 +891,6 @@ class CodexWaitReceiptLedger:
             "outcome": "consent_reopened",
             "idempotency_key": idempotency_key,
         }
-        relative = Path("receipts/codex-wait-exhaustion") / f"{node}.jsonl"
-
         def decide(prior: list[Dict[str, object]]) -> tuple[Dict[str, object], Optional[Dict[str, object]]]:
             for existing in prior:
                 if existing.get("idempotency_key") != idempotency_key:
@@ -810,9 +904,74 @@ class CodexWaitReceiptLedger:
                 )
             return row, row
 
-        return transact(
-            self.root,
-            relative,
-            decide,
-            allowed_kinds=set(self._KINDS),
-        )
+        from .receipt_prefix import transact_exhaustion
+        return transact_exhaustion(self.root, node, idempotency_key, decide)
+
+
+def armed_workspace_claims(
+    root: FloatiRoot, *, strict: bool = False
+) -> Iterator[Tuple[Dict[str, object], Optional[str]]]:
+    """Yield latest armed claims and their holder's registry state."""
+    try:
+        latest: Dict[str, str] = {}
+        if strict:
+            from .registry import read_registry_compatible
+
+            records, unread, _versions = read_registry_compatible(root)
+            if unread:
+                raise OSError("registry contains unrecognized records")
+        else:
+            records = Registry(root).known_records()
+        for rec in records:
+            node = rec.get("node_id")
+            state = rec.get("state")
+            if rec.get("kind") == "registry_entry" and isinstance(node, str) and isinstance(state, str):
+                latest[node] = state
+    except (OSError, ProtocolRefusal, IntegrityFailure) as exc:
+        raise OSError("registry probe failed") from exc
+
+    session_dir = root.path / "receipts" / "codex-wait-session"
+    if session_dir.is_symlink() or (strict and session_dir.parent.is_symlink()):
+        raise OSError("session ledger is a symlink")
+    if not session_dir.exists():
+        return
+    if not session_dir.is_dir():
+        raise OSError("session ledger is not a directory")
+    try:
+        entries = list(session_dir.iterdir())
+    except OSError as exc:
+        raise OSError("session ledger unreadable") from exc
+
+    for entry in entries:
+        if strict and entry.suffix == ".jsonl" and (entry.is_symlink() or not entry.is_file()):
+            raise OSError("session ledger is not an ordinary file")
+        if entry.is_symlink() or not entry.is_file() or entry.suffix != ".jsonl":
+            continue
+        relative = Path("receipts/codex-wait-session") / entry.name
+        try:
+            rows = read_records_snapshot(
+                root, relative, allowed_kinds={"codex_wait_session_receipt"}
+            )
+        except (OSError, ProtocolRefusal, IntegrityFailure) as exc:
+            raise OSError("session ledger probe failed") from exc
+        latest_by_ws: Dict[str, Dict[str, object]] = {}
+        for row in rows:
+            workspace = row.get("workspace")
+            if isinstance(workspace, str) and workspace:
+                latest_by_ws[workspace] = row
+        for row in latest_by_ws.values():
+            if row.get("state") == "armed":
+                yield row, latest.get(str(row["node_id"]))
+
+
+def live_claimed_trees(root: FloatiRoot) -> Tuple[Path, ...]:
+    """Workspaces with an armed session on an active registry node."""
+
+    claimed: List[Path] = []
+    for row, state in armed_workspace_claims(root):
+        if state == "active":
+            try:
+                claimed.append(Path(str(row["workspace"])).resolve())
+            except OSError as exc:
+                raise OSError("claimed workspace probe failed") from exc
+    return tuple(claimed)

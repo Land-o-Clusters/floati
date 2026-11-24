@@ -97,6 +97,7 @@ def run_with_timeout_forensics(
     *,
     sidecar_path: Optional[Path] = None,
     attempt_key: Optional[str] = None,
+    env: Optional[Mapping[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
     key = attempt_key if isinstance(attempt_key, str) and _SAFE_KEY.fullmatch(attempt_key) else "unkeyed"
     attempt_directory = Path(
@@ -110,6 +111,7 @@ def run_with_timeout_forensics(
         process = subprocess.Popen(
             list(argv),
             cwd=str(cwd),
+            env=env,
             stdout=stdout_sink,
             stderr=stderr_sink,
             text=True,

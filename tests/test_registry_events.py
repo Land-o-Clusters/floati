@@ -108,7 +108,12 @@ class RegistryEventTests(unittest.TestCase):
             idempotency_key="job-123",
         )
         self.assertEqual(first, replay)
-        records = read_records(self.root, "events.jsonl", allowed_kinds={"message_envelope"})
+        physical = read_records(self.root, "events.jsonl",
+            allowed_kinds={"message_envelope", "send_readiness_observation"})
+        self.assertEqual(["message_envelope", "send_readiness_observation"],
+                         [row["kind"] for row in physical])
+        self.assertEqual(physical[0]["id"], physical[1]["envelope_id"])
+        records = [row for row in physical if row["kind"] == "message_envelope"]
         self.assertEqual(1, len(records))
         self.assertEqual("message_envelope", records[0]["kind"])
         self.assertEqual("floati", records[0]["repo"])
@@ -372,7 +377,12 @@ class RegistryEventTests(unittest.TestCase):
             "docs/evidence/checkpoint.md", "HM-0.5 delivered",
         )
         self.assertNotEqual(before, root_entries(self.root))
-        events = read_records(self.root, "events.jsonl", allowed_kinds={"message_envelope"})
+        physical = read_records(self.root, "events.jsonl",
+            allowed_kinds={"message_envelope", "send_readiness_observation"})
+        self.assertEqual(["message_envelope", "send_readiness_observation"],
+                         [row["kind"] for row in physical])
+        self.assertEqual(physical[0]["id"], physical[1]["envelope_id"])
+        events = [row for row in physical if row["kind"] == "message_envelope"]
         self.assertEqual(1, len(events))
         self.assertEqual("message_envelope", events[0]["kind"])
         self.assertFalse(self.events.denial_path.exists())
@@ -433,7 +443,7 @@ class RegistryEventTests(unittest.TestCase):
                 "reason": "stale_recipient",
                 "author": "attacker",
             },
-            allowed_kinds={"message_envelope", "message_retracted"},
+            allowed_kinds={"message_envelope", "message_retracted", "send_readiness_observation"},
         )
         before = self.events.path.read_bytes()
         with self.assertRaises(IntegrityFailure) as caught:

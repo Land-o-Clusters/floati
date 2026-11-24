@@ -293,8 +293,13 @@ class WaitCommandTests(unittest.TestCase):
         self.assertEqual(0, status)
         self.assertIn('"decision": "block"', emitted)
         self.assertTrue(observed)
+        fixture_base = self.base.resolve(strict=False)
         for path in observed:
-            with self.subTest(path=path):
+            with self.subTest(
+                scope="fixture" if path == fixture_base or fixture_base in path.parents else "external",
+                path=path.relative_to(fixture_base).as_posix()
+                if path == fixture_base or fixture_base in path.parents else str(path),
+            ):
                 self.assertFalse(path == foreign or foreign in path.parents)
 
     # -- parity ------------------------------------------------------------

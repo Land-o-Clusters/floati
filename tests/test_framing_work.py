@@ -5,12 +5,14 @@ from floati import fixture_ids as public_ids
 import tempfile
 import unittest
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.host_paths import worker_workspace_root
 from floati.planes import AuthorityGrantStore
+from floati.records import validate_record
 from floati.registry import Registry
 from floati.root import FloatiRoot
 
@@ -64,6 +66,213 @@ class WorkLogTests(unittest.TestCase):
     @staticmethod
     def binding(sha: str, doc: str) -> dict[str, str]:
         return {"repo": "floati", "sha": sha, "doc": doc}
+
+    def test_notification_crash_boundaries_finish_once_and_reads_stay_inert(self) -> None:
+        from floati.work import WorkLog
+        from floati.events import EventLog
+        from floati.work_notification import WorkNotifications, project_notification_findings
+
+        grants = AuthorityGrantStore(self.root)
+        grants.grant_exact("notify-work", public_ids.worker('alpha'), 1, NOW)
+        work = WorkLog(self.root)
+        for boundary in ("before-send", "after-send", "uncrashed"):
+            with self.subTest(boundary=boundary):
+                if boundary == "before-send":
+                    target = patch.object(EventLog, "send", side_effect=RuntimeError("crash"))
+                elif boundary == "after-send":
+                    target = patch.object(WorkNotifications, "sent", side_effect=RuntimeError("crash"))
+                else:
+                    from contextlib import nullcontext
+                    target = nullcontext()
+                with target:
+                    if boundary == "uncrashed":
+                        work.add(boundary, "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "crash"):
+                            work.add(boundary, "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+                item = next(row for row in work.show() if row["title"] == boundary)
+                journal = WorkNotifications(self.root)
+                before = journal.records(item["id"])
+                mail_before = EventLog(self.root).event_records()
+                shown = work.show(item["id"])[0]
+                self.assertEqual(before, shown["notifications"])
+                findings = project_notification_findings(self.root, now=NOW)
+                pending = [f for f in findings if f["code"] == "work_notification_pending" and f["subject"] == item["id"]]
+                self.assertEqual(boundary != "uncrashed", bool(pending))
+                self.assertEqual(mail_before, EventLog(self.root).event_records())
+                self.assertEqual(before, journal.records(item["id"]))
+                work.notify(item["id"], "bravo", now=NOW)
+                work.notify(item["id"], "bravo", now=NOW)
+                sent = [r for r in journal.records(item["id"]) if r["phase"] == "sent"]
+                self.assertEqual(1, len(sent))
+                envelopes = [r for r in EventLog(self.root).event_records() if r["kind"] == "message_envelope"
+                             and r.get("idempotency_key") == "work-add-" + item["id"] + "-" + public_ids.worker('alpha')]
+                self.assertEqual([sent[0]["envelope_id"]], [r["id"] for r in envelopes])
+
+    def test_notification_orphan_is_counted_and_duplicate_precheck_leaves_no_intent(self) -> None:
+        from floati.work import WorkLog
+        from floati.work_notification import WorkNotifications, project_notification_findings
+
+        work = WorkLog(self.root)
+        with patch("floati.work.transact", side_effect=RuntimeError("before item")):
+            with self.assertRaisesRegex(RuntimeError, "before item"):
+                work.add("orphan", "bravo", [], dispatcher="bravo", now=NOW)
+        self.assertEqual([], work.show())
+        result = work.notify(None, "bravo", now=NOW)
+        self.assertEqual([], result["notifications"])
+        orphans = [f for f in project_notification_findings(self.root, now=NOW)
+                   if f["code"] == "work_notification_intent_orphan"]
+        self.assertEqual(1, len(orphans))
+        self.assertEqual(("ok", 1), (orphans[0]["severity"], orphans[0]["count"]))
+        work.add("orphan", "bravo", [], dispatcher="bravo", now=NOW)
+        directory = self.home / "receipts/work-notifications"
+        before = sorted(p.name for p in directory.iterdir())
+        with self.assertRaises(ProtocolRefusal) as caught:
+            work.add("orphan", "bravo", [], dispatcher="bravo", now=NOW)
+        self.assertEqual("work_duplicate_open", caught.exception.code)
+        self.assertEqual(before, sorted(p.name for p in directory.iterdir()))
+
+    def test_non_sender_claim_reports_pending_without_authoring_dispatcher_mail(self) -> None:
+        from floati.work import WorkLog
+        from floati.events import EventLog
+
+        actor = public_ids.worker('alpha')
+        AuthorityGrantStore(self.root).grant_exact("notify-work", actor, 1, NOW)
+        work = WorkLog(self.root)
+        with patch.object(EventLog, "send", side_effect=RuntimeError("crash")):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                work.add("pending claim", "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+        item = work.show()[0]
+        findings = []
+        claimed = work.claim(item["id"], actor, "notify-work", 1, now=NOW,
+                             notification_findings=findings)
+        self.assertEqual(claimed, validate_record(claimed, self.root.tenant_id,
+                         frozenset({"work_transition"}), integrity=False))
+        pending = next(f for f in findings if f["code"] == "work_notification_pending")
+        self.assertEqual("bravo", pending["sender"])
+        self.assertEqual("floati work notify --id " + item["id"] + " --as bravo", pending["remedy"])
+        self.assertEqual([], EventLog(self.root).event_records())
+        work.notify(item["id"], "bravo", now=NOW)
+        # A claim removes add eligibility; replay derives recipients now, never
+        # snapshots the old eligible list into the item or journal.
+        self.assertEqual([], EventLog(self.root).event_records())
+
+    def test_notification_send_then_roll_uses_archived_envelope_without_duplicate(self) -> None:
+        from contextlib import nullcontext
+        from floati.work import WorkLog
+        from floati.work_notification import WorkNotifications, project_notification_findings
+        from floati.events import EventLog
+        from floati.bus_epoch import roll_bus_epoch, ROLL_AUTHORITY_SUBJECT
+
+        grants = AuthorityGrantStore(self.root)
+        grants.grant_exact("notify-work", public_ids.worker('alpha'), 1, NOW)
+        grants.grant_exact(ROLL_AUTHORITY_SUBJECT, public_ids.worker('alpha'), 1, datetime.now(timezone.utc))
+        work = WorkLog(self.root)
+        for interrupted in (True, False):
+            with self.subTest(interrupted=interrupted):
+                title = "rolled-gap-" + str(interrupted)
+                target = (patch.object(WorkNotifications, "sent", side_effect=RuntimeError("crash"))
+                          if interrupted else nullcontext())
+                with target:
+                    if interrupted:
+                        with self.assertRaisesRegex(RuntimeError, "crash"):
+                            work.add(title, "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+                    else:
+                        work.add(title, "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+                item = next(i for i in work.show() if i["title"] == title)
+                key = "work-add-" + item["id"] + "-" + public_ids.worker('alpha')
+                original = next(r for r in EventLog(self.root).event_records()
+                                if r["kind"] == "message_envelope" and r.get("idempotency_key") == key)
+                roll_bus_epoch(self.root, actor=public_ids.worker('alpha'), idempotency_key=title)
+                self.assertFalse(any(r["kind"] == "message_envelope" and r.get("idempotency_key") == key
+                                     for r in EventLog(self.root).event_records()))
+                work.notify(item["id"], "bravo", now=NOW)
+                work.notify(item["id"], "bravo", now=NOW)
+                sent = [r for r in WorkNotifications(self.root).records(item["id"]) if r["phase"] == "sent"]
+                self.assertEqual([original["id"]], [r["envelope_id"] for r in sent])
+                self.assertFalse(any(r["kind"] == "message_envelope" and r.get("idempotency_key") == key
+                                     for r in EventLog(self.root).event_records()))
+                self.assertFalse(any(f["code"] in {"work_notification_pending", "work_notification_conflict"}
+                                     for f in project_notification_findings(self.root, now=NOW)))
+
+    def test_notification_send_refusal_is_degraded_and_preserves_remedy(self) -> None:
+        from floati.work import WorkLog
+        from floati.events import EventLog
+
+        AuthorityGrantStore(self.root).grant_exact("notify-work", public_ids.worker('alpha'), 1, NOW)
+        findings = []
+        with patch.object(EventLog, "send", side_effect=ProtocolRefusal("recipient_unregistered", "gone", remedy="register the recipient")):
+            item = WorkLog(self.root).add("refused notice", "bravo", [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW,
+                                          notification_findings=findings)
+        self.assertEqual(item, validate_record(item, self.root.tenant_id,
+                         frozenset({"work_item"}), integrity=False))
+        finding = next(f for f in findings if f["code"] == "work_notification_refused")
+        self.assertEqual("recipient_unregistered", finding["refusal_code"])
+        self.assertEqual("register the recipient", finding["remedy"])
+
+    def test_completion_crash_retries_same_transition_and_return_mail(self) -> None:
+        from contextlib import nullcontext
+        from floati.work import WorkLog
+        from floati.events import EventLog
+        from floati.work_notification import WorkNotifications
+        from floati.jsonl import read_records_snapshot
+
+        actor = public_ids.worker('alpha')
+        AuthorityGrantStore(self.root).grant_exact("completion-work", actor, 1, NOW)
+        work = WorkLog(self.root)
+        for boundary in ("before-send", "after-send", "uncrashed"):
+            with self.subTest(boundary=boundary):
+                item = work.add("finish-" + boundary, actor, [], dispatcher="bravo", now=NOW)
+                work.claim(item["id"], actor, "completion-work", 1, now=NOW)
+                binding = [self.binding(SHA_A, "AGENTS.md")]
+                target = (patch.object(EventLog, "send", side_effect=RuntimeError("crash"))
+                          if boundary == "before-send" else
+                          patch.object(WorkNotifications, "sent", side_effect=RuntimeError("crash"))
+                          if boundary == "after-send" else nullcontext())
+                with target:
+                    if boundary == "uncrashed":
+                        work.complete(item["id"], actor, binding, now=NOW)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "crash"):
+                            work.complete(item["id"], actor, binding, now=NOW)
+                retried = work.complete(item["id"], actor, binding, now=NOW)
+                self.assertEqual(retried, validate_record(retried, self.root.tenant_id,
+                                 frozenset({"work_transition"}), integrity=False))
+                work.notify(item["id"], actor, now=NOW)
+                transitions = [r for r in read_records_snapshot(self.root, work.relative_path,
+                               allowed_kinds={"work_item", "work_transition"})
+                               if r["kind"] == "work_transition" and r["action"] == "complete"
+                               and r["work_item_id"] == item["id"]]
+                self.assertEqual([retried["id"]], [r["id"] for r in transitions])
+                sent = [r for r in work.show(item["id"])[0]["notifications"] if r["phase"] == "sent"]
+                self.assertEqual([retried["id"]], [r["transition_id"] for r in sent])
+                envelopes = [r for r in EventLog(self.root).event_records() if r["kind"] == "message_envelope"
+                             and r.get("idempotency_key") == "work-complete-" + item["id"] + "-bravo"]
+                self.assertEqual([sent[0]["envelope_id"]], [r["id"] for r in envelopes])
+
+    def test_native_oldest_claim_retains_the_pending_sender_finding(self) -> None:
+        from floati.work import WorkLog
+        from floati.events import EventLog
+
+        actor = public_ids.worker('alpha')
+        AuthorityGrantStore(self.root).grant_exact("oldest-work", actor, 1, NOW)
+        work = WorkLog(self.root)
+        with patch.object(EventLog, "send", side_effect=RuntimeError("crash")):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                work.add("oldest pending", actor, [self.binding(SHA_A, "AGENTS.md")], dispatcher="bravo", now=NOW)
+        claimed = work.claim_owned_oldest(actor, "oldest-work", 1, now=NOW)
+        self.assertEqual("claimed", claimed["state"])
+        self.assertEqual(["bravo"], [f["sender"] for f in claimed["findings"] if f["code"] == "work_notification_pending"])
+
+    def test_identical_open_work_is_refused_without_another_item(self) -> None:
+        from floati.work import WorkLog
+
+        work = WorkLog(self.root)
+        first = work.add("prepare input", public_ids.worker('alpha'), [])
+        with self.assertRaises(ProtocolRefusal) as caught:
+            work.add("prepare input", public_ids.worker('alpha'), [])
+        self.assertEqual("work_duplicate_open", caught.exception.code)
+        self.assertEqual([first["id"]], [item["id"] for item in work.show()])
 
     def test_work_ledger_is_distinct_append_only_and_completes_sparse_items(self) -> None:
         from floati.jsonl import read_records
@@ -136,6 +345,41 @@ class WorkLogTests(unittest.TestCase):
                     work.claim(item["id"], actor, subject, epoch, now=NOW)
                 self.assertEqual(code, caught.exception.code)
                 self.assertEqual(before, path.read_bytes())
+
+    def test_claimed_item_reports_collision_before_other_authority(self) -> None:
+        from floati.work import WorkLog
+
+        work = WorkLog(self.root)
+        item = work.add("collision", public_ids.worker('alpha'), [])
+        grants = AuthorityGrantStore(self.root)
+        first = grants.grant_exact("work-claims", public_ids.worker('alpha'), 1, NOW)
+        work.claim(item["id"], public_ids.worker('alpha'), "work-claims", first["epoch"], now=NOW)
+        second = grants.grant_exact("work-claims", "bravo", 2, NOW)
+        with self.assertRaises(ProtocolRefusal) as caught:
+            work.claim(item["id"], "bravo", "work-claims", second["epoch"], now=NOW)
+        self.assertEqual("work_already_claimed", caught.exception.code)
+
+    def test_eligibility_reports_superseding_sibling_grant(self) -> None:
+        from floati.work import WorkLog
+
+        work = WorkLog(self.root)
+        item = work.add("available work", public_ids.worker('alpha'), [])
+        grants = AuthorityGrantStore(self.root)
+        grants.grant_exact("work-claims", public_ids.worker('alpha'), 1, NOW)
+        grants.grant_exact("work-claims", "bravo", 2, NOW)
+        shown = work.show(item["id"], actor=public_ids.worker('alpha'), now=NOW)[0]
+        self.assertFalse(shown["eligibility"]["eligible"])
+        self.assertEqual("authority_superseded", shown["eligibility"]["code"])
+        self.assertEqual([{"code": "authority_superseded", "subject": "work-claims",
+                           "holder": "bravo", "epoch": 2}], shown["eligibility"]["findings"])
+        expired = work.show(item["id"], actor=public_ids.worker('alpha'), now=NOW + timedelta(days=370))[0]
+        self.assertEqual("authority_missing", expired["eligibility"]["code"])
+        self.assertEqual([], expired["eligibility"]["findings"])
+        grants.grant_exact("other-work", public_ids.worker('alpha'), 1, NOW)
+        usable = work.show(item["id"], actor=public_ids.worker('alpha'), now=NOW)[0]["eligibility"]
+        self.assertTrue(usable["eligible"])
+        self.assertEqual([{"subject": "other-work", "epoch": 1}], usable["authorities"])
+        self.assertEqual("authority_superseded", usable["findings"][0]["code"])
 
     def test_invalid_work_transition_refuses_without_mutation(self) -> None:
         from floati.work import WorkLog

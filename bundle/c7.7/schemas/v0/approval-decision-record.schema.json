@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/approval-decision-record.schema.json",
+  "title": "Floati Approval Decision Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "request_id", "decider", "decision", "granted_scope", "granted_ttl_seconds", "reason_code", "decided_at", "expires_at", "authority_subject", "authority_epoch"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^approval-decision-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "approval_decision"},
+    "request_id": {"type": "string", "pattern": "^approval-request-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "decider": {"type": "string", "minLength": 1, "maxLength": 64},
+    "decision": {"type": "string", "enum": ["approved", "denied"]},
+    "granted_scope": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "granted_ttl_seconds": {"type": ["integer", "null"], "minimum": 1, "maximum": 86400},
+    "reason_code": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "decided_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "authority_subject": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authority_epoch": {"type": "integer", "minimum": 1}
+  }
+}

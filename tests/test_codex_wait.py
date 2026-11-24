@@ -17,8 +17,10 @@ from floati.registry import Registry
 from floati.events import EventLog
 from floati.jsonl import read_records_snapshot
 from floati.root import FloatiRoot
+from floati.records import WAKE_HOLD_KINDS
 from tests.schema_validation import validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.waiter_timing import scripted_readiness
 
 
 def waiter_captured_io(stdout: io.StringIO, stderr: io.StringIO) -> str:
@@ -113,12 +115,17 @@ class CodexWaitParticipationTests(unittest.TestCase):
 
         self.assertEqual(0, status)
         self.assertTrue(observed)
+        fixture_base = self.base.resolve(strict=False)
         for path in observed:
-            with self.subTest(path=path):
+            with self.subTest(
+                scope="fixture" if path == fixture_base or fixture_base in path.parents else "external",
+                path=path.relative_to(fixture_base).as_posix()
+                if path == fixture_base or fixture_base in path.parents else str(path),
+            ):
                 self.assertFalse(path == foreign_root or foreign_root in path.parents)
 
 
-class CodexWaitContractTests(unittest.TestCase):
+class _CodexWaitContractFixture:
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temp.cleanup)
@@ -148,6 +155,8 @@ class CodexWaitContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+
+class CodexWaitContractTests(_CodexWaitContractFixture, unittest.TestCase):
     def test_longest_prefix_map_binding_resolves_through_active_registry(self) -> None:
         from floati.codex_wait_contract import resolve_participant
 
@@ -364,7 +373,7 @@ class CodexWaitContractTests(unittest.TestCase):
         validate_json_schema(receipt, schema)
 
 
-class CodexWaitRuntimeTests(CodexWaitContractTests):
+class _CodexWaitRuntimeFixture(_CodexWaitContractFixture):
     def setUp(self) -> None:
         super().setUp()
         Registry(self.root).register("architect", "architect")
@@ -451,6 +460,9 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assert_waiter_stdout_contains(stdout, stderr, '"decision": "block"')
         return json.loads(stdout.getvalue())
 
+
+# Keep the contract methods running with and without armed consent.
+class CodexWaitRuntimeTests(_CodexWaitRuntimeFixture, CodexWaitContractTests):
     def test_fresh_envelope_emits_one_block_and_records_wake_after_flush(self) -> None:
         from floati.codex_wait import run_stop_waiter
 
@@ -479,9 +491,17 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         deliveries = read_records_snapshot(
             self.root,
             public_ids.compose('receipts/deliveries/', public_ids.ledger(public_ids.builder('floati'))),
-            allowed_kinds={"delivery_receipt", "wake_hold_receipt"},
+            allowed_kinds=set(WAKE_HOLD_KINDS),
         )
-        self.assertEqual(["wake_hold_receipt"], [row["kind"] for row in deliveries])
+        # BUS-DELIVERY-UNPRESENTED-1: this fixture's waiter carries no native
+        # consent chain, so no hold testimony exists and the publication
+        # receipts delivered_unpresented; the presentation plane is unchanged.
+        self.assertEqual(["delivered_unpresented"], [row["kind"] for row in deliveries])
+        from floati.cursor_presentations import CursorPresentationLedger
+        presentations = CursorPresentationLedger(self.root).read(self.participant.binding.node_id)
+        self.assertEqual(["prepared", "flushed"], [row["phase"] for row in presentations])
+        self.assertEqual(deliveries[0]["id"], presentations[-1]["delivery_receipt_id"])
+        self.assertEqual(presentations[-1]["id"], attempts[0]["decision_receipt_id"])
         self.assertFalse((self.bus_home / "receipts" / "acks" / public_ids.ledger(public_ids.builder('floati'))).exists())
 
     def test_non_armed_session_cannot_steal_a_fresh_wake(self) -> None:
@@ -539,7 +559,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
                 stdout=io.StringIO(),
                 stderr=io.StringIO(),
                 monotonic=lambda: clock[0],
-                sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+                wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
                 wall_time=lambda: 1000.0,
             )
 
@@ -555,11 +575,17 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         second_err = io.StringIO()
         clock = [0.0]
         payload = {"cwd": str(self.workspace), "session_id": "thread-held"}
+        def advance(seconds):
+            clock[0] += seconds
+
         run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload=payload,
             stdout=first,
             stderr=first_err,
+            monotonic=lambda: clock[0],
+            sleep=advance,
+            wait_readable=scripted_readiness(advance),
         )
         run_stop_waiter(
             bus_home=self.bus_home,
@@ -567,7 +593,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             stdout=second,
             stderr=second_err,
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
         self.assert_waiter_stdout_contains(first, first_err, '"decision": "block"')
@@ -606,7 +632,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             stdout=stdout,
             stderr=stderr,
             monotonic=lambda: clock[0],
-            sleep=sleep,
+            wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
         )
 
         self.assertEqual(1.0, clock[0])
@@ -637,7 +663,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             stdout=stdout,
             stderr=stderr,
             monotonic=monotonic,
-            sleep=sleep,
+            wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
             poll_interval_seconds=1.0,
         )
 
@@ -663,11 +689,18 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             "cwd": str(self.workspace),
             "session_id": "thread-incremental-reader",
         }
+        seed_clock = [0.0]
+        def advance_seed(seconds):
+            seed_clock[0] += seconds
+
         run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload=payload,
             stdout=io.StringIO(),
             stderr=io.StringIO(),
+            monotonic=lambda: seed_clock[0],
+            sleep=advance_seed,
+            wait_readable=scripted_readiness(advance_seed),
         )
         measured_paths = {
             self.root.resolve_relative("events.jsonl").resolve(strict=False),
@@ -695,7 +728,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
                 stdout=io.StringIO(),
                 stderr=io.StringIO(),
                 monotonic=lambda: clock[0],
-                sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+                wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
                 poll_interval_seconds=1.0,
             )
 
@@ -716,11 +749,18 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         marker.write_text("disabled\n", encoding="utf-8")
         stdout = io.StringIO()
         stderr = io.StringIO()
+        clock = [0.0]
+        def advance(seconds):
+            clock[0] += seconds
+
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={"cwd": str(self.workspace), "session_id": "thread-detached"},
             stdout=stdout,
             stderr=stderr,
+            monotonic=lambda: clock[0],
+            sleep=advance,
+            wait_readable=scripted_readiness(advance),
         )
 
         self.assertEqual(0, status)
@@ -733,13 +773,18 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
         self.assertEqual("thread-detached", attempts[0]["acting_session_id"])
 
     def test_trusted_waiter_records_the_exact_codex_daemon_binding(self) -> None:
+        import hashlib
         from floati import wake_daemon_adapters as adapters
+        from floati.errors import ProtocolRefusal
+        from floati.seat_board import SeatBoard
         from floati.wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
         from floati.codex_wait import run_stop_waiter
+        from tests.test_wake_daemon_adapters import _Runner
+        from tests.test_workspace_seat_declaration import WorkspaceSeatDeclarationTests
 
         self.arm_codex_role_node(public_ids.worker("codex"))
         executable = self.base / "codex-target"
-        executable.write_bytes(b"#!/bin/sh\nexit 0\n")
+        executable.write_bytes(b"#!/bin/sh\nprintf 'codex-cli 0.163.0\\n'\n")
         executable.chmod(0o700)
         link = self.base / "codex"
         link.symlink_to(executable)
@@ -754,15 +799,60 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             stdout=io.StringIO(),
             stderr=io.StringIO(),
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
         coordinate = DaemonCoordinate(self.root, public_ids.worker("codex"), "codex")
-        binding = AdapterBindingStore(self.root).read(coordinate)
+        store = AdapterBindingStore(self.root)
+        binding = store.read(coordinate)
         self.assertEqual("thread-bound", binding["session_id"])
         self.assertEqual(str(self.workspace), binding["workspace"])
-        self.assertEqual(str(executable), binding["executable"])
+        trusted_bytes = executable.read_bytes()
+        self.assertEqual(hashlib.sha256(trusted_bytes).hexdigest(), binding["executable_digest"])
         self.assertEqual(adapters.adapter_contract_digest("codex"), binding["adapter_digest"])
+
+        # The stable declaration survives relocation with repair testimony.
+        replacement = self.base / "upgraded-codex"
+        replacement.write_bytes(trusted_bytes)
+        replacement.chmod(0o700)
+        link.unlink()
+        link.symlink_to(replacement)
+        executable.unlink()
+        WorkspaceSeatDeclarationTests.write_seat_fixture(
+            self, self.workspace, self.root.path, public_ids.worker("codex"))
+        boarded = SeatBoard(self.root).board(public_ids.worker("codex"), self.workspace,
+            "thread-bound", idempotency_key="relocated-codex-board")
+        self.assertEqual("completed", boarded["step"])
+        repaired = store.read(coordinate)
+        self.assertEqual(str(replacement), repaired['executable'])
+        self.assertEqual(binding['executable_digest'], repaired['executable_digest'])
+        binding = repaired
+        runner = _Runner()
+        adapter = adapters.CodexQueueWakeAdapter(coordinate, runner=runner)
+        self.assertEqual("queued", adapter.request_wake(binding, "wake", 30).outcome)
+        self.assertEqual(1, len(runner.calls))
+        self.assertEqual(str(replacement), runner.calls[0][0][0])
+
+        before = store.path(coordinate).read_bytes()
+        replacement.write_bytes(b"#!/bin/sh\n# swapped at the same path\nexit 0\n")
+        runner.calls.clear()
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "wake", 30)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
+        self.assertEqual(before, store.path(coordinate).read_bytes())
+
+        replacement.write_bytes(trusted_bytes)
+        foreign = self.base / "foreign-codex"
+        foreign.write_bytes(b"#!/bin/sh\n# different binary\nexit 0\n")
+        foreign.chmod(0o700)
+        link.unlink()
+        link.symlink_to(foreign)
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "wake", 30)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
+        self.assertEqual(before, store.path(coordinate).read_bytes())
 
     def test_non_codex_seat_hold_leaves_no_codex_daemon_testimony(self) -> None:
         """WAKE-IDLE-1-F1: a non-Codex seat's hold leaves no Codex testimony.
@@ -792,7 +882,7 @@ class CodexWaitRuntimeTests(CodexWaitContractTests):
             stdout=io.StringIO(),
             stderr=io.StringIO(),
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
         )
 
         self.assertFalse(
@@ -955,7 +1045,7 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
             stdout=stdout,
             stderr=stderr,
             monotonic=lambda: clock[0],
-            sleep=sleep,
+            wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
             poll_interval_seconds=1.0,
         )
         self.assertEqual(0, status)
@@ -1094,7 +1184,7 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
             stdout=io.StringIO(),
             stderr=io.StringIO(),
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
             poll_interval_seconds=1.0,
         )
 
@@ -1104,7 +1194,7 @@ class CodexWaitLedgerReopenTests(CodexWaitRuntimeTests):
         self.assertEqual(2, rows[0]["waited_seconds"])
 
 
-class CodexWaitWorkspaceMapReopenTests(CodexWaitRuntimeTests):
+class CodexWaitWorkspaceMapReopenTests(_CodexWaitRuntimeFixture, unittest.TestCase):
     """IN-6e — map growth and map restore are different live-wait events."""
 
     def map_path(self) -> Path:
@@ -1164,7 +1254,7 @@ class CodexWaitWorkspaceMapReopenTests(CodexWaitRuntimeTests):
                 stdout=stdout,
                 stderr=stderr,
                 monotonic=lambda: clock[0],
-                sleep=sleep,
+                wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
                 poll_interval_seconds=1.0,
             )
 
@@ -1212,7 +1302,7 @@ class CodexWaitWorkspaceMapReopenTests(CodexWaitRuntimeTests):
             stdout=stdout,
             stderr=stderr,
             monotonic=lambda: clock[0],
-            sleep=sleep,
+            wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
             poll_interval_seconds=1.0,
         )
 
@@ -1236,7 +1326,7 @@ class CodexWaitWorkspaceMapReopenTests(CodexWaitRuntimeTests):
         self.assertEqual(1, exits[0]["waited_seconds"])
 
 
-class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
+class CodexWaitWriteFailureTests(_CodexWaitRuntimeFixture, unittest.TestCase):
     """IN-6f — waiter evidence-write failures are never silent."""
 
     def exit_rows(self) -> list[dict]:
@@ -1261,7 +1351,7 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
             stdout=stdout,
             stderr=stderr,
             monotonic=lambda: clock[0],
-            sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+            wait_readable=scripted_readiness((lambda seconds: clock.__setitem__(0, clock[0] + seconds)), interval=(1.0)), sleep=lambda seconds: clock.__setitem__(0, clock[0] + seconds),
             poll_interval_seconds=1.0,
         )
         return stdout
@@ -1289,21 +1379,21 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
     def test_session_authority_write_failure_surfaces_and_records_exit(self) -> None:
         stderr = io.StringIO()
         with mock.patch(
-            "floati.codex_wait.CodexWaitSessionLedger.participate",
+            "floati.codex_wait.CodexWaitSessionLedger._participate_already_guarded",
             side_effect=OSError("secret-write-detail"),
         ):
             stdout = self.run_idle("thread-session-write", stderr)
 
-        self.assertEqual(
-            "",
-            stdout.getvalue(),
-            waiter_captured_io(stdout, stderr),
-        )
+        decision = json.loads(stdout.getvalue())
+        self.assertEqual("block", decision["decision"])
+        self.assertIn("check session_authority", decision["reason"])
+        self.assertNotIn("secret-write-detail", stdout.getvalue())
         self.assert_redacted_diagnostic(stderr, "session_authority")
         self.assertEqual(
             ["integrity_failure"],
             [row["reason_code"] for row in self.exit_rows()],
         )
+        self.assertEqual("OSError", self.exit_rows()[0]["integrity_failure"]["exception_class"])
 
     def test_daemon_binding_write_failure_surfaces_and_keeps_the_decision(self) -> None:
         self.arm_codex_role_node(public_ids.worker("codex"))
@@ -1384,7 +1474,7 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
                 stdout=stdout,
                 stderr=stderr,
                 monotonic=lambda: clock[0],
-                sleep=sleep,
+                wait_readable=scripted_readiness((sleep), interval=(1.0)), sleep=sleep,
                 poll_interval_seconds=1.0,
             )
 
@@ -1400,6 +1490,11 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
         self.send("write-failure-wake")
         stdout = io.StringIO()
         stderr = io.StringIO()
+        clock = [0.0]
+
+        def advance(seconds):
+            clock[0] += seconds
+
         with mock.patch(
             "floati.codex_wait.WakeAttemptLedger.record",
             side_effect=OSError("secret-write-detail"),
@@ -1414,6 +1509,9 @@ class CodexWaitWriteFailureTests(CodexWaitRuntimeTests):
                 },
                 stdout=stdout,
                 stderr=stderr,
+                monotonic=lambda: clock[0],
+                sleep=advance,
+                wait_readable=scripted_readiness(advance),
             )
 
         self.assert_waiter_stdout_contains(stdout, stderr, '"decision": "block"')

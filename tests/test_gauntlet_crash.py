@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import shutil
 import signal
+import stat
 import sys
 import tempfile
 import threading
@@ -30,6 +31,8 @@ from floati.work import WorkLog
 from floati.workers import WorkerAdapterFailure, WorkerRefusals, WorkerRunner
 from floati.runtruth import RunLedger
 from floati.policy import RepositoryPolicy
+from tests.readiness import Readiness, wait_event
+from tests.time_bounds import derived_codex_handshake_budget_seconds
 from tests.hm3i_gauntlet_fixtures import (
     CANONICAL_RUN_KINDS,
     axis_coverage_from_traces,
@@ -45,6 +48,7 @@ from tests.test_spawn_groups import (
 )
 from tests.test_effect_controller import _EffectCase
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.test_process_atomicity import assert_send_companions
 
 
 CRASH_EXIT = 91
@@ -542,7 +546,8 @@ class CrashPointGauntletTests(unittest.TestCase):
                 self.run_crasher(_send_then_crash, (str(base), point))
                 if point in torn_points:
                     with self.assertRaises(IntegrityFailure) as read_failure:
-                        read_records(root, "events.jsonl", allowed_kinds={"message_envelope"})
+                        read_records(root, "events.jsonl",
+                            allowed_kinds={"message_envelope", "send_readiness_observation"})
                     self.assertEqual("incomplete_jsonl_line", read_failure.exception.code)
                     with self.assertRaises(IntegrityFailure) as retry_failure:
                         EventLog(root).send(
@@ -557,8 +562,11 @@ class CrashPointGauntletTests(unittest.TestCase):
                     self.assertEqual("incomplete_jsonl_line", retry_failure.exception.code)
                     continue
 
-                rows = read_records(root, "events.jsonl", allowed_kinds={"message_envelope"})
+                physical = read_records(root, "events.jsonl",
+                    allowed_kinds={"message_envelope", "send_readiness_observation"})
+                rows = assert_send_companions(self, physical)
                 expected_before_retry = 2 if point in complete_points else 1
+                self.assertEqual(2 * expected_before_retry, len(physical))
                 self.assertEqual(expected_before_retry, len(rows))
                 retried = EventLog(root).send(
                     public_ids.worker('alpha'),
@@ -569,7 +577,10 @@ class CrashPointGauntletTests(unittest.TestCase):
                     "crash retry",
                     idempotency_key="gauntlet-crash-key",
                 )
-                rows = read_records(root, "events.jsonl", allowed_kinds={"message_envelope"})
+                physical = read_records(root, "events.jsonl",
+                    allowed_kinds={"message_envelope", "send_readiness_observation"})
+                rows = assert_send_companions(self, physical)
+                self.assertEqual(4, len(physical))
                 self.assertEqual(2, len(rows))
                 self.assertEqual("gauntlet-crash-key", retried["idempotency_key"])
                 self.assertEqual(1, sum(row["id"] == retried["id"] for row in rows))
@@ -941,7 +952,15 @@ class ThreadObservationCrashTests(unittest.TestCase):
     def test_source_crash_timeout_partial_and_group_cleanup_remain_bounded(self) -> None:
         """Catches process start/response/TERM/KILL/reap seams escaping testimony."""
 
+        from types import SimpleNamespace
+
+        import floati.thread_source as thread_source
         from floati.thread_source import CodexLocalThreadSource
+
+        native_time = thread_source.time
+        native_select = thread_source.select.select
+        native_send = thread_source._send
+        native_cleanup = thread_source._cleanup
 
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -965,7 +984,44 @@ class ThreadObservationCrashTests(unittest.TestCase):
                             str(diagnostic),
                         ]
                     )
-                    result = source.read(THREAD_ID, deadline_seconds=0.25)
+                    readiness = Readiness(f"{mode} thread fixture responds or closes")
+                    thread_read_sent = threading.Event()
+
+                    def ready_select(readers, writers, exceptional, timeout=None):
+                        if timeout is None or timeout > 0:
+                            if mode == "hang" and thread_read_sent.is_set():
+                                # The initialized fixture deliberately has no
+                                # response. Trigger the deadline branch after
+                                # the request event, without a timed sleep.
+                                return [], [], []
+                            ready = native_select(
+                                readers, writers, exceptional, readiness.remaining()
+                            )
+                            if not any(ready):
+                                raise readiness.failure()
+                            return ready
+                        # Keep the parser's trailing-byte probe nonblocking.
+                        return native_select(readers, writers, exceptional, timeout)
+
+                    def send(stream, message):
+                        result = native_send(stream, message)
+                        if message.get("id") == 2 and message.get("method") == "thread/read":
+                            thread_read_sent.set()
+                        return result
+
+                    def cleanup(process):
+                        # TERM/KILL/reap keep their real product clocks.
+                        with mock.patch.object(thread_source, "time", native_time):
+                            return native_cleanup(process)
+
+                    # Fixture startup and byte/EOF readiness are host events;
+                    # they do not spend the parser's test clock. Keep the real
+                    # launch; only hang advances the scenario to a timeout.
+                    with mock.patch.object(thread_source, "time", SimpleNamespace(monotonic=lambda: 0.0)),\
+                            mock.patch.object(thread_source, "select", SimpleNamespace(select=ready_select)),\
+                            mock.patch.object(thread_source, "_send", send),\
+                            mock.patch.object(thread_source, "_cleanup", cleanup):
+                        result = source.read(THREAD_ID, deadline_seconds=0.25)
                     self.assertEqual(
                         (outcome, reason),
                         (result.observation_outcome, result.observation_reason),
@@ -976,15 +1032,16 @@ class ThreadObservationCrashTests(unittest.TestCase):
                                 encoding="ascii"
                             )
                         )
-                        deadline = time.monotonic() + 1
-                        while time.monotonic() < deadline:
+                        def descendant_absent():
                             try:
                                 os.kill(descendant, 0)
                             except ProcessLookupError:
-                                break
-                            time.sleep(0.01)
-                        else:
-                            self.fail("observer descendant survived exact group cleanup")
+                                return True
+                            return False
+
+                        Readiness("observer descendant exits exact group cleanup").until(
+                            descendant_absent
+                        )
 
 
 class EffectLedgerCrashTests(unittest.TestCase):
@@ -1148,6 +1205,10 @@ class EffectLedgerCrashTests(unittest.TestCase):
 
 class EffectWorkerCrashTests(unittest.TestCase):
     def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory(prefix="crash-parent-", dir=REAL_TEMP_ROOT)
+        self.addCleanup(temporary.cleanup)
+        self.private_parent = Path(temporary.name).resolve() / "floati-work"
+        self.private_parent.mkdir(mode=0o700)
         # Crash/terminal tests instrument the integration seam; Task 1 owns real
         # kernel proof, and the unsupported test below replaces this patch.
         patcher = mock.patch(
@@ -1156,9 +1217,22 @@ class EffectWorkerCrashTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def effect_case(self, adapter):
+        from tests.test_workers import _EffectWorkerFixture
+
+        case = _EffectWorkerFixture(self, adapter, workspace_parent=self.private_parent)
+        workspace = Path(WorkLog(case.root).show(case.run.parent)[0]["workspace"])
+        self.assertEqual(self.private_parent, workspace.parent)
+        metadata = workspace.parent.lstat()
+        self.assertEqual(os.getuid(), metadata.st_uid)
+        self.assertEqual(0o700, stat.S_IMODE(metadata.st_mode))
+        self.assertEqual(workspace.parent, workspace.parent.resolve(strict=True))
+        return case
+
     def test_exec_child_timeout_and_crash_reap_provider_process_groups(self) -> None:
         """Catches timeout/death failing to reap an inherited exec provider."""
-        from tests.test_workers import _EffectReportingAdapter, _EffectWorkerCase
+        from floati.worker_isolation import prepare_worker_isolation as real_prepare
+        from tests.test_workers import _EffectReportingAdapter
         from tests.test_worker_bootstrap import WorkerBootstrapTests
 
         for mode in ("timeout", "crash"):
@@ -1166,6 +1240,9 @@ class EffectWorkerCrashTests(unittest.TestCase):
                 directory = Path(tempfile.mkdtemp(dir=REAL_TEMP_ROOT))
                 self.addCleanup(shutil.rmtree, directory, True)
                 pid_path = directory / "provider.pid"
+                startup_bound = derived_codex_handshake_budget_seconds()
+                runner_timeout = min(60.0, 2 * startup_bound + 1.0)
+                hanging_lifetime = runner_timeout + 30.0
 
                 adapter_source = (
                     "import os\n"
@@ -1191,19 +1268,23 @@ class EffectWorkerCrashTests(unittest.TestCase):
                     "             \"signal.signal(signal.SIGTERM, signal.SIG_IGN); \"\n"
                     "             \"Path(os.environ['FLOATI_PROVIDER_PID']).write_text(\"\n"
                     "             \"str(os.getpid()) + ':' + str(os.getpgrp()), encoding='utf-8'); \"\n"
-                    "             \"time.sleep(30)\"],\n"
+                    f"             \"time.sleep({hanging_lifetime!r})\"],\n"
                     "            start_new_session=self.isolate_process_group,\n"
                     "        )\n"
-                    "        ready_deadline = time.monotonic() + 1.0\n"
+                    f"        ready_bound = {startup_bound!r}\n"
+                    "        ready_started = time.monotonic()\n"
+                    "        ready_deadline = ready_started + ready_bound\n"
                     "        while not Path(os.environ['FLOATI_PROVIDER_PID']).exists():\n"
                     "            if time.monotonic() >= ready_deadline:\n"
-                    "                raise RuntimeError('provider did not install SIGTERM handler')\n"
+                    "                raise RuntimeError('provider did not install SIGTERM handler: '\n"
+                    "                    f'bound={ready_bound:.3f}s elapsed={time.monotonic()-ready_started:.3f}s '\n"
+                    "                    f'host_load={os.getloadavg()}')\n"
                     "            time.sleep(0.005)\n"
                     "        if self.isolate_process_group and self.registrar is not None:\n"
                     "            self.registrar(provider.pid)\n"
                     "        if os.environ['FLOATI_PROVIDER_MODE'] == 'crash':\n"
                     "            os._exit(7)\n"
-                    "        time.sleep(30)\n"
+                    f"        time.sleep({hanging_lifetime!r})\n"
                     "        return object()\n"
                     "    def drive(self, handle, item, *, deadline_seconds):\n"
                     "        return []\n"
@@ -1219,26 +1300,46 @@ class EffectWorkerCrashTests(unittest.TestCase):
                     ),
                     adapter_source=adapter_source,
                 )
-                case = _EffectWorkerCase(self, _EffectReportingAdapter(()))
+                case = self.effect_case(_EffectReportingAdapter(()))
                 runner = case.runner(instrument_exec=False)
-                # Keep the Worker deadline beyond the instrumented bootstrap's
-                # own one-second provider-readiness bound so a loaded full bank
-                # still proves descendant cleanup instead of timing out before
-                # the provider PID/process group exists.
-                runner.call_timeout = 2.0
+                # The timeout's value is not asserted: give fixture startup its
+                # measured host budget for BOTH bootstrap and provider startup
+                # before inducing the product timeout. The hanging fixtures
+                # outlive even the maximum derived outer timeout.
+                runner.call_timeout = runner_timeout
                 environment = {
                     "FLOATI_PROVIDER_PID": str(pid_path),
                     "FLOATI_PROVIDER_MODE": mode,
                 }
+                policies = []
+
+                def observe_prepare(*args, **kwargs):
+                    policy = real_prepare(*args, **kwargs)
+                    policies.append(policy)
+                    self.assertEqual(self.private_parent, policy.workspace.parent)
+                    metadata = policy.workspace.lstat()
+                    self.assertEqual((metadata.st_dev, metadata.st_ino), policy.workspace_identity)
+                    self.assertEqual(os.getuid(), metadata.st_uid)
+                    self.assertEqual(0o700, stat.S_IMODE(metadata.st_mode))
+                    return policy
+
                 with mock.patch(
                     "floati.workers._WORKER_BOOTSTRAP_PATH", bootstrap,
-                ), mock.patch.dict(os.environ, environment, clear=False):
+                ), mock.patch.dict(os.environ, environment, clear=False), mock.patch(
+                    "floati.workers.prepare_worker_isolation", side_effect=observe_prepare,
+                ):
                     result = runner.run(
                         "node-a", "codex", now=case.run.now(8),
                         run_id=case.run.run_id, item_id=case.run.parent,
                         attempt_id=case.run.opened["attempt_id"],
                     )
 
+                self.assertEqual(1, len(policies))
+                policy = policies[0]
+                metadata = policy.workspace.lstat()
+                self.assertEqual((metadata.st_dev, metadata.st_ino), policy.workspace_identity)
+                self.assertFalse(policy.scratch.exists())
+                self.assertFalse(policy.write_probe.exists())
                 self.assertEqual("degrade", result["transition"])
                 self.assertEqual(
                     "process_timeout" if mode == "timeout" else "process_died",
@@ -1276,8 +1377,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
         """Catches a pre-callback isolation refusal inventing dispatched uncertainty."""
         from tests.test_workers import _EffectReportingAdapter, _EffectWorkerCase
 
-        case = _EffectWorkerCase(
-            self,
+        case = self.effect_case(
             _EffectReportingAdapter((
                 _EffectWorkerCase.intent_event(),
                 _EffectWorkerCase.dispatch_event(),
@@ -1300,8 +1400,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
         import floati.workers as workers_module
         from tests.test_workers import _EffectReportingAdapter, _EffectWorkerCase
 
-        case = _EffectWorkerCase(
-            self,
+        case = self.effect_case(
             _EffectReportingAdapter((
                 _EffectWorkerCase.intent_event(),
                 _EffectWorkerCase.dispatch_event(),
@@ -1314,7 +1413,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
 
         def concurrent_terminal() -> None:
             try:
-                self.assertTrue(projected.wait(2))
+                wait_event(projected, "effect projection reaches terminal writer")
                 operation = next(
                     iter(case.effect_ledger.project()._operations.values())
                 )
@@ -1336,7 +1435,7 @@ class EffectWorkerCrashTests(unittest.TestCase):
         ) -> tuple[dict[str, object], ...]:
             operations = original_operations[6](controller, context)
             projected.set()
-            self.assertTrue(terminal_written.wait(2))
+            wait_event(terminal_written, "concurrent terminal evidence written")
             return operations
 
         original_operations = workers_module._EFFECT_WORKER_OPERATIONS
@@ -1358,7 +1457,10 @@ class EffectWorkerCrashTests(unittest.TestCase):
                     attempt_id=case.run.opened["attempt_id"],
                 )
         finally:
-            writer.join(2)
+            readiness = Readiness("concurrent terminal writer exits")
+            writer.join(readiness.remaining())
+            if writer.is_alive():
+                raise readiness.failure()
 
         self.assertFalse(writer.is_alive())
         self.assertEqual([], writer_errors)
@@ -1382,7 +1484,10 @@ class EffectWorkerCrashTests(unittest.TestCase):
             ),
             die_after_reports=True,
         )
-        case = _EffectWorkerCase(self, adapter)
+        case = self.effect_case(adapter)
+        workspace = Path(WorkLog(case.root).show(case.run.parent)[0]["workspace"])
+        self.assertEqual(self.private_parent, workspace.parent,
+                         "crash work must use its owned private parent")
         runner = case.runner()
         original_append = runner.receipts.append
         observed_order = []

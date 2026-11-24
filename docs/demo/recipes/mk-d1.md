@@ -21,6 +21,7 @@ From a clean clone of the public repository at the current tag
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
 git -C /absolute/floati checkout v0.1.2
+cd /absolute/floati
 ROOT=/absolute/mk-d1-fleet
 
 python3 -m floati init --root "$ROOT" --solo claude-sender --harness claude
@@ -30,7 +31,7 @@ python3 -m floati node add --root "$ROOT" --node codex-receiver \
 # the Claude Code seat hands its row to the Codex seat
 python3 -m floati send --root "$ROOT" --from claude-sender \
   --to codex-receiver --repo floati \
-  --sha 0000000000000000000000000000000000000000 \
+  --sha "$(git rev-parse HEAD)" \
   --doc docs/demo/recipes/mk-d1.md --note "row one: the handoff slice"
 
 # the Codex seat drains: one command presents the envelope, writes the
@@ -54,15 +55,29 @@ that the system failed.
 ## What you should see
 
 - The send artifact carries the `message_envelope` and names the receiver
-  `recipient_not_listening`: the append is proven, the delivery is not yet.
+  readiness `unknown`: this fixture has no recipient hook configuration
+  provenance, so it cannot prove absence. The send journals its readiness
+  **as observed at** `observed_at`, not as a promise through append. The observation
+  is saved beside the envelope. The append is proven; delivery follows the drain.
 - The drain artifact carries all three at once: the presented `messages`, the
   `delivery_receipt`, and the `ack_receipt` — the receiver acknowledged when
   it drained.
 - `floati receipts codex-receiver` lists one delivery and one acknowledgment
   for the node, and `denials: []`.
-- The malformed send refuses with `status: "refused"` and
-  `evidence.code: "sha_invalid"` — `sha must be a 40- or 64-character
-  lowercase Git object id`.
+- On versions with the send-side commit-resolution fence, the deliberate
+  `00000` send refuses with `status: "refused"` and
+  `evidence.code: "sha_absent"`: it names no commit in the checked repository.
+  Older versions that validate the envelope first report `sha_invalid`.
+
+## Regenerating the published capture
+
+The capture source checkout and the demonstrated Git history can differ.
+When running the generator from a development checkout, pass the public clone
+above as `--handoff-repository /absolute/floati`. The generator derives the
+earliest recipe commit in that clone, runs the real send from there, and
+photographs that exact SHA. Its `--source-sha` identifies the generator source
+separately. Keep the public clone, font, capture time and source receipt fixed
+when comparing output at two development HEADs.
 
 ## What this demo does not show
 

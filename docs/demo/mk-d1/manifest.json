@@ -1,24 +1,24 @@
 {
-  "captured_at": "2026-09-11T17:21:34.000Z",
+  "captured_at": "2026-10-02T23:27:00.000Z",
   "captures": [
     {
       "animated": true,
       "caption": "fixture fleet, real run - a Claude Code seat sends a row to a Codex seat, the Codex seat drains and acks, receipts names the delivery and the acknowledgment, and one malformed envelope is refused; The receiver acknowledged when it next drained. This recording does not show a seat waking on its own.",
       "files": [
         {
-          "bytes": 3567,
+          "bytes": 4135,
           "path": "mk-d1-standard.txt",
-          "sha256": "638c9811b587e93c0abf3941e75ef9a1885403fd0968e9bfb2b83abc132860bb"
+          "sha256": "4869c9c7de693b5ff29b6ea29ec948a496b413bb746e10af26237a1e00504c1d"
         },
         {
-          "bytes": 213381,
+          "bytes": 67491,
           "path": "mk-d1-dark.gif",
-          "sha256": "9ad3d58096a95b788f4da9848477325ca0eb7e20cbcc89569655d29007f0ab1f"
+          "sha256": "229ecde00b434da0e946f6c018154967af8633e7531870513f1bf4a834acc6af"
         },
         {
-          "bytes": 213605,
+          "bytes": 67491,
           "path": "mk-d1-light.gif",
-          "sha256": "30c4236530e88053232d30af41cb2844f21c1acee1eba6099a81c89df846ab0a"
+          "sha256": "14cdaabc5aa456e0d420a93aa27822d02c4f359db59984784a9f21a21fac905b"
         }
       ],
       "frame_count": 4,
@@ -30,6 +30,6 @@
   "generator": "scripts/capture-mk-d1.py",
   "schema_version": 0,
   "scratch": "<scratch>",
-  "source_sha": "f0532c456da07c2de5cc7185139f7a79c3d33f8c",
+  "source_sha": "0fdde6feed29dc1d6a2ec2e8db3fffaf5866c116",
   "synthetic": false
 }

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v2/thread-attachment-registered-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "provider", "provider_thread_id", "subject_kind", "work_item_id", "registered_by", "registered_at_testimony", "adhoc_profile_id", "adhoc_dispatch_id", "native_receipt_id"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "id": {"type": "string", "pattern": "^thread-attachment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "x-floati-terminal-unsafe": true},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "thread_attachment_registered"},
+    "provider": {"enum": ["codex_local", "claude_local", "pi_local"]},
+    "provider_thread_id": {"type": "string", "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true},
+    "subject_kind": {"const": "adhoc_dispatch"},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "registered_by": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "x-floati-terminal-unsafe": true},
+    "registered_at_testimony": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "adhoc_profile_id": {"type": "string", "pattern": "^adhoc-profile-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "adhoc_dispatch_id": {"type": "string", "pattern": "^adhoc-dispatch-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "native_receipt_id": {"type": "string", "pattern": "^(?:adhoc-native-opened-|adhoc-lifecycle-)[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true}
+  },
+  "allOf": [{"if": {"properties": {"provider": {"const": "codex_local"}}}, "then": {"properties": {"provider_thread_id": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}}]
+}

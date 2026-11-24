@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/run-result-accepted-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "run_id",
+    "item_id",
+    "attempt_id",
+    "predecessor_result_id",
+    "acceptance_mode",
+    "acceptance_receipt_id",
+    "worker_receipt_ids",
+    "effect_operation_ids",
+    "effect_ledger_high_watermark",
+    "effect_evidence_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "timestamp": {"type": "string", "format": "date-time"},
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^run-result-accepted-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "kind": {"const": "result_accepted"},
+    "item_id": {
+      "type": "string",
+      "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "predecessor_result_id": {
+      "type": "string",
+      "pattern": "^run-(?:result-produced|result-verified)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "acceptance_mode": {"enum": ["verified", "accepted_unverified"]},
+    "acceptance_receipt_id": {
+      "type": ["string", "null"],
+      "pattern": "^acceptance-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "worker_receipt_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^worker-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+      }
+    },
+    "effect_operation_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1024,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^effect-op-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+      }
+    },
+    "effect_ledger_high_watermark": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "effect_evidence_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

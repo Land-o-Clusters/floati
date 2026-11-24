@@ -20,19 +20,93 @@
     "idempotency_key"
   ],
   "properties": {
-    "schema_version": {"type": "integer", "const": 1},
-    "id": {"type": "string", "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
-    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
-    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
-    "kind": {"const": "codex_wait_session_receipt"},
-    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
-    "workspace": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
-    "workspace_map_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "acting_session_id": {"type": "string", "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true},
-    "operation": {"enum": ["claim", "arm", "takeover"]},
-    "state": {"const": "armed"},
-    "predecessor_receipt_id": {"type": ["string", "null"], "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
-    "consent_receipt_id": {"type": "string", "pattern": "^codex-wait-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
-    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true}
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
+    "kind": {
+      "const": "codex_wait_session_receipt"
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^/",
+      "x-floati-terminal-unsafe": true
+    },
+    "workspace_map_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "acting_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-floati-terminal-unsafe": true
+    },
+    "operation": {
+      "enum": [
+        "claim",
+        "arm",
+        "takeover"
+      ]
+    },
+    "state": {
+      "const": "armed"
+    },
+    "predecessor_receipt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "consent_receipt_id": {
+      "type": "string",
+      "pattern": "^codex-wait-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-floati-terminal-unsafe": true
+    },
+    "claim_superseded_dead": {
+      "type": "object",
+      "description": "BL-13: present when a contested claimant was superseded without --take-over because its own wake coordinate measured runtime_missing.",
+      "additionalProperties": false,
+      "required": [
+        "claimant",
+        "evidence"
+      ],
+      "properties": {
+        "claimant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "x-floati-terminal-unsafe": true
+        },
+        "evidence": {
+          "const": "runtime_missing"
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/dispatch-return-record.schema.json",
+  "title": "Floati Dispatch Return v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "actor",
+    "dispatch_id",
+    "coordinates",
+    "supersedes",
+    "idempotency_key",
+    "request_digest",
+    "artifact",
+    "statement"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "dispatch_return"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^dispatch-return-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "dispatch_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "coordinates": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": false,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "bound-record-common.schema.json#/$defs/brief"
+            },
+            {
+              "properties": {
+                "provenance": {
+                  "const": "claimed"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "bound-record-common.schema.json#/$defs/ref"
+            },
+            {
+              "properties": {
+                "provenance": {
+                  "const": "observed"
+                },
+                "ref": {
+                  "pattern": "^refs/heads/.+"
+                },
+                "paths": {
+                  "const": []
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "supersedes": {
+      "const": null
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "request_digest": {
+      "$ref": "bound-record-common.schema.json#/$defs/sha256"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "provenance"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "bound-record-common.schema.json#/$defs/path"
+        },
+        "provenance": {
+          "const": "claimed"
+        }
+      }
+    },
+    "statement": {
+      "anyOf": [
+        {
+          "$ref": "bound-record-common.schema.json#/$defs/claimed_text"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

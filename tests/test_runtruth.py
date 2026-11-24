@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_queue, wait_event
 import tempfile
 import time
 import unittest
@@ -18,7 +19,7 @@ from floati.contracts import TaskContract, contract_digest
 
 def _task6_acceptance_process(base, record, start, outcomes):
     root = FloatiRoot.open_direct_home(Path(base), create=False)
-    start.wait(10)
+    wait_event(start, 'runtruth: start synchronization')
     try:
         accepted = RunLedger(root).append(record)
         outcomes.put(("acceptance_ok", accepted["id"]))
@@ -36,7 +37,7 @@ def _task6_intent_process(base, policy_path, arguments, start, outcomes):
         EffectLedger(root), RunLedger(root),
         RepositoryPolicy.load(Path(policy_path)), ApprovalLedger(root),
     )
-    start.wait(10)
+    wait_event(start, 'runtruth: start synchronization')
     try:
         intent = controller.intent(**arguments)
         outcomes.put(("intent_ok", intent["id"]))
@@ -669,6 +670,31 @@ class RunTruthTests(unittest.TestCase):
 class EffectAcceptanceTests(unittest.TestCase):
     """Cross-ledger acceptance is exact, retry-safe, and race-free."""
 
+    def setUp(self) -> None:
+        from multiprocessing import resource_tracker, synchronize, util
+
+        tracker = resource_tracker._resource_tracker
+        prior_pid = tracker._pid
+        prior_finalizers = frozenset(util._finalizer_registry)
+        self._effect_race_children_collected = True
+        self._effect_owned_temporaries = []
+
+        def close_owned_tracker() -> None:
+            if prior_pid is None and tracker._pid is not None:
+                self.assertTrue(self._effect_race_children_collected,
+                                "effect race child collection remains unproved")
+                # Tracebacks can retain Events after a test failure. Reap only
+                # this fixture's new SemLocks before its owned tracker exits.
+                for key, finalizer in list(util._finalizer_registry.items()):
+                    if (key not in prior_finalizers
+                            and finalizer._callback == synchronize.SemLock._cleanup):
+                        finalizer()
+                tracker._stop()
+                self.assertIsNone(tracker._pid)
+
+        self.addCleanup(close_owned_tracker)
+        super().setUp()
+
     def test_acceptance_guard_waits_beyond_generic_ledger_lock_budget(self) -> None:
         """Lawful queued fences use their own bounded concurrency budget."""
         from floati.runtruth import effect_acceptance_guard
@@ -681,8 +707,8 @@ class EffectAcceptanceTests(unittest.TestCase):
             args=(str(case.root.tenant_home), ready),
         )
         holder.start()
-        self.assertTrue(ready.wait(5))
         try:
+            self.assertTrue(wait_event(ready, 'runtruth: ready synchronization'))
             with effect_acceptance_guard(case.root):
                 pass
         finally:
@@ -695,7 +721,21 @@ class EffectAcceptanceTests(unittest.TestCase):
     def _case(self):
         from tests.test_effect_controller import _EffectCase
 
-        return _EffectCase(self)
+        case = _EffectCase(self)
+        owned_temp = case.run.temp
+        matches = [index for index, (function, args, kwargs) in enumerate(self._cleanups)
+                   if getattr(function, "__self__", None) is owned_temp
+                   and getattr(function, "__func__", None) is tempfile.TemporaryDirectory.cleanup
+                   and args == () and kwargs == {}]
+        self.assertEqual(1, len(matches), "exact effect root cleanup must have one owner")
+        def cleanup_owned_root() -> None:
+            if self._effect_race_children_collected:
+                tempfile.TemporaryDirectory._rmtree(owned_temp.name)
+
+        self._cleanups[matches[0]] = (cleanup_owned_root, (), {})
+        self._effect_owned_temporaries.append(owned_temp)
+        self.assertIsNotNone(owned_temp._finalizer.detach())
+        return case
 
     @staticmethod
     def _confirmed_effect(case, *, key="effect-one", spend=1):
@@ -973,7 +1013,7 @@ class EffectAcceptanceTests(unittest.TestCase):
             snapshot = original_project(ledger)
             if reader_identity and threading.get_ident() == reader_identity[0]:
                 reader_snapshot.set()
-                if not release_reader.wait(5):
+                if not wait_event(release_reader, 'runtruth: release_reader synchronization', timeout=120):
                     raise RuntimeError("projection race release timed out")
             return snapshot
 
@@ -998,7 +1038,7 @@ class EffectAcceptanceTests(unittest.TestCase):
         with mock.patch.object(EffectLedger, "project", observed_project):
             reader = threading.Thread(target=read_projection)
             reader.start()
-            self.assertTrue(reader_snapshot.wait(5))
+            self.assertTrue(wait_event(reader_snapshot, 'runtruth: reader_snapshot synchronization'))
             writer = threading.Thread(target=append_acceptance)
             writer.start()
             writer.join(0.1)
@@ -1043,7 +1083,7 @@ class EffectAcceptanceTests(unittest.TestCase):
             snapshot = original_project(ledger)
             if reader_identity and threading.get_ident() == reader_identity[0]:
                 reader_snapshot.set()
-                if not release_reader.wait(5):
+                if not wait_event(release_reader, 'runtruth: release_reader synchronization', timeout=120):
                     raise RuntimeError("shared projection release timed out")
             return snapshot
 
@@ -1063,7 +1103,7 @@ class EffectAcceptanceTests(unittest.TestCase):
         with mock.patch.object(EffectLedger, "project", observed_project):
             reader = threading.Thread(target=read_projection)
             reader.start()
-            self.assertTrue(reader_snapshot.wait(5))
+            self.assertTrue(wait_event(reader_snapshot, 'runtruth: reader_snapshot synchronization'))
             writer = threading.Thread(target=append_general_record)
             writer.start()
             writer.join(0.2)
@@ -1160,37 +1200,71 @@ class EffectAcceptanceTests(unittest.TestCase):
         case = self._case()
         candidate = case.result_acceptance_candidate()
         context = multiprocessing.get_context("spawn")
-        start = context.Event()
-        outcomes = context.Queue()
-        acceptance = context.Process(
-            target=_task6_acceptance_process,
-            args=(str(case.root.tenant_home), candidate, start, outcomes),
-        )
-        intent = context.Process(
-            target=_task6_intent_process,
-            args=(str(case.root.tenant_home), str(case.run.policy_path),
-                  case.intent_args(), start, outcomes),
-        )
-        acceptance.start(); intent.start(); start.set()
-        acceptance.join(20); intent.join(20)
-        self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
-        observed = {outcomes.get(timeout=5)[0:2] for _ in range(2)}
-        labels = {row[0] for row in observed}
-        self.assertIn(labels, (
-            {"acceptance_ok", "intent_refused"},
-            {"intent_ok", "acceptance_refused"},
-        ))
-        refusals = {row[1] for row in observed if row[0].endswith("refused")}
-        self.assertTrue(refusals <= {
-            "effect_attempt_accepted", "effect_binding_required",
-        })
-        before_run = case.run_ledger.records()
-        before_effect = case.effect_ledger.records()
-        lock_path = case.root.resolve_relative("effects/acceptance.lock")
-        self.assertEqual(b"", lock_path.read_bytes())
-        lock_path.unlink()
-        self.assertEqual(before_run, case.run_ledger.records())
-        self.assertEqual(before_effect, case.effect_ledger.records())
+        self._effect_race_children_collected = False
+        start = outcomes = None
+        children = []
+        try:
+            start = context.Event()
+            outcomes = context.Queue()
+            acceptance = context.Process(
+                target=_task6_acceptance_process,
+                args=(str(case.root.tenant_home), candidate, start, outcomes),
+            )
+            children.append(acceptance)
+            intent = context.Process(
+                target=_task6_intent_process,
+                args=(str(case.root.tenant_home), str(case.run.policy_path),
+                      case.intent_args(), start, outcomes),
+            )
+            children.append(intent)
+            acceptance.start(); intent.start(); start.set()
+            acceptance.join(20); intent.join(20)
+            self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
+            observed = {wait_queue(outcomes, 'runtruth: outcomes frame')[0:2] for _ in range(2)}
+            labels = {row[0] for row in observed}
+            self.assertIn(labels, (
+                {"acceptance_ok", "intent_refused"},
+                {"intent_ok", "acceptance_refused"},
+            ))
+            refusals = {row[1] for row in observed if row[0].endswith("refused")}
+            self.assertTrue(refusals <= {
+                "effect_attempt_accepted", "effect_binding_required",
+            })
+            before_run = case.run_ledger.records()
+            before_effect = case.effect_ledger.records()
+            lock_path = case.root.resolve_relative("effects/acceptance.lock")
+            self.assertEqual(b"", lock_path.read_bytes())
+            lock_path.unlink()
+            self.assertEqual(before_run, case.run_ledger.records())
+            self.assertEqual(before_effect, case.effect_ledger.records())
+        finally:
+            cleanup_errors = []
+            if start is not None:
+                try:
+                    start.set()
+                except Exception as error:
+                    cleanup_errors.append(error)
+            for process in children:
+                if process.pid is None:
+                    continue
+                try:
+                    process.join(20)
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(5)
+                    if process.is_alive() or process.exitcode is None:
+                        raise RuntimeError("effect race child remained uncollected")
+                except Exception as error:
+                    cleanup_errors.append(error)
+            self._effect_race_children_collected = not cleanup_errors
+            if outcomes is not None:
+                try:
+                    outcomes.close()
+                    outcomes.join_thread()
+                except Exception as error:
+                    cleanup_errors.append(error)
+            if cleanup_errors:
+                raise cleanup_errors[0]
 
     def test_completed_attempt_and_successful_run_terminal_require_effect_binding(self) -> None:
         case = self._case()

@@ -45,6 +45,79 @@ The materialized interchange shape is
 - `receipts/deliveries/<node>.jsonl` — `delivery_receipt`;
 - `receipts/acks/<node>.jsonl` — `ack_receipt`.
 
+The operator's `floati confluence bundle --root ROOT --consumer CONSUMER
+--out /absolute/output.json` retains the grant-stamped v1 bundle by default.
+For edge receipts on a live bus, run the same verb with `--schema-version 2`.
+That writes `schemas/v0/receipts-read-bundle-v2.schema.json` to the operator's
+absolute output path outside the fleet root. An active per-root, per-consumer
+grant is required before either version writes anything. The v2 bundle adds
+`events.jsonl` message envelopes, carrying message id, sender, recipient, and
+appended timestamp. It also carries `message_retracted` records with their
+`retracted_message_id`, so a consumer can close a withdrawn envelope rather
+than display it as waiting forever. Delivery and acknowledgment records retain
+their recipient
+and `item_ids`, so consumers can join them to envelopes by id. Actor-bound v1
+acknowledgments validate in v2. A `wake_hold_receipt` sharing a delivery ledger
+is validated, excluded from entries by kind, and counted in
+`excluded_wake_hold_receipt_count`; zero means none were excluded. Other event
+kinds are validated but not exported. The v0 and v1 schemas remain frozen.
+
+For a directory-based launch export, use `--schema-version 2 --out
+/absolute/bundle-directory/receipts-read.json`. This also writes
+`codex-launches.json` in the selected directory under the same grant.
+Select that directory in the consumer to read the launch projection.
+The projection carries native session IDs, dispatch and testimony IDs, the
+launch directory, and the request and observation times. It omits launches
+without authenticated sender testimony and sets `complete: false` when any
+launch in the admitted source set cannot be joined. A missing sidecar or one
+with `complete: false` leaves launcher attribution unavailable.
+Exported files have owner-only permissions. During replacement or after an
+interrupted export, the sidecar can be absent. Rerun the export to restore it.
+
+The v2 bundle also exports an optional `roster` array, projected by
+`floati/roster.py` for active nodes. Each row names `node_id` and carries
+`owner`, `harness`, `repository_branch`, `activity`, `current_action`, and
+`liveness` cells. Every cell has a `stamp` (`MEASURED`, `DERIVED`, `ESTIMATE`,
+or `UNKNOWN`), `value`, `observed_at`, and `age_seconds`. Missing evidence
+remains UNKNOWN with null value, observation time, and age; owner currently
+has no measured source. Ages use the export observation clock, independently
+of the receipt-derived `snapshot_at`. Expired presence carries
+`value: no_report_since` and its expiry as `named_time`; it never implies
+idle activity. Consumers must retain the stamps and ages when displaying cells.
+
+This optional v2 extension follows the governed loosening rule: bundles
+without `roster` still validate, and consumers may ignore the block without
+changing their interpretation of existing fields. Existing required fields
+and entry constraints are unchanged.
+
+An optional v2 `fleet_state` object adds `observed_at`, `archive_retention`,
+and `waiters` for this granted root only. Archive retention lists epochs by
+id, physical retained `size_bytes`, roll time, 30-day `expires_at`, `expired`
+eligibility, and `removed` testimony. Keep-forever suppresses expiry and uses
+null `expires_at`. A missing unreceipted payload has null size and
+`size_reason: archive_payload_absent`; a receipted removal with no payload
+has zero size. `last_removal_receipt` is the latest validated native removal
+record, or null. A removal can outlive its roll receipt; then `rolled_at`
+and `expires_at` remain null. A removal receipt proves the removal intent
+was recorded, not that no payload currently exists; size is observed separately.
+
+Each active node has a waiter row. `mode` is a stamped `blocking` or `polling`
+observation of the backend actually selected by the shared Codex/Cursor wait
+path, with observation time, age, and `valid_until` (at most 120 seconds).
+It is backend testimony, not process-liveness or session-authority proof.
+Missing, malformed, future, or expired observations are UNKNOWN with a reason.
+Other waiter implementations have no backend observation yet and remain
+UNKNOWN. `last_wake` uses only a `woke` native wake-attempt receipt, retaining
+its timestamp and receipt id; queued/refused attempts do not prove a wake.
+`idle_cpu` is UNKNOWN with `reason: idle_cpu_not_measured`; cycle counters and
+backend choice do not measure idle CPU. This read seam performs no process
+probe, network operation, watcher installation, or root mutation.
+
+`fleet_state` is optional: every previous v2 schema constraint remains intact,
+and old bundles without the block still validate. The branch supplies the
+pre-change schema and an old-valid compatibility fixture; publication into
+the cut contract remains the architect's ratify-versus-recut decision.
+
 Each entry carries the contained source path and one-based source ordinal.
 Bundle sequence is deterministic by `(record.timestamp, record.id, source,
 source_ordinal)`. Existing durable record schemas remain authoritative; the
@@ -60,8 +133,11 @@ unruled kind. Missing allowlisted files are empty evidence, not errors.
 
 `tests/fixtures/confluence/v0/fleet-status.json` and
 `tests/fixtures/confluence/v0/receipts-read.json` are fixed consumer fixtures.
-Additive or breaking changes require a new schema version and new fixtures;
-version zero does not acquire undocumented fields. `floati status` without
+Version zero does not acquire undocumented fields; its additive or breaking
+changes require a new schema version and new fixtures. The optional v2
+roster extension above is a governed loosening under the 2026-09-01
+ratify-versus-recut ruling.
+`floati status` without
 `--json` remains compatible, while `--json` is the explicit declaration that
 the caller relies on this contract.
 

@@ -4,9 +4,10 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from floati.cursor import SparseCursor
-from floati.errors import ProtocolRefusal
+from floati.errors import FloatiError, ProtocolRefusal
 from floati.events import EventLog
 from floati.ids import uuid7_hex
 from floati.jsonl import append_record
@@ -61,6 +62,26 @@ class NodeLeaseProtocolTests(unittest.TestCase):
             idempotency_key=key,
             now=now,
         )
+
+    def test_lease_projection_uses_one_registration_and_lease_snapshot(self):
+        before = self.registry.known_records()
+        changed = [dict(row, expires_at=(NOW + timedelta(hours=1)).isoformat().replace("+00:00", "Z"))
+                   if row["kind"] == "node_lease" else row for row in before]
+        with mock.patch.object(self.registry, "known_records", side_effect=[before, changed]) as reader:
+            state = self.registry.node_lease_state("temporary", now=NOW + timedelta(seconds=6))
+        self.assertEqual("expired", state["state"])
+        self.assertEqual(1, reader.call_count)
+
+    def test_invalid_lease_node_refuses_before_reading_a_malformed_plane(self):
+        self.registry.path.write_bytes(b"not-a-valid-frame")
+        try:
+            self.registry.node_lease_state("Invalid-Node", now=NOW)
+        except FloatiError as exc:
+            self.assertIsInstance(exc, ProtocolRefusal)
+            self.assertEqual("node_invalid", exc.code)
+        else:
+            self.fail("invalid node unexpectedly supplied lease evidence")
+        self.assertEqual(b"not-a-valid-frame", self.registry.path.read_bytes())
 
     def assert_expired(self, action) -> None:
         with self.assertRaises(ProtocolRefusal) as raised:

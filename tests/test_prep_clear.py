@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -40,13 +41,21 @@ SESSION = "session-018f7e9b3c137abc8def0123456789ab"
 
 
 def _git(arguments: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    """One fixed Git, one explicit tree, no ambient Git coordinates."""
+    """One fixed Git, one explicit tree, no ambient Git coordinates.
 
-    completed = subprocess.run(
-        ["/usr/bin/git", *arguments],
+    gc.auto=0 keeps commit and push from detaching a maintenance child that
+    would outlive the process that started it. The process group is reaped
+    after the command returns.
+    """
+
+    process = subprocess.Popen(
+        ["/usr/bin/git", "-c", "gc.auto=0", "-c", "gc.autoDetach=false",
+         "-c", "maintenance.auto=false", *arguments],
         cwd=str(cwd),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
         env={
             "PATH": "/usr/bin:/bin",
             "GIT_AUTHOR_NAME": "prep-clear-test",
@@ -57,6 +66,21 @@ def _git(arguments: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
             "GIT_CONFIG_NOSYSTEM": "1",
         },
     )
+    try:
+        stdout, stderr = process.communicate()
+    finally:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            process.wait()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+    completed = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
     if completed.returncode != 0:
         raise AssertionError(f"git {' '.join(arguments)}: {completed.stderr}")
     return completed
@@ -400,15 +424,85 @@ class PrepClearLooseningTests(unittest.TestCase):
         # composition added four more kinds after that base, each by its own
         # named car (SB-1 in train AT; HOOKS-PRE and ROLE-1 Am.1 in train AU;
         # ARCH-1 in train AV). LANES-1 adds its explicit workspace kind.
+        # BL-10 on this base adds its migration receipt kind.
+        # F2 adds shared Stop holds and frozen send-readiness companions.
+        # F2-SEAT-STALL-VISIBLE-1 adds the explicit seat execution kind.
+        # Epoch rollback adds a receipt preserving the original roll binding.
         self.assertEqual(
             {
                 "prep_clear_receipt",
                 "seat_board_receipt",
+                "seat_teardown_receipt",
+                "seat_migration_receipt",
                 "hook_burn_record",
                 "role_template_write_receipt",
                 "registry_role_transfer",
                 "lane_workspace_record",
                 "timing_receipt",
+                "stop_hold_receipt",
+                "send_readiness_observation",
+                "seat_execution",
+                "cursor_presentation_receipt",
+                "bus_epoch_recovery_receipt",
+                # F2-RETIRED-HOME-DISARM-1: the migrate/retire disarm receipt.
+                "retired_home_disarm_receipt",
+                # HOLD-1 (harbor train 14): the operator hold record.
+                "hold_receipt",
+                "delivered_unpresented",
+                # BUS-CONSUMED-RECEIPT-1: explicit recipient ACTED testimony.
+                "consumption_receipt",
+                # BUS-AUTO-ROTATE-1: epoch-bound teardown cutoff verification.
+                "seat_teardown_epoch_verification",
+                # Roll-owned testimony for exact carried message frames.
+                "epoch_carry_verification",
+                # ADHOC-STAGE1 Task1: closed native profile/admission metadata.
+                "adhoc_profile_record",
+                "adhoc_dispatch_record",
+                "adhoc_native_thread_opened_record",
+                "adhoc_lifecycle_record",
+                # NET-ASK-1: local question, answer, decline, and timeout records.
+                "ask_question",
+                "ask_answer",
+                "ask_decline",
+                "ask_timeout",
+                # BUS-ARCHIVE-RETENTION-1: native history commit and expired-epoch removal.
+                "epoch_history_commit",
+                "epoch_archive_removal",
+                # NET-ADDRESS-PERSON-1: explicit operator-recorded person membership.
+                "registry_person_record",
+                # LX-U1: the separate wake-daemon directory ownership record.
+                "wake_daemon_directory_ownership_record",
+                # Codex upgrade tolerance: additive, claim-bound repair testimony.
+                "codex_binding_repair_receipt",
+                # WORK-QUEUE-B: separate write-ahead notification journal.
+                "work_notification_record",
+                # HANDOFF-EVIDENCE-1: the bound-record work handoff.
+                "work_handoff_record",
+                # NEEDS-YOU-INBOX-1 and ATTENTION-BUDGET-1: the needs-you inbox.
+                "needs_item",
+                "needs_read",
+                "needs_close",
+                "needs_budget",
+                "needs_dispatch_hold",
+                # NET-TERRITORY-1: leased working paths, a liveness fact.
+                "territory_lease",
+                # NET-QUIET-1: the quiet window record and its exposure receipts.
+                "quiet_window_receipt",
+                "quiet_exposure_receipt",
+                # DISPATCH-RECORD-1: the dispatch revision, return and close records.
+                "dispatch_revision",
+                "dispatch_return",
+                "dispatch_close",
+                # FLEET-NIGHT-MODE-1: the fleet presence receipt.
+                "fleet_presence_receipt",
+                # CODEX-LAUNCH-PROJECTION-1: the native dispatch launcher record.
+                "native_dispatch_launcher_record",
+                # NET-HOLD-INBOUND-1: inbound hold, release and per-item human decision.
+                "inbound_hold_receipt",
+                # NEEDS-YOU-OBSERVED-1: observed items and each source's outcome.
+                "needs_observed",
+                "needs_observation",
+                "needs_wake",
             },
             set(_SPECS) - before,
         )

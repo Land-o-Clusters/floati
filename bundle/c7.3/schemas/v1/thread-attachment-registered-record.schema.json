@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/thread-attachment-registered-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "provider",
+    "provider_thread_id",
+    "subject_kind",
+    "work_item_id",
+    "registered_by",
+    "registered_at_testimony"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^thread-attachment-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "x-floati-terminal-unsafe": true},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "thread_attachment_registered"},
+    "provider": {"const": "codex_local"},
+    "provider_thread_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "x-floati-terminal-unsafe": true},
+    "subject_kind": {"enum": ["work_item", "attempt"]},
+    "work_item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$", "x-floati-terminal-unsafe": true},
+    "registered_by": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$", "x-floati-terminal-unsafe": true},
+    "registered_at_testimony": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"subject_kind": {"const": "attempt"}}, "required": ["subject_kind"]},
+      "then": {"required": ["run_id", "attempt_id"]},
+      "else": {
+        "allOf": [
+          {"not": {"required": ["run_id"]}},
+          {"not": {"required": ["attempt_id"]}}
+        ]
+      }
+    }
+  ]
+}

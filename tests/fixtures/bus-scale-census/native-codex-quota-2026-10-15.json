@@ -1,0 +1,15 @@
+{
+  "kind": "retained_native_codex_usage_projection",
+  "source_tool": "mcp__codex_app__get_usage_limits",
+  "captured_at": "2026-10-15 16:41:38 UTC",
+  "source_fields": [
+    "rateLimitsByLimitId.codex.primary.usedPercent",
+    "rateLimitsByLimitId.codex.primary.windowDurationMins",
+    "rateLimitsByLimitId.codex.primary.resetsAt"
+  ],
+  "primary": {
+    "usedPercent": 13,
+    "windowDurationMins": 10080,
+    "resetsAt": 1792649607
+  }
+}

@@ -17,19 +17,22 @@ actually ships — and this test classifies every derived and pinned path
 through the exporter's own classifier before comparing. In a projection
 the policy is absent by design and classification is the identity, which
 is exactly right: every file a projection carries is an included file,
-so the same comparison holds there, and the projection leg is proven by
-building one.
+so the same comparison holds there. Separate source and projected pins keep
+exact line coordinates when the exporter reserializes the bundle manifest;
+neither reader can accept a runtime-derived line offset.
 """
 
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.export_inventory import (
     classify_inventory,
@@ -52,28 +55,36 @@ CENSUS_PATHS = frozenset(
     {
         "tests/test_h1_f1.py",
         "tests/h1_f1_reader_map.txt",
+        "tests/h1_f1_reader_map_projected.txt",
         "docs/evidence/h1-f1-codex-wait-readers-2026-09-05.md",
     }
 )
 
 PIN_RELATIVE = "tests/h1_f1_reader_map.txt"
+PROJECTED_PIN_RELATIVE = "tests/h1_f1_reader_map_projected.txt"
 
 # Printed pins on this tree (AX 9ee9d60d), Am.2: the included census only —
 # the 22 readers the export policy excludes (.github, unpublished docs/,
 # tools/) no longer reach a projection and no longer pin counts here.
-PINNED_FILES = 34
-PINNED_HITS = 67
+# BL-11: tests/test_bl_11.py joins the install class (4 hits) — growth only.
+# INSTALL-TRUST-PREFLIGHT-1 R3: fixture-derived operator pairs read the
+# launcher name — tests/test_fu1_g4.py joins update-readback, more hits in
+# test_fu1_g2 / test_install_trust_preflight / test_codex_hook_install. Growth only.
+# READER-SOURCE-REMEDY-2: the hooks-only Doctor fixture adds one update-readback hit.
+# CURRENT-ALIAS-READER-1: two more update-readback hits in the currency test.
+PINNED_FILES = 45
+PINNED_HITS = 105
 PINNED_CLASS_FILES = {
-    "install": 12,
-    "update-readback": 7,
-    "manifest": 3,
+    "install": 22,
+    "update-readback": 9,
+    "manifest": 2,
     "export-baseline": 2,
     "docs": 10,
 }
 PINNED_CLASS_HITS = {
-    "install": 30,
-    "update-readback": 19,
-    "manifest": 3,
+    "install": 59,
+    "update-readback": 29,
+    "manifest": 2,
     "export-baseline": 2,
     "docs": 13,
 }
@@ -103,9 +114,14 @@ def classify(path: str) -> str:
         path == "floati/fleet_update.py"
         # READER-SKEW-1 Am.1: the currency reader observes install ancestry
         # and its test pins the observation - both update-readback readers.
-        or path in ("floati/reader_currency.py", "tests/test_reader_currency.py")
+        or path in ("floati/reader_currency.py", "tests/test_reader_currency.py",
+                    "tests/test_reader_skew_gateway.py",
+                    # Scratch host diagnostics bind the gateway, transport and hook.
+                    "tests/test_f2_gateway_takeover.py")
         or path.startswith("tests/test_fu1_")
-        or path == "tests/test_doctor.py"
+        # WAITER-IDLE-WINDOW-1: doctor reads the configured hook window;
+        # it never invokes or installs the launcher it identifies.
+        or path in ("tests/test_doctor.py", "floati/doctor.py")
     ):
         return "update-readback"
     if (
@@ -114,16 +130,36 @@ def classify(path: str) -> str:
         in (
             "floati/waiter_bundle.py",
             "floati/entrypoint_contract.py",
+            # SEAT-ONBOARD-1: prerequisite observation only; this reader never
+            # installs the global Stop hook or edits its trust registration.
+            "floati/seat_onboarding.py",
             "tools/codex/codex-fleet-bus.py",
             "tests/test_codex_hook_install.py",
+            "tests/test_net_setup.py",
+            # Supported host observers use the same governed stable launcher.
+            "tests/test_host_observer_install.py",
+            "tests/test_host_permission_activity_contracts.py",
+            "tests/test_cursor_host_install.py",
+            # BL-11: the hook-trust guard and stable-launcher gates.
+            "tests/test_bl_11.py",
+            # BL-11-GATEWAY-1: native waiter-shape trust admission controls.
+            "tests/test_codex_gateway_vendor.py",
+            # INSTALL-TRUST-PREFLIGHT-1: Stop-hook write preflight and split subjects.
+            "tests/test_install_trust_preflight.py",
             # READER-SKEW-1 Am.1: the installed-reader seam and its test.
             "tests/test_installed_reader.py",
             "tests/test_hook_preconditions.py",
             "tests/test_operator_contracts.py",
             "tests/test_deploy.py",
+            # ROLLBACK-HOOK-1: host-wiring photograph compared on reverse deploy.
+            "tests/test_rollback_hook_1.py",
             "tests/test_au1_s0.py",
             "tests/test_au1_s2.py",
             "tests/test_wait_command.py",
+            # Host-tool fixture drives the existing native hook entry only.
+            "tests/test_seat_execution_host_tool_native.py",
+            # Scratch setup supplies the already trusted Stop prerequisite.
+            "tests/test_seat_onboard.py",
         )
     ):
         return "install"
@@ -146,22 +182,80 @@ def tracked_paths(root: Path) -> tuple[str, ...]:
 
 def derive_readers(root: Path) -> tuple[tuple[str, int, str], ...]:
     rows = []
-    needle = NEEDLE.encode("utf-8")
     for relative in tracked_paths(root):
-        path = root / relative
-        payload = path.read_bytes()
-        if needle not in payload:
-            continue
-        text = payload.decode("utf-8", "surrogateescape")
-        kind = classify(relative)
-        for number, line in enumerate(text.splitlines(), 1):
-            if NEEDLE in line:
-                rows.append((relative, number, kind))
+        rows.extend(readers_in_payload(relative, (root / relative).read_bytes()))
     return tuple(rows)
 
 
+def readers_in_payload(relative: str, payload: bytes) -> tuple[tuple[str, int, str], ...]:
+    if NEEDLE.encode("utf-8") not in payload:
+        return ()
+    kind = classify(relative)
+    return tuple(
+        (relative, number, kind)
+        for number, line in enumerate(
+            payload.decode("utf-8", "surrogateescape").splitlines(), 1
+        )
+        if NEEDLE in line
+    )
+
+
+def projected_reader_payloads(root: Path, rows) -> dict[str, bytes]:
+    """Expose the known readers, then use the exporter's manifest writer.
+
+    The adapters do not introduce this launcher basename. Reuse the existing
+    source-reader population and adaptation memo rather than performing a
+    second whole-tree census. The manifest writer additionally reads its own
+    bounded file population. Non-reader payloads can retain their source
+    bytes here: their SHA-256 values have fixed width and cannot contain the
+    basename, so they cannot change any reader's manifest line coordinate.
+    """
+
+    from scripts import export_public as exporter
+    from tests.export_inventory import (
+        _adapted_bytes_source, export_policy, published_baseline,
+    )
+
+    adapt = _adapted_bytes_source(
+        root, exporter, export_policy(root), set(published_baseline(root))
+    )
+    payloads = {
+        relative: adapt(relative, (root / relative).read_bytes())
+        for relative in sorted({path for path, _line, _kind in rows})
+    }
+    manifest_relative = "bundle-manifest.v0.json"
+    manifest_source = (root / manifest_relative).read_bytes()
+    manifest = json.loads(manifest_source)
+    projected = {}
+    for entry in manifest["files"]:
+        relative = entry["path"]
+        data = payloads[relative] if relative in payloads else (root / relative).read_bytes()
+        projected[relative] = (data, "100644")
+    projected[manifest_relative] = (
+        payloads.get(manifest_relative, manifest_source), "100644"
+    )
+    # Only the blob-read boundary is replaced: a regenerator must see current
+    # workspace bytes, including an uncommitted regenerated manifest. The real
+    # writer owns digest refresh, JSON ordering, indentation and line endings.
+    with mock.patch.object(exporter, "_blob", return_value=manifest_source):
+        exporter._regenerate_bundle_manifest(
+            projected, {manifest_relative: object()}, root, []
+        )
+    payloads[manifest_relative] = projected[manifest_relative][0]
+    return payloads
+
+
+def projected_reader_census(root: Path, rows) -> tuple[tuple[str, int, str], ...]:
+    return tuple(
+        row
+        for relative, payload in projected_reader_payloads(root, rows).items()
+        for row in readers_in_payload(relative, payload)
+    )
+
+
 def load_pin(root: Path) -> tuple[tuple[str, int, str], ...]:
-    path = root / PIN_RELATIVE
+    relative = PIN_RELATIVE if export_policy_is_present(root) else PROJECTED_PIN_RELATIVE
+    path = root / relative
     if not path.is_file():
         return ()
     rows = []
@@ -234,8 +328,8 @@ class H1F1ReaderMapTests(unittest.TestCase):
     def test_the_pin_predicts_a_real_projection(self) -> None:
         """The census the export ships is the census the pin enumerates.
 
-        Builds one real projection of this tree — exactly the included
-        files, committed — and runs this census inside it. RED in the
+        Builds an included-file fixture, exposes its reader files and uses
+        the real manifest writer, then runs this census inside it. RED in the
         a60df682 rehearsal: the pin enumerated 22 readers the policy
         excludes, so the projected suite failed on readers that had
         deliberately not shipped.
@@ -245,6 +339,9 @@ class H1F1ReaderMapTests(unittest.TestCase):
             self.skipTest("no export policy in this tree; classification is identity")
 
         included = classify_inventory(tracked_files(REPOSITORY_ROOT), root=REPOSITORY_ROOT)
+        exposed_readers = projected_reader_payloads(
+            REPOSITORY_ROOT, load_pin(REPOSITORY_ROOT)
+        )
         with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             base = Path(temporary)
             projection = base / "projection"
@@ -252,7 +349,10 @@ class H1F1ReaderMapTests(unittest.TestCase):
             for relative in included:
                 target = projection / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(REPOSITORY_ROOT / relative, target)
+                if relative in exposed_readers:
+                    target.write_bytes(exposed_readers[relative])
+                else:
+                    shutil.copyfile(REPOSITORY_ROOT / relative, target)
 
             def git(*arguments: str) -> None:
                 environment = {

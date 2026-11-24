@@ -2,33 +2,102 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 import unicodedata
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Mapping, cast
+from typing import Any, Dict, Mapping, Tuple, cast
 
 
 class SchemaValidationError(AssertionError):
     pass
 
 
+# HARBOR-SPEED-R-C: every validation used to re-read, re-parse and re-resolve
+# its schema and each `$ref` target from disk (measured at harbor main
+# 1fa68e48: ~12 Path.resolve() and 2 json.loads per call, ~45% of the 20,232
+# validations test_effects/test_schemas run per Unicode-parity test). Two
+# remedies, neither of which can serve a changed schema stale:
+#
+# * Parsed documents are memoised per process under a CONTENT key -- the
+#   resolved path plus the sha256 of the bytes read on THIS call. Every call
+#   still reads every schema it touches, so an edited, replaced or reverted
+#   file is a new key. The memo is private to this module and `_validate`
+#   only reads documents, so a shared parse is never mutated.
+# * `$ref` resolution -- each referenced FILE's resolved path, and each
+#   (file, fragment) JSON pointer -- is memoised for the duration of ONE call
+#   only, exactly the lifetime the per-call document cache already had.
+_DOCUMENT_MEMO: Dict[Tuple[Path, str], Mapping[str, Any]] = {}
+
+
+class _CallCache:
+    """Per-call state: documents loaded, `$ref` files resolved, pointers followed."""
+
+    __slots__ = ("documents", "paths", "references")
+
+    def __init__(self) -> None:
+        self.documents: Dict[Path, Mapping[str, Any]] = {}
+        self.paths: Dict[Tuple[Path, str], Path] = {}
+        self.references: Dict[
+            Tuple[Path, str],
+            Tuple[Mapping[str, Any], Mapping[str, Any], Path],
+        ] = {}
+
+
 def validate_json_schema(instance: object, schema_path: Path) -> None:
-    cache: Dict[Path, Mapping[str, Any]] = {}
+    cache = _CallCache()
     resolved = Path(schema_path).resolve()
     schema = _load(resolved, cache)
     _validate(instance, schema, schema, resolved, "$", cache)
 
 
-def _load(path: Path, cache: Dict[Path, Mapping[str, Any]]) -> Mapping[str, Any]:
-    if path not in cache:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(value, dict):
-            raise SchemaValidationError(f"{path}: schema root is not an object")
-        cache[path] = value
-    return cache[path]
+def _load(path: Path, cache: _CallCache) -> Mapping[str, Any]:
+    if path not in cache.documents:
+        data = path.read_bytes()
+        key = (path, hashlib.sha256(data).hexdigest())
+        value = _DOCUMENT_MEMO.get(key)
+        if value is None:
+            # Path.read_text decodes with universal newlines; do exactly that.
+            text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+            value = json.loads(text)
+            if not isinstance(value, dict):
+                raise SchemaValidationError(f"{path}: schema root is not an object")
+            _DOCUMENT_MEMO[key] = value
+        cache.documents[path] = value
+    return cache.documents[path]
+
+
+def _dereference(
+    reference: str,
+    document: Mapping[str, Any],
+    schema_path: Path,
+    location: str,
+    cache: _CallCache,
+) -> Tuple[Mapping[str, Any], Mapping[str, Any], Path]:
+    """(target schema, its document, its path) for one `$ref`, once per call."""
+
+    key = (schema_path, reference)
+    resolved = cache.references.get(key)
+    if resolved is None:
+        target_name, _, fragment = reference.partition("#")
+        if not target_name:
+            target_path = schema_path
+        else:
+            # Many fragments of one file: resolve the file once per call.
+            path_key = (schema_path, target_name)
+            cached_path = cache.paths.get(path_key)
+            if cached_path is None:
+                cached_path = (schema_path.parent / target_name).resolve()
+                cache.paths[path_key] = cached_path
+            target_path = cached_path
+        target_document = document if target_path == schema_path else _load(target_path, cache)
+        target = _pointer(target_document, fragment, location)
+        resolved = (target, target_document, target_path)
+        cache.references[key] = resolved
+    return resolved
 
 
 def _pointer(document: object, fragment: str, location: str) -> Mapping[str, Any]:
@@ -92,14 +161,13 @@ def _validate(
     document: Mapping[str, Any],
     schema_path: Path,
     location: str,
-    cache: Dict[Path, Mapping[str, Any]],
+    cache: _CallCache,
 ) -> None:
     reference = schema.get("$ref")
     if isinstance(reference, str):
-        target_name, _, fragment = reference.partition("#")
-        target_path = schema_path if not target_name else (schema_path.parent / target_name).resolve()
-        target_document = document if target_path == schema_path else _load(target_path, cache)
-        target = _pointer(target_document, fragment, location)
+        target, target_document, target_path = _dereference(
+            reference, document, schema_path, location, cache
+        )
         _validate(instance, target, target_document, target_path, location, cache)
         return
 
@@ -310,8 +378,12 @@ def _validate(
             if parsed.tzinfo is None or parsed.utcoffset() is None:
                 raise SchemaValidationError(f"{location}: date-time has no offset")
 
-    if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+    if _is_json_number(instance):
         if "minimum" in schema and instance < schema["minimum"]:
             raise SchemaValidationError(f"{location}: value is below minimum")
         if "maximum" in schema and instance > schema["maximum"]:
             raise SchemaValidationError(f"{location}: value is above maximum")
+        if "exclusiveMinimum" in schema and instance <= schema["exclusiveMinimum"]:
+            raise SchemaValidationError(f"{location}: value is not above exclusive minimum")
+        if "exclusiveMaximum" in schema and instance >= schema["exclusiveMaximum"]:
+            raise SchemaValidationError(f"{location}: value is not below exclusive maximum")

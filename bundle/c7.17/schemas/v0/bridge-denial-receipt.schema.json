@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/bridge-denial-receipt.schema.json",
+  "title": "Floati Bridge Denial Receipt v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "bridge_id", "source_tenant_id", "destination_tenant_id", "direction", "reason_code", "stamp"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^bridge-denial-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "bridge_denial"},
+    "bridge_id": {"type": "string", "pattern": "^bridge-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "source_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "destination_tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "direction": {"enum": ["left_to_right", "right_to_left", "invalid"]},
+    "reason_code": {"enum": ["bridge_same_root", "bridge_consent_missing", "bridge_consent_revoked", "bridge_consent_mismatch", "bridge_not_active", "bridge_direction_invalid", "bridge_sender_inactive", "bridge_recipient_inactive", "bridge_transport_forbidden", "bridge_root_unknown"]},
+    "stamp": {"const": "advisory_not_consumption"}
+  }
+}

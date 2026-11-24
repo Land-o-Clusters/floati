@@ -4,18 +4,23 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import re
+import stat
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
 
 from .command_scope import CommandScope
-from .errors import ProtocolRefusal, SnapshotRefusal
+from .bus_epoch import epoch_guard
+from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
 from .consumption import ConsumptionLedger, WORK_KINDS
+from .message_consumption import MessageConsumption
 from .effects import EffectLedger, EffectProjection
 from .events import EVENT_KINDS
-from .jsonl import read_records_snapshot
-from .records import EFFECT_KINDS, THREAD_OBSERVATION_KINDS
+from .jsonl import read_records_sealed_snapshot, read_records_snapshot
+from .records import EFFECT_KINDS, THREAD_OBSERVATION_KINDS, WAKE_HOLD_KINDS
 from .registry import REGISTRY_KINDS, Registry
 from .root import FloatiRoot
 from .snapshot import SnapshotStore, SourceSpec
@@ -250,7 +255,121 @@ class ThreadObservationStatusProjection:
             "detached_total": sum(bool(row["detached"]) for row in rows),
         }
 
+
+def provider_state_size(root: FloatiRoot, profile: Mapping[str, object]) -> Dict[str, object]:
+    """Count only bounded descriptor-bound metadata, never conversation content."""
+    try:
+        coordinates = {"root": root.tenant_home,
+            "provider_state": root.tenant_home / str(profile["provider_state"])}
+        with root.bind_adhoc_coordinates(coordinates) as (identities, descriptors):
+            if any(identities[key] != profile["filesystem_bindings"][key]
+                   for key in coordinates):
+                raise ValueError("replaced provider directory")
+            remaining, total = 4096, 0
+            def count(directory, depth):
+                nonlocal remaining, total
+                metadata = os.fstat(directory)
+                if depth > 64 or metadata.st_uid != os.geteuid():
+                    raise ValueError("unsafe directory")
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        remaining -= 1
+                        if remaining < 0:
+                            raise ValueError("metadata enumeration bound")
+                        info = entry.stat(follow_symlinks=False)
+                        if info.st_uid != os.geteuid():
+                            raise ValueError("foreign provider entry")
+                        if stat.S_ISDIR(info.st_mode):
+                            child = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                dir_fd=directory)
+                            try:
+                                actual = os.fstat(child)
+                                if (actual.st_dev, actual.st_ino) != (info.st_dev, info.st_ino):
+                                    raise ValueError("changed directory")
+                                count(child, depth + 1)
+                            finally:
+                                os.close(child)
+                        elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                            total += info.st_size
+                            if total > 2 ** 63 - 1:
+                                raise ValueError("metadata size bound")
+                        else:
+                            raise ValueError("nonordinary provider entry")
+            slot = descriptors["provider_state"]
+            if stat.S_IMODE(os.fstat(slot).st_mode) != 0o700:
+                raise ValueError("provider slot is not private")
+            count(slot, 0)
+            return {"value": total, "evidence_class": "measured"}
+    except (OSError, ProtocolRefusal, ValueError, KeyError, TypeError):
+        return {"value": None, "evidence_class": "unknown", "reason": "provider_state_unsafe"}
+
+
+class AdhocThreadStatusProjection:
+    """Join durable execution references without asking a provider for status."""
+
+    def __init__(self, root: FloatiRoot) -> None:
+        self.root = root
+
+    def artifact(self, now: datetime) -> Dict[str, object]:
+        from .adhoc_profiles import AdhocProfiles
+        from .adhoc_journal import AdhocJournal
+        from .work import WorkLog
+
+        profiles = AdhocProfiles(self.root).records()
+        if not profiles:
+            return {"profiles": []}
+        history = AdhocJournal(self.root).records()
+        registry = Registry(self.root).known_records()
+        active_nodes = set(Registry(self.root).active_node_ids())
+        leases = {row["id"]: row for row in registry
+            if row["kind"] == "node_lease"}
+        workers = WorkerReceipts(self.root).records()
+        rows = []
+        for profile in profiles:
+            admissions = [row for row in history if row["kind"] == "adhoc_dispatch_record"
+                and row["profile_id"] == profile["id"]]
+            latest = admissions[-1] if admissions else None
+            phases = [row for row in history if latest is not None
+                and row.get("dispatch_id") == latest["dispatch_id"]
+                and row["kind"] != "adhoc_dispatch_record"]
+            coordinate, native_id = None, None
+            for phase in phases:
+                evidence = phase["evidence"]
+                if phase["kind"] == "adhoc_native_thread_opened_record":
+                    coordinate = evidence.get("provider_coordinate")
+                    native_id = phase["id"]
+                elif phase.get("phase") == "provider_terminal":
+                    event = evidence.get("event", {})
+                    if event.get("provider_coordinate") is not None:
+                        coordinate, native_id = event["provider_coordinate"], phase["id"]
+            work_id = latest["dispatch"]["work_item_id"] if latest else None
+            work_state = None
+            if work_id is not None:
+                work_state = WorkLog(self.root).show(work_id)[0]["state"]
+            lease = leases.get(profile["node_lease_id"])
+            current_lease = next((row for row in reversed(registry)
+                if row.get("kind") == "node_lease" and row.get("node_id") == profile["node_id"]), None)
+            lease_active = (profile["node_id"] in active_nodes and lease is not None
+                and current_lease == lease and lease["state"] == "active"
+                and now < datetime.fromisoformat(str(lease["expires_at"]).replace("Z", "+00:00")))
+            phase = phases[-1].get("phase", "provider_opened") if phases else "admitted" if latest else "profiled"
+            rows.append({"profile_id": profile["id"], "node_id": profile["node_id"],
+                "node_lease_id": profile["node_lease_id"], "lane_opening_id": profile["lane_opening_id"],
+                "adapter": profile["adapter"], "dispatch_id": latest["dispatch_id"] if latest else None,
+                "phase": phase,
+                "work_item_id": work_id, "work_state": work_state,
+                "worker_receipt_ids": [row["id"] for row in workers if row["work_item_id"] == work_id],
+                "native_receipt_id": native_id, "provider_coordinate": copy.deepcopy(coordinate),
+                "provider_status": {"value": "unknown", "evidence_class": "unknown"},
+                "observation_reason": "not_observed", "lease_active": lease_active,
+                "history_state": "retained" if lease_active and phase != "teardown_completed" else "inactive_non_resumable",
+                "provider_state_bytes": provider_state_size(self.root, profile)})
+        return {"profiles": rows}
+
+
 class FleetProjection:
+    MESSAGE_PROGRESS_OBSERVATION_VERSION = 1
+
     def __init__(self, root: FloatiRoot) -> None:
         self.root = root
 
@@ -260,7 +379,17 @@ class FleetProjection:
         *,
         scope: Optional[CommandScope] = None,
     ) -> Dict[str, object]:
-        snapshot, _ = self._snapshot(now)
+        from .mail_summary import observe
+        from .send_prefix import _CACHE_ERRORS
+
+        mail = observe(self.root)
+        if mail is not None:
+            try:
+                snapshot, _ = self._summary_snapshot(now, mail)
+            except _CACHE_ERRORS:
+                snapshot, _ = self._snapshot(now)
+        else:
+            snapshot, _ = self._snapshot(now)
         if scope is not None:
             snapshot["scope"] = scope.evidence()
         return snapshot
@@ -287,7 +416,25 @@ class FleetProjection:
                     before_scan = store.capture()
                 except SnapshotRefusal:
                     pass
-            snapshot, mode = self._snapshot(current)
+            from .status_snapshot import StatusSnapshotStore
+            from .send_prefix import _CACHE_ERRORS
+
+            mail = store.observation if isinstance(store, StatusSnapshotStore) else None
+            if mail is not None:
+                try:
+                    snapshot, mode = self._summary_snapshot(current, mail)
+                except _CACHE_ERRORS:
+                    # Disposable proof failure must retain the complete native
+                    # reader and its original authoritative-source anchors.
+                    store = SnapshotStore(self.root, reader="status", key="default",
+                                          discover_sources=self._status_sources)
+                    try:
+                        before_scan = store.capture()
+                    except SnapshotRefusal:
+                        before_scan = None
+                    snapshot, mode = self._snapshot(current)
+            else:
+                snapshot, mode = self._snapshot(current)
             artifact = {
                 "status_schema_version": 0,
                 "kind": "fleet_status",
@@ -298,6 +445,7 @@ class FleetProjection:
             }
             payload = {
                 "artifact": artifact,
+                "message_progress_observation_version": self.MESSAGE_PROGRESS_OBSERVATION_VERSION,
                 "work_states": ConsumptionLedger(self.root).project(),
                 "built_at": self._timestamp(current),
                 "time_sensitive": self._status_time_sensitive(),
@@ -328,6 +476,17 @@ class FleetProjection:
         return now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     def _status_snapshot_store(self) -> SnapshotStore:
+        from .mail_summary import observe
+        from .status_snapshot import StatusSnapshotStore
+        from .send_prefix import _CACHE_ERRORS
+
+        mail = observe(self.root)
+        if mail is not None:
+            try:
+                return StatusSnapshotStore(self.root, observation=mail,
+                                           discover_sources=self._status_sources)
+            except (SnapshotRefusal, *_CACHE_ERRORS):
+                pass
         return SnapshotStore(
             self.root,
             reader="status",
@@ -336,7 +495,12 @@ class FleetProjection:
         )
 
     def _status_sources(self) -> Sequence[SourceSpec]:
+        from .adhoc_records import PROFILE_RELATIVE, JOURNAL_RELATIVE
+        from .adhoc_profiles import PROFILE_KINDS
+        from .adhoc_journal import JOURNAL_KINDS
         sources = [
+            SourceSpec(PROFILE_RELATIVE, frozenset(PROFILE_KINDS)),
+            SourceSpec(JOURNAL_RELATIVE, frozenset(JOURNAL_KINDS)),
             SourceSpec(Path("registry/entries.jsonl"), frozenset(REGISTRY_KINDS)),
             SourceSpec(Path("events.jsonl"), frozenset(EVENT_KINDS)),
             SourceSpec(ConsumptionLedger.relative_path, frozenset(WORK_KINDS)),
@@ -353,8 +517,11 @@ class FleetProjection:
             ),
         ]
         for directory, kinds in (
-            ("receipts/deliveries", frozenset({"delivery_receipt", "wake_hold_receipt"})),
+            ("receipts/stop-holds", frozenset({"stop_hold_receipt"})),
+            ("receipts/deliveries", frozenset({"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"})),
             ("receipts/acks", frozenset({"ack_receipt"})),
+            ("receipts/consumed", frozenset({"consumption_receipt"})),
+            ("receipts/wakes", frozenset({"wake_attempt_receipt"})),
             ("authority-grants", frozenset({"authority_grant"})),
             ("mutual-exclusion-holds", frozenset({"mutual_exclusion_hold"})),
             ("liveness-presence", frozenset({"liveness_presence"})),
@@ -363,9 +530,15 @@ class FleetProjection:
         ):
             absolute = self.root.resolve_relative(directory)
             if absolute.is_dir():
+                paths = list(absolute.glob("*.jsonl"))
+                if directory in {"receipts/deliveries", "receipts/acks", "receipts/consumed"}:
+                    # Worker-session ledgers live at node/session-hash.jsonl.
+                    # All three planes affect message_progress, so a warm
+                    # status or harbor snapshot must observe their appends.
+                    paths.extend(absolute.glob("*/*.jsonl"))
                 sources.extend(
                     SourceSpec(path.relative_to(self.root.tenant_home), kinds)
-                    for path in sorted(absolute.glob("*.jsonl"))
+                    for path in sorted(paths)
                 )
         return tuple(sources)
 
@@ -383,7 +556,18 @@ class FleetProjection:
             path = self.root.resolve_relative(source.relative)
             if path.is_file() and path.stat().st_size:
                 return True
-        return False
+        return self._registry_has_active_node_lease()
+
+    def _registry_has_active_node_lease(self) -> bool:
+        """An active node lease expires with the clock, so a warm status must rebuild."""
+
+        from .registry import read_registry_compatible
+
+        records, _unrecognized, _versions = read_registry_compatible(self.root)
+        return any(
+            record.get("kind") == "node_lease" and record.get("state") == "active"
+            for record in records
+        )
 
     def _status_from_snapshot(
         self,
@@ -396,6 +580,7 @@ class FleetProjection:
             "work_states",
             "built_at",
             "time_sensitive",
+            "message_progress_observation_version",
         }:
             raise SnapshotRefusal(
                 "snapshot_payload_invalid", "status snapshot fields are invalid"
@@ -405,7 +590,9 @@ class FleetProjection:
         built_at = payload["built_at"]
         time_sensitive = payload["time_sensitive"]
         if (
-            not isinstance(artifact, dict)
+            type(payload["message_progress_observation_version"]) is not int
+            or payload["message_progress_observation_version"] != self.MESSAGE_PROGRESS_OBSERVATION_VERSION
+            or not isinstance(artifact, dict)
             or not isinstance(work_states, dict)
             or not isinstance(built_at, str)
             or not isinstance(time_sensitive, bool)
@@ -425,14 +612,23 @@ class FleetProjection:
             )
         nodes = result.get("nodes")
         if not isinstance(nodes, list) or any(
-            not isinstance(node, dict) or "wake_health" not in node
+            not isinstance(node, dict) or not isinstance(node.get("wake_health"), dict)
+            or "recent_sessions" not in node["wake_health"]
+            or "seat_attention" not in node
+            or node.get("lifetime") not in {"permanent", "temporary"}
+            or not self._valid_message_progress(node.get("message_progress"))
             for node in nodes
         ):
             raise SnapshotRefusal(
                 "snapshot_payload_invalid",
-                "status snapshot predates wake-health testimony",
+                "status snapshot predates recent-session testimony",
             )
         result["observed_at"] = self._timestamp(now)
+        adhoc = AdhocThreadStatusProjection(self.root).artifact(now)
+        if adhoc["profiles"]:
+            result["adhoc_threads"] = adhoc
+        else:
+            result.pop("adhoc_threads", None)
 
         unsupported = set()
         work_tail: Sequence[Dict[str, object]] = ()
@@ -469,7 +665,30 @@ class FleetProjection:
             result["consumption"]["state"] = (
                 "work_available" if counts["open"] else "caught_up"
             )
+        # Cursor journals are best-effort state, not governed SnapshotStore
+        # records. Reobserve only this bounded hour on a cache hit, including
+        # when the clock advances without a ledger write.
+        from .wake_health import WakeHealthProjection
+
+        wake_health = WakeHealthProjection(self.root)
+        for node in result["nodes"]:
+            node["wake_health"]["recent_sessions"] = wake_health.recent_sessions(
+                str(node["node_id"]), now,
+            )
         return result
+
+    @staticmethod
+    def _valid_message_progress(value: object) -> bool:
+        if isinstance(value, dict) and value.get("state") == "unknown":
+            return (set(value) == {"state", "reason_code", "delivered", "acknowledged", "consumed"}
+                    and isinstance(value.get("reason_code"), str)
+                    and re.fullmatch(r"[a-z][a-z0-9_]{0,127}", value["reason_code"]) is not None
+                    and all(value[key] is None for key in ("delivered", "acknowledged", "consumed")))
+        return (
+            isinstance(value, dict)
+            and set(value) == {"delivered", "acknowledged", "consumed"}
+            and all(type(count) is int and count >= 0 for count in value.values())
+        )
 
     @staticmethod
     def _apply_status_event_tail(
@@ -516,12 +735,30 @@ class FleetProjection:
                 )
 
     def _snapshot(self, now: datetime) -> tuple[Dict[str, object], str]:
-        supervised = Supervisor(self.root).snapshot(now)
+        # Retain the independent native projection for cold recovery and
+        # census equivalence. Only the status producer supplies a certified
+        # mail observation to the shared projection below.
+        return self._project_snapshot(now)
+
+    def _summary_snapshot(self, now: datetime, mail) -> tuple[Dict[str, object], str]:
+        from .send_prefix import CacheMiss
+
+        if not mail.current():
+            raise CacheMiss()
+        result = self._project_snapshot(now, mail=mail)
+        if not mail.current():
+            raise CacheMiss()
+        return result
+
+    def _project_snapshot(self, now: datetime, *, mail=None) -> tuple[Dict[str, object], str]:
+        supervisor = Supervisor(self.root)
+        supervised = supervisor.snapshot(now, mail=False if mail is None else mail)
         from .wake_health import WakeHealthProjection
 
         wake_health = WakeHealthProjection(self.root)
         for node in supervised["nodes"]:
-            node["wake_health"] = wake_health.fact(str(node["node_id"]), now)
+            node["wake_health"] = (wake_health.fact(str(node["node_id"]), now, mail=False) if mail is None
+                                   else wake_health.fact(str(node["node_id"]), now, mail=mail))
         consumption = ConsumptionLedger(self.root).summary()
         work_counts = dict(consumption["counts"])
         worker_refusals = WorkerRefusals(self.root).records()
@@ -530,8 +767,10 @@ class FleetProjection:
         else:
             consumption["wake_state"] = "none"
         receipt_counts = {
-            "delivery": self._count_directory("receipts/deliveries", "delivery_receipt"),
-            "ack": self._count_directory("receipts/acks", "ack_receipt"),
+            "delivery": (mail.receipt_counts["delivery"] if mail is not None else
+                         self._count_directory("receipts/deliveries", "delivery_receipt", allowed=set(WAKE_HOLD_KINDS))),
+            "ack": (mail.receipt_counts["ack"] if mail is not None else
+                    self._count_directory("receipts/acks", "ack_receipt")),
             "denial": len(read_records_snapshot(self.root, "receipts/denials.jsonl", allowed_kinds={"denial_receipt"})),
         }
         snapshot = {
@@ -547,32 +786,47 @@ class FleetProjection:
             "threads": ThreadObservationStatusProjection(self.root).summary(),
             "unrecognized_kinds": supervised["unrecognized_kinds"],
         }
+        adhoc = AdhocThreadStatusProjection(self.root).artifact(now)
+        if adhoc["profiles"]:
+            snapshot["adhoc_threads"] = adhoc
         return snapshot, str(supervised["mode"])
 
     def receipts(self, node_id: str) -> Dict[str, object]:
-        Registry(self.root).require_active(node_id)
-        deliveries = read_records_snapshot(
-            self.root, Path("receipts/deliveries") / f"{node_id}.jsonl",
-            allowed_kinds={"delivery_receipt", "wake_hold_receipt"},
-        )
-        acknowledgments = read_records_snapshot(
-            self.root, Path("receipts/acks") / f"{node_id}.jsonl",
-            allowed_kinds={"ack_receipt"},
-        )
-        denials = [
-            record for record in read_records_snapshot(
-                self.root, "receipts/denials.jsonl", allowed_kinds={"denial_receipt"}
+        with epoch_guard(self.root):
+            Registry(self.root).require_active(node_id)
+            deliveries = read_records_sealed_snapshot(
+                self.root, Path("receipts/deliveries") / f"{node_id}.jsonl",
+                allowed_kinds={"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"},
             )
-            if node_id in (record["claimed_sender"], record["claimed_recipient"])
-        ]
-        return {"node_id": node_id, "deliveries": [row for row in deliveries if row["kind"] == "delivery_receipt"], "acks": acknowledgments, "denials": denials}
+            acknowledgments = read_records_sealed_snapshot(
+                self.root, Path("receipts/acks") / f"{node_id}.jsonl",
+                allowed_kinds={"ack_receipt"},
+            )
+            denials = [
+                record for record in read_records_sealed_snapshot(
+                    self.root, "receipts/denials.jsonl", allowed_kinds={"denial_receipt"}
+                )
+                if node_id in (record["claimed_sender"], record["claimed_recipient"])
+            ]
+            ledger = MessageConsumption(self.root)
+            progress = ledger.progress(node_id, sealed=True)
+            consumptions = []
+            if progress.get("state") != "unknown":
+                try:
+                    consumptions = ledger.records(node_id, sealed=True)
+                except IntegrityFailure as error:
+                    progress = ledger.unknown_progress(error)
+            result = {"node_id": node_id, "deliveries": [row for row in deliveries if row["kind"] in ("delivery_receipt", "delivered_unpresented")], "acks": acknowledgments, "consumptions": consumptions, "denials": denials}
+            if progress.get("state") == "unknown":
+                result["message_progress"] = progress
+            return result
 
-    def _count_directory(self, directory: str, kind: str) -> int:
+    def _count_directory(self, directory: str, kind: str, *, allowed: Optional[frozenset] = None) -> int:
         absolute = self.root.resolve_relative(directory)
         if not absolute.is_dir():
             return 0
         return sum(
-            sum(1 for row in read_records_snapshot(self.root, path.relative_to(self.root.tenant_home), allowed_kinds={kind, "wake_hold_receipt"}) if row["kind"] == kind)
+            sum(1 for row in read_records_snapshot(self.root, path.relative_to(self.root.tenant_home), allowed_kinds=set(allowed) if allowed is not None else {kind, "wake_hold_receipt"}) if row["kind"] == kind)
             for path in sorted(absolute.glob("*.jsonl"))
         )
 

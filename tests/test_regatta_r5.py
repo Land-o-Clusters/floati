@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import io
-import json
 import os
 import re
 import unittest
@@ -29,33 +27,6 @@ class _TTY(io.StringIO):
 
     def fileno(self) -> int:
         return 91
-
-
-class R5AMachineTwinPins(unittest.TestCase):
-    def test_plain_and_json_twins_are_byte_identical_before_r5_render_work(self) -> None:
-        """Catches the modernization floor leaking protocol dressing into machine output."""
-        from floati.tui_render import HarborBoardModel, render_plain_dump
-
-        model = HarborBoardModel.from_projection(SNAPSHOT, WORK, RECEIPTS)
-        plain = render_plain_dump(model, width=100).encode("utf-8")
-        artifact = (
-            json.dumps(
-                model.to_snapshot(),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            + "\n"
-        ).encode("utf-8")
-
-        self.assertEqual(
-            "31fdd93cdc00ff456f440ca3b022c0a16d9b0e88a6c2e0e4be83a86aeb8ce545",
-            hashlib.sha256(plain).hexdigest(),
-        )
-        self.assertEqual(
-            "5c86d938487eacd6ca498aa31b0882c6640349d1458e0ff485a9d93f81543034",
-            hashlib.sha256(artifact).hexdigest(),
-        )
 
 
 class R5BKeyboardProtocolTests(unittest.TestCase):

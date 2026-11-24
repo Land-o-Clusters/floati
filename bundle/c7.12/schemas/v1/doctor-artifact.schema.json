@@ -1,0 +1,1871 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/doctor-artifact.schema.json",
+  "title": "Floati Doctor Artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "diagnostic_version",
+    "state",
+    "root",
+    "source",
+    "ref",
+    "findings",
+    "unrecognized_kinds",
+    "fleet_update"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "diagnostic_version": {
+      "const": "0"
+    },
+    "state": {
+      "enum": [
+        "healthy",
+        "refused",
+        "unknown",
+        "cannot_speak",
+        "malformed_evidence",
+        "degraded"
+      ]
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "unrecognized_kinds": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "$ref": "#/$defs/unrecognized_kind"
+      }
+    },
+    "fleet_update": {
+      "$ref": "#/$defs/fleet_update"
+    },
+    "archive_retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retained", "expired", "keep_forever", "survivor_checkpoint_bytes"],
+      "properties": {
+        "retained": {"type": "integer", "minimum": 0},
+        "expired": {"type": "integer", "minimum": 0},
+        "keep_forever": {"type": "integer", "minimum": 0},
+        "survivor_checkpoint_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "probe": {
+      "$ref": "#/$defs/probe_report"
+    },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "$defs": {
+    "codex_wait_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id", "window_state", "hook_timeout_seconds",
+        "consent_hook_timeout_seconds", "wait_deadline_seconds",
+        "consent_receipt_id", "consent_error_code", "hook_timeout_source",
+        "wait_deadline_source", "hook_armed", "harness_ceiling_seconds"
+      ],
+      "properties": {
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "window_state": {
+          "enum": ["matched", "mismatch", "consent_unavailable", "workspace_unresolved", "hook_unavailable", "hook_ambiguous"]
+        },
+        "hook_timeout_seconds": {"type": ["integer", "null"], "minimum": 1},
+        "consent_hook_timeout_seconds": {"type": ["integer", "null"], "minimum": 2, "maximum": 86400},
+        "wait_deadline_seconds": {"type": ["integer", "null"], "minimum": 1, "maximum": 86399},
+        "consent_receipt_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "consent_error_code": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "hook_timeout_source": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096},
+        "wait_deadline_source": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "hook_armed": {"type": ["boolean", "null"]},
+        "harness_ceiling_seconds": {"type": "null"}
+      }
+    },
+    "probe_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe_version",
+        "state",
+        "root"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "probe_version": {
+          "const": "0"
+        },
+        "state": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "refused"
+          ]
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "budget_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "total_budget_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "nodes": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "node",
+              "verdict",
+              "elapsed_ticks"
+            ],
+            "properties": {
+              "node": {
+                "$ref": "#/$defs/identifier"
+              },
+              "verdict": {
+                "enum": [
+                  "PASS",
+                  "DEAF"
+                ]
+              },
+              "elapsed_ticks": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/probe_finding"
+              },
+              {
+                "$ref": "#/$defs/refused_root_probe_finding"
+              }
+            ]
+          }
+        },
+        "code": {
+          "$ref": "#/$defs/refusal_code"
+        },
+        "remedy": {
+          "$ref": "#/$defs/refusal_remedy"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "refused"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "detail"
+            ]
+          },
+          "else": {
+            "required": [
+              "budget_seconds",
+              "total_budget_seconds",
+              "nodes",
+              "findings"
+            ],
+            "not": {
+              "required": [
+                "detail"
+              ]
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/transient_remedy_binding"
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "refused"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "findings": {
+                "items": {
+                  "$ref": "#/$defs/probe_finding"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                { "required": ["code"] },
+                { "required": ["remedy"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "probe_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "subject",
+        "detail"
+      ],
+      "properties": {
+        "code": {
+          "const": "delivery_probe"
+        },
+        "severity": {
+          "enum": [
+            "ok",
+            "error"
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/identifier"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remediation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "fleet_update": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "actors"
+          ],
+          "properties": {
+            "state": {
+              "const": "absent"
+            },
+            "actors": {
+              "$ref": "#/$defs/actors"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "const": "unavailable"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "code"
+          ],
+          "properties": {
+            "state": {
+              "const": "integrity_failure"
+            },
+            "code": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]+$"
+            },
+            "remedy": {
+              "$ref": "#/$defs/refusal_remedy"
+            },
+            "refusal_code": {
+              "$ref": "#/$defs/refusal_code"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/$defs/transient_remedy_binding"
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "actors",
+            "operations",
+            "actor",
+            "started_at",
+            "idempotency_key",
+            "plan_digest",
+            "consent_receipt_id",
+            "last_completed_step_receipt_id",
+            "completion_receipt_id",
+            "remaining_steps",
+            "epoch_roll_state",
+            "current_transport_pins",
+            "target_transport_pins",
+            "owner_review_batch_digest",
+            "reader_consequences",
+            "seat_binding_consequences",
+            "seat_exclusions"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "in_progress",
+                "completed"
+              ]
+            },
+            "actors": {
+              "$ref": "#/$defs/actors"
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/fleet_update_operation"
+              }
+            },
+            "actor": {
+              "$ref": "#/$defs/identifier"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "plan_digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "consent_receipt_id": {
+              "type": "string",
+              "pattern": "^update-consent-"
+            },
+            "last_completed_step_receipt_id": {
+              "$ref": "#/$defs/receipt_or_null"
+            },
+            "completion_receipt_id": {
+              "$ref": "#/$defs/receipt_or_null"
+            },
+            "remaining_steps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/remaining_step"
+              }
+            },
+            "epoch_roll_state": {
+              "enum": [
+                "not_required",
+                "required",
+                "completed"
+              ]
+            },
+            "current_transport_pins": {
+              "$ref": "#/$defs/transport_pins"
+            },
+            "target_transport_pins": {
+              "$ref": "#/$defs/transport_pins"
+            },
+            "owner_review_batch_digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "reader_consequences": {
+              "$ref": "fleet-update-receipt.schema.json#/properties/reader_consequences"
+            },
+            "seat_binding_consequences": {
+              "$ref": "fleet-update-receipt.schema.json#/properties/seat_binding_consequences"
+            },
+            "seat_exclusions": {
+              "$ref": "fleet-update-receipt.schema.json#/properties/seat_exclusions"
+            }
+          }
+        }
+      ]
+    },
+    "fleet_update_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "actor",
+        "started_at",
+        "idempotency_key",
+        "plan_digest",
+        "consent_receipt_id",
+        "last_completed_step_receipt_id",
+        "completion_receipt_id",
+        "remaining_steps",
+        "epoch_roll_state",
+        "current_transport_pins",
+        "target_transport_pins",
+        "owner_review_batch_digest",
+        "reader_consequences",
+        "seat_binding_consequences",
+        "seat_exclusions"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "in_progress",
+            "completed"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/identifier"
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "plan_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "consent_receipt_id": {
+          "type": "string",
+          "pattern": "^update-consent-"
+        },
+        "last_completed_step_receipt_id": {
+          "$ref": "#/$defs/receipt_or_null"
+        },
+        "completion_receipt_id": {
+          "$ref": "#/$defs/receipt_or_null"
+        },
+        "remaining_steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/remaining_step"
+          }
+        },
+        "epoch_roll_state": {
+          "enum": [
+            "not_required",
+            "required",
+            "completed"
+          ]
+        },
+        "current_transport_pins": {
+          "$ref": "#/$defs/transport_pins"
+        },
+        "target_transport_pins": {
+          "$ref": "#/$defs/transport_pins"
+        },
+        "owner_review_batch_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reader_consequences": {
+          "$ref": "fleet-update-receipt.schema.json#/properties/reader_consequences"
+        },
+        "seat_binding_consequences": {
+          "$ref": "fleet-update-receipt.schema.json#/properties/seat_binding_consequences"
+        },
+        "seat_exclusions": {
+          "$ref": "fleet-update-receipt.schema.json#/properties/seat_exclusions"
+        }
+      }
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receipt_or_null": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^fleet-update-"
+        }
+      ]
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "transport_pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "source_sha"
+      ],
+      "properties": {
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "remaining_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ordinal",
+        "coordinate"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "shared_install",
+            "waiter_binding",
+            "epoch_roll",
+            "transport_pins"
+          ]
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "coordinate": {
+          "$ref": "#/$defs/step_coordinate"
+        }
+      }
+    },
+    "step_coordinate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "destination",
+            "metadata_relative"
+          ],
+          "properties": {
+            "kind": {
+              "const": "shared_install"
+            },
+            "destination": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "metadata_relative": {
+              "const": ".floati-install/manifest.v0.json"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "index",
+            "configuration",
+            "store",
+            "trust_key"
+          ],
+          "properties": {
+            "kind": {
+              "const": "waiter_binding"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "configuration": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "store": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "trust_key": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "epoch_roll"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "registry",
+            "transport"
+          ],
+          "properties": {
+            "kind": {
+              "const": "transport_pins"
+            },
+            "registry": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "transport": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        }
+      ]
+    },
+    "unrecognized_kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "count",
+        "first_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "first_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "subject",
+        "detail",
+        "remediation"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "remote_control_workers"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "remote_control_workers"
+            ],
+            "properties": {
+              "subject": {
+                "const": "host"
+              }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "remote_control_workers": {
+                    "properties": {
+                      "classification": {
+                        "const": 1
+                      }
+                    }
+                  },
+                  "severity": {
+                    "const": "info"
+                  },
+                  "remediation": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "remote_control_workers": {
+                    "properties": {
+                      "classification": {
+                        "const": 2
+                      }
+                    }
+                  },
+                  "severity": {
+                    "const": "warning"
+                  },
+                  "remediation": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "remote_control_workers"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "lane_workspaces"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "lane_workspaces"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "lane_workspaces"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "host_disk_watch"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "disk_watch"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "disk_watch"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "delivery_health"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "oldest_unread"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "oldest_unread"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "version_skew"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "vocabulary_skew",
+              "older_readers"
+            ]
+          },
+          "else": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "vocabulary_skew"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "older_readers"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "bus_epoch_roll_reconciled"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "epoch_roll"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "epoch_roll"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "wake_health",
+                  "wake_receipt_legacy_unreadable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "wake_health"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "wake_health"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "wake_receipt_legacy_unreadable"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "read_finding"
+            ],
+            "properties": {
+              "severity": {
+                "const": "error"
+              },
+              "wake_health": {
+                "required": [
+                  "read_finding"
+                ]
+              }
+            }
+          },
+          "else": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "read_finding"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "wake_health": {
+                    "not": {
+                      "required": [
+                        "read_finding"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "acknowledgment_health"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "acknowledgment"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "acknowledgment"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "effect_reconciliation_interpreter_trust"
+              },
+              "severity": {
+                "const": "warning"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "interpreter_trust"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "interpreter_trust"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "hook_trust"
+            ]
+          },
+          "then": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "codex_wait_hook_trust",
+                  "host_codex_wait_hook_trust"
+                ]
+              }
+            },
+            "required": [
+              "hook_trust_key",
+              "hook_trust",
+              "hook_trust_status",
+              "hook_trust_current_hash",
+              "hook_trust_observed_hash",
+              "hook_enabled",
+              "hook_armed",
+              "hook_trust_remediation"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "hook_trust_key"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_trust_status"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_trust_current_hash"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_trust_observed_hash"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_enabled"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_armed"
+                  ]
+                },
+                {
+                  "required": [
+                    "hook_trust_remediation"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {"required": ["code"], "properties": {"code": {"enum": ["codex_wait_window", "host_codex_wait_window"]}}},
+          "then": {"required": ["wait_window"]},
+          "else": {"not": {"required": ["wait_window"]}}
+        },
+        {
+          "$ref": "#/$defs/transient_remedy_binding"
+        }
+      ],
+      "properties": {
+        "wait_window": {
+          "$ref": "#/$defs/codex_wait_window"
+        },
+        "remote_control_workers": {
+          "$ref": "#/$defs/remote_control_workers"
+        },
+        "lane_workspaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nodes",
+            "unmanaged_bytes"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "node_id",
+                  "open_lanes",
+                  "oldest_open_age_seconds"
+                ],
+                "properties": {
+                  "node_id": {
+                    "$ref": "#/$defs/identifier"
+                  },
+                  "open_lanes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "oldest_open_age_seconds": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0
+                  }
+                }
+              }
+            },
+            "unmanaged_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?$"
+        },
+        "severity": {
+          "enum": [
+            "ok",
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "remediation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        },
+        "installed_reader": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source_sha",
+            "reference_sha",
+            "commits_behind",
+            "state"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "transport",
+                "waiter"
+              ]
+            },
+            "source_sha": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "reference_sha": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "commits_behind": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "state": {
+              "enum": [
+                "absent",
+                "unavailable",
+                "diverged",
+                "behind",
+                "current",
+                "ahead"
+              ]
+            }
+          }
+        },
+        "installer_shadow": {
+          "$ref": "fleet-status-artifact.schema.json#/$defs/installer_shadow"
+        },
+        "disk_watch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "exit",
+            "floor_bytes",
+            "free_bytes",
+            "build_bytes",
+            "trees",
+            "partial",
+            "reason",
+            "build_names"
+          ],
+          "properties": {
+            "exit": {
+              "enum": [0, 1, 2]
+            },
+            "floor_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "free_bytes": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            },
+            "build_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "partial": {
+              "type": "boolean"
+            },
+            "reason": {
+              "anyOf": [
+                {"type": "null"},
+                {
+                  "enum": [
+                    "walk_capped",
+                    "statvfs_unavailable",
+                    "tree_unreadable"
+                  ]
+                }
+              ]
+            },
+            "build_names": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "trees": {
+              "type": "array",
+              "maxItems": 4096,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "build_bytes", "partial", "reason"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "pattern": "^/"
+                  },
+                  "build_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "partial": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {"type": "null"},
+                      {
+                        "enum": ["walk_capped", "tree_unreadable"]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "oldest_unread": {
+          "$ref": "fleet-status-artifact.schema.json#/$defs/oldest_unread"
+        },
+        "vocabulary_skew": {
+          "$ref": "#/$defs/vocabulary_skew"
+        },
+        "older_readers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reader_schema_version",
+              "ledger_newest_kind"
+            ],
+            "properties": {
+              "reader_schema_version": {
+                "const": "0"
+              },
+              "ledger_newest_kind": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,127}$"
+              }
+            }
+          }
+        },
+        "epoch_roll": {
+          "$ref": "#/$defs/epoch_roll"
+        },
+        "wake_health": {
+          "$ref": "wake-health-fact.schema.json"
+        },
+        "read_finding": {
+          "$ref": "wake-health-fact.schema.json#/$defs/read_finding"
+        },
+        "acknowledgment": {
+          "$ref": "#/$defs/acknowledgment_health"
+        },
+        "interpreter_trust": {
+          "$ref": "#/$defs/interpreter_trust"
+        },
+        "hook_trust_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "hook_trust": {
+          "enum": [
+            "trusted",
+            "untrusted_pending_user"
+          ]
+        },
+        "hook_trust_status": {
+          "enum": [
+            "trusted",
+            "modified",
+            "untrusted"
+          ]
+        },
+        "hook_trust_current_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "hook_trust_observed_hash": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "hook_enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hook_armed": {
+          "type": "boolean"
+        },
+        "hook_trust_remediation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        },
+        "hook_group_index": {
+          "type": "integer",
+          "description": "BL-11: zero-based index of the Floati waiter's Stop-hook group in the Codex hooks document; names the exact hook in the ruled banner."
+        },
+        "remedy": {
+          "$ref": "#/$defs/refusal_remedy"
+        },
+        "refusal_code": {
+          "$ref": "#/$defs/refusal_code"
+        }
+      }
+    },
+    "acknowledgment_health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivered_unacknowledged_count",
+        "oldest_attention_minutes",
+        "oldest_message_id",
+        "acknowledged_count",
+        "latencies",
+        "cadence",
+        "sla"
+      ],
+      "properties": {
+        "delivered_unacknowledged_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "oldest_attention_minutes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "oldest_message_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^msg-"
+        },
+        "acknowledged_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latencies": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/acknowledgment_latency"
+          }
+        },
+        "cadence": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+        },
+        "sla": {
+          "const": "undeclared"
+        }
+      }
+    },
+    "acknowledgment_latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_id",
+        "seconds"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "pattern": "^msg-"
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "remote_control_workers": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification",
+            "workers",
+            "in_seat"
+          ],
+          "properties": {
+            "classification": {
+              "const": 1
+            },
+            "workers": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in_seat": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "classification",
+            "workers",
+            "in_seat",
+            "seats",
+            "foreign_workers"
+          ],
+          "properties": {
+            "classification": {
+              "const": 2
+            },
+            "workers": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in_seat": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seats": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "workspace",
+                  "pid"
+                ],
+                "properties": {
+                  "workspace": {
+                    "type": "string",
+                    "pattern": "^/"
+                  },
+                  "pid": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            },
+            "foreign_workers": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "interpreter_trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interpreter_path",
+        "failing_component",
+        "component_uid",
+        "component_mode"
+      ],
+      "properties": {
+        "interpreter_path": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "failing_component": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "component_uid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "component_mode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "epoch_roll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "tenant_id",
+        "request",
+        "classification",
+        "direction",
+        "receipt"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "PREPARED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "direction": {
+                "const": "rollback"
+              },
+              "receipt": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "COMMITTED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "direction": {
+                "const": "roll_forward"
+              },
+              "receipt": {
+                "$ref": "bus-epoch-roll-receipt.schema.json"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/properties/root"
+        },
+        "tenant_id": {
+          "$ref": "bus-epoch-roll-receipt.schema.json#/properties/tenant_id"
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "actor",
+            "idempotency_key",
+            "request_id"
+          ],
+          "properties": {
+            "actor": {
+              "$ref": "bus-epoch-roll-receipt.schema.json#/properties/actor"
+            },
+            "idempotency_key": {
+              "$ref": "bus-epoch-roll-receipt.schema.json#/properties/idempotency_key"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "x-floati-terminal-unsafe": true
+            }
+          }
+        },
+        "classification": {
+          "enum": [
+            "PREPARED",
+            "COMMITTED"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "rollback",
+            "roll_forward"
+          ]
+        },
+        "receipt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "bus-epoch-roll-receipt.schema.json"
+            }
+          ]
+        }
+      }
+    },
+    "vocabulary_skew": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reader_version",
+        "ledger_version",
+        "unknown_kinds",
+        "remedy",
+        "observed_at"
+      ],
+      "properties": {
+        "state": {
+          "const": "version_skew"
+        },
+        "reader_version": {
+          "const": "0"
+        },
+        "ledger_version": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "unknown_kinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,127}$"
+          }
+        },
+        "remedy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "observed_at": {
+          "type": "string",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "refusal_code": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_]{0,126}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "refusal_remedy": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "why"
+          ],
+          "properties": {
+            "kind": {
+              "const": "none"
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "action",
+            "delay_seconds",
+            "holder"
+          ],
+          "properties": {
+            "kind": {
+              "const": "transient"
+            },
+            "action": {
+              "const": "retry_once"
+            },
+            "delay_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            "holder": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$(?![\\s\\S])"
+            }
+          }
+        }
+      ]
+    },
+    "transient_remedy_binding": {
+      "if": {
+        "required": [
+          "remedy"
+        ],
+        "properties": {
+          "remedy": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "transient"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "oneOf": [
+          {
+            "required": [
+              "refusal_code"
+            ],
+            "properties": {
+              "refusal_code": {
+                "const": "ledger_lock_timeout"
+              }
+            }
+          },
+          {
+            "not": {
+              "required": [
+                "refusal_code"
+              ]
+            },
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "code": {
+                "const": "ledger_lock_timeout"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "refused_root_probe_finding": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/finding"
+        },
+        {
+          "required": [
+            "remedy"
+          ],
+          "properties": {
+            "severity": {
+              "const": "error"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

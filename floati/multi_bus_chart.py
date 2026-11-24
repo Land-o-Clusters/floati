@@ -15,7 +15,7 @@ from .errors import ProtocolRefusal
 from .events import EVENT_KINDS, validate_event_records
 from .jsonl import read_records_snapshot
 from .root import FloatiRoot, validate_identifier
-from .registry import read_registry_compatible
+from .registry_prefix import read_catalog
 
 
 _MAX_REGISTRY_BYTES = 1024 * 1024
@@ -270,7 +270,7 @@ class MultiBusHarborChart:
 
     def _bus(self, declaration: Mapping[str, Any]) -> Dict[str, Any]:
         root = FloatiRoot.open_direct_home(declaration["root"])
-        registry, _unrecognized, _versions = read_registry_compatible(root)
+        registry, registry_activity = read_catalog(root)
         events = read_records_snapshot(
             root,
             Path("events.jsonl"),
@@ -301,6 +301,8 @@ class MultiBusHarborChart:
             _parse_time(record["timestamp"])
             for record in [*registry, *events]
         ]
+        if registry_activity is not None:
+            activity.append(_parse_time(registry_activity))
         last = max(activity) if activity else None
         age = None if last is None else max(0, int((self.now - last).total_seconds()))
         return {

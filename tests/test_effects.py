@@ -791,8 +791,11 @@ class EffectCompensationProjectionTests(unittest.TestCase):
             self.proposal, self.compensation_rows["effect_intent"],
             self.compensation_rows["effect_dispatched"], self.compensation_confirmed,
         ]
-        for candidate in (changed, cross):
-            with self.subTest(candidate=candidate), self.assertRaises(IntegrityFailure) as caught:
+        for case_index, candidate in enumerate((changed, cross)):
+            with self.subTest(case=(
+                "foreign-compensation-operation",
+                "foreign-compensation-terminal-evidence",
+            )[case_index]), self.assertRaises(IntegrityFailure) as caught:
                 EffectProjection.from_records(prefix + [candidate])
             self.assertEqual("effect_evidence_invalid", caught.exception.code)
 

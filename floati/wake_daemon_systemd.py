@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import hashlib
+import ctypes
+import errno
 import os
+import re
 import stat
 import subprocess
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Mapping, Optional
 
-from .errors import ProtocolRefusal
+from .errors import DurabilityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .jsonl import read_records_snapshot
+from .root import FloatiRoot
 from .wake_daemon_contract import (
     DAEMON_KINDS,
     AdapterBindingStore,
@@ -84,6 +88,109 @@ def _quote_exec_start(parts: list[str]) -> str:
         )
         quoted.append(f'"{escaped}"')
     return " ".join(quoted)
+
+
+def installed_unit_directories(
+    root: FloatiRoot, node_id: str, harness: str, unit_path: Path, plist_digest: str
+) -> list[dict]:
+    """Read install ownership, including testimony retained by lifecycle rolls.
+
+    Legacy installs have no directory ownership and therefore authorize no
+    directory removal. The unit's exact parent chain bounds every candidate.
+    """
+    relative = Path("receipts/wake-daemon") / f"{node_id}.jsonl"
+    digest = unit_path.name.removeprefix("floati-wake-").removesuffix(".service")
+
+    def paths():
+        yield relative
+        directory = root.path / "receipts" / "wake-daemon"
+        pattern = re.compile(re.escape(node_id) + r"\.(\d{8}T\d{6}Z)(?:-(\d+))?\.jsonl")
+        archives = []
+        for path in directory.glob(f"archive-*/{node_id}.*.jsonl"):
+            match = pattern.fullmatch(path.name)
+            if match is not None:
+                archives.append(((match[1], int(match[2] or 0)), path))
+        for _, path in sorted(archives, reverse=True):
+            yield path.relative_to(root.path)
+
+    ownership = {}
+    for path in paths():
+        rows = read_records_snapshot(root, path, allowed_kinds=DAEMON_KINDS)
+        # Append order, including archive suffix order, is authority. A roll
+        # between the install and ownership append may put them in two files.
+        for row in reversed(rows):
+            if (row.get("node_id") != node_id or row.get("harness") != harness
+                    or row.get("coordinate_digest") != digest):
+                continue
+            if row["kind"] == "wake_daemon_directory_ownership_record":
+                if row["unit_path"] == str(unit_path) and row["unit_digest"] == plist_digest:
+                    ownership.setdefault(row["lifecycle_receipt_id"], row)
+            elif row["kind"] == "wake_daemon_lifecycle_receipt" and row["event"] in {"installed", "removed"}:
+                if row["event"] != "installed" or row["plist_digest"] != plist_digest:
+                    return []
+                candidates = set(list(unit_path.parents)[:3])
+                return [dict(item) for item in ownership.get(row["id"], {}).get("created_directories", [])
+                        if Path(item["path"]) in candidates]
+    return []
+
+
+def _rename_directory_noreplace(parent_fd: int, source: str, target: str) -> None:
+    """Move a directory under its held parent without replacing a raced name."""
+    library = ctypes.CDLL(None, use_errno=True)
+    rename, flag = getattr(library, "renameatx_np", None), 4
+    if rename is None:
+        rename, flag = getattr(library, "renameat2", None), 1
+    if rename is None:
+        raise OSError(errno.ENOTSUP, "exclusive directory rename is unavailable")
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(parent_fd, os.fsencode(source), parent_fd, os.fsencode(target), flag) != 0:
+        error = ctypes.get_errno() or errno.EIO
+        raise OSError(error, os.strerror(error), target)
+
+
+def remove_created_unit_directories(unit_path: Path, created: list[dict]) -> None:
+    """Remove empty, still-identical owned parents without following symlinks."""
+    candidates = set(list(unit_path.parents)[:3])
+    for item in sorted(created, key=lambda row: len(Path(row["path"]).parts), reverse=True):
+        path = Path(item["path"])
+        if path not in candidates:
+            continue
+        parent_fd = None
+        quarantine = None
+        try:
+            parent_fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+            for part in path.parent.parts[1:]:
+                child_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                   dir_fd=parent_fd)
+                os.close(parent_fd)
+                parent_fd = child_fd
+            directory_fd = os.open(path.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                   dir_fd=parent_fd)
+            try:
+                current = os.fstat(directory_fd)
+                if ((current.st_dev, current.st_ino) != (item["device"], item["inode"])
+                        or os.listdir(directory_fd)):
+                    continue
+            finally:
+                os.close(directory_fd)
+            quarantine = f".{path.name}.{uuid7_hex()}.remove"
+            _rename_directory_noreplace(parent_fd, path.name, quarantine)
+            moved = os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+            if stat.S_ISDIR(moved.st_mode) and (moved.st_dev, moved.st_ino) == (item["device"], item["inode"]):
+                os.rmdir(quarantine, dir_fd=parent_fd)
+        except OSError:
+            # A shared, replaced, missing, or nonempty directory is retained.
+            continue
+        finally:
+            if parent_fd is not None:
+                if quarantine is not None:
+                    try:
+                        os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
+                        _rename_directory_noreplace(parent_fd, quarantine, path.name)
+                    except OSError:
+                        pass
+                os.close(parent_fd)
 
 
 class SystemdUserUnitManager:
@@ -221,8 +328,25 @@ class SystemdUserUnitManager:
             )
         if self.unit_path.exists() or self.unit_path.is_symlink():
             self._validate_installed(preview)
+            created = installed_unit_directories(
+                self.root, self.coordinate.node_id, self.coordinate.harness,
+                self.unit_path, str(preview["plist_digest"])
+            )
         else:
-            self.user_units_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            created = []
+            for directory in reversed(list(self.unit_path.parents)[:3]):
+                try:
+                    directory.mkdir(mode=0o700)
+                except FileExistsError:
+                    if not directory.is_dir() or directory.is_symlink():
+                        raise ProtocolRefusal(
+                            "wake_daemon_user_units_invalid",
+                            "systemd user unit parent must be an ordinary directory",
+                        )
+                else:
+                    identity = directory.stat()
+                    created.append({"path": str(directory), "device": identity.st_dev,
+                                    "inode": identity.st_ino})
             log_directory = self.root.resolve_relative("state/wake-daemon/logs")
             log_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             temporary = self.unit_path.with_name(
@@ -244,6 +368,7 @@ class SystemdUserUnitManager:
                 if descriptor >= 0:
                     os.close(descriptor)
                 temporary.unlink(missing_ok=True)
+                remove_created_unit_directories(self.unit_path, created)
                 raise ProtocolRefusal(
                     "wake_daemon_supervisor_install_failed",
                     "systemd user unit could not be installed",
@@ -255,6 +380,19 @@ class SystemdUserUnitManager:
             state="installed",
             reason_code=None,
         )
+        try:
+            self.lifecycle.record_directory_ownership(
+                self.coordinate,
+                lifecycle_receipt_id=str(receipt["id"]),
+                unit_path=str(self.unit_path),
+                unit_digest=str(preview["plist_digest"]),
+                created_directories=created,
+                idempotency_key="systemd-directories-" + str(receipt["id"]),
+            )
+        except (OSError, DurabilityFailure):
+            # The unit is installed. Without the optional second append,
+            # removal preserves every parent, just as for a legacy install.
+            pass
         return self._artifact(preview, "installed", None, receipt)
 
     def start(self) -> Dict[str, object]:
@@ -460,6 +598,9 @@ class SystemdUserUnitManager:
                 "installed systemd user unit differs from the expected digest",
                 remedy=self.digest_mismatch_remedy(),
             )
+        created = installed_unit_directories(
+            self.root, self.coordinate.node_id, self.coordinate.harness, self.unit_path, expected_digest
+        )
         quarantine = self.unit_path.with_name(
             f".{self.unit_path.name}.{uuid7_hex()}.remove"
         )
@@ -481,6 +622,7 @@ class SystemdUserUnitManager:
                 "wake_daemon_supervisor_remove_failed",
                 "exact systemd user unit could not be safely removed",
             ) from exc
+        remove_created_unit_directories(self.unit_path, created)
         receipt = self._record(
             preview, event="removed", state="removed", reason_code=None
         )

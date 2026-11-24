@@ -83,13 +83,99 @@
       "properties": {
         "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
         "role": {"type": "string", "minLength": 1, "maxLength": 64},
+        "lifetime": {"enum": ["permanent", "temporary"]},
         "liveness": {"enum": ["present", "silent", "expired", "unknown"]},
         "authority": {"enum": ["active", "expired", "none"]},
         "mutex": {"enum": ["active", "expired", "none"]},
         "inbox_depth": {"type": "integer", "minimum": 0},
+        "message_progress": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "delivered",
+                "acknowledged",
+                "consumed"
+              ],
+              "properties": {
+                "delivered": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "acknowledged": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "consumed": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "reason_code",
+                "delivered",
+                "acknowledged",
+                "consumed"
+              ],
+              "properties": {
+                "state": {
+                  "const": "unknown"
+                },
+                "reason_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9_]{0,127}$",
+                  "not": {
+                    "pattern": "[^a-z0-9_]"
+                  }
+                },
+                "delivered": {
+                  "type": "null"
+                },
+                "acknowledged": {
+                  "type": "null"
+                },
+                "consumed": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
         "last_activity": {"type": "string", "format": "date-time"},
         "oldest_unread": {"$ref": "#/$defs/oldest_unread"},
         "wake_health": {"$ref": "wake-health-fact.schema.json"},
+        "seat_attention": {
+          "type": "object", "additionalProperties": false,
+          "required": ["state", "reason", "node_id", "observed_at", "threshold_minutes", "threshold_basis", "undelivered_count", "oldest_waiting_at", "oldest_waiting_age_seconds", "last_hold_started_at", "hold_evidence_state", "next_check_at", "detail", "remedy", "sources"],
+          "properties": {
+            "state": {"enum": ["not_applicable", "not_overdue", "unknown"]},
+            "reason": {"enum": ["harness_has_no_stop_hook", "no_waiting_mail", "fresh_waiting_mail", "hold_started_since_waiting_mail", "overdue_without_hold_start", "hold_evidence_unreadable"]},
+            "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "threshold_minutes": {"type": "integer", "minimum": 1},
+            "threshold_basis": {"type": "string", "minLength": 1},
+            "undelivered_count": {"type": "integer", "minimum": 0},
+            "oldest_waiting_at": {"type": ["string", "null"], "format": "date-time"},
+            "oldest_waiting_age_seconds": {"type": ["number", "null"], "minimum": 0},
+            "last_hold_started_at": {"type": ["string", "null"], "format": "date-time"},
+            "hold_evidence_state": {"enum": ["not_read", "readable", "unknown"]},
+            "next_check_at": {"type": ["string", "null"], "format": "date-time"},
+            "detail": {"type": "string"}, "remedy": {"type": "string"},
+            "sources": {"type": "array", "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["path", "record_id"],
+              "properties": {"path": {"type": "string"}, "record_id": {"type": ["string", "null"]}}
+            }}
+          }
+        },
         "tide": {
           "type": "object",
           "additionalProperties": false,
@@ -117,16 +203,31 @@
       ]
     },
     "stale": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plane", "subject_id", "holder", "epoch", "expires_at"],
-      "properties": {
-        "plane": {"enum": ["authority", "mutex"]},
-        "subject_id": {"type": "string", "minLength": 1, "maxLength": 64},
-        "holder": {"type": "string", "minLength": 1, "maxLength": 64},
-        "epoch": {"type": "integer", "minimum": 1},
-        "expires_at": {"type": "string", "format": "date-time"}
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plane", "subject_id", "holder", "epoch", "expires_at"],
+          "properties": {
+            "plane": {"enum": ["authority", "mutex"]},
+            "subject_id": {"type": "string", "minLength": 1, "maxLength": 64},
+            "holder": {"type": "string", "minLength": 1, "maxLength": 64},
+            "epoch": {"type": "integer", "minimum": 1},
+            "expires_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plane", "node_id", "expires_at", "retire_command"],
+          "properties": {
+            "plane": {"const": "node"},
+            "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+            "expires_at": {"type": "string", "format": "date-time"},
+            "retire_command": {"type": "string", "minLength": 1, "maxLength": 4096}
+          }
+        }
+      ]
     },
     "worker": {
       "type": "object",
@@ -242,6 +343,8 @@
         "worker_refusals": {"type": "array", "maxItems": 100000, "items": {"$ref": "../v0/worker-refusal-record.schema.json"}},
         "workers": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/worker"}},
         "threads": {"$ref": "#/$defs/thread_summary"},
+        "adhoc_threads": {"$ref": "adhoc-thread-status.schema.json"},
+        "fleet_presence": {"$ref": "fleet-presence-receipt.schema.json#/$defs/projection"},
         "unrecognized_kinds": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/unrecognized_kind"}},
         "installer_shadow": {"$ref": "#/$defs/installer_shadow"}
       }

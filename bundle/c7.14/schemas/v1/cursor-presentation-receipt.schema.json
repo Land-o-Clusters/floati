@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/cursor-presentation-receipt.schema.json",
+  "title": "Floati Native Conversation Presentation Receipt v1",
+  "description": "Closed prepared/flushed native notification testimony. Native validation additionally requires a literal integer version; ordered immutable batch correspondence, input-prefix reproduction and exact delivery identity are verified by the presentation ledger, not by this single-record schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "batch_id",
+    "node_id",
+    "acting_session_id",
+    "workspace",
+    "consent_receipt_id",
+    "claim_receipt_id",
+    "harness",
+    "epoch_anchor",
+    "phase",
+    "item_ids",
+    "event_prefix_digest",
+    "delivery_prefix_digest",
+    "acknowledgment_prefix_digest",
+    "output_digest",
+    "delivery_receipt_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^cursor-presentation-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
+    "kind": {
+      "const": "cursor_presentation_receipt"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^cursor-presentation-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "acting_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?![Aa][Ll][Ll]$|[Gg][Ll][Oo][Bb][Aa][Ll]$)[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?:/|/(?!\\.\\.?(/|$))[^/]+(?:/(?!\\.\\.?(/|$))[^/]+)*)$",
+      "x-floati-terminal-unsafe": true
+    },
+    "consent_receipt_id": {
+      "type": "string",
+      "pattern": "^codex-wait-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "claim_receipt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^codex-wait-session-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "harness": {
+      "enum": [
+        "cursor",
+        "codex"
+      ]
+    },
+    "epoch_anchor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "phase": {
+      "enum": [
+        "prepared",
+        "flushed"
+      ]
+    },
+    "item_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+      }
+    },
+    "event_prefix_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "delivery_prefix_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "acknowledgment_prefix_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "output_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "delivery_receipt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(?:delivery-|wake-hold-)[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "harness": {
+            "const": "codex"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "claim_receipt_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "phase": {
+            "const": "prepared"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "delivery_receipt_id": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "delivery_receipt_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

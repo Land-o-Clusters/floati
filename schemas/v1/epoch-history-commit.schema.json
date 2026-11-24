@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/epoch-history-commit.schema.json",
+  "title": "Floati Epoch History Commit v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "kind",
+    "actor",
+    "trigger",
+    "verifier_version",
+    "policy",
+    "live_anchor",
+    "previous_generation",
+    "generation",
+    "source_commitment",
+    "chunks"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^epoch-history-commit-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$(?![\\s\\S])"
+    },
+    "kind": {
+      "type": "string",
+      "const": "epoch_history_commit"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "send",
+        "present",
+        "drain",
+        "retract",
+        "ack",
+        "stop_poll"
+      ]
+    },
+    "verifier_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "keep_forever"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "keep_forever": {
+          "type": "boolean"
+        }
+      }
+    },
+    "live_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byte_length",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+        }
+      }
+    },
+    "previous_generation": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+        }
+      ]
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+    },
+    "source_commitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunk_count",
+        "sha256"
+      ],
+      "properties": {
+        "chunk_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+        }
+      }
+    },
+    "chunks": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "ordinal",
+          "byte_length",
+          "sha256"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "sources",
+              "survivor"
+            ]
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99999
+          },
+          "byte_length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8388608
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"
+          }
+        }
+      }
+    }
+  }
+}

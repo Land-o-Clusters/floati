@@ -52,7 +52,7 @@ a new scoped ruling.
 Before activation, bind every receipt to one exact 40-hex Floati head and run:
 
 ```text
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_locks_ledger tests.test_locks_cleanup tests.test_locks_queue tests.test_locks_provisioning tests.test_locks_handoffs tests.test_locks_dark
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.harbor_locks_dark tests.test_locks_dark
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_source_scrub tests.test_name_sweep tests.test_copy_ledger
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
 PYTHONDONTWRITEBYTECODE=1 python3 -m floati.selftest

@@ -2,6 +2,15 @@
 
 Status date: 2026-07-31.
 
+`work_duplicate_open` refuses a new work item matching an existing open item;
+use the existing item or change its details. Historical duplicate records remain
+readable.
+
+`work_already_claimed` identifies a claim collision; choose an open item or
+coordinate with its current holder. `authority_superseded` identifies a prior
+holder whose subject now has a newer grant to another node; ask the coordinator
+for a current grant.
+
 The conformance artifact is invoked directly:
 
 ```bash
@@ -92,3 +101,34 @@ and separated exclusion evidence.
 The artifact emits one machine-readable JSON object. Product-visible copy is
 `COPY PENDING — ARCHITECT`; these status identifiers are protocol vocabulary, not
 interface copy.
+# Work notification journal
+
+`work add --as D` records an inert `work_notification_record` intent before
+the unchanged work item. With an artifact it sends ordinary, normal mail to
+the nodes eligible at send time. Completion mail uses the completing actor
+and completion artifact, addressed to the intent's dispatcher. Sent testimony
+lives only in `receipts/work-notifications/<item>.jsonl`; no journal row is
+part of the work ledger or the Confluence bundle.
+
+The fixed notes are `Work available: <item id>` and `Work completed: <item id>`
+(`ADD_NOTE` and `COMPLETE_NOTE` in `floati/work_notification.py`). Keys are
+`work-add-<item id>-<recipient>` and `work-complete-<item id>-<recipient>`.
+Neither note nor key is provenance; the journal's sent row is the join.
+
+Only a recorded sender replays mail in a write verb or `work notify --id I
+--as X` (`--all` selects X's pending items). The journal is the first guard,
+live envelopes the second, and native retained epoch history the third.
+`work show` and `doctor` read without sending. Orphan intents stay inert and
+are counted as `work_notification_intent_orphan` with severity `ok`.
+
+Successful work with missing inputs reports `work_add_unnotified` or
+`work_complete_unnotified`, with `missing` and `missing_flags`. A send refusal
+becomes `work_notification_refused` with recipient, `refusal_code` and the
+send's own remedy; the CLI exits degraded (35). Another sender's pending
+mail is `work_notification_pending`, naming the sender and exact notify
+command. Doctor reports one warning per pending item (35),
+`work_notification_conflict` for absent or disagreeing sent-envelope evidence,
+or `work_notification_unreadable` naming an unreadable journal; other journals
+still report. Conflicting content refuses `idempotency_conflict`, never rewrites.
+Car A's `work_duplicate_open`, `work_already_claimed` and
+`authority_superseded` retain their meanings and refusal order.

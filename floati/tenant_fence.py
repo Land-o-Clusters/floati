@@ -39,6 +39,9 @@ FORBIDDEN_TOKEN_DIGESTS: tuple[tuple[str, str, int], ...] = (
         ("private_workspace_path", "5619b9f135b302cff90a45151a2faa05abd247a4cff236fe6b7836f8a24282a9", 17),
         ("private_bus_root", "605c099aa14103dfe0f4f4603abe28737754d22361af047774f31ee720524ef8", 25),
         ("absolute_product_path", "7fc58b0694f67dd86741311f94e15edb7bfca74f559ee2276cbb981b4d5c7c94", 17),
+        ("fleet_host_name", "d1de880dc0db519a7acdd0b4a353b13c676594bfb9480eb2351f3fe2a6877c4c", 11),
+        ("fleet_host_name", "78dccc1ec29722c9306b0c161b160fdb61758fa6b288ae9350cd90f817c0b2c1", 6),
+        ("architect_brief_path", "0ab019a05292c24859cf362a9456277e2d2202c3e04290bfc0efc0f201d1567f", 13),
 )
 
 _ACCOUNT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -209,7 +212,19 @@ def load_operator_declaration(root: Path) -> dict[str, object]:
 def declaration_matches_public_pins(root: Path) -> bool:
     """Return whether the operator file's keyed digests match the exported pins."""
 
+    return _declaration_matches_public_pins(load_operator_declaration(root))
+
+
+def load_pinned_operator_declaration(root: Path) -> dict[str, object]:
+    """Load the private declaration and verify the same bytes against the pins."""
+
     document = load_operator_declaration(root)
+    if not _declaration_matches_public_pins(document):
+        raise RuntimeError("tenant fence declaration does not match its pins")
+    return document
+
+
+def _declaration_matches_public_pins(document: dict[str, object]) -> bool:
     key = str(document["key"]).encode("utf-8")
     pinned = {
         (code, digest, length)

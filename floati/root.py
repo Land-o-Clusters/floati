@@ -4,22 +4,30 @@ from __future__ import annotations
 
 import os
 import re
+import stat
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import FrozenSet, Literal, Mapping, Optional, Tuple, Union
 
 from .errors import ProtocolRefusal
+from .session_identity import IDENTIFIER_PATTERN, validate_identifier
 
 
-IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 _AUTHORITY_TOKEN = object()
+# NET-HOLD-INBOUND-1: every root this process opens, by tenant, so the display
+# gate can read the inbound holds of whichever root an envelope came from.
+# Bounded by the number of distinct roots the process opens.
+_OPENED_ROOTS: dict = {}
+
+
+def opened_roots(tenant_id: str) -> list:
+    """The roots this process has opened for one tenant that still exist."""
+    homes = _OPENED_ROOTS.get(tenant_id, {})
+    for home in [home for home in list(homes) if not os.path.isdir(home)]:
+        homes.pop(home, None)
+    return list(homes.values())
 CommandRootSource = Literal["explicit", "environment"]
-
-
-def validate_identifier(value: Optional[str], field: str = "tenant") -> str:
-    if not isinstance(value, str) or not IDENTIFIER_PATTERN.fullmatch(value):
-        raise ProtocolRefusal(f"{field}_invalid", f"{field} must match {IDENTIFIER_PATTERN.pattern}")
-    return value
 
 
 def resolve_command_root(
@@ -106,6 +114,7 @@ class FloatiRoot:
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "tenant_id", tenant_id)
         object.__setattr__(self, "tenant_home", tenant_home)
+        _OPENED_ROOTS.setdefault(tenant_id, {})[str(tenant_home)] = self
 
     @classmethod
     def open(cls, path: Optional[Union[Path, str]], tenant_id: Optional[str]) -> "FloatiRoot":
@@ -133,7 +142,7 @@ class FloatiRoot:
                 "tenant_symlinked_entry",
                 "the selected tenant home must not be a symlink",
             )
-        tenant_home.mkdir(parents=True, exist_ok=True)
+        tenant_home.mkdir(parents=True, exist_ok=True, mode=0o700)
         return cls(_AUTHORITY_TOKEN, resolved, tenant, tenant_home)
 
     @classmethod
@@ -166,7 +175,7 @@ class FloatiRoot:
             raise ProtocolRefusal("namespace_root_layout_present", "direct home cannot contain a tenants namespace")
         if create:
             try:
-                home.mkdir(parents=True, exist_ok=True)
+                home.mkdir(parents=True, exist_ok=True, mode=0o700)
             except OSError as exc:
                 raise ProtocolRefusal(
                     "root_unavailable",
@@ -178,6 +187,56 @@ class FloatiRoot:
 
     def resolve_relative(self, relative: Union[Path, str]) -> Path:
         return _resolve_contained(self.tenant_home, relative)
+
+    @contextmanager
+    def bind_adhoc_coordinates(self, coordinates, *, files=()):
+        """Pin derived ad-hoc coordinates, rejecting replacement of every path edge.
+
+        Callers derive these coordinates from registry and lane receipts, never
+        dispatch-supplied paths. Descriptors remain open through the operation.
+        """
+        if coordinates.get("root") != self.tenant_home:
+            raise ProtocolRefusal("adhoc_binding_changed", "ad-hoc coordinates require this exact tenant root")
+        descriptors, identities, edges = {}, {}, []
+        with ExitStack() as stack:
+            try:
+                for name, supplied in coordinates.items():
+                    path = Path(supplied)
+                    if not path.is_absolute() or path.resolve(strict=True) != path:
+                        raise OSError("noncanonical coordinate")
+                    parent = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                    stack.callback(os.close, parent)
+                    for index, part in enumerate(path.parts[1:]):
+                        directory = index != len(path.parts[1:]) - 1 or name not in files
+                        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+                        if directory:
+                            flags |= os.O_DIRECTORY
+                        child = os.open(part, flags, dir_fd=parent)
+                        stack.callback(os.close, child)
+                        edges.append((parent, part, child))
+                        parent = child
+                    metadata = os.fstat(parent)
+                    ordinary = stat.S_ISREG(metadata.st_mode) if name in files else stat.S_ISDIR(metadata.st_mode)
+                    if not ordinary or metadata.st_uid != os.geteuid() or (name in files and metadata.st_nlink != 1):
+                        raise OSError("foreign or nonordinary coordinate")
+                    descriptors[name] = parent
+                    identities[name] = {"dev": metadata.st_dev, "ino": metadata.st_ino}
+
+                def revalidate():
+                    for parent, part, child in edges:
+                        named = os.stat(part, dir_fd=parent, follow_symlinks=False)
+                        opened = os.fstat(child)
+                        if (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino) or stat.S_ISLNK(named.st_mode):
+                            raise OSError("descriptor path changed")
+
+                revalidate()
+            except (OSError, ValueError, RuntimeError) as exc:
+                raise ProtocolRefusal("adhoc_binding_changed", "a derived ad-hoc filesystem coordinate could not be pinned") from exc
+            try:
+                yield identities, descriptors
+                revalidate()
+            except OSError as exc:
+                raise ProtocolRefusal("adhoc_binding_changed", "a pinned ad-hoc filesystem coordinate changed") from exc
 
     def grant_observation(self, *tenant_ids: str) -> ObservationCapability:
         tenants = frozenset(validate_identifier(value) for value in tenant_ids)

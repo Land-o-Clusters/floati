@@ -19,6 +19,7 @@ From a clean clone of the public repository at the current tag
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
 git -C /absolute/floati checkout v0.1.2
+cd /absolute/floati
 ROOT=/absolute/mk-d2-fleet
 
 python3 -m floati init --root "$ROOT"
@@ -49,7 +50,7 @@ python3 -m floati presence report --root "$ROOT" \
 # so this envelope is never drained - this is the undelivered mail
 python3 -m floati send --root "$ROOT" --from architect-codex \
   --to builder-claude --repo floati \
-  --sha 0000000000000000000000000000000000000000 \
+  --sha "$(git rev-parse HEAD)" \
   --doc docs/demo/recipes/mk-d2.md --note "next slice"
 
 # once the presence TTL lapses (one second), look at the two surfaces:

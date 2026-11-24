@@ -27,6 +27,17 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"}
     },
-    "presentation_count": {"type": "integer", "minimum": 1}
-  }
+    "presentation_count": {"type": "integer", "minimum": 1},
+    "bridge_publication": {
+      "type": "object", "additionalProperties": false,
+      "required": ["invocation_id", "acting_session_id", "workspace", "output_digest"],
+      "properties": {
+        "invocation_id": {"type": "string", "minLength": 51, "maxLength": 51, "pattern": "^bridge-publication-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+        "acting_session_id": {"type": "string", "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$", "not": {"anyOf": [{"pattern": "^(?:[aA][lL][lL]|[gG][lL][oO][bB][aA][lL])$"}, {"pattern": "[\\u0000-\\u001f\\u007f]"}]}},
+        "workspace": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/(?!/)(?!.*(?:/\\.\\.?/|/\\.\\.?$|//))(?!.*[\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u202a-\\u202e\\u2066-\\u2069])(?:[^/]+(?:/[^/]+)*)?$"},
+        "output_digest": {"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "allOf": [{"if": {"required": ["bridge_publication"]}, "then": {"properties": {"item_ids": {"minItems": 1}}}}]
 }

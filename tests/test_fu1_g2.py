@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.readiness import wait_event, wait_join, wait_poll
 import unittest
 import atexit
 import json
@@ -23,8 +24,68 @@ from floati.records import validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
 from tests.test_fu1_g0 import REPOSITORY_ROOT, _tree_bytes
-from tests.test_fu1_g1 import FU1G1Tests
+from tests import test_fu1_g1
 
+
+def legacy_rebind_pair(
+    configuration: Path, store: Path, target_digest: str
+) -> dict[str, str] | None:
+    """The operator pair for rebinding one fixture's legacy Floati Stop group.
+
+    Every FU1 fixture binding registers the legacy digest-named launcher
+    (``/usr/bin/python3 <store>/<digest>/scripts/floati-codex-wait --root R``),
+    so its rebind CHANGES the Stop definition: the launcher moves to
+    ``<store>/<target_digest>/...`` and nothing else does. The pair is derived
+    from the fixture's own file and that rule, never from the product planner;
+    a planner that rewrote anything else would no longer match and the commit
+    refuses. A group already on the stable ``current`` launcher, or already on
+    the target, states no change and returns None.
+    """
+
+    import shlex
+
+    from floati.codex_hook_trust import codex_hook_current_hash
+
+    stop = json.loads(Path(configuration).read_text(encoding="utf-8"))["hooks"]["Stop"]
+    groups = [group for group in stop if "floati-codex-wait" in json.dumps(group)]
+    assert len(groups) == 1, groups
+    argv = shlex.split(groups[0]["hooks"][0]["command"])
+    if Path(argv[1]).relative_to(store).parts[0] == "current":
+        return None
+    target = json.loads(json.dumps(groups[0]))
+    target["hooks"][0]["command"] = shlex.join(
+        [argv[0], str(Path(store) / target_digest / "scripts" / "floati-codex-wait"), *argv[2:]]
+    )
+    preimage = codex_hook_current_hash(groups[0])
+    planned = codex_hook_current_hash(target)
+    if preimage == planned:
+        return None
+    return {"preimage": preimage, "target": planned}
+
+
+def legacy_rebind_ack(configuration: Path, store: Path, target_digest: str) -> str:
+    """The same pair as the operator types it: `<preimage>:<target>`."""
+
+    pair = legacy_rebind_pair(configuration, store, target_digest)
+    assert pair is not None, "this fixture states that its rebind changes Stop"
+    return f"{pair['preimage']}:{pair['target']}"
+
+
+def legacy_fixture_stop_pairs(test: object) -> list[dict[str, str]]:
+    """The pairs THIS fixture's G2 commit states, one per declared binding."""
+
+    from floati.waiter_bundle import waiter_runtime_digest
+
+    bindings = json.loads(Path(test.binding_path).read_text(encoding="utf-8"))["bindings"]
+    target_digest = waiter_runtime_digest(Path(test.target_source))
+    pairs: list[dict[str, str]] = []
+    for binding in bindings:
+        pair = legacy_rebind_pair(
+            Path(binding["configuration"]), Path(binding["store"]), target_digest
+        )
+        if pair is not None and pair not in pairs:
+            pairs.append(pair)
+    return pairs
 
 _CANONICAL_EXECUTABLE: str | None = None
 
@@ -113,7 +174,28 @@ def _attempt_fleet_update_guard(root_path: str, sender: object) -> None:
         sender.close()
 
 
-class FU1G2Tests(FU1G1Tests):
+class FU1G2Tests(test_fu1_g1.FU1G1Tests):
+    def setUp(self) -> None:
+        from multiprocessing import resource_tracker, synchronize, util
+
+        tracker = resource_tracker._resource_tracker
+        prior_pid = tracker._pid
+        prior_finalizers = frozenset(util._finalizer_registry)
+
+        def close_owned_tracker() -> None:
+            if prior_pid is None and tracker._pid is not None:
+                # Failing unittest tracebacks can retain local semaphores.
+                for key, finalizer in list(util._finalizer_registry.items()):
+                    if (key not in prior_finalizers
+                            and finalizer._callback == synchronize.SemLock._cleanup):
+                        finalizer()
+                tracker._stop()
+                self.assertIsNone(tracker._pid)
+
+        # Run last, after fixture resources and explicit children are released.
+        self.addCleanup(close_owned_tracker)
+        super().setUp()
+
     def _guard_process_outcome(
         self, context: object, target: object, *args: object
     ) -> tuple[str, str | None]:
@@ -123,7 +205,7 @@ class FU1G2Tests(FU1G1Tests):
         sending.close()
         try:
             self.assertTrue(
-                receiving.poll(10), "guard probe process produced no result"
+                wait_poll(receiving, "test_fu1_g2 receiving"), "guard probe process produced no result"
             )
             outcome = receiving.recv()
         finally:
@@ -296,6 +378,7 @@ class FU1G2Tests(FU1G1Tests):
         plan: dict[str, object],
         key: str,
         fault_hook: object = None,
+        stop_hook_acknowledgements: list[dict[str, str]] | None = None,
     ) -> dict[str, object]:
         from floati.fleet_update import commit_fleet_update_g2
 
@@ -303,6 +386,10 @@ class FU1G2Tests(FU1G1Tests):
             "_fault_hook",
             inspect.signature(commit_fleet_update_g2).parameters,
             "G2 needs one explicit default-off internal crash seam for production-path recovery tests",
+        )
+        self.assertIn(
+            "stop_hook_acknowledgements",
+            inspect.signature(commit_fleet_update_g2).parameters,
         )
         return commit_fleet_update_g2(
             plan=plan,
@@ -312,6 +399,11 @@ class FU1G2Tests(FU1G1Tests):
             target_source=self.target_source,
             installer_executable=canonical_executable(),
             git_executable="/usr/bin/git",
+            stop_hook_acknowledgements=(
+                legacy_fixture_stop_pairs(self)
+                if stop_hook_acknowledgements is None
+                else stop_hook_acknowledgements
+            ),
             _fault_hook=fault_hook,
         )
 
@@ -694,37 +786,27 @@ class FU1G2Tests(FU1G1Tests):
             self.assertEqual(rows[2]["id"], result["waiter_steps"][0]["receipt"]["id"])
 
     def test_g2_26_shared_file_journal_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_file_journal")
-
-    def test_g2_27_shared_file_fsync_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_file_file_fsync")
-
-    def test_g2_28_shared_file_replace_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_file_replace")
-
-    def test_g2_29_shared_file_directory_fsync_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_file_directory_fsync")
-
-    def test_g2_30_shared_file_readback_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_file_readback")
-
-    def test_g2_31_shared_metadata_journal_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_metadata_journal")
-
-    def test_g2_32_shared_metadata_fsync_fault_recovers_through_real_commit(self) -> None:
-        self._exercise_real_shared_fault("after_metadata_file_fsync")
-
-    def test_g2_33_shared_metadata_replace_fault_replays_durability_without_replace(self) -> None:
-        self._exercise_real_shared_fault("after_metadata_replace")
-
-    def test_g2_34_shared_metadata_directory_fsync_fault_replays_without_replace(self) -> None:
-        self._exercise_real_shared_fault("after_metadata_directory_fsync")
-
-    def test_g2_35_shared_metadata_readback_fault_replays_without_replace(self) -> None:
-        self._exercise_real_shared_fault("after_metadata_readback")
-
-    def test_g2_36_shared_post_commit_pre_receipt_fault_recovers_without_writer(self) -> None:
-        self._exercise_real_shared_fault("after_shared_commit_readback")
+        events = (
+            "after_file_journal",
+            "after_file_file_fsync",
+            "after_file_replace",
+            "after_file_directory_fsync",
+            "after_file_readback",
+            "after_metadata_journal",
+            "after_metadata_file_fsync",
+            "after_metadata_replace",
+            "after_metadata_directory_fsync",
+            "after_metadata_readback",
+            "after_shared_commit_readback",
+            "after_shared_step_receipt",
+        )
+        for index, event in enumerate(events):
+            with self.subTest(event=event):
+                if index:
+                    # Recovery changes the installed generation and receipts.
+                    self.doCleanups()
+                    self.setUp()
+                self._exercise_real_shared_fault(event)
 
     def test_g2_recovery_rejects_later_malformed_sibling_before_any_write(self) -> None:
         """Catches response-loss recovery staging past a later invalid receipt."""
@@ -748,47 +830,28 @@ class FU1G2Tests(FU1G1Tests):
         self.assertEqual("fleet_update_receipt_invalid", caught.exception.code)
         self.assertEqual(before, self._zero_write_snapshot(self.base))
 
-    def test_g2_37_shared_receipt_response_loss_reuses_the_appended_receipt(self) -> None:
-        self._exercise_real_shared_fault("after_shared_step_receipt")
-
     def test_g2_38_waiter_generation_replace_fault_replays_store_durability(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_generation_replace")
-
-    def test_g2_39_waiter_generation_store_fsync_fault_replays_readback(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_generation_store_fsync")
-
-    def test_g2_39a_waiter_generation_pre_replace_fault_cleans_stage(self) -> None:
-        self._exercise_real_waiter_fault("before_waiter_generation_replace")
-
-    def test_g2_39b_waiter_generation_readback_fault_replays_without_rename(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_generation_readback")
-
-    def test_g2_40_waiter_before_temp_fault_leaves_exact_pre_and_recovers(self) -> None:
-        self._exercise_real_waiter_fault("before_waiter_temp_create")
-
-    def test_g2_41_waiter_before_write_fault_cleans_temp_and_recovers(self) -> None:
-        self._exercise_real_waiter_fault("before_waiter_write")
-
-    def test_g2_42_waiter_before_fsync_fault_cleans_temp_and_recovers(self) -> None:
-        self._exercise_real_waiter_fault("before_waiter_file_fsync")
-
-    def test_g2_43_waiter_before_replace_fault_cleans_temp_and_recovers(self) -> None:
-        self._exercise_real_waiter_fault("before_waiter_replace")
-
-    def test_g2_44_waiter_after_replace_fault_replays_durability_without_replace(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_replace")
-
-    def test_g2_45_waiter_after_directory_fsync_fault_replays_readback(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_directory_fsync")
-
-    def test_g2_46_waiter_after_readback_fault_reobserves_trust_without_replace(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_readback")
-
-    def test_g2_47_waiter_after_trust_fault_recovers_post_without_replace(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_trust_observation")
-
-    def test_g2_48_waiter_receipt_response_loss_reuses_exact_receipt(self) -> None:
-        self._exercise_real_waiter_fault("after_waiter_step_receipt")
+        events = (
+            "after_waiter_generation_replace",
+            "after_waiter_generation_store_fsync",
+            "before_waiter_generation_replace",
+            "after_waiter_generation_readback",
+            "before_waiter_temp_create",
+            "before_waiter_write",
+            "before_waiter_file_fsync",
+            "before_waiter_replace",
+            "after_waiter_replace",
+            "after_waiter_directory_fsync",
+            "after_waiter_readback",
+            "after_waiter_trust_observation",
+            "after_waiter_step_receipt",
+        )
+        for index, event in enumerate(events):
+            with self.subTest(event=event):
+                if index:
+                    self.doCleanups()
+                    self.setUp()
+                self._exercise_real_waiter_fault(event)
 
     def test_g2_49_real_shared_ambiguous_join_state_refuses_without_mutation(self) -> None:
         """Catches authenticated recovery overwriting a foreign terminal shared byte."""
@@ -883,6 +946,7 @@ class FU1G2Tests(FU1G1Tests):
                     plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
                     target_source=self.target_source, installer_executable=canonical_executable(),
                     git_executable="/usr/bin/git",
+                    stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
                 )
         self.assertEqual(expected_code, caught.exception.code)
         self.assertEqual(1, stage.call_count, "G2 must finish pure preflight before its consent join")
@@ -914,6 +978,7 @@ class FU1G2Tests(FU1G1Tests):
                 plan=plan, root=self.root, actor=self.actor,
                 idempotency_key="fu1-g2-stale-removal", target_source=self.target_source,
                 installer_executable=canonical_executable(), git_executable="/usr/bin/git",
+                stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
             )
 
         self.assertEqual("fleet_update_install_stale_removal_unsupported", caught.exception.code)
@@ -1084,6 +1149,9 @@ class FU1G2Tests(FU1G1Tests):
             "hook_trust_key": target["hook_trust_key"], "current_hook_hash": target["hook_trust_current_hash"],
             "observed_trusted_hash": None, "observed_enabled": True,
         }
+        # The fixture already rewrote the group onto the target generation
+        # above, so this rebind leaves the Stop definition unchanged: no pair.
+        self.assertIsNone(legacy_rebind_pair(self.hooks_path, self.waiter_store, target_digest))
         result = commit_waiter_rebind(staged)
         self.assertEqual(target["hook_trust_key"], result["trust_observation"]["hook_trust_key"])
         self.assertFalse(result["trust_observation"]["hook_armed"])
@@ -1145,10 +1213,10 @@ class FU1G2Tests(FU1G1Tests):
             mock.patch("floati.codex_hook_install._write_atomic", side_effect=counted_atomic),
         ):
             writer.return_value.run.side_effect = lambda: calls.__setitem__("shared_writer", calls["shared_writer"] + 1)
-            first = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
+            first = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git", stop_hook_acknowledgements=legacy_fixture_stop_pairs(self))
             receipt_path = self.root.path / FleetUpdateReceiptLedger.relative(self.actor)
             first_receipt_bytes = receipt_path.read_bytes()
-            second = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
+            second = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-retry", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git", stop_hook_acknowledgements=legacy_fixture_stop_pairs(self))
         self.assertEqual(first["last_receipt_id"], second["last_receipt_id"])
         self.assertEqual(first, second)
         self.assertEqual({"shared_writer": 1, "generation": 1, "hook": 1, "atomic": 1}, calls)
@@ -1238,9 +1306,9 @@ class FU1G2Tests(FU1G1Tests):
             mock.patch("floati.codex_hook_install._write_atomic", side_effect=counted_atomic),
         ):
             with self.assertRaises(OSError):
-                commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
+                commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git", stop_hook_acknowledgements=legacy_fixture_stop_pairs(self))
             self.assertEqual(staged_waiter["after"], self.hooks_path.read_bytes())
-            recovered = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git")
+            recovered = commit_fleet_update_g2(plan=plan, root=self.root, actor=self.actor, idempotency_key="fu1-g2-d3b-crash", target_source=self.target_source, installer_executable=canonical_executable(), git_executable="/usr/bin/git", stop_hook_acknowledgements=legacy_fixture_stop_pairs(self))
         self.assertEqual("g2_committed_pending_later_gates", recovered["state"])
         self.assertEqual(1, calls["atomic"], "post-write retry must append evidence without a second hook rewrite")
         rows = [row for row in FleetUpdateReceiptLedger(self.root).rows(self.actor) if row["kind"] == "fleet_update_step"]
@@ -1263,9 +1331,19 @@ class FU1G2Tests(FU1G1Tests):
         }
         with mock.patch("floati.codex_hook_install._write_atomic", side_effect=OSError("fixture before commit")):
             with self.assertRaises(OSError):
-                commit_waiter_rebind(staged)
+                commit_waiter_rebind(
+                    staged,
+                    acknowledge_stop_hook_change=legacy_rebind_ack(
+                        self.hooks_path, self.waiter_store, str(plan["target_waiter_digest"])
+                    ),
+                )
         self.assertEqual(before, self.hooks_path.read_bytes())
-        commit_waiter_rebind(staged)
+        commit_waiter_rebind(
+            staged,
+            acknowledge_stop_hook_change=legacy_rebind_ack(
+                self.hooks_path, self.waiter_store, str(plan["target_waiter_digest"])
+            ),
+        )
         after = self.hooks_path.read_bytes()
         self.assertIn(b'"command": "true"', after)
         self.assertEqual(before.split(b'"Stop"', 1)[0], after.split(b'"Stop"', 1)[0])
@@ -2123,7 +2201,7 @@ class FU1G2Tests(FU1G1Tests):
         def hold_first(event: str) -> None:
             if event == "before_shared_writer_run":
                 entered.set()
-                if not release.wait(10):
+                if not wait_event(release, "test_fu1_g2 release"):
                     raise AssertionError("first execution was not released")
 
         def run_first() -> None:
@@ -2134,7 +2212,7 @@ class FU1G2Tests(FU1G1Tests):
 
         first = threading.Thread(target=run_first)
         first.start()
-        self.assertTrue(entered.wait(10), "first execution did not reach its held writer seam")
+        self.assertTrue(wait_event(entered, "test_fu1_g2 entered"), "first execution did not reach its held writer seam")
 
         def reject_overlap(event: str) -> None:
             if event == "before_shared_writer_run":
@@ -2149,7 +2227,7 @@ class FU1G2Tests(FU1G1Tests):
             self.assertEqual("fleet_update_execution_contended", caught.exception.code)
         finally:
             release.set()
-            first.join(20)
+            wait_join(first, "test_fu1_g2 first")
         self.assertFalse(first.is_alive(), "first execution did not terminate after release")
         self.assertEqual([], first_errors)
         self.assertEqual(1, len(first_results))
@@ -2183,7 +2261,7 @@ class FU1G2Tests(FU1G1Tests):
         def hold_first(event: str) -> None:
             if event == "before_shared_writer_run":
                 entered.set()
-                if not release.wait(10):
+                if not wait_event(release, "test_fu1_g2 release"):
                     raise AssertionError("first execution was not released")
 
         def run_first() -> None:
@@ -2196,7 +2274,7 @@ class FU1G2Tests(FU1G1Tests):
 
         first = threading.Thread(target=run_first)
         first.start()
-        self.assertTrue(entered.wait(10), "first actor did not reach its held writer seam")
+        self.assertTrue(wait_event(entered, "test_fu1_g2 entered"), "first actor did not reach its held writer seam")
 
         def reject_overlap(event: str) -> None:
             if event == "before_shared_writer_run":
@@ -2215,12 +2293,13 @@ class FU1G2Tests(FU1G1Tests):
                     target_source=self.target_source,
                     installer_executable=canonical_executable(),
                     git_executable="/usr/bin/git",
+                    stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
                     _fault_hook=reject_overlap,
                 )
             self.assertEqual("fleet_update_execution_contended", caught.exception.code)
         finally:
             release.set()
-            first.join(20)
+            wait_join(first, "test_fu1_g2 first")
         self.assertFalse(first.is_alive(), "first actor did not terminate after release")
         self.assertEqual([], first_errors)
         self.assertEqual([], FleetUpdateReceiptLedger(self.root).rows(other_actor))
@@ -2273,7 +2352,7 @@ class FU1G2Tests(FU1G1Tests):
         def hold_first(event: str) -> None:
             if event == "before_shared_writer_run":
                 entered.set()
-                if not release.wait(10):
+                if not wait_event(release, "test_fu1_g2 release"):
                     raise AssertionError("held public-entry execution was not released")
 
         def run_first() -> None:
@@ -2284,7 +2363,7 @@ class FU1G2Tests(FU1G1Tests):
 
         first = threading.Thread(target=run_first)
         first.start()
-        self.assertTrue(entered.wait(10), "held execution did not reach writer seam")
+        self.assertTrue(wait_event(entered, "test_fu1_g2 entered"), "held execution did not reach writer seam")
         codes: list[str | None] = []
         ledger = FleetUpdateReceiptLedger(self.root)
         try:
@@ -2302,7 +2381,7 @@ class FU1G2Tests(FU1G1Tests):
                     codes.append(None)
         finally:
             release.set()
-            first.join(20)
+            wait_join(first, "test_fu1_g2 first")
         self.assertFalse(first.is_alive())
         self.assertEqual([], first_errors)
         self.assertEqual(
@@ -3002,6 +3081,7 @@ class FU1G2Tests(FU1G1Tests):
                 target_source=self.target_source,
                 installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
+                stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
             )
         self.assertEqual("fleet_update_waiter_invalid", caught.exception.code)
         self.assertEqual(2, calls)
@@ -3296,11 +3376,13 @@ class FU1G2Tests(FU1G1Tests):
                 plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
                 target_source=self.target_source, installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
+                stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
             )
             second = commit_fleet_update_g2(
                 plan=plan, root=self.root, actor=self.actor, idempotency_key=key,
                 target_source=self.target_source, installer_executable=canonical_executable(),
                 git_executable="/usr/bin/git",
+                stop_hook_acknowledgements=legacy_fixture_stop_pairs(self),
             )
 
         self.assertEqual("g2_committed_pending_later_gates", first["state"])

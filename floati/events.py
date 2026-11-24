@@ -2,30 +2,40 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
+import re
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .bus_epoch import shared_epoch_operation
-from .errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
+from .epoch_rotation import automatic_epoch_operation
+from .errors import IntegrityFailure, ProtocolRefusal, bind_send_refusal_remedy
 from .ids import uuid7_hex
+from .inbound_hold import rejected_message_ids, require_presentable, withhold_unapproved
 from .jsonl import (
     append_record,
     read_records,
     read_records_compatible,
+    read_records_compatible_sealed_snapshot,
     read_records_compatible_snapshot,
     read_records_compatible_with_versions,
+    read_records_sealed_snapshot,
     read_records_snapshot,
     transact,
     transact_records,
 )
 from .mail_health import RecipientReadiness
-from .records import WAKE_HOLD_KINDS, validate_record
+from .native_dispatch_launcher import (
+    KIND as LAUNCHER_KIND,
+    capture_native_launcher,
+    native_launcher_runtime_session,
+)
+from .records import ASK_RECORD_KINDS, WAKE_HOLD_KINDS, validate_record
 from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
 from .runtruth import RUN_KINDS
-from .snapshot import SnapshotStore, SourceSpec
 from .version_skew import VocabularySkewFact, vocabulary_skew_fact
 
 
@@ -34,7 +44,16 @@ EVENT_KINDS = frozenset(
     {
         "message_envelope", "delivery_claim", "message_retracted",
         "bus_epoch_roll_receipt",
+        "seat_teardown_epoch_verification",
+        "epoch_carry_verification",
         "ledger_repair_receipt",
+        "send_readiness_observation",
+        LAUNCHER_KIND,
+        "seat_execution",
+        "ask_question",
+        "ask_answer",
+        "ask_decline",
+        "ask_timeout",
     }
 )
 _ATTEMPT_BINDING_FIELDS = frozenset(
@@ -87,12 +106,67 @@ def _send_observed_at(now: Optional[datetime]) -> str:
     )
 
 
+def _parse_receipt_time(stamp: str) -> datetime:
+    """Parse one registry UTC-milliseconds stamp back into an aware instant."""
+
+    parsed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ProtocolRefusal("time_invalid", "receipt stamps must be aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_ask_event(
+    record: Mapping[str, object],
+    questions: Dict[str, Dict[str, object]],
+    resolved: set,
+) -> None:
+    """Require a question before its answer, decline, or timeout."""
+
+    kind = record["kind"]
+    if kind == "ask_question":
+        questions[str(record["id"])] = record
+        return
+    question = questions.get(str(record.get("reply_to")))
+    if question is None:
+        raise IntegrityFailure(
+            "ask_correlation_invalid",
+            "ask terminal evidence must follow its question",
+        )
+    if kind == "ask_timeout":
+        if record.get("observer") != question["sender"]:
+            raise IntegrityFailure(
+                "ask_correlation_invalid",
+                "ask timeout observer must be the question sender",
+            )
+        return
+    if question["sender"] != record.get("recipient") or question["recipient"] != record.get("sender"):
+        raise IntegrityFailure(
+            "ask_correlation_invalid",
+            "ask terminal evidence must reverse the question parties",
+        )
+    if str(record.get("reply_to")) in resolved:
+        raise IntegrityFailure(
+            "ask_already_resolved",
+            "a question can have one terminal answer or decline",
+        )
+    resolved.add(str(record.get("reply_to")))
+
+
 def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
     """Reject a schema-valid event prefix that cannot be semantically replayed."""
 
-    prior_by_id: Dict[str, Dict[str, object]] = {}
-    retracted = set()
-    for index, record in enumerate(records):
+    if any(row["kind"] in {"seat_teardown_epoch_verification", "epoch_carry_verification"} for row in records) or (
+            records and records[0]["kind"] == "bus_epoch_roll_receipt"
+            and "teardown_carry" in records[0].get("automatic", {})):
+        from .epoch_teardown import validate_event_verifications
+        validate_event_verifications(records)
+    _validate_event_order(records, 0, {}, set(), set(), {}, set(), set())
+
+
+def _validate_event_order(records, start, prior_by_id, retracted, observed_envelopes,
+                          ask_questions, ask_resolved, launcher_envelopes):
+    """Apply the same ordered joins to a whole ledger or a certified slice."""
+    for index, record in enumerate(records, start):
         if record["kind"] == "bus_epoch_roll_receipt":
             if index != 0:
                 raise IntegrityFailure(
@@ -132,7 +206,64 @@ def validate_event_records(records: Sequence[Dict[str, object]]) -> None:
                     "delivery claim sha must equal its referenced message sha",
                 )
             continue
-        if record["kind"] == "ledger_repair_receipt":
+        if record["kind"] in {"ledger_repair_receipt", "seat_teardown_epoch_verification", "epoch_carry_verification"}:
+            continue
+        if record["kind"] == LAUNCHER_KIND:
+            message_id = record["message_id"]
+            envelope = prior_by_id.get(message_id)
+            if (envelope is None or message_id not in observed_envelopes
+                    or message_id in launcher_envelopes
+                    or envelope["sender"] != record["sender_node_id"]
+                    or envelope["timestamp"] != record["timestamp"]):
+                raise IntegrityFailure("native_dispatch_launcher_invalid",
+                    "launcher testimony must follow its exact guarded send")
+            launcher_envelopes.add(message_id)
+            continue
+        if record["kind"] == "seat_execution":
+            if record["envelope_id"] is not None:
+                envelope = prior_by_id.get(record["envelope_id"])
+                if envelope is None or envelope["sender"] != record["node_id"] or envelope["idempotency_key"] != record["idempotency_key"] or envelope["timestamp"] != record["timestamp"]:
+                    raise IntegrityFailure("seat_execution_notice_invalid", "execution must follow its exact native notice")
+                if record["envelope_id"] not in observed_envelopes:
+                    raise IntegrityFailure("seat_execution_notice_invalid", "execution notice needs atomic readiness testimony")
+            elif record["event"] != "running" and not (
+                record["event"] == "unknown" and record["code"] in {
+                    "cursor_followup_returned", "gateway_action_returned"}
+            ):
+                raise IntegrityFailure("seat_execution_notice_invalid", "terminal execution acceptance needs its notice")
+            continue
+        if record["kind"] == "send_readiness_observation":
+            envelope_id = str(record["envelope_id"])
+            envelope = prior_by_id.get(envelope_id)
+            if envelope is None:
+                raise IntegrityFailure(
+                    "send_readiness_order_invalid",
+                    "send readiness must follow its referenced message envelope",
+                )
+            if envelope_id in observed_envelopes:
+                raise IntegrityFailure(
+                    "send_readiness_duplicate",
+                    "one envelope can have only one readiness observation",
+                )
+            if any(record[field] != envelope[field] for field in (
+                "sender", "recipient", "idempotency_key",
+            )):
+                raise IntegrityFailure(
+                    "send_readiness_binding_invalid",
+                    "readiness parties and idempotency key must equal its envelope",
+                )
+            if not (
+                record["timestamp"] == record["observed_at"]
+                == record["readiness"]["observed_at"] == envelope["timestamp"]
+            ):
+                raise IntegrityFailure(
+                    "send_readiness_timestamp_invalid",
+                    "readiness observation timestamps must equal its envelope timestamp",
+                )
+            observed_envelopes.add(envelope_id)
+            continue
+        if record["kind"] in ASK_RECORD_KINDS:
+            _validate_ask_event(record, ask_questions, ask_resolved)
             continue
         original_id = str(record["retracted_message_id"])
         original = prior_by_id.get(original_id)
@@ -166,9 +297,13 @@ class EventLog:
     def records(self) -> List[Dict[str, object]]:
         """Return retained message envelopes, including messages later retracted."""
 
+        records, _unrecognized = read_records_compatible_sealed_snapshot(
+            self.root, self.relative_path, allowed_kinds=set(EVENT_KINDS)
+        )
+        self._validate_event_records(records)
         return [
             record
-            for record in self.event_records()
+            for record in records
             if record["kind"] == "message_envelope"
         ]
 
@@ -228,10 +363,10 @@ class EventLog:
             integrity=False,
         )
 
-    def event_records(self) -> List[Dict[str, object]]:
+    def event_records(self, *, sealed: bool = False) -> List[Dict[str, object]]:
         """Known event frames; well-formed future kinds are skipped (SKEW-2)."""
 
-        records, _unrecognized = self.compatible_event_records()
+        records, _unrecognized = self.compatible_event_records(sealed=True) if sealed else self.compatible_event_records()
         return records
 
     def strict_event_records(self) -> List[Dict[str, object]]:
@@ -258,11 +393,12 @@ class EventLog:
         }
 
     def compatible_event_records(
-        self, *, snapshot: bool = False
+        self, *, snapshot: bool = False, sealed: bool = False
     ) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
         """Read known event testimony without letting future kinds darken the bus."""
 
-        reader = read_records_compatible_snapshot if snapshot else read_records_compatible
+        reader = (read_records_compatible_sealed_snapshot if sealed
+                  else read_records_compatible_snapshot if snapshot else read_records_compatible)
         records, unrecognized = reader(
             self.root, self.relative_path, allowed_kinds=set(EVENT_KINDS)
         )
@@ -324,7 +460,41 @@ class EventLog:
             return "absent_legacy"
         return dict(value)
 
-    def _deny(self, sender: str, recipient: str, reason_code: str) -> None:
+    @staticmethod
+    def _reply_refusal_detail(
+        sender: str,
+        recipient: str,
+        reply_to: object,
+        prior_events: Sequence[Dict[str, object]],
+        original: Optional[Dict[str, object]],
+    ) -> Dict[str, str]:
+        """Advice from the checked snapshot, never a rewritten authored reply."""
+
+        coordinate = reply_to
+        if (
+            not isinstance(coordinate, str)
+            or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", coordinate) is None
+        ):
+            coordinate = "invalid-" + hashlib.sha256(repr(reply_to).encode("utf-8")).hexdigest()[:16]
+        newest = next(
+            (row for row in reversed(prior_events)
+             if row.get("kind") == "message_envelope"
+             and row.get("sender") == recipient and row.get("recipient") == sender),
+            None,
+        )
+        remedy = (
+            "omit --reply-to to start a new thread" if newest is None
+            else "retry send with --reply-to " + str(newest["id"])
+        )
+        case = "unknown_reply" if original is None else (
+            "own_outgoing" if original["sender"] == sender else "other_parties"
+        )
+        return {"case": case, "requested_reply_to": coordinate, "remedy": remedy}
+
+    def _deny(
+        self, sender: str, recipient: str, reason_code: str,
+        *, detail: Optional[Dict[str, str]] = None,
+    ) -> None:
         def safe_claim(value: object) -> str:
             if isinstance(value, str) and 1 <= len(value) <= 64:
                 return value
@@ -341,11 +511,26 @@ class EventLog:
             "claimed_recipient": safe_claim(recipient),
             "reason_code": reason_code,
         }
+        message = f"message refused: {reason_code}"
+        if detail is not None:
+            denial["detail"] = detail
+            case_text = {
+                "unknown_reply": "was not found",
+                "own_outgoing": "was sent by you",
+                "other_parties": "is between other parties",
+            }[detail["case"]]
+            message += f"; {detail['requested_reply_to']} {case_text}"
         append_record(self.root, self.denial_relative_path, denial, allowed_kinds={"denial_receipt"})
-        raise ProtocolRefusal(reason_code, f"message refused: {reason_code}")
+        refusal = ProtocolRefusal(
+            reason_code, message, remedy=None if detail is None else detail["remedy"]
+        )
+        if detail is not None:
+            refusal.refusal_detail = dict(detail)
+        raise refusal
 
-    @shared_epoch_operation
-    def send(
+    @automatic_epoch_operation("send")
+    @shared_epoch_operation(selected_writer=True)
+    def _send_guarded(
         self,
         sender: str,
         recipient: str,
@@ -355,12 +540,106 @@ class EventLog:
         note: str,
         *,
         reply_to: Optional[str] = None,
+        message_class: str = "normal",
         idempotency_key: Optional[str] = None,
         worker_session_id: Optional[str] = None,
         attempt_binding: object = None,
         claim: object = None,
+        address_preview: object = None,
         now: Optional[datetime] = None,
+        _execution_publication: object = None,
+        _teardown_report: bool = False,
     ) -> Dict[str, object]:
+        try:
+            return self._send_impl(
+                sender,
+                recipient,
+                repo,
+                sha,
+                doc,
+                note,
+                reply_to=reply_to,
+                message_class=message_class,
+                idempotency_key=idempotency_key,
+                worker_session_id=worker_session_id,
+                attempt_binding=attempt_binding,
+                claim=claim,
+                address_preview=address_preview,
+                now=now,
+                _execution_publication=_execution_publication,
+                _teardown_report=_teardown_report,
+            )
+        except ProtocolRefusal as exc:
+            rebound = bind_send_refusal_remedy(exc)
+            if rebound is exc:
+                raise
+            raise rebound from exc
+
+    def send(
+        self, sender: str, recipient: str, repo: str, sha: str, doc: str, note: str,
+        *, reply_to: Optional[str] = None, message_class: str = "normal",
+        idempotency_key: Optional[str] = None, worker_session_id: Optional[str] = None,
+        attempt_binding: object = None, claim: object = None, address_preview: object = None,
+        now: Optional[datetime] = None, _execution_publication: object = None,
+        _teardown_report: bool = False,
+    ) -> Dict[str, object]:
+        result = self._send_guarded(sender, recipient, repo, sha, doc, note,
+            reply_to=reply_to, message_class=message_class, idempotency_key=idempotency_key,
+            worker_session_id=worker_session_id, attempt_binding=attempt_binding,
+            claim=claim, address_preview=address_preview, now=now,
+            _execution_publication=_execution_publication, _teardown_report=_teardown_report)
+        # The receiving hook needs the native writer locks. Never wait for its
+        # presentation from inside the send transaction or epoch maintenance.
+        from .claude_inbox import notify_send
+        try:
+            observation = notify_send(self.root, result["message"])
+        except (OSError, ProtocolRefusal) as exc:
+            # The envelope already exists. An optional wake failure cannot
+            # turn that append into a before-mutation send refusal.
+            observation = {"status": "fallback", "code": "claude_inbox_unavailable",
+                           "reason": getattr(exc, "code", "state_io_error")}
+        if observation is not None:
+            result["claude_inbox"] = observation
+        return result
+
+    # Existing epoch qualification uses this seam to bypass automatic
+    # maintenance while retaining writer admission. Preserve that contract.
+    send.__wrapped__ = _send_guarded.__wrapped__
+
+    def _send_impl(
+        self,
+        sender: str,
+        recipient: str,
+        repo: str,
+        sha: str,
+        doc: str,
+        note: str,
+        *,
+        reply_to: Optional[str] = None,
+        message_class: str = "normal",
+        idempotency_key: Optional[str] = None,
+        worker_session_id: Optional[str] = None,
+        attempt_binding: object = None,
+        claim: object = None,
+        address_preview: object = None,
+        now: Optional[datetime] = None,
+        _execution_publication: object = None,
+        _teardown_report: bool = False,
+    ) -> Dict[str, object]:
+        if message_class not in ("normal", "fyi"):
+            raise ProtocolRefusal("message_class_invalid", "message class must be normal or fyi",
+                remedy="send with --message-class normal or --message-class fyi")
+        if _execution_publication is not None:
+            from .seat_execution import _ExecutionPublication
+            if type(_execution_publication) is not _ExecutionPublication or not _execution_publication.authorized(self.root):
+                raise ProtocolRefusal("seat_execution_controller_only", "execution companion requires its native controller",
+                    remedy="use the authenticated native execution producer; caller-created companions have no authority")
+        def execution_matches(records, envelope):
+            saved = next((r for r in records if r.get("kind") == "seat_execution"
+                          and r["envelope_id"] == envelope["id"]), None)
+            return ((_execution_publication is None and saved is None)
+                    or (_execution_publication is not None and saved is not None
+                        and _execution_publication.matches(saved)))
         # Node spellings are lexical input, not a claim eligible for durable
         # denial evidence.  Validate both parties before touching registry or
         # receipt state so malformed CLI values have a zero-state refusal.
@@ -380,7 +659,10 @@ class EventLog:
                 f"message refused: recipient {recipient!r} is not registered; "
                 f"registered nodes: {roster}",
             ) from exc
-        observed_at = _send_observed_at(now)
+        # Validate an explicit clock during preflight. A default observation
+        # clock is captured only for a fresh send under the recipient guard;
+        # exact replay never needs a new observation instant.
+        observed_at = None if now is None else _send_observed_at(now)
         key = ("idempotency-" + uuid7_hex()) if idempotency_key is None else idempotency_key
         if not isinstance(key, str) or not key or len(key) > 128:
             raise ProtocolRefusal("idempotency_key_invalid", "idempotency key must contain 1 to 128 characters")
@@ -388,18 +670,14 @@ class EventLog:
         session = worker_session_id
         if isinstance(binding, dict) and session is None:
             session = binding["worker_session_id"]  # validator proves this opaque value
-        prior_events = self.event_records()
-        if reply_to is not None:
-            original = next((record for record in prior_events if record["id"] == reply_to), None)
-            if original is None:
-                self._deny(sender, recipient, "reply_to_unknown")
-            if original["sender"] != recipient or original["recipient"] != sender:
-                self._deny(sender, recipient, "reply_to_parties_mismatch")
         envelope: Dict[str, object] = {
             "schema_version": 0,
             "id": "msg-" + uuid7_hex(),
             "tenant_id": self.root.tenant_id,
-            "timestamp": observed_at,
+            # This fixed stamp admits argument/claim validation before any
+            # mutation. For a default clock it is replaced in the fresh-send
+            # branch before publication; it never reaches a transaction or receipt.
+            "timestamp": observed_at or "1970-01-01T00:00:00.000Z",
             "kind": "message_envelope",
             "sender": sender,
             "recipient": recipient,
@@ -410,67 +688,40 @@ class EventLog:
             "idempotency_key": key,
             "attempt_binding": binding,
         }
-        if reply_to is not None:
-            envelope["reply_to"] = reply_to
+        if message_class != "normal":
+            envelope["message_class"] = message_class
         if session is not None:
             envelope["worker_session_id"] = session
+        if address_preview is not None:
+            envelope["address_preview"] = address_preview
         validate_record(envelope, self.root.tenant_id, frozenset({"message_envelope"}), integrity=False)
         delivery_claim = None
         if claim is not None:
             delivery_claim = self._delivery_claim(
                 claim, envelope_id=str(envelope["id"]), envelope_sha=sha
             )
+        from .send_prefix import selected_records
+        prior_events = selected_records(self.root, key, reply_to)
+        if reply_to is not None:
+            original = next((record for record in prior_events
+                if record["kind"] == "message_envelope" and record["id"] == reply_to), None)
+            if original is None:
+                self._deny(sender, recipient, "reply_to_unknown",
+                    detail=self._reply_refusal_detail(sender, recipient, reply_to, self.event_records(), original))
+            if original["sender"] != recipient or original["recipient"] != sender:
+                self._deny(sender, recipient, "reply_to_parties_mismatch",
+                    detail=self._reply_refusal_detail(sender, recipient, reply_to, self.event_records(), original))
+            # All other input was validated before cache/lock creation. The
+            # reply coordinate now names a validated native envelope, rather
+            # than turning a non-message record into a syntax refusal.
+            envelope["reply_to"] = reply_to
         payload_fields = (
             "sender", "recipient", "repo", "sha", "doc", "note", "reply_to",
-            "worker_session_id",
+            "worker_session_id", "address_preview",
         )
-        for record in prior_events:
-            if record.get("kind") != "message_envelope":
-                continue
-            if record.get("idempotency_key") != key:
-                continue
-            prior_claim = next(
-                (
-                    row for row in prior_events
-                    if row.get("kind") == "delivery_claim"
-                    and row.get("note_ref") == record.get("id")
-                ),
-                None,
-            )
-            if (
-                all(record.get(field) == envelope.get(field) for field in payload_fields)
-                and record.get("attempt_binding", "absent_legacy")
-                == envelope["attempt_binding"]
-                and (
-                    (delivery_claim is None and prior_claim is None)
-                    or (
-                        delivery_claim is not None
-                        and prior_claim is not None
-                        and self._claim_semantics(prior_claim)
-                        == self._claim_semantics(delivery_claim)
-                    )
-                )
-            ):
-                return self._send_receipt(
-                    record if prior_claim is None else {"message": record, "claim": prior_claim},
-                    self.registry.node_lease_state(
-                        recipient,
-                        now=datetime.fromisoformat(
-                            str(record["timestamp"]).replace("Z", "+00:00")
-                        ),
-                    ),
-                    observed_at=str(record["timestamp"]),
-                )
-            break
-        self.registry.require_protocol_lease(sender, now=now, act="send by sender")
-        recipient_lease = self.registry.require_protocol_lease(
-            recipient, now=now, act="send to recipient"
-        )
-
-        def decide(
-            records: list[Dict[str, object]],
-        ) -> tuple[Dict[str, object], Sequence[Dict[str, object]]]:
-            self._validate_event_records(records)
+        def find_replay(
+            records: Sequence[Dict[str, object]],
+        ) -> Optional[tuple[Dict[str, object], Dict[str, object]]]:
             for record in records:
                 if record.get("kind") != "message_envelope":
                     continue
@@ -486,6 +737,8 @@ class EventLog:
                 )
                 if (
                     all(record.get(field) == envelope.get(field) for field in payload_fields)
+                    and record.get("message_class", "normal") == message_class
+                    and execution_matches(records, record)
                     and record.get("attempt_binding", "absent_legacy")
                     == envelope["attempt_binding"]
                     and (
@@ -500,46 +753,131 @@ class EventLog:
                 ):
                     return (
                         record if prior_claim is None else {"message": record, "claim": prior_claim},
-                        (),
+                        self._saved_readiness(records, record),
                     )
                 raise ProtocolRefusal("idempotency_conflict", "idempotency key has different content")
+            return None
+
+        def decide(
+            records: list[Dict[str, object]],
+        ) -> tuple[tuple[Dict[str, object], Dict[str, object]], Sequence[Dict[str, object]]]:
+            replay = find_replay(records)
+            if replay is not None:
+                return replay, ()
             if delivery_claim is None:
-                return envelope, (envelope,)
+                tail = (envelope, observation) + launcher_tail
+                if _execution_publication is not None:
+                    companion = _execution_publication.companion(envelope)
+                    validate_record(companion, self.root.tenant_id, {"seat_execution"}, integrity=False)
+                    tail += (companion,)
+                return (envelope, readiness), tail
+            if _execution_publication is not None:
+                raise ProtocolRefusal("seat_execution_claim_unsupported", "execution notice does not accept a delivery claim",
+                    remedy="let the native execution producer send its atomic notice without a delivery claim")
             result = {"message": envelope, "claim": delivery_claim}
-            return result, (envelope, delivery_claim)
+            return (result, readiness), (envelope, delivery_claim, observation) + launcher_tail
 
         try:
-            durable = transact_records(
-                self.root,
-                self.relative_path,
-                decide,
-                allowed_kinds=EVENT_KINDS,
-                skip_unknown_kinds=True,
-            )
-            return self._send_receipt(
-                durable,
-                recipient_lease,
-                observed_at=observed_at,
-            )
+            from .wake_hold import wake_coordination_guard
+
+            replay = find_replay(prior_events)
+            if replay is not None:
+                return self._send_receipt(*replay)
+
+            # Observe before taking the event-ledger lock. Both testimony and
+            # its append stay under the same recipient guard (epoch -> node
+            # -> ledger); the observer must not reacquire this physical guard.
+            # Teardown reports are protocol evidence from a paused seat. The
+            # teardown transaction already owns the sender's lane lock.
+            native_session = (native_launcher_runtime_session()
+                              if not _teardown_report and _execution_publication is None
+                              and session is None else None)
+            launcher_tail = ()
+            with ExitStack() as guards:
+                nodes = {recipient} if native_session is None else {sender, recipient}
+                for node in sorted(nodes):
+                    guards.enter_context(wake_coordination_guard(self.root, node))
+                prior_events = selected_records(self.root, key, reply_to, previous=prior_events)
+                # Frozen testimony wins even if today's observer is absent.
+                replay = find_replay(prior_events)
+                if replay is not None:
+                    durable, saved_readiness = replay
+                else:
+                    if observed_at is None:
+                        observed_at = _send_observed_at(None)
+                    envelope["timestamp"] = observed_at
+                    operation_now = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+                    self.registry.require_protocol_lease(sender, now=operation_now, act="send by sender")
+                    self.registry.require_protocol_lease(
+                        recipient, now=operation_now, act="send to recipient"
+                    )
+                    if native_session is not None:
+                        launcher = capture_native_launcher(self.root, envelope, native_session)
+                        if launcher is not None:
+                            launcher_tail = (launcher,)
+                    readiness = RecipientReadiness._observe_already_guarded(
+                        self.root, recipient, observed_at=observed_at,
+                    ).artifact()
+                    observation = {
+                        "schema_version": 1,
+                        "id": "send-readiness-" + uuid7_hex(),
+                        "tenant_id": self.root.tenant_id,
+                        "timestamp": observed_at,
+                        "kind": "send_readiness_observation",
+                        "envelope_id": envelope["id"],
+                        "sender": sender,
+                        "recipient": recipient,
+                        "observed_at": observed_at,
+                        "readiness": readiness,
+                        "idempotency_key": key,
+                    }
+                    from .jsonl import _transact_seat_execution_records
+                    transaction = _transact_seat_execution_records if _execution_publication is not None else transact_records
+                    coordinates = (self.root,) if _execution_publication is not None else (self.root, self.relative_path)
+                    from .send_prefix import stage_send
+                    with stage_send(self.root, EVENT_KINDS, key, reply_to, prior_events, decide) as stage:
+                        durable, saved_readiness = transaction(
+                            *coordinates,
+                            decide,
+                            allowed_kinds=EVENT_KINDS,
+                            skip_unknown_kinds=True,
+                            _send_selection=(key, reply_to, prior_events, stage),
+                        )
+            return self._send_receipt(durable, saved_readiness)
         except ProtocolRefusal as exc:
             if exc.code == "idempotency_conflict":
                 self._deny(sender, recipient, "idempotency_conflict")
             raise
 
     @staticmethod
+    def _saved_readiness(
+        records: Sequence[Dict[str, object]], envelope: Mapping[str, object],
+    ) -> Dict[str, object]:
+        """Read the frozen companion; never invent checks for legacy mail."""
+
+        for record in records:
+            if (record["kind"] == "send_readiness_observation"
+                    and record["envelope_id"] == envelope["id"]):
+                return dict(record["readiness"])
+        return {
+            "state": "unknown",
+            "reason": "historical_readiness_missing",
+            "observed_at": str(envelope["timestamp"]),
+            "checked_mechanisms": [],
+            "mechanism_evidence": [],
+        }
+
+    @staticmethod
     def _send_receipt(
         durable: Dict[str, object],
-        recipient_lease: Mapping[str, object],
-        *,
-        observed_at: str,
+        readiness: Mapping[str, object],
     ) -> SendReceipt:
         result = dict(durable) if "message" in durable else {"message": durable}
-        result["recipient_readiness"] = RecipientReadiness.from_lease(
-            recipient_lease, observed_at=observed_at
-        ).artifact()
+        result["recipient_readiness"] = dict(readiness)
         return SendReceipt(result)
 
-    @shared_epoch_operation
+    @automatic_epoch_operation("retract")
+    @shared_epoch_operation(selected_writer=True)
     def retract(
         self,
         retracted_message_id: str,
@@ -635,7 +973,8 @@ class EventLog:
             skip_unknown_kinds=True,
         )
 
-    @shared_epoch_operation
+    @automatic_epoch_operation("present")
+    @shared_epoch_operation(selected_writer=True)
     def present(
         self,
         recipient: str,
@@ -643,6 +982,7 @@ class EventLog:
         *,
         worker_session_id: Optional[str] = None,
         now: Optional[datetime] = None,
+        _wake_only: bool = False,
     ) -> Tuple[List[Dict[str, object]], Optional[Dict[str, object]]]:
         """Present under the same recipient/session guard as wake evaluation."""
         recipient = self.registry.resolve_node_id(recipient, field="recipient")
@@ -653,9 +993,11 @@ class EventLog:
                 limit,
                 worker_session_id=worker_session_id,
                 now=now,
+                _wake_only=_wake_only,
             )
 
-    @shared_epoch_operation
+    @automatic_epoch_operation("drain")
+    @shared_epoch_operation(selected_writer=True)
     def drain(
         self,
         recipient: str,
@@ -701,22 +1043,28 @@ class EventLog:
         """Message ids still awaiting acknowledgment for one active recipient."""
 
         from .cursor import SparseCursor
+        from .inbox_prefix import recipient_frames
 
         node = self.registry.require_active(recipient)["node_id"]
-        frames = self.event_records()
+        frames = recipient_frames(self.root, str(node), read_only=True)
+        events = [record for record in frames if record["kind"] == "message_envelope"]
         retracted = {
             str(record["retracted_message_id"])
             for record in frames
             if record["kind"] == "message_retracted"
         }
-        acked = SparseCursor(self.root).acked_ids(str(node))
+        _delivered, acked = SparseCursor(self.root).state_for(
+            str(node), events, retracted_ids=retracted, sealed=True,
+        )
+        # A person's rejection is terminal: never presented, never acknowledged.
+        rejected = rejected_message_ids(self.root, str(node))
         return [
             str(record["id"])
-            for record in frames
-            if record["kind"] == "message_envelope"
-            and record["recipient"] == node
+            for record in events
+            if record["recipient"] == node
             and record["id"] not in acked
             and record["id"] not in retracted
+            and record["id"] not in rejected
         ]
 
     def empty_inbox(
@@ -762,7 +1110,7 @@ class EventLog:
             "acting_session_id": acting_session_id,
         }
 
-    @shared_epoch_operation
+    @shared_epoch_operation(selected_writer=True)
     def present_compatible(
         self,
         recipient: str,
@@ -835,43 +1183,10 @@ class EventLog:
         *,
         worker_session_id: Optional[str] = None,
         now: Optional[datetime] = None,
+        _wake_only: bool = False,
     ) -> Tuple[List[Dict[str, object]], Optional[Dict[str, object]]]:
-        recipient = validate_identifier(recipient, "recipient")
-        self.registry.require_active(recipient)
-        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_PRESENTATION_ITEMS:
-            raise ProtocolRefusal("presentation_limit_invalid", "presentation limit must be 1 through 1000")
-        if worker_session_id is not None:
-            self._session_component(worker_session_id)
-            messages, _payload = self._present_full_scan(
-                recipient, limit, worker_session_id=worker_session_id
-            )
-        elif any(
-            record["kind"] == "message_retracted" for record in self.event_records()
-        ):
-            # A snapshot containing only envelope tails cannot prove a newly
-            # appended retraction; use the same full projection as sessions.
-            messages, _payload = self._present_full_scan(recipient, limit)
-        else:
-            store = None
-            try:
-                store = self._inbox_snapshot_store(recipient, limit)
-                loaded = store.load()
-                messages = self._messages_from_snapshot(
-                    recipient, limit, loaded.payload, loaded.tails.get("events.jsonl", ())
-                )
-            except SnapshotRefusal:
-                before_scan = None
-                if store is not None:
-                    try:
-                        before_scan = store.capture()
-                    except SnapshotRefusal:
-                        pass
-                messages, payload = self._present_full_scan(recipient, limit)
-                if store is not None and before_scan is not None:
-                    try:
-                        store.refresh(payload, expected=before_scan)
-                    except SnapshotRefusal:
-                        pass
+        messages = self._read_inbox_already_guarded(
+            recipient, limit, worker_session_id=worker_session_id, _wake_only=_wake_only)
         if not messages:
             return [], None
         self.registry.require_protocol_lease(
@@ -882,31 +1197,89 @@ class EventLog:
         )
         return messages, receipt
 
+    def _read_inbox_already_guarded(
+        self, recipient: str, limit: int = MAX_PRESENTATION_ITEMS, *,
+        worker_session_id: Optional[str] = None, _wake_only: bool = False,
+    ) -> List[Dict[str, object]]:
+        """The shared inbox reader, without a premature presentation receipt.
+
+        The ordinary peek and native context relay hold the same recipient
+        guard. Keep reader/index adoption here so both inherit it together.
+        """
+        recipient = validate_identifier(recipient, "recipient")
+        self.registry.require_active(recipient)
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_PRESENTATION_ITEMS:
+            raise ProtocolRefusal("presentation_limit_invalid", "presentation limit must be 1 through 1000")
+        if worker_session_id is not None:
+            self._session_component(worker_session_id)
+        from .inbox_prefix import recipient_frames
+        frames = recipient_frames(self.root, recipient)
+        messages, _payload = self._present_from_frames(
+            frames, recipient, limit, worker_session_id=worker_session_id,
+            _wake_only=_wake_only,
+        )
+        return messages
+
     def _write_delivery_receipt(
         self,
         recipient: str,
         messages: Sequence[Dict[str, object]],
         *,
         worker_session_id: Optional[str] = None,
-    ) -> Dict[str, object]:
-        relative = self._delivery_relative_path(recipient, worker_session_id=worker_session_id)
+        _bridge_publication: object = None,
+        _acting_session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, object]]:
+        require_presentable(self.root, recipient, messages)
+        from .bridge_publication import BridgePublication, deferred_delivery
+        proof = None
+        if _bridge_publication is not None:
+            if (not isinstance(_bridge_publication, tuple) or len(_bridge_publication) != 2
+                    or type(_bridge_publication[0]) is not BridgePublication
+                    or worker_session_id is not None):
+                raise ProtocolRefusal("bridge_publication_invalid", "delivery has no native bridge publication owner",
+                    remedy="preserve the exact envelope IDs and recover through the declared native inbox")
+            owner, supplied = _bridge_publication
+            proof = owner.receipt_proof(self.root, recipient, messages, supplied)
+        elif deferred_delivery(self, recipient, messages, worker_session_id):
+            # This private bridge query has not flushed its output.  Return
+            # the real messages and no receipt; a pending batch is not one.
+            return None
+        stamp = utc_now()
+        from .presenter_liveness import presenter_evidence
 
-        def decide(prior: list[Dict[str, object]]) -> tuple[Dict[str, object], Dict[str, object]]:
+        evidence = {"shown": True} if proof is not None else presenter_evidence(
+            self.root, recipient, now=_parse_receipt_time(stamp)
+        )
+        from .claude_inbox import delivery_fallbacks
+        diagnostic = delivery_fallbacks(self.root, recipient,
+            proof["acting_session_id"] if proof is not None else _acting_session_id,
+            messages) if evidence["shown"] and worker_session_id is None else None
+
+        def decide(prior_count: int) -> tuple[Dict[str, object], Dict[str, object]]:
+            # BUS-DELIVERY-UNPRESENTED-1: a delivery whose recipient presenter
+            # cannot be shown alive from the bus's own receipts at this instant
+            # is a distinct kind, never a plain delivery.
             receipt: Dict[str, object] = {
                 "schema_version": 0,
                 "id": "delivery-" + uuid7_hex(),
                 "tenant_id": self.root.tenant_id,
-                "timestamp": utc_now(),
-                "kind": "delivery_receipt",
+                "timestamp": stamp,
+                "kind": "delivery_receipt" if evidence["shown"] else "delivered_unpresented",
                 "recipient": recipient,
                 "item_ids": [message["id"] for message in messages],
-                "presentation_count": len(prior) + 1,
+                "presentation_count": prior_count + 1,
             }
+            if not evidence["shown"]:
+                receipt["presenter_evidence"] = evidence
+            if proof is not None:
+                receipt["bridge_publication"] = proof
+            if diagnostic is not None:
+                receipt.update(schema_version=1, claude_inbox=diagnostic)
             return receipt, receipt
 
-        return transact(
-            self.root, relative, decide, allowed_kinds=set(WAKE_HOLD_KINDS)
-        )
+        from .cursor_prefix import transact_delivery
+        return transact_delivery(self.root, recipient, [message["id"] for message in messages], decide,
+            worker_session_id=worker_session_id)
 
     def stale_send_projection(self) -> List[Dict[str, object]]:
         """Project dead-holder sends from evidence only; this method never renews a lease."""
@@ -974,22 +1347,13 @@ class EventLog:
             return "dead_holder"
         return None
 
-    def _inbox_snapshot_store(self, recipient: str, limit: int) -> SnapshotStore:
-        return SnapshotStore(
-            self.root,
-            reader="inbox",
-            key=f"{recipient}:{limit}",
-            discover_sources=lambda: (
-                SourceSpec(self.relative_path, EVENT_KINDS),
-            ),
-        )
-
     def _present_full_scan(
-        self, recipient: str, limit: int, *, worker_session_id: Optional[str] = None
+        self, recipient: str, limit: int, *, worker_session_id: Optional[str] = None,
+        _wake_only: bool = False,
     ) -> tuple[List[Dict[str, object]], Dict[str, object]]:
-        frames = self.event_records()
+        frames = self.event_records(sealed=True)
         return self._present_from_frames(
-            frames, recipient, limit, worker_session_id=worker_session_id
+            frames, recipient, limit, worker_session_id=worker_session_id, _wake_only=_wake_only
         )
 
     def _present_from_frames(
@@ -999,6 +1363,7 @@ class EventLog:
         limit: int,
         *,
         worker_session_id: Optional[str] = None,
+        _wake_only: bool = False,
     ) -> tuple[List[Dict[str, object]], Dict[str, object]]:
         from .cursor import SparseCursor
 
@@ -1013,6 +1378,7 @@ class EventLog:
             events,
             worker_session_id=worker_session_id,
             retracted_ids=retracted_ids,
+            sealed=True,
         )
         matching = [
             record
@@ -1022,6 +1388,10 @@ class EventLog:
             and record["id"] not in retracted_ids
             and record["id"] not in acknowledged
         ]
+        matching = withhold_unapproved(self.root, recipient, matching)
+        if _wake_only:
+            from .mail_health import wake_eligible
+            matching = [record for record in matching if wake_eligible(record)]
         messages = matching[:limit]
         payload: Dict[str, object] = {
             "recipient": recipient,
@@ -1034,119 +1404,3 @@ class EventLog:
         if worker_session_id is not None:
             payload["worker_session_id"] = worker_session_id
         return messages, payload
-
-    def _messages_from_snapshot(
-        self,
-        recipient: str,
-        limit: int,
-        payload: Dict[str, object],
-        event_tail: Sequence[Dict[str, object]],
-    ) -> List[Dict[str, object]]:
-        fields = {
-            "recipient",
-            "limit",
-            "messages",
-            "truncated",
-            "delivered_ids",
-            "acked_ids",
-        }
-        if set(payload) != fields or payload.get("recipient") != recipient or payload.get("limit") != limit:
-            raise SnapshotRefusal(
-                "snapshot_payload_invalid", "inbox snapshot parameters do not match"
-            )
-        raw_messages = payload["messages"]
-        raw_delivered = payload["delivered_ids"]
-        raw_acked = payload["acked_ids"]
-        truncated = payload["truncated"]
-        if (
-            not isinstance(raw_messages, list)
-            or not all(isinstance(row, dict) for row in raw_messages)
-            or not isinstance(raw_delivered, list)
-            or not all(isinstance(item, str) for item in raw_delivered)
-            or not isinstance(raw_acked, list)
-            or not all(isinstance(item, str) for item in raw_acked)
-            or not isinstance(truncated, bool)
-        ):
-            raise SnapshotRefusal(
-                "snapshot_payload_invalid", "inbox snapshot payload is malformed"
-            )
-        messages = [dict(row) for row in raw_messages]
-        delivered = set(raw_delivered)
-        acknowledged = set(raw_acked)
-        known = {str(row.get("id")) for row in messages}
-
-        delivery_records = read_records(
-            self.root,
-            self._delivery_relative_path(recipient),
-            allowed_kinds=set(WAKE_HOLD_KINDS),
-        )
-        for receipt in delivery_records:
-            if receipt.get("recipient") != recipient:
-                raise IntegrityFailure(
-                    "delivery_evidence_invalid",
-                    "delivery belongs to another recipient",
-                )
-            for item_id in receipt["item_ids"]:
-                if item_id not in delivered and item_id not in known:
-                    raise SnapshotRefusal(
-                        "snapshot_tail_history_required",
-                        "delivery references an event outside the retained inbox window",
-                    )
-                delivered.add(str(item_id))
-
-        from .cursor import SparseCursor
-
-        ack_records = read_records(
-            self.root,
-            SparseCursor(self.root)._relative_path_for(recipient),
-            allowed_kinds={"ack_receipt"},
-        )
-        for receipt in ack_records:
-            if receipt.get("recipient") != recipient:
-                raise IntegrityFailure(
-                    "ack_evidence_invalid",
-                    "ack receipt belongs to another contract",
-                )
-            for item_id in receipt["item_ids"]:
-                if item_id not in delivered:
-                    raise IntegrityFailure(
-                        "ack_evidence_invalid",
-                        "ack does not correspond to delivered recipient evidence",
-                    )
-                acknowledged.add(str(item_id))
-
-        retained_before_ack = len(messages)
-        messages = [row for row in messages if row["id"] not in acknowledged]
-        if len(messages) != retained_before_ack and truncated:
-            raise SnapshotRefusal(
-                "snapshot_tail_history_required",
-                "acknowledgment exposed a truncated inbox window",
-            )
-
-        for record in event_tail:
-            if record.get("kind") in {
-                "bus_epoch_roll_receipt", "delivery_claim", "ledger_repair_receipt",
-            }:
-                continue
-            if record.get("kind") != "message_envelope":
-                raise SnapshotRefusal(
-                    "snapshot_tail_history_required",
-                    "event tail needs full ledger history",
-                )
-            if record.get("reply_to") is not None:
-                raise SnapshotRefusal(
-                    "snapshot_tail_history_required",
-                    "reply tail needs omitted causal history",
-                )
-            if (
-                record.get("recipient") != recipient
-                or record.get("worker_session_id") is not None
-                or record["id"] in acknowledged
-            ):
-                continue
-            if len(messages) < limit:
-                messages.append(dict(record))
-                known.add(str(record["id"]))
-            else:
-                truncated = True
-        return messages[:limit]

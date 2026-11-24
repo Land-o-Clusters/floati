@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/recipient-preview.schema.json",
+  "title": "Floati Recipient Preview v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["preview_version", "tenant_id", "sender", "address", "recipients", "digest"],
+  "properties": {
+    "preview_version": {"const": 1},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "sender": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+    "address": {"type": "string", "maxLength": 133, "pattern": "^(?:everyone|repo:[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?|person:[a-z0-9][a-z0-9_-]{0,63})$"},
+    "person_source_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "recipients": {
+      "type": "array", "minItems": 1, "maxItems": 4096, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"}
+    },
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

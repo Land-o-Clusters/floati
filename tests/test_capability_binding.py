@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_queue, wait_event
 from floati import fixture_ids as public_ids
 
 import dataclasses
@@ -50,7 +51,7 @@ def _race_binding(
 ):
     try:
         root = FloatiRoot.open_direct_home(Path(root_path), create=False)
-        start.wait(5)
+        wait_event(start, 'capability_binding: start synchronization')
         if action == "bind":
             policy = Policy.load(Path(policy_path))
             result = CapabilityBinder(
@@ -70,13 +71,13 @@ def _race_binding(
         queue.put(("error", type(exc).__name__))
 
 
-def _hold_grant_lock(root_path, ready):
+def _hold_grant_lock(root_path, ready, release):
     path = Path(root_path) / "capabilities" / "grants.jsonl.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         ready.set()
-        time.sleep(2)
+        wait_event(release, "grant lock holder release", timeout=120)
 
 
 def _race_dispatch(root_path, policy_path, snapshot_id, start, queue):
@@ -84,7 +85,7 @@ def _race_dispatch(root_path, policy_path, snapshot_id, start, queue):
         root = FloatiRoot.open_direct_home(Path(root_path), create=False)
         policy = Policy.load(Path(policy_path))
         binder = CapabilityBinder(RunLedger(root), CapabilityGrantLedger(root))
-        start.wait(5)
+        wait_event(start, 'capability_binding: start synchronization')
         result = binder.dispatch(
             snapshot_id, [public_ids.worker('alpha')], "policy.route", policy,
             now=NOW + timedelta(seconds=20),
@@ -1122,7 +1123,7 @@ class CapabilityBindingTests(unittest.TestCase):
         for process in processes:
             process.join(8)
             self.assertEqual(0, process.exitcode)
-        results = [queue.get(timeout=1) for _ in processes]
+        results = [wait_queue(queue, 'capability_binding: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})
         self.assertEqual(1, sum(value == "capability_revoked" for _, value in results))
         self.assertLessEqual(sum(value == "capability_set_bound" for _, value in results), 1)
@@ -1233,7 +1234,7 @@ class CapabilityBindingTests(unittest.TestCase):
         for process in processes:
             process.join(8)
             self.assertEqual(0, process.exitcode)
-        results = [queue.get(timeout=1) for _ in processes]
+        results = [wait_queue(queue, 'capability_binding: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})
         self.assertEqual(1, sum(status == "ok" for status, _ in results))
         self.assertEqual(
@@ -1249,18 +1250,22 @@ class CapabilityBindingTests(unittest.TestCase):
         """Catches the binder proceeding unlocked after bounded lock acquisition fails."""
         context = multiprocessing.get_context("fork")
         ready = context.Event()
-        holder = context.Process(target=_hold_grant_lock, args=(str(self.root.path), ready))
+        release = context.Event()
+        holder = context.Process(target=_hold_grant_lock, args=(str(self.root.path), ready, release))
         holder.start()
-        self.assertTrue(ready.wait(2))
-        before = self.ledger.records()
-        with self.assertRaises(ProtocolRefusal) as caught:
-            self.binder.bind(
-                self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
-                self.policy, 0, now=NOW + timedelta(seconds=11),
-            )
-        self.assertEqual("ledger_lock_timeout", caught.exception.code)
-        self.assertEqual(before, self.ledger.records())
-        holder.join(4)
+        try:
+            wait_event(ready, "grant lock held before binder refusal control")
+            before = self.ledger.records()
+            with self.assertRaises(ProtocolRefusal) as caught:
+                self.binder.bind(
+                    self.run_id, self.item_id, self.opened["attempt_id"], public_ids.worker('alpha'), "codex",
+                    self.policy, 0, now=NOW + timedelta(seconds=11),
+                )
+            self.assertEqual("ledger_lock_timeout", caught.exception.code)
+            self.assertEqual(before, self.ledger.records())
+        finally:
+            release.set()
+            holder.join(4)
         self.assertEqual(0, holder.exitcode)
 
     def test_snapshot_and_v1_dispatch_short_writes_roll_back_exactly(self) -> None:

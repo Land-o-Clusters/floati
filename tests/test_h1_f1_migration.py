@@ -12,6 +12,7 @@ from floati import fixture_ids as public_ids
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.test_codex_hook_install import expected_stop_block, operator_pair
 from tests.test_h1_f1 import NEEDLE, REPOSITORY_ROOT
 
 
@@ -45,11 +46,16 @@ class H1F1MigrationTests(unittest.TestCase):
         )
 
     def test_new_install_writes_the_floati_wait_launcher(self) -> None:
+        # Empty Stop list: this install CHANGES the definition, so it names
+        # the operator pair derived from fixture coordinates.
         self.installer().install(
             self.workspace,
             public_ids.builder("floati"),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=operator_pair(
+                None, expected_stop_block(self.destination, self.bus_home, 10)
+            ),
         )
         command = json.loads(self.hooks_path.read_text(encoding="utf-8"))[
             "hooks"

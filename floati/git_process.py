@@ -10,6 +10,13 @@ from typing import Sequence
 from .errors import ProtocolRefusal
 
 
+GIT_MAINTENANCE_OPTIONS: tuple[str, ...] = (
+    "-c", "gc.auto=0",
+    "-c", "gc.autoDetach=false",
+    "-c", "maintenance.auto=false",
+)
+
+
 _FIXED_GIT_ENVIRONMENT = {
     "GIT_ASKPASS": "/usr/bin/false",
     "GIT_ATTR_NOSYSTEM": "1",
@@ -48,6 +55,7 @@ def fixed_git_command(
 
     return [
         executable,
+        *GIT_MAINTENANCE_OPTIONS,
         "--no-optional-locks",
         "--no-replace-objects",
         "-c",

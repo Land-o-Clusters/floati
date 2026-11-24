@@ -253,7 +253,7 @@ class TimeHostilityGauntletTests(unittest.TestCase):
             traces = build_full_run_trace_set(base)
             self.assertTrue(all(axis_coverage_from_traces("time", traces).values()))
             for trace in traces:
-                with self.subTest(run_id=trace.run_id):
+                with self.subTest(trace_family=trace.root.path.relative_to(base.resolve(strict=False)).as_posix()):
                     expected = assert_physical_projection(trace)
                     rewritten = [dict(record) for record in trace.records]
                     for index, record in enumerate(rewritten):

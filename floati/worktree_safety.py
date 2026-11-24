@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from .errors import ProtocolRefusal
-from .git_process import require_complete_history_for_reachability
+from .git_process import GIT_MAINTENANCE_OPTIONS, require_complete_history_for_reachability
 
 _MAX_REFS = 4096
 _SANDBOX_ENV = {
@@ -67,7 +67,7 @@ def _run(
 ) -> subprocess.CompletedProcess[bytes]:
     try:
         completed = subprocess.run(
-            ["/usr/bin/git", *arguments],
+            ["/usr/bin/git", *GIT_MAINTENANCE_OPTIONS, *arguments],
             cwd=str(cwd),
             input=stdin,
             env=_SANDBOX_ENV,

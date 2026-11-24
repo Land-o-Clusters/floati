@@ -223,7 +223,7 @@ class LedgerRepair:
             )
         return receipt
 
-    @shared_epoch_operation
+    @shared_epoch_operation(selected_writer=True)
     def quarantine(
         self, ledger: str, record_id: str, *, key: str
     ) -> Dict[str, object]:

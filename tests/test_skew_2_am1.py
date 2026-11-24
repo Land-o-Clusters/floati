@@ -144,6 +144,32 @@ class Skew2Am1WakeSurvivalTests(unittest.TestCase):
         self.assertEqual(1, len(delivery_prefixes))
         self.assertEqual(1, len(acknowledgment_prefixes))
 
+        # A future frame must also survive the writer's carry without changing
+        # the recognized event prefix a native hold reader can reproduce.
+        from datetime import datetime, timezone
+        from floati import bus_epoch
+        from floati.epoch_carry import build_carry_plan
+
+        original = controller.evaluate(public_ids.builder("a"),
+            worker_session_id="cursor-session-1", idempotency_key="before-roll")
+        self.assertEqual([self.known["id"]], original["receipt"]["item_ids"])
+        unknown_frame = (self.root.path / "events.jsonl").read_bytes().splitlines(keepends=True)[-1]
+
+        def planner(root, old):
+            carry = build_carry_plan(root, old)
+            return carry.live_payloads, {"trigger": "ack",
+                "policy": {"max_bytes": 1, "max_age_days": 7, "source": "operator_declared"},
+                "observed_bytes": next(len(raw) for name, _plane, raw in old if name == "events.jsonl"),
+                "observed_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                "epoch_started_at": None, "due_reasons": ["bytes"]}
+
+        bus_epoch.roll_automatic_epoch(self.root, actor="sender", planner=planner)
+        self.assertIn(unknown_frame, (self.root.path / "events.jsonl").read_bytes().splitlines(keepends=True))
+        carried = controller.evaluate(public_ids.builder("a"),
+            worker_session_id="cursor-session-1", idempotency_key="after-roll")
+        self.assertEqual("held_only", carried["state"])
+        self.assertEqual(1, carried["held_total"])
+
     def test_run_cycle_returns_state_with_unknown_event_kind(self) -> None:
         """RED: one run_cycle with unknown event kind returns a state, never raises."""
 

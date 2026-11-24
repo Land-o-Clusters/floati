@@ -36,6 +36,36 @@ class InboxSnapshotTests(unittest.TestCase):
             idempotency_key=f"snapshot-message-{index}",
         )
 
+    def test_carried_event_plane_keeps_reads_snapshots_and_acknowledgments_usable(self):
+        from tests.test_epoch_carry import EpochCarryTests
+
+        for worker in (None, "carried-worker"):
+            with self.subTest(worker_session_id=worker):
+                fixture = EpochCarryTests("runTest")
+                fixture.setUp()
+                try:
+                    message = fixture.send("carried-inbox", worker_session_id=worker)
+                    fixture.automatic_roll()
+                    events = EventLog(fixture.root)
+                    for options in ({}, {"snapshot": True}, {"sealed": True}):
+                        rows = events.compatible_event_records(**options)[0]
+                        self.assertTrue(any(row["kind"] == "epoch_carry_verification"
+                                            for row in rows))
+                        self.assertEqual([message["id"]], [row["id"] for row in rows
+                            if row["kind"] == "message_envelope"])
+                    for _ in range(2):
+                        shown, delivery = events.present("seat-a", worker_session_id=worker)
+                        self.assertEqual([message["id"]], [row["id"] for row in shown])
+                        self.assertEqual([message["id"]], delivery["item_ids"])
+                    shown, _, acknowledgment = events.drain("seat-a",
+                        acting_session_id=worker or "carried-session",
+                        worker_session_id=worker)
+                    self.assertEqual([message["id"]], [row["id"] for row in shown])
+                    self.assertEqual([message["id"]], acknowledgment["item_ids"])
+                    self.assertEqual([], events.present("seat-a", worker_session_id=worker)[0])
+                finally:
+                    fixture.doCleanups()
+
     def test_stable_read_and_simple_event_tail_do_not_full_scan(self) -> None:
         first_message = self.send(0)
         first, _receipt = self.events.present("bob")
@@ -61,7 +91,7 @@ class InboxSnapshotTests(unittest.TestCase):
             [row["id"] for row in tailed],
         )
 
-    def test_ack_that_exposes_truncated_history_falls_back_correctly(self) -> None:
+    def test_ack_that_exposes_truncated_history_uses_the_recipient_index(self) -> None:
         first_message = self.send(0)
         second_message = self.send(1)
         shown, _receipt = self.events.present("bob", limit=1)
@@ -77,7 +107,7 @@ class InboxSnapshotTests(unittest.TestCase):
         ) as full_scan:
             next_messages, _receipt = self.events.present("bob", limit=1)
 
-        self.assertEqual(1, full_scan.call_count)
+        self.assertEqual(0, full_scan.call_count)
         self.assertEqual(
             [second_message["id"]], [row["id"] for row in next_messages]
         )

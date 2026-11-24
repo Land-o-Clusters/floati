@@ -205,7 +205,7 @@ class LiveRootSmokeTests(unittest.TestCase):
         self.assertEqual(1, len(observations))
         observed = observations[0]
         self.assertFalse(observed["directory"].exists())
-        self.assertEqual(1, len(observed["events"]))
+        self.assertEqual(2, len(observed["events"]))
         message = observed["events"][0]
         self.assertEqual("message_envelope", message["kind"])
         self.assertEqual("smoke-sender", message["sender"])
@@ -213,6 +213,17 @@ class LiveRootSmokeTests(unittest.TestCase):
         self.assertEqual("floati", message["repo"])
         self.assertEqual("a" * 40, message["sha"])
         self.assertEqual("docs/evidence/live-root-smoke.md", message["doc"])
+        observation = observed["events"][1]
+        self.assertEqual("send_readiness_observation", observation["kind"])
+        self.assertEqual(message["id"], observation["envelope_id"])
+        for field in ("sender", "recipient", "timestamp", "idempotency_key"):
+            self.assertEqual(message[field], observation[field])
+        self.assertEqual("recipient_not_listening", observation["readiness"]["state"])
+        self.assertEqual("all_mechanisms_absent", observation["readiness"]["reason"])
+        self.assertEqual(["lease", "stop_hook", "seat_board"],
+                         observation["readiness"]["checked_mechanisms"])
+        self.assertEqual(["absent"] * 3,
+                         [row["state"] for row in observation["readiness"]["mechanism_evidence"]])
         self.assertEqual([message["id"]], observed["deliveries"][0]["item_ids"])
         self.assertEqual([message["id"]], observed["acks"][0]["item_ids"])
         self.assertEqual(1, len(observed["deliveries"]))

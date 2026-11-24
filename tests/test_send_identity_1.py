@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 from floati import fixture_ids as public_ids
+from tests.banked_sha_fixture import banked_send_repository
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
@@ -138,15 +139,19 @@ class SendIdentity1Tests(unittest.TestCase):
 
     def test_declared_root_mismatch_refuses_ack_without_side_effect(self) -> None:
         _declared, foreign_root, workspace = self.mismatched_seat()
+        # SEND-SHA-RESOLVES-1: the setup send runs from a repository that
+        # holds the sha it names, so the mismatch refusal lands on ack.
+        repository, sha = banked_send_repository(self.base)
         sent, send_artifact = self.invoke(
             "send",
             "--root", str(foreign_root),
             "--from", "sender-a",
             "--to", public_ids.builder("a"),
             "--repo", "floati",
-            "--sha", SHA,
+            "--sha", sha,
             "--doc", "docs/evidence/task-2-red.md",
             "--note", "mail to ack from a mismatched seat",
+            cwd=repository,
         )
         self.assertEqual(0, sent.returncode, sent.stderr)
         message_id = send_artifact["evidence"]["message"]["id"]

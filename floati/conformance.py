@@ -316,6 +316,26 @@ def _remove_registry_lock(root: FloatiRoot) -> None:
         raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "registry lock remained after setup")
 
 
+def _prepare_unarranged_recipient(root: FloatiRoot, node: str) -> None:
+    """Give the throwaway negative control an explicit readable empty config.
+
+    Missing recipient provenance is unknown. The native Cursor installer
+    establishes the bounded coordinate; removing its Stop entry in this
+    fixture proves absence without consulting the operator's HOME.
+    """
+    from .cursor_wait import install_cursor_hook
+    workspace = root.resolve_relative(Path("state/conformance-readiness") / node / "workspace")
+    runtime = root.resolve_relative(Path("state/conformance-readiness") / node / "runtime")
+    workspace.mkdir(parents=True, exist_ok=True)
+    (runtime / "scripts").mkdir(parents=True, exist_ok=True)
+    launcher = runtime / "scripts/floati"
+    launcher.write_text("#!/bin/sh\nexit 31\n", encoding="utf-8")
+    launcher.chmod(0o700)
+    installed = install_cursor_hook(workspace=workspace, root=root.tenant_home, node=node, runtime=runtime)
+    Path(installed["hooks_path"]).write_text(
+        '{"version":1,"hooks":{"stop":[]}}\n', encoding="utf-8")
+
+
 def _root_snapshot(root: FloatiRoot) -> Tuple[Tuple[str, str, object], ...]:
     entries = []
     for entry in sorted(root.tenant_home.rglob("*"), key=lambda path: path.relative_to(root.tenant_home).as_posix()):
@@ -336,11 +356,12 @@ def run(adapter: object, root: FloatiRoot) -> int:
 
     try:
         for node in ("charlie", "retired", "bob", _PRIMARY_NODE, "delta"):
-            evidence = _expect_ok(adapter, "register", node, "worker")
+            evidence = _expect_ok(adapter, "register", node, "Cursor" if node == "bob" else "worker")
             if evidence.get("node_id") != node or evidence.get("state") != "active":
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "registry evidence mismatch")
         _append_retired_registry_entry(root, "retired", "worker")
         _remove_registry_lock(root)
+        _prepare_unarranged_recipient(root, "bob")
 
         sent = []
         run_key = "conformance-" + uuid7_hex()
@@ -368,6 +389,7 @@ def run(adapter: object, root: FloatiRoot) -> int:
                 not isinstance(message, dict)
                 or not isinstance(readiness, dict)
                 or readiness.get("state") != "recipient_not_listening"
+                or readiness.get("checked_mechanisms") != ["lease", "stop_hook", "seat_board"]
                 or message.get("kind") != "message_envelope"
                 or message.get("sha") != character.lower() * 40
                 or message.get("doc") != f"docs/evidence/{character}.md"
@@ -380,15 +402,21 @@ def run(adapter: object, root: FloatiRoot) -> int:
             )
             if (
                 _root_snapshot(root) == before_registered_send
-                or len(after_events) != len(before_events) + 1
-                or after_events[-1].get("kind") != "message_envelope"
-                or after_events[-1].get("id") != message.get("id")
+                or len(after_events) != len(before_events) + 2
+                or after_events[-2] != message
+                or after_events[-2].get("kind") != "message_envelope"
+                or after_events[-2].get("sender") != _PRIMARY_NODE
+                or after_events[-2].get("recipient") != "bob"
+                or after_events[-2].get("repo") != "floati"
+                or after_events[-2].get("sha") != character.lower() * 40
+                or after_events[-2].get("doc") != f"docs/evidence/{character}.md"
+                or after_events[-2].get("note") != f"notification {character}"
+                or after_events[-2].get("idempotency_key") != f"{run_key}-{character}"
+                or after_events[-1].get("kind") != "send_readiness_observation"
+                or after_events[-1].get("envelope_id") != message.get("id")
                 or after_events[-1].get("sender") != _PRIMARY_NODE
                 or after_events[-1].get("recipient") != "bob"
-                or after_events[-1].get("repo") != "floati"
-                or after_events[-1].get("sha") != character.lower() * 40
-                or after_events[-1].get("doc") != f"docs/evidence/{character}.md"
-                or after_events[-1].get("note") != f"notification {character}"
+                or after_events[-1].get("readiness") != readiness
                 or after_events[-1].get("idempotency_key") != f"{run_key}-{character}"
             ):
                 raise _Outcome(
@@ -400,7 +428,10 @@ def run(adapter: object, root: FloatiRoot) -> int:
 
         first = _expect_ok(adapter, "present", "bob")
         first_ids = [item.get("id") for item in first.get("messages", [])]
-        if first_ids != [item["id"] for item in sent] or first.get("receipt", {}).get("kind") != "delivery_receipt":
+        # BUS-DELIVERY-UNPRESENTED-1: a conformance fixture has no live
+        # presenter, so its native drain receipt is delivered_unpresented;
+        # either honest delivery kind proves the drain receipted its batch.
+        if first_ids != [item["id"] for item in sent] or first.get("receipt", {}).get("kind") not in ("delivery_receipt", "delivered_unpresented"):
             raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "delivery evidence mismatch")
 
         ack = _expect_ok(adapter, "acknowledge", "bob", [sent[1]["id"]])
@@ -508,11 +539,12 @@ def run_live_root_smoke() -> int:
             cursor = SparseCursor(root)
 
             for node in ("smoke-recipient", "smoke-retired", "smoke-extra", "smoke-sender"):
-                registered = registry.register(node, "smoke")
+                registered = registry.register(node, "Cursor" if node == "smoke-recipient" else "smoke")
                 if registered.get("node_id") != node or registered.get("state") != "active":
                     raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "registry evidence mismatch")
             _append_retired_registry_entry(root, "smoke-retired", "smoke")
             _remove_registry_lock(root)
+            _prepare_unarranged_recipient(root, "smoke-recipient")
 
             sent = events.send(
                 "smoke-sender",
@@ -529,6 +561,7 @@ def run_live_root_smoke() -> int:
                 not isinstance(message, dict)
                 or not isinstance(readiness, dict)
                 or readiness.get("state") != "recipient_not_listening"
+                or readiness.get("checked_mechanisms") != ["lease", "stop_hook", "seat_board"]
                 or message.get("kind") != "message_envelope"
                 or message.get("sender") != "smoke-sender"
                 or message.get("recipient") != "smoke-recipient"
@@ -542,7 +575,7 @@ def run_live_root_smoke() -> int:
             if (
                 [message.get("id") for message in messages] != [message["id"]]
                 or delivery is None
-                or delivery.get("kind") != "delivery_receipt"
+                or delivery.get("kind") not in ("delivery_receipt", "delivered_unpresented")
                 or delivery.get("item_ids") != [message["id"]]
             ):
                 raise _Outcome(CONFORMANCE_FAILED, "conformance_failed", "delivery evidence mismatch")

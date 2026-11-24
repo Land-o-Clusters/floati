@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, Mapping, Optional, Sequence
 
 from .consumption import ConsumptionLedger
-from .errors import SnapshotRefusal
+from .errors import IntegrityFailure, SnapshotRefusal
 from .jsonl import read_records_snapshot
 from .root import FloatiRoot
 from .snapshot import SnapshotStore, SourceSpec
 from .work import WORK_KINDS
 from .workers import WORKER_KINDS, WORKER_REFUSAL_KINDS
+
+DENIALS_SOURCE = Path("receipts/denials.jsonl")
+_GOVERNED_DENIAL_ID = re.compile(
+    r"denial-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}"
+)
 
 
 EVENT_CLASSES = ("claim", "turn", "degradation", "denial", "completion")
@@ -21,8 +27,47 @@ REPLAY_SOURCES = (
     (Path("work/items.jsonl"), frozenset(WORK_KINDS)),
     (Path("receipts/workers.jsonl"), frozenset(WORKER_KINDS)),
     (Path("receipts/worker-refusals.jsonl"), frozenset(WORKER_REFUSAL_KINDS)),
-    (Path("receipts/denials.jsonl"), frozenset({"denial_receipt"})),
+    (DENIALS_SOURCE, frozenset({"denial_receipt"})),
 )
+
+
+def _denials_observation(
+    root: FloatiRoot, source: Path, kinds: frozenset
+) -> tuple[list, Optional[Dict[str, object]]]:
+    """DENIAL-RECEIPT-LEGACY-READ-1: unavailable history is an observation.
+
+    A denial receipt written before the current exact-record contract must
+    not fail the whole timeline closed. Only that reader refusal converts;
+    every other validation failure re-raises, and the writer-side validator
+    stays strict.
+    """
+
+    try:
+        return read_records_snapshot(root, source, allowed_kinds=set(kinds)), None
+    except IntegrityFailure as failure:
+        if failure.code != "record_fields_invalid":
+            raise
+        return [], {
+            "code": "denial_receipt_legacy_unreadable",
+            "ledger": source.as_posix(),
+            "record_id": _governed_record_id(failure.detail),
+            "source_code": failure.code,
+        }
+
+
+def _governed_record_id(detail: str) -> Optional[str]:
+    """Copy the governed record id from a qualified read failure's detail.
+
+    The decode layer qualifies the refusal with the exact ledger coordinate
+    and the record it refused. Only a well-formed governed id is copied -
+    never the defective values or the raw detail.
+    """
+
+    for segment in detail.split(": "):
+        candidate = segment[len("record "):] if segment.startswith("record ") else None
+        if candidate and _GOVERNED_DENIAL_ID.fullmatch(candidate):
+            return candidate
+    return None
 
 
 def _parse_time(value: str) -> datetime:
@@ -92,6 +137,7 @@ class ReplayTimeline:
     cached_plain: Optional[str] = None
     cached_counts: Optional[Mapping[str, int]] = None
     cached_duration_ms: Optional[int] = None
+    read_findings: Sequence[Mapping[str, object]] = field(default_factory=tuple)
 
     @classmethod
     def from_root(cls, root: FloatiRoot) -> "ReplayTimeline":
@@ -142,6 +188,7 @@ class ReplayTimeline:
                 plain,
                 artifact["counts"],
                 int(artifact["duration_ms"]),
+                read_findings=timeline.read_findings,
             )
 
     def artifact(self) -> Dict[str, object]:
@@ -168,6 +215,15 @@ class ReplayTimeline:
                 "counts": counts,
                 "duration_ms": duration,
                 "sources": list(self.sources),
+                **(
+                    {
+                        "read_findings": [
+                            dict(finding) for finding in self.read_findings
+                        ]
+                    }
+                    if self.read_findings
+                    else {}
+                ),
             },
             self.cached_plain,
         )
@@ -220,8 +276,14 @@ def _read_full_timeline(root: FloatiRoot) -> ReplayTimeline:
     events: list[Dict[str, object]] = []
     populated_sources: list[str] = []
     source_ordinals: Dict[str, int] = {}
+    read_findings: list[Dict[str, object]] = []
     for source, kinds in REPLAY_SOURCES:
-        records = read_records_snapshot(root, source, allowed_kinds=set(kinds))
+        if source == DENIALS_SOURCE:
+            records, read_finding = _denials_observation(root, source, kinds)
+            if read_finding is not None:
+                read_findings.append(read_finding)
+        else:
+            records = read_records_snapshot(root, source, allowed_kinds=set(kinds))
         source_ordinals[source.as_posix()] = len(records)
         if source == Path("work/items.jsonl"):
             ConsumptionLedger(root).project(records)
@@ -255,7 +317,8 @@ def _read_full_timeline(root: FloatiRoot) -> ReplayTimeline:
             event["elapsed_ms"] = max(0, prior_elapsed, observed_elapsed)
             prior_elapsed = int(event["elapsed_ms"])
     return ReplayTimeline(
-        tuple(events), tuple(sorted(populated_sources)), source_ordinals
+        tuple(events), tuple(sorted(populated_sources)), source_ordinals,
+        read_findings=read_findings,
     )
 
 

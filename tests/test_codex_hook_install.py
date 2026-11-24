@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from floati import fixture_ids as public_ids
 
+import hashlib
 import json
 import shlex
 import tempfile
@@ -14,6 +15,55 @@ from unittest import mock
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
+
+
+def expected_stop_block(destination: Path, bus_home: Path, timeout: int) -> dict:
+    """The Stop group this fixture expects install to write.
+
+    Built from the fixture's own coordinates, never read back from the
+    planner: if the product's planned definition drifts, the operator pair
+    a test derives from this stops matching and the install refuses.
+    """
+
+    command = " ".join(
+        shlex.quote(part)
+        for part in (
+            "/usr/bin/python3",
+            str(destination / "current" / "scripts" / "floati-codex-wait"),
+            "wait",
+            "--for",
+            "fresh-work",
+            "--root",
+            str(bus_home),
+        )
+    )
+    return {
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "timeout": timeout,
+                "statusMessage": "Watching Floati bus",
+            }
+        ]
+    }
+
+
+def operator_pair(preimage_block, target_block) -> str:
+    """What an operator types: `<installed>:<planned>` Stop-group hashes.
+
+    `preimage_block is None` states that no Floati Stop group is installed,
+    whose preimage is sha256(b"").
+    """
+
+    from floati.codex_hook_trust import codex_hook_current_hash
+
+    preimage = (
+        hashlib.sha256(b"").hexdigest()
+        if preimage_block is None
+        else codex_hook_current_hash(preimage_block)
+    )
+    return f"{preimage}:{codex_hook_current_hash(target_block)}"
 
 
 class CodexHookInstallerTests(unittest.TestCase):
@@ -69,6 +119,12 @@ class CodexHookInstallerTests(unittest.TestCase):
         )
         self.destination = self.base / ".codex" / "floati-wake"
 
+        # This fixture installs into a Stop list with no Floati group, so its
+        # first install CHANGES the definition and names this operator pair.
+        self.fresh_pair = operator_pair(
+            None, expected_stop_block(self.destination, self.bus_home, 10)
+        )
+
     def installer(self):
         from floati.codex_hook_install import CodexHookInstaller
 
@@ -79,12 +135,41 @@ class CodexHookInstallerTests(unittest.TestCase):
             destination=self.destination,
         )
 
+    def test_global_preparation_refuses_invalid_trust_before_any_write(self):
+        from floati.errors import ProtocolRefusal
+        from floati.codex_hook_trust import codex_hook_current_hash
+        before = self.hooks_path.read_bytes()
+        config = self.hooks_path.with_name("config.toml")
+        foreign = self.base / "foreign.toml"
+        foreign.write_text('model = "fixture"\n')
+        for case in ("symlink", "malformed", "stale-ack"):
+            with self.subTest(case=case):
+                self.hooks_path.write_bytes(before)
+                self.destination = self.base / ("prepare-" + case)
+                pair = operator_pair(None, expected_stop_block(self.destination, self.bus_home, 10))
+                config.unlink(missing_ok=True)
+                if case == "symlink":
+                    config.symlink_to(foreign)
+                elif case == "malformed":
+                    config.write_text('[hooks.state.' + json.dumps(f"{self.hooks_path}:stop:2:0") +
+                        ']\ntrusted_hash = "invalid"\n')
+                else:
+                    config.write_text('model = "fixture"\n')
+                with self.assertRaises(ProtocolRefusal):
+                    self.installer().prepare(hook_timeout_seconds=10,
+                        acknowledge_stop_hook_change=("0" * 64 + ":" +
+                            codex_hook_current_hash(expected_stop_block(self.destination, self.bus_home, 10))
+                            if case == "stale-ack" else pair))
+                self.assertEqual(before, self.hooks_path.read_bytes())
+                self.assertFalse(self.destination.exists(), case)
+
     def test_install_adds_one_block_and_preserves_every_existing_block(self) -> None:
         receipt = self.installer().install(
             self.workspace,
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
 
         installed = json.loads(self.hooks_path.read_text(encoding="utf-8"))
@@ -94,7 +179,12 @@ class CodexHookInstallerTests(unittest.TestCase):
         self.assertEqual("Watching Floati bus", block["hooks"][0]["statusMessage"])
         self.assertEqual(10, block["hooks"][0]["timeout"])
         self.assertIn(str(self.bus_home), block["hooks"][0]["command"])
-        self.assertIn(receipt["bundle_digest"], block["hooks"][0]["command"])
+        # BL-11: the registered command names the stable current launcher and
+        # never the bundle digest, so updates cannot consume Codex trust.
+        self.assertIn(
+            str(self.destination / "current" / "scripts" / "floati-codex-wait"),
+            block["hooks"][0]["command"])
+        self.assertNotIn(receipt["bundle_digest"], block["hooks"][0]["command"])
         for field in (
             "bundle_digest",
             "installed_bundle_digest",
@@ -106,12 +196,50 @@ class CodexHookInstallerTests(unittest.TestCase):
             self.assertRegex(receipt[field], r"^[0-9a-f]{64}$")
         self.assertEqual("installed", receipt["state"])
 
+    def test_shared_commands_are_installed_in_the_native_codex_home(self) -> None:
+        receipt = self.installer().install(self.workspace, public_ids.builder('floati'),
+            hook_timeout_seconds=10, wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair)
+        commands = self.hooks_path.parent / 'skills'
+        self.assertEqual(str(commands), receipt['seat_commands']['out'])
+        for verb in ('boot', 'teardown'):
+            content = (commands / f'{verb}-seat/SKILL.md').read_text()
+            self.assertTrue(content.startswith(f'---\nname: {verb}-seat\n'))
+            self.assertIn('\ndescription: ', content)
+            self.assertNotIn('$ARGUMENTS', content)
+            self.assertNotIn(str(self.bus_home), content)
+            self.assertNotIn(public_ids.builder('floati'), content)
+        self.assertFalse((self.workspace / '.codex/prompts').exists())
+
+    def test_installed_commands_use_the_recorded_runtime_without_path_lookup(self) -> None:
+        """A fresh shell must reach this install even with no Floati on PATH."""
+        import re
+        import shlex
+
+        receipt = self.installer().install(self.workspace, public_ids.builder('floati'),
+            hook_timeout_seconds=10, wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair)
+        commands = Path(receipt['seat_commands']['out'])
+        for verb in ('boot', 'teardown'):
+            with self.subTest(verb=verb):
+                path = commands / f'{verb}-seat/SKILL.md'
+                # Also read the old output so the RED names the runtime defect
+                # independently of the command-surface defect.
+                if not path.exists():
+                    path = commands / f'{verb}-seat.md'
+                content = path.read_text()
+                invocation = re.search(r'Run `([^`]+)` with', content).group(1)
+                argv = shlex.split(invocation)
+                self.assertEqual(str(self.source / 'scripts/floati'), argv[0])
+                self.assertEqual(['node', verb], argv[1:3])
+
     def test_installed_waiter_launcher_declares_the_fixed_stop_hook_interpreter(self) -> None:
         receipt = self.installer().install(
             self.workspace,
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
 
         installed = json.loads(self.hooks_path.read_text(encoding="utf-8"))
@@ -133,6 +261,7 @@ class CodexHookInstallerTests(unittest.TestCase):
                     public_ids.builder('floati'),
                     hook_timeout_seconds=10,
                     wait_deadline_seconds=2,
+                    acknowledge_stop_hook_change=self.fresh_pair,
                 )
 
         self.assertEqual("codex_wait_host_interpreter_absent", caught.exception.code)
@@ -149,6 +278,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
         self.assertRegex(receipt["bundle_digest"], r"^[0-9a-f]{64}$")
         malformed = json.loads(self.hooks_path.read_text(encoding="utf-8"))
@@ -169,6 +299,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
         second = self.installer().install(
             self.workspace,
@@ -198,6 +329,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
         second = self.installer().install(
             second_workspace,
@@ -228,6 +360,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
 
         self.assertEqual("untrusted_pending_user", first["hook_trust"])
@@ -283,6 +416,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=operator_pair(old_block, expected_stop_block(self.destination, self.bus_home, 10)),
             session_id="installer-session",
         )
 
@@ -291,7 +425,12 @@ class CodexHookInstallerTests(unittest.TestCase):
         self.assertEqual(self.original_stop[1], installed["hooks"]["Stop"][2])
         self.assertEqual(subagent_before, installed["hooks"]["SubagentStop"])
         replacement = installed["hooks"]["Stop"][1]
-        self.assertIn(receipt["bundle_digest"], replacement["hooks"][0]["command"])
+        # BL-11: the replacement migrates the legacy digest-named command to
+        # the stable current launcher.
+        self.assertIn(
+            str(self.destination / "current" / "scripts" / "floati-codex-wait"),
+            replacement["hooks"][0]["command"])
+        self.assertNotIn(receipt["bundle_digest"], replacement["hooks"][0]["command"])
         self.assertEqual("replaced", receipt["state"])
         self.assertEqual("modified", receipt["hook_trust_status"])
         self.assertIs(True, receipt.get("hook_trust_invalidated_by_install"))
@@ -333,6 +472,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
             session_id="installer-session-one",
         )
         second = self.installer().install(
@@ -387,6 +527,7 @@ class CodexHookInstallerTests(unittest.TestCase):
             public_ids.builder('floati'),
             hook_timeout_seconds=10,
             wait_deadline_seconds=2,
+            acknowledge_stop_hook_change=self.fresh_pair,
         )
 
         self.assertIn(marker.encode(), self.hooks_path.read_bytes())

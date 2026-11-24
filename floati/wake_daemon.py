@@ -13,6 +13,7 @@ import json
 import math
 import os
 import resource
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,7 @@ from .wake_daemon_contract import (
     DaemonConsentLedger,
     DaemonCoordinate,
     DaemonLifecycleLedger,
+    lifecycle_conflict_remedy,
 )
 from .wake_daemon_roll import consent_relative, lifecycle_relative
 from .wake_hold import WakeAttemptLedger, WakeHoldController
@@ -65,6 +67,9 @@ _RUNTIME_FIELDS = frozenset({
     "cpu_seconds_total",
     "cpu_seconds_window",
     "cpu_wall_window",
+    "last_wake_attempt_at",
+    "last_mail_seen_at",
+    "idle_retire_days",
 })
 # Fields a runtime written by an older build may not carry. The shape check
 # stays CLOSED - no unknown key is ever accepted - and these are read through
@@ -78,6 +83,13 @@ _OPTIONAL_RUNTIME_FIELDS = frozenset({
     "cpu_seconds_total",
     "cpu_seconds_window",
     "cpu_wall_window",
+    # WD-4: the idle clock. Both are epoch seconds stamped by the serve
+    # loop; idle_retire_days is copied from the active consent at serve
+    # start (0 = never). A runtime written by an older build lacks all
+    # three and reads as never-stamped, which keeps cycling.
+    "last_wake_attempt_at",
+    "last_mail_seen_at",
+    "idle_retire_days",
 })
 _REQUIRED_RUNTIME_FIELDS = _RUNTIME_FIELDS - _OPTIONAL_RUNTIME_FIELDS
 _BREAKER_THRESHOLD = 3
@@ -88,6 +100,38 @@ WAKE_BREAKER_REMEDY = (
     "rebind the wake daemon to a dedicated headless session - an interactive "
     "session with a large rollout may be unresumable - then rerun doctor"
 )
+# F2-TAKEOVER-DAEMON-1: WAKE_BREAKER_REMEDY's rebind is `wake daemon bind`,
+# which refuses a Codex coordinate by design (the binding is accepted only
+# from trusted waiter participation). A Codex seat's rebind is a take-over
+# from a live session, whose Stop waiter republishes the binding - the same
+# participation executable_drift_remedy names for Codex.
+CODEX_WAKE_BREAKER_REMEDY = (
+    "from a live Codex session for this seat run codex-fleet-bus PROFILE "
+    "board --take-over, then end that turn so the registered trusted Codex "
+    "Stop waiter rebinds the wake daemon to that session; then rerun doctor"
+)
+LIFECYCLE_CONFLICT = "wake_daemon_lifecycle_idempotency_conflict"
+
+
+def wake_breaker_remedy(
+    harness: str,
+    last_reason_code: object = None,
+    runtime_path: Optional[Path] = None,
+) -> str:
+    """The open breaker's remedy, as an act the bound seat can perform.
+
+    A breaker tripped by a spent lifecycle key is cleared by that refusal's
+    own act; otherwise a Codex seat rebinds through a take-over and every
+    other harness keeps WAKE_BREAKER_REMEDY byte for byte.
+    """
+
+    if last_reason_code == LIFECYCLE_CONFLICT and runtime_path is not None:
+        return lifecycle_conflict_remedy(runtime_path)
+    if harness == "codex":
+        return CODEX_WAKE_BREAKER_REMEDY
+    return WAKE_BREAKER_REMEDY
+
+
 _CPU_WINDOW = 32
 _DEFAULT_CPU_BUDGET_SECONDS = 0.25
 
@@ -113,6 +157,49 @@ def _bounded_exception_message(detail: object, fallback: str) -> str:
     )
     bounded = printable[:CYCLE_EXCEPTION_MESSAGE_BOUND]
     return bounded or fallback
+
+
+def claimant_runtime_missing(root: object, node_id: str, claimant_session: str) -> bool:
+    """BL-13: the only admissible proof that a contested claimant is gone.
+
+    Measures the claimant's own wake adapter coordinate, exactly the
+    coordinate ``wake status`` reports: a binding whose durable runtime file
+    is absent is ``runtime_missing`` and is proof of death. No binding for
+    the claimant session, a readable runtime, or an underivable
+    (symlinked) runtime is never proof — those claims stay contested.
+    """
+
+    from .wake_daemon_contract import (
+        AdapterBindingStore,
+        DaemonCoordinate,
+        SUPPORTED_HARNESSES,
+    )
+
+    store = AdapterBindingStore(root)
+    for harness in sorted(SUPPORTED_HARNESSES):
+        try:
+            coordinate = DaemonCoordinate(root, node_id, harness)
+        except ProtocolRefusal:
+            continue
+        try:
+            binding = store.read(coordinate)
+        except ProtocolRefusal as exc:
+            if exc.code == "wake_daemon_binding_absent":
+                continue
+            raise
+        if str(binding.get("session_id")) != str(claimant_session):
+            continue
+        runtime_path = (
+            Path(root.path)
+            / "state"
+            / "wake-daemon"
+            / "runtime"
+            / f"{coordinate.digest}.json"
+        )
+        if runtime_path.is_symlink():
+            return False
+        return not runtime_path.is_file()
+    return False
 
 
 def breaker_status_for_node(root: object, node_id: str) -> Dict[str, object]:
@@ -295,6 +382,7 @@ _TERMINAL_SERVE_REFUSALS = frozenset(
         "wake_daemon_activation_epoch_mismatch",
         "unknown_node",
         "wake_daemon_binding_absent",
+        "wake_daemon_idle_retired",
     }
 )
 # Receipt events stay inside the lifecycle vocabulary records.py already
@@ -353,6 +441,12 @@ class WakeDaemon:
         self._hold_controller = WakeHoldController(self.root)
         self._cycle_cpu_origin: Optional[float] = None
         self._cycle_now: Optional[float] = None
+        # F2-TAKEOVER-DAEMON-1: the highest cycle this object has recorded a
+        # lifecycle receipt for under its own instance id. A runtime that
+        # re-initializes under that id resumes counting above it, so no key
+        # this process composed is ever composed again.
+        self._spent_cycle_index = 0
+        self._logged_cycle_refusals: set[str] = set()
 
     def wake_health(self, now: datetime) -> Dict[str, object]:
         """Project the same node-bound wake fact exposed by status and Doctor."""
@@ -547,6 +641,7 @@ class WakeDaemon:
             {
                 "id": str(row["id"]),
                 "note": row["note"] if isinstance(row.get("note"), str) else "",
+                "sender": row["sender"] if isinstance(row.get("sender"), str) else "",
             }
             for row in messages
         ]
@@ -596,10 +691,15 @@ class WakeDaemon:
                 lifecycle_state="unknown",
                 reason_code="wake_evidence_unknown",
             )
+        from .colleague_frame import frame_clause
+        from .fleet_presence import with_presence
+
         reason = (
             f"[floati] {len(item_ids)} new message(s) for "
             f"{self.coordinate.node_id}: " + ", ".join(item_ids)
+            + " " + frame_clause(messages)
         )
+        reason = with_presence(self.coordinate.root, self.coordinate.node_id, reason, separator=" ")
         runtime["last_state"] = "wake_requested"
         runtime["last_reason_code"] = "wake_evidence_pending"
         self._write_runtime(runtime)
@@ -737,6 +837,49 @@ class WakeDaemon:
             except OSError:
                 pass
 
+    _IDLE_ATTEMPT_STATES = frozenset({"woke", "queued", "refused"})
+    _IDLE_MAIL_STATES = frozenset({"woke", "queued", "held", "refused"})
+
+    def _stamp_idle_activity(
+        self, now: float, result: Mapping[str, object], idle_retire_days: int
+    ) -> None:
+        """WD-4: keep the idle clock in the runtime record. A cycle that
+        woke, queued or was refused attempted a wake; a cycle that saw held
+        work saw mail. Anything else is silence and leaves the stamps."""
+
+        state = result.get("state")
+        attempted = state in self._IDLE_ATTEMPT_STATES
+        saw_mail = state in self._IDLE_MAIL_STATES
+        if not attempted and not saw_mail:
+            return
+        try:
+            runtime = self.read_runtime()
+        except (ProtocolRefusal, IntegrityFailure):
+            return
+        if attempted:
+            runtime["last_wake_attempt_at"] = float(now)
+        if saw_mail:
+            runtime["last_mail_seen_at"] = float(now)
+        runtime["idle_retire_days"] = int(idle_retire_days)
+        try:
+            self._write_runtime(runtime)
+        except (ProtocolRefusal, IntegrityFailure):
+            return
+
+    def _idle_past_window(self, now: float, idle_retire_days: int) -> bool:
+        try:
+            runtime = self.read_runtime()
+        except (ProtocolRefusal, IntegrityFailure):
+            return False
+        stamps = [
+            float(runtime[field])
+            for field in ("last_wake_attempt_at", "last_mail_seen_at")
+            if runtime.get(field) is not None
+        ]
+        if not stamps:
+            return False
+        return (now - max(stamps)) >= idle_retire_days * 86400.0
+
     def serve(
         self,
         stop_requested: Callable[[], bool],
@@ -746,6 +889,10 @@ class WakeDaemon:
     ) -> None:
         consent = self.consent.require_active(self.coordinate)
         serve_activation_epoch = int(consent["activation_epoch"])
+        # WD-4: the consented idle window, in days. A v2 consent row carries
+        # idle_retire_days; a legacy row reads the default 14. 0 = never.
+        raw_window = consent.get("idle_retire_days")
+        idle_retire_days = 14 if raw_window is None else int(raw_window)
         with self.owner:
             while not stop_requested():
                 try:
@@ -764,10 +911,26 @@ class WakeDaemon:
                                 "wake_daemon_activation_epoch_mismatch",
                                 "activation epoch moved under this daemon instance",
                             )
+                        self._stamp_idle_activity(clock(), result, idle_retire_days)
+                        if (
+                            idle_retire_days
+                            and self._idle_past_window(clock(), idle_retire_days)
+                        ):
+                            # WD-4: no wake attempt and no mail for this node
+                            # within the consented window - retire the WD-2
+                            # way instead of polling on as a zombie.
+                            raise ProtocolRefusal(
+                                "wake_daemon_idle_retired",
+                                "no wake attempt and no mail within the "
+                                "consented idle window",
+                            )
                     except Exception as exc:
+                        self._log_cycle_refusal(exc)
                         result = self._recover_cycle_exception(
                             exc, clock, serve_activation_epoch
                         )
+                    else:
+                        self._logged_cycle_refusals.clear()
                 except _ServeTerminal:
                     # WD-2 (P4): the retirement receipt is written; exiting
                     # cleanly is the point - under KeepAlive
@@ -783,6 +946,33 @@ class WakeDaemon:
                     break
                 delay = max(0.0, float(result["next_poll_at"]) - clock())
                 sleep(delay)
+
+    def _log_cycle_refusal(self, exc: BaseException) -> None:
+        """F2-TAKEOVER-DAEMON-1: a spent lifecycle key reaches the log.
+
+        Measured on the reporting seat: three conflicts, `wake daemon status`
+        running, stdout and stderr EMPTY - the conflicting key existed only
+        inside a refusal nobody printed. One line per outage, never per
+        cycle (the stderr wall is the disease LEDGER-1 rotates away): the
+        refusal's detail names the key and its remedy names the act. A cycle
+        that completes re-arms it.
+        """
+
+        if not isinstance(exc, ProtocolRefusal) or exc.code != LIFECYCLE_CONFLICT:
+            return
+        if exc.code in self._logged_cycle_refusals:
+            return
+        self._logged_cycle_refusals.add(exc.code)
+        remedy = exc.remedy if isinstance(exc.remedy, str) else json.dumps(exc.remedy)
+        try:
+            sys.stderr.write(
+                f"floati wake daemon {self.coordinate.node_id}/"
+                f"{self.coordinate.harness}: {exc.code}: {exc.detail}; "
+                f"remedy: {remedy}\n"
+            )
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            pass
 
     def _recover_cycle_exception(
         self,
@@ -941,6 +1131,7 @@ class WakeDaemon:
                         idempotency_key=f"{instance}-serve-terminal-{reason_code}"[
                             :128
                         ],
+                        conflict_remedy=lifecycle_conflict_remedy(self.runtime_path),
                     )
                 except (ProtocolRefusal, IntegrityFailure) as receipt_failure:
                     # The retirement must stay clean even when its receipt
@@ -1006,6 +1197,7 @@ class WakeDaemon:
                 else "wake_daemon_cycle_exception"
             )
             try:
+                self._note_spent_cycle(runtime)
                 lifecycle = self.lifecycle.record(
                     self.coordinate,
                     daemon_instance_id=str(runtime["daemon_instance_id"]),
@@ -1021,6 +1213,7 @@ class WakeDaemon:
                         f"{runtime['daemon_instance_id']}"
                         f"-{runtime['cycle_index']}-cycle_exception"
                     ),
+                    conflict_remedy=lifecycle_conflict_remedy(self.runtime_path),
                 )
                 runtime["last_lifecycle_receipt_id"] = lifecycle["id"]
                 self._write_runtime(runtime)
@@ -1054,7 +1247,12 @@ class WakeDaemon:
         except ProtocolRefusal as exc:
             if exc.code != "wake_daemon_runtime_absent":
                 raise
-            current = self._initial_runtime(consent, binding, current_epoch)
+            current = self._initial_runtime(
+                consent,
+                binding,
+                current_epoch,
+                cycle_index=self._carried_cycle_index(None),
+            )
         if current["bus_epoch_archive"] != current_epoch:
             current["bus_epoch_archive"] = current_epoch
             current["next_poll_at"] = 0.0
@@ -1064,13 +1262,18 @@ class WakeDaemon:
                 binding,
                 current_epoch,
                 breaker_transitions=int(current["breaker_transitions"]),
+                cycle_index=self._carried_cycle_index(current),
             )
         if current["session_digest"] not in {None, binding.session_digest}:
+            # A take-over: the binding moved to another session under this
+            # running daemon. The runtime starts over for the new session but
+            # its lifecycle keys continue above every key already spent.
             current = self._initial_runtime(
                 consent,
                 binding,
                 current_epoch,
                 breaker_transitions=int(current["breaker_transitions"]),
+                cycle_index=self._carried_cycle_index(current),
             )
         current["session_digest"] = binding.session_digest
         return current
@@ -1082,6 +1285,7 @@ class WakeDaemon:
         current_epoch: Optional[str],
         *,
         breaker_transitions: int = 0,
+        cycle_index: int = 0,
     ) -> Dict[str, object]:
         """Reactivation resets the cycle counters and CARRIES THE BREAKER'S.
 
@@ -1090,6 +1294,14 @@ class WakeDaemon:
         on, and an outage that heals and returns is a second outage. Reset it
         and the announcement key repeats, and the bus - correctly - treats the
         relapse as a replay of the first.
+
+        F2-TAKEOVER-DAEMON-1 - ``cycle_index`` is the same lesson for the
+        lifecycle key ``<daemon_instance_id>-<cycle_index>-<event>``. Reset to
+        0 under an instance id that already recorded cycles, a take-over's
+        first cycle recomposed the predecessor's first key: refused as a
+        conflict when the content differed, silently swallowed as a replay
+        when it matched. The caller passes the count to resume from
+        (``_carried_cycle_index``); a fresh instance id still starts at 0.
         """
         return {
             "schema_version": 0,
@@ -1099,7 +1311,7 @@ class WakeDaemon:
             "coordinate_digest": self.coordinate.digest,
             "daemon_instance_id": self.daemon_instance_id,
             "activation_epoch": int(consent["activation_epoch"]),
-            "cycle_index": 0,
+            "cycle_index": int(cycle_index),
             "breaker_transitions": int(breaker_transitions),
             "current_wake_key": None,
             "consecutive_refusals": 0,
@@ -1119,6 +1331,25 @@ class WakeDaemon:
             "cpu_wall_window": [],
         }
 
+    def _carried_cycle_index(self, current: Optional[Mapping[str, object]]) -> int:
+        """Where a re-initialized runtime under this instance resumes counting.
+
+        Above every cycle this object recorded, and above the prior runtime's
+        count when that runtime is this same instance's. A prior runtime of a
+        different instance (a previous process) shares no keys with this one.
+        """
+
+        carried = self._spent_cycle_index
+        if current is not None and current.get("daemon_instance_id") == self.daemon_instance_id:
+            carried = max(carried, int(current["cycle_index"]))
+        return carried
+
+    def _note_spent_cycle(self, runtime: Mapping[str, object]) -> None:
+        if runtime.get("daemon_instance_id") == self.daemon_instance_id:
+            self._spent_cycle_index = max(
+                self._spent_cycle_index, int(runtime["cycle_index"])
+            )
+
     def _validate_runtime(self, value: object) -> Dict[str, object]:
         if not isinstance(value, dict) or not (
             _REQUIRED_RUNTIME_FIELDS <= set(value) <= _RUNTIME_FIELDS
@@ -1134,6 +1365,9 @@ class WakeDaemon:
         value.setdefault("cpu_seconds_total", 0.0)
         value.setdefault("cpu_seconds_window", [])
         value.setdefault("cpu_wall_window", [])
+        value.setdefault("last_wake_attempt_at", None)
+        value.setdefault("last_mail_seen_at", None)
+        value.setdefault("idle_retire_days", None)
         if (
             value.get("schema_version") != 0
             or value.get("tenant_id") != self.root.tenant_id
@@ -1206,13 +1440,38 @@ class WakeDaemon:
             cleaned_wall.append(float(wall_item))
         value["cpu_seconds_window"] = cleaned_cpu
         value["cpu_wall_window"] = cleaned_wall
+        for field in ("last_wake_attempt_at", "last_mail_seen_at"):
+            item = value.get(field)
+            if item is not None and (
+                isinstance(item, bool)
+                or not isinstance(item, (int, float))
+                or item < 0
+            ):
+                raise IntegrityFailure(
+                    "wake_daemon_runtime_invalid",
+                    f"daemon runtime {field} is invalid",
+                )
+            value[field] = None if item is None else float(item)
+        days = value.get("idle_retire_days")
+        if days is not None and (
+            isinstance(days, bool) or not isinstance(days, int) or days > 3650
+        ):
+            raise IntegrityFailure(
+                "wake_daemon_runtime_invalid",
+                "daemon runtime idle_retire_days is invalid",
+            )
         return value
 
     def _epoch_archive_token(self) -> Optional[str]:
-        """Name the live receipt's owned predecessor without touching its members."""
+        """Return the verified predecessor name, or certified absence at genesis."""
+        from .send_prefix import current_epoch_has_no_roll_head
 
         if not self.root.resolve_relative("events.jsonl").exists():
             return None
+        if current_epoch_has_no_roll_head(self.root):
+            return None
+        # A roll head names an archive. Its name alone cannot establish that
+        # the archived members and the rest of the receipt chain still agree.
         archives = _owned_epoch_archives(self.root)
         return archives[0].name if archives else None
 
@@ -1262,6 +1521,10 @@ class WakeDaemon:
         runtime["cycle_index"] = int(runtime["cycle_index"]) + 1
         runtime["last_state"] = result_state
         runtime["last_reason_code"] = reason_code
+        # Noted BEFORE the append: a slot is spent once it is attempted -
+        # written, replayed, or refused as already holding other content -
+        # so a re-initialized runtime never resumes at or below it.
+        self._note_spent_cycle(runtime)
         lifecycle = self.lifecycle.record(
             self.coordinate,
             daemon_instance_id=str(runtime["daemon_instance_id"]),
@@ -1278,6 +1541,7 @@ class WakeDaemon:
             ),
             exception_type=exception_type,
             exception_message=exception_message,
+            conflict_remedy=lifecycle_conflict_remedy(self.runtime_path),
         )
         runtime["last_lifecycle_receipt_id"] = lifecycle["id"]
         self._write_runtime(runtime)
@@ -1383,7 +1647,9 @@ class WakeDaemon:
             "last_reason_code": runtime["last_reason_code"],
             "cycle_index": int(runtime["cycle_index"]),
             "half_open_awaiting_work": bool(runtime.get("awaiting_work")),
-            "remedy": WAKE_BREAKER_REMEDY,
+            "remedy": wake_breaker_remedy(
+                self.coordinate.harness, runtime["last_reason_code"], self.runtime_path
+            ),
         }
         notice["announcement"] = self._announce_breaker(
             runtime, notice_relative.as_posix()
@@ -1453,7 +1719,12 @@ class WakeDaemon:
                 f"{runtime['last_reason_code']} after "
                 f"{int(runtime['consecutive_refusals'])} consecutive refusals, "
                 f"backoff {int(runtime['current_backoff'])}s. "
-                f"Notice: {notice_relative}. Remedy: {WAKE_BREAKER_REMEDY}"
+                f"Notice: {notice_relative}. Remedy: "
+                + wake_breaker_remedy(
+                    self.coordinate.harness,
+                    runtime["last_reason_code"],
+                    self.runtime_path,
+                )
             )
             receipt = EventLog(self.root).send(
                 self.coordinate.node_id,

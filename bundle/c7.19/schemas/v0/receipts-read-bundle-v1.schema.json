@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/receipts-read-bundle.schema.json",
+  "title": "Floati Receipts Read Bundle v1 (grant-stamped)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "tenant_id",
+    "snapshot_at",
+    "grant_id",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "receipts_read_bundle"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "snapshot_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "source",
+          "source_ordinal",
+          "record"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(?:work/items\\.jsonl|receipts/(?:workers|worker-refusals|denials)\\.jsonl|receipts/(?:deliveries|acks)/[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?\\.jsonl)$"
+          },
+          "source_ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "record": {
+            "oneOf": [
+              {
+                "$ref": "work-item-record.schema.json"
+              },
+              {
+                "$ref": "work-transition-record.schema.json"
+              },
+              {
+                "$ref": "delivery-receipt.schema.json"
+              },
+              {
+                "$ref": "ack-receipt.schema.json"
+              },
+              {
+                "$ref": "denial-receipt.schema.json"
+              },
+              {
+                "$ref": "worker-receipt-record.schema.json"
+              },
+              {
+                "$ref": "worker-refusal-record.schema.json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "grant_id": {
+      "type": "string",
+      "pattern": "^confluence-grant-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    }
+  }
+}

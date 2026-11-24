@@ -1,0 +1,133 @@
+{
+  "commands": [
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ROOT",
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "actor",
+          "nargs": null,
+          "option_strings": [
+            "--as"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ID",
+          "mutually_exclusive_group": null,
+          "name": "window",
+          "nargs": null,
+          "option_strings": [
+            "--window"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "KEY",
+          "mutually_exclusive_group": null,
+          "name": "idempotency_key",
+          "nargs": null,
+          "option_strings": [
+            "--idempotency-key"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "integer",
+          "metavar": "PID",
+          "mutually_exclusive_group": null,
+          "name": "resolve_pid",
+          "nargs": null,
+          "option_strings": [
+            "--resolve-pid"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "integer"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "TOKEN",
+          "mutually_exclusive_group": null,
+          "name": "start_token",
+          "nargs": null,
+          "option_strings": [
+            "--start-token"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "quiet",
+        "release",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--as",
+        "value",
+        "--window",
+        "value",
+        "--idempotency-key",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "quiet",
+        "release"
+      ],
+      "program": "floati quiet release",
+      "public": true
+    }
+  ],
+  "predecessors": {
+    "quiet release": "{\"arguments\":[{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ROOT\",\"mutually_exclusive_group\":null,\"name\":\"root\",\"nargs\":null,\"option_strings\":[\"--root\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"NODE\",\"mutually_exclusive_group\":null,\"name\":\"actor\",\"nargs\":null,\"option_strings\":[\"--as\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ID\",\"mutually_exclusive_group\":null,\"name\":\"window\",\"nargs\":null,\"option_strings\":[\"--window\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"KEY\",\"mutually_exclusive_group\":null,\"name\":\"idempotency_key\",\"nargs\":null,\"option_strings\":[\"--idempotency-key\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"}],\"artifact_schema_version\":null,\"example_argv\":[\"quiet\",\"release\",\"--root\",\"\u002fprivate/tmp/floati-contract\",\"--as\",\"value\",\"--window\",\"value\",\"--idempotency-key\",\"value\"],\"executable\":true,\"mcp_exposure\":\"never\",\"mcp_omit\":[],\"mcp_required\":[],\"mutually_exclusive_groups\":[],\"path\":[\"quiet\",\"release\"],\"program\":\"floati quiet release\",\"public\":true}"
+  },
+  "schema_version": 0,
+  "source_commit": "d6263c86db08b6c88428eceb91ca6230217d30d6"
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "case": "seat-teardown",
+    "row": "SEAT-TEARDOWN-PREFIX-1",
+    "owner_ruling_date": "2026-10-29"
+  },
+  {
+    "case": "wake-daemon-serve",
+    "row": "WAKE-DAEMON-EPOCH-TOKEN-1",
+    "owner_ruling_date": "2026-10-29"
+  },
+  {
+    "case": "wake-wait",
+    "row": "WAITER-COLD-SOURCE-1",
+    "owner_ruling_date": "2026-10-29"
+  }
+]

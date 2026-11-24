@@ -4,6 +4,7 @@ from floati import fixture_ids as public_ids
 
 import argparse
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -27,10 +28,12 @@ from floati.registry import REGISTRY_KINDS, Registry
 from floati.work import WorkLog
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.banked_sha_fixture import banked_send_repository
 
 
 SHA = "a" * 40
 READ_TOOLS = {
+    "checkout-liveness",
     "confluence_bundle",
     "confluence_status",
     "describe",
@@ -41,14 +44,23 @@ READ_TOOLS = {
     "intake_show",
     "intake_preview",
     "log",
+    "needs_admission",
+    "needs_show",
+    "quiet_show",
+    "quiet_status",
     "receipts",
     "status",
+    "work_handoff_show",
+    "dispatch_show",
 }
 GOVERNED_TOOLS = {
     "ack",
+    "consume",
     "confluence_grant",
     "confluence_revoke",
     "inbox",
+    "needs_close",
+    "needs_file",
     "send",
     "wake_pause",
     "wake_resume",
@@ -73,6 +85,12 @@ def leaf_parser(
 
 
 class McpToolSurfaceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
+        cls.addClassCleanup(temporary.cleanup)
+        cls.send_repository, cls.sha = banked_send_repository(Path(temporary.name))
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
         self.addCleanup(self.temporary.cleanup)
@@ -103,11 +121,16 @@ class McpToolSurfaceTests(unittest.TestCase):
         return {
             "recipient": public_ids.builder('b'),
             "repo": "floati",
-            "sha": SHA,
-            "doc": "docs/evidence/mcp-tools.md",
+            "sha": self.sha,
+            "doc": "note.md",
             "note": note,
             "idempotency_key": key,
         }
+
+    def use_send_repository(self) -> None:
+        # MCP binds the repository to the server's working directory.
+        self.addCleanup(os.chdir, Path.cwd())
+        os.chdir(self.send_repository)
 
     def assert_tool_error(self, result: dict[str, object], code: str) -> dict[str, object]:
         self.assertIs(True, result["isError"])
@@ -120,6 +143,46 @@ class McpToolSurfaceTests(unittest.TestCase):
         )
         return artifact
 
+    def test_dispatch_authoring_refuses_invalid_delivery_branches(self) -> None:
+        from floati.dispatch_records import DispatchRecords
+        from floati.errors import ProtocolRefusal
+
+        brief = Path(self.temporary.name) / "brief.txt"
+        brief.write_text("Review the proposal.\n", encoding="utf-8")
+        records = DispatchRecords(self.root)
+        sender, recipient = public_ids.builder("a"), public_ids.builder("b")
+        for index, branch in enumerate(("review..v2", "review/@{1}", "review.lock")):
+            with self.subTest(branch=branch):
+                with self.assertRaises(ProtocolRefusal) as refusal:
+                    records.record(f"review-{index}", sender, "initial", recipient, branch, brief,
+                                   external="review request")
+                self.assertEqual("dispatch_branch_invalid", refusal.exception.code)
+        self.assertEqual([], records.show()["records"])
+
+        authored = records.record("review", sender, "initial", recipient, "review/v2", brief,
+                                  external="review request")
+        self.assertEqual("review/v2", authored["branch"])
+
+    def test_older_invalid_delivery_branch_can_be_read_and_superseded(self) -> None:
+        from floati.dispatch_records import DIRECTORY, DispatchRecords
+
+        brief = Path(self.temporary.name) / "brief.txt"
+        brief.write_text("Review the proposal.\n", encoding="utf-8")
+        records = DispatchRecords(self.root)
+        sender, recipient = public_ids.builder("a"), public_ids.builder("b")
+        revision = records.record("review", sender, "initial", recipient, "review", brief,
+                                  external="review request")
+        historical = dict(revision, branch="review..v2")
+        journal = self.root.tenant_home / DIRECTORY / "review.jsonl"
+        journal.write_text(json.dumps(historical) + "\n", encoding="utf-8")
+
+        shown = records.show("review")
+        self.assertEqual([historical], [entry["record"] for entry in shown["records"]], shown)
+        correction = records.record("review", sender, "correction", recipient, "review/v2", brief,
+                                    external="review request", supersedes=revision["id"])
+        self.assertEqual((2, "review/v2", revision["id"]),
+                         (correction["revision"], correction["branch"], correction["supersedes"]))
+
     def test_tool_set_is_derived_from_parser_exposure_tags(self) -> None:
         """Catches a hand-maintained allowlist drifting from live parser tags."""
 
@@ -130,6 +193,95 @@ class McpToolSurfaceTests(unittest.TestCase):
             self.assertNotIn("DRAFT", tool["description"])
             self.assertNotEqual(tool["description"], "floati " + tool["name"].replace("_", " "))
         self.assertEqual("approved", self.surface()["copy_state"])
+
+    def test_handoff_reader_reports_absent_evidence_for_the_bound_root(self) -> None:
+        item = WorkLog(self.root).add("Prepare review", public_ids.builder("a"), [])
+        server = self.server()
+        result = server.call_tool("work_handoff_show", {"item_id": item["id"], "json": True})
+        self.assertNotIn("isError", result)
+        evidence = result["structuredContent"]["evidence"]
+        self.assertEqual(("bound-record", 1, [], "none"),
+                         (evidence["contract"], evidence["contract_version"], evidence["records"],
+                          evidence["evidence_state"]))
+        self.assertNotIn("work_handoff_record", {tool["name"] for tool in server.list_tools()})
+
+    def test_dispatch_mcp_reads_the_roster_without_serving_briefs_or_writes(self) -> None:
+        from floati.dispatch_records import DispatchRecords
+        from floati.replay_history import project_asked
+
+        sender, recipient = public_ids.builder("a"), public_ids.builder("b")
+        envelope = EventLog(self.root).send(sender, recipient, "floati", self.sha,
+                                            "README.md", "Review the proposal.")["message"]
+        brief = self.root.path.parent / "brief.txt"
+        secret = "Local context for the reviewer only.\n"
+        brief.write_text(secret, encoding="utf-8")
+        revision = DispatchRecords(self.root).record(
+            "review", sender, "initial", recipient, "review", brief, envelope_id=envelope["id"],
+        )
+        server = self.server()
+        result = server.call_tool("dispatch_show", {"dispatch_id": "review", "json": True})
+        self.assertNotIn("isError", result)
+        evidence = result["structuredContent"]["evidence"]
+        self.assertEqual(revision, evidence["records"][0]["record"])
+        self.assertEqual("observed", revision["carrier"]["provenance"])
+        asked = project_asked(revision)
+        self.assertEqual((sender, revision["id"], 1), (asked["node"], asked["receipt_id"], asked["revision"]))
+        self.assertEqual(asked, evidence["roster"][0]["asked"])
+        self.assertNotIn(secret.strip(), json.dumps(result))
+        messages = EventLog(self.root).records()
+        self.assertEqual([envelope["id"]], [message["id"] for message in messages])
+        self.assertNotIn(secret.strip(), json.dumps(messages))
+        self.assertEqual({"dispatch_show"}, {t["name"] for t in server.list_tools()
+                                              if t["name"].startswith("dispatch_")})
+
+    def test_dispatch_mcp_keeps_known_history_visible_when_a_future_row_adds_fields(self) -> None:
+        from floati.dispatch_records import DIRECTORY, DispatchRecords
+
+        brief = Path(self.temporary.name) / "brief.txt"
+        brief.write_text("Review the proposal.\n", encoding="utf-8")
+        sender, recipient = public_ids.builder("a"), public_ids.builder("b")
+        revision = DispatchRecords(self.root).record(
+            "review", sender, "initial", recipient, "review", brief, external="review request",
+        )
+        future_id = "dispatch-revision-" + uuid7_hex()
+        future = dict(revision, id=future_id, schema_version=2, revision=2,
+                      idempotency_key="follow-up", supersedes=revision["id"], audience="reviewers")
+        journal = self.root.tenant_home / DIRECTORY / "review.jsonl"
+        with journal.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(future) + "\n")
+
+        result = self.server().call_tool("dispatch_show", {"dispatch_id": "review", "json": True})
+        self.assertNotIn("isError", result)
+        evidence = result["structuredContent"]["evidence"]
+        self.assertEqual([revision], [entry["record"] for entry in evidence["records"]], evidence)
+        self.assertEqual("unknown", evidence["records"][0]["freshness"]["state"])
+        self.assertIsNone(evidence["records"][0]["chain"]["head"])
+        self.assertEqual(
+            [{"dispatch_id": "review", "record_id": future_id, "code": "schema_version_invalid"}],
+            evidence["refusals"],
+        )
+
+    def test_status_pulls_current_fleet_presence_without_hook_participation(self) -> None:
+        outside_reader = self.server(public_ids.builder("b"))
+        cli_status = ["status", "--root", str(self.root.path), "--json"]
+        for mode in ("UNDECLARED", "AWAY", "PRESENT"):
+            with self.subTest(mode=mode):
+                if mode != "UNDECLARED":
+                    code, declaration = run_cli_artifact([
+                        "presence", "set", "--root", str(self.root.path),
+                        "--as", public_ids.builder("a"), "--mode", mode,
+                        "--idempotency-key", "operator-" + mode.lower(),
+                    ])
+                    self.assertEqual(0, code, declaration)
+                code, cli = run_cli_artifact(cli_status)
+                self.assertEqual(0, code, cli)
+                result = outside_reader.call_tool("status", {})
+                self.assertFalse(result.get("isError", False), result)
+                observed = result["structuredContent"]["evidence"]["fleet_presence"]
+                self.assertEqual(mode, observed["mode"])
+                self.assertEqual(cli["evidence"]["fleet_presence"], observed)
+                if mode != "UNDECLARED":
+                    self.assertEqual(declaration["evidence"], observed)
 
     def test_exposure_mutation_changes_both_generated_tool_and_deny_sets(self) -> None:
         """Catches the server ignoring a parser exposure mutation or shadowing deny truth."""
@@ -157,7 +309,7 @@ class McpToolSurfaceTests(unittest.TestCase):
         """Catches bound fields, wrong scalar types, choices, or repeats in MCP schemas."""
 
         send = self.tool("send")["inputSchema"]
-        self.assertFalse({"root", "sender", "actor", "session"} & set(send["properties"]))
+        self.assertFalse({"root", "sender", "actor", "session", "repository"} & set(send["properties"]))
         self.assertIn("recipient", send["properties"])
         self.assertEqual(
             {"recipient", "repo", "sha", "doc", "note", "idempotency_key"},
@@ -242,6 +394,7 @@ class McpToolSurfaceTests(unittest.TestCase):
         self.assertIsInstance(evidence["remedy"], str)
         self.assertTrue(evidence["remedy"])
 
+        self.use_send_repository()
         provided = self.send_arguments(note="n" * 1100, key="mcp2f1-send")
         evidence = self.assert_tool_error(
             server.call_tool("send", provided), "note_invalid"
@@ -359,6 +512,7 @@ class McpToolSurfaceTests(unittest.TestCase):
         """Catches MCP inventing output, identity, or process-local idempotency truth."""
 
         self.assertIsNotNone(run_cli_artifact, "floati.mcp.run_cli_artifact must exist")
+        self.use_send_repository()
         arguments = self.send_arguments(note="n" * 1024, key="mcp-deduplicate")
         direct_exit, direct_artifact = run_cli_artifact([
             "send",
@@ -366,8 +520,8 @@ class McpToolSurfaceTests(unittest.TestCase):
             "--from", public_ids.builder('a'),
             "--to", public_ids.builder('b'),
             "--repo", "floati",
-            "--sha", SHA,
-            "--doc", "docs/evidence/mcp-tools.md",
+            "--sha", self.sha,
+            "--doc", "note.md",
             "--note", "n" * 1024,
             "--idempotency-key", "mcp-deduplicate",
         ])
@@ -383,15 +537,29 @@ class McpToolSurfaceTests(unittest.TestCase):
             direct_artifact["evidence"]["message"]["sender"],
         )
         self.assertEqual(
-            "recipient_not_listening",
+            "unknown",
             direct_artifact["evidence"]["recipient_readiness"]["state"],
         )
+        self.assertEqual("mechanism_evidence_incomplete",
+            direct_artifact["evidence"]["recipient_readiness"]["reason"])
+        hook = next(fact for fact in direct_artifact["evidence"]["recipient_readiness"]["mechanism_evidence"]
+                    if fact["mechanism"] == "stop_hook")
+        self.assertEqual("unknown", hook["state"])
         self.assertEqual(1, len(EventLog(self.root).records()))
+        # Replaying across native/MCP servers retains one envelope and exactly
+        # its frozen companion observation, rather than another readiness poll.
+        rows = EventLog(self.root).event_records()
+        self.assertEqual(["message_envelope", "send_readiness_observation"],
+                         [row["kind"] for row in rows])
+        self.assertEqual(rows[0]["id"], rows[1]["envelope_id"])
+        self.assertEqual(direct_artifact["evidence"]["recipient_readiness"],
+                         rows[1]["readiness"])
 
     def test_note_cap_refuses_with_exact_cli_artifact_parity(self) -> None:
         """Catches MCP weakening the CLI note cap or translating its refusal."""
 
         self.assertIsNotNone(run_cli_artifact, "floati.mcp.run_cli_artifact must exist")
+        self.use_send_repository()
         note = "n" * 1025
         direct_exit, direct_artifact = run_cli_artifact([
             "send",
@@ -399,8 +567,8 @@ class McpToolSurfaceTests(unittest.TestCase):
             "--from", public_ids.builder('a'),
             "--to", public_ids.builder('b'),
             "--repo", "floati",
-            "--sha", SHA,
-            "--doc", "docs/evidence/mcp-tools.md",
+            "--sha", self.sha,
+            "--doc", "note.md",
             "--note", note,
             "--idempotency-key", "mcp-too-long",
         ])
@@ -491,6 +659,7 @@ class McpToolSurfaceTests(unittest.TestCase):
         self.assertEqual("unknown_node", wake_artifact["evidence"]["code"])
         self.assert_tool_error(wake_result, "unknown_node")
         self.assertIn("node add", str(wake_result["structuredContent"]["evidence"]["remedy"]))
+        self.use_send_repository()
         arguments = self.send_arguments(
             note="after retirement",
             key="retired-send",
@@ -501,7 +670,7 @@ class McpToolSurfaceTests(unittest.TestCase):
             "--from", public_ids.builder('a'),
             "--to", public_ids.builder('b'),
             "--repo", "floati",
-            "--sha", SHA,
+            "--sha", self.sha,
             "--doc", "docs/evidence/mcp-tools.md",
             "--note", "after retirement",
             "--idempotency-key", "retired-send",
@@ -533,7 +702,9 @@ class McpToolSurfaceTests(unittest.TestCase):
             "out": str(Path(self.temporary.name) / "confluence-bundle.json"),
             "source": str(self.root.path),
             "directory": str(self.temporary.name),
+            "path": str(self.temporary.name),
             "snapshot_id": "snap-00000000000000000000000000000000",
+            "item_id": "work-00000000000070008000000000000000",
             "operation": "comment",
             "node": public_ids.builder("a"),
         }
@@ -608,6 +779,7 @@ class McpToolSurfaceTests(unittest.TestCase):
         server = self.server()
 
         self.assertIn("send", {tool["name"] for tool in server.list_tools()})
+        self.use_send_repository()
         result = server.call_tool(
             "send",
             self.send_arguments(note="after expiry", key="expired-send"),

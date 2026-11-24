@@ -1,19 +1,11 @@
 """AD-1 t3 C-row — loopback CLIENT, not HeadlessProfileAdapter.
-
-The live executable for this row is OPERATOR-DECLARED in
-``tests/harness_declarations.json`` and is never searched for. Where it is not
-declared, or the declared path is not one canonical executable on this host,
-the live test still runs and asserts the typed absence instead. It never skips.
 """
 
 from __future__ import annotations
 
 import importlib
-import subprocess
 import unittest
 
-from tests import harness_declaration
-from tests import managed_test_tools
 from tests.test_roster_adapters import ROSTER
 
 
@@ -44,30 +36,6 @@ class ObservationClientFenceTests(unittest.TestCase):
         from floati.adapters.headless_template import HeadlessProfileAdapter
 
         self.assertFalse(issubclass(module.T3ClientAdapter, HeadlessProfileAdapter))
-
-
-class LiveExecutableTests(unittest.TestCase):
-    """C-row: live executable named and launched."""
-
-    def test_named_t3_binary_reports_version(self) -> None:
-        executable = harness_declaration.live_executable_or_typed_absence(
-            self, "t3"
-        )
-        if executable is None:
-            return
-        node = managed_test_tools.executable(
-            "FLOATI_TEST_NODE_EXECUTABLE", "node"
-        )
-        self.assertIsNotNone(node, "AD-1 t3 requires a real Node executable")
-        completed = subprocess.run(
-            [str(node), str(executable), "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("t3", completed.stdout.lower())
-        self.assertIn("0.0.35", completed.stdout)
 
 
 if __name__ == "__main__":

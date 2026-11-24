@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/registry-person-record.schema.json",
+  "title": "Floati Registry Person Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "tenant_id", "timestamp", "node_id", "person"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "registry_person_record"},
+    "id": {"type": "string", "pattern": "^registry-person-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+    "person": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"}
+  }
+}

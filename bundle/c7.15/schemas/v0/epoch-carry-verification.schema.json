@@ -1,0 +1,28 @@
+{
+  "$id": "https://landoclusters.com/floati/schemas/v0/epoch-carry-verification.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Floati Epoch Carry Verification v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "roll_receipt_id", "roll_receipt_sha256", "carried_envelopes", "digest"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 0},
+    "id": {"type": "string", "pattern": "^epoch-carry-verification-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"const": "epoch_carry_verification"},
+    "roll_receipt_id": {"type": "string", "pattern": "^bus-epoch-roll-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "roll_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "carried_envelopes": {
+      "type": "array", "maxItems": 100000, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "sha256"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^msg-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

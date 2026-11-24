@@ -20,6 +20,7 @@ independent witness rather than importing the product instrument they judge.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -352,28 +353,42 @@ class DeadThreadRefusalTests(unittest.TestCase):
         """Control: a provably live holder queues exactly as today."""
 
         adapters, adapter, binding, runner, root, node, workspace = self._world()
-        child = subprocess.Popen(["/bin/sleep", "30"])
-        try:
-            _write_holder_testimony(
-                root, node, "thread-fq6",
-                pid=child.pid, start_epoch=_ps_start_epoch(child.pid),
-            )
-            result = adapter.request_wake(binding, "[floati] wd-3 wake", 60)
-        finally:
-            child.kill()
-            child.wait()
+        _write_holder_testimony(root, node, "thread-fq6",
+            pid=os.getpid(), start_epoch=_ps_start_epoch(os.getpid()))
+        result = adapter.request_wake(binding, "[floati] wd-3 wake", 60)
         self.assertEqual("queued", result.outcome, result)
         self.assertIsNone(result.reason_code, result)
         self.assertEqual(1, len(runner.calls), runner.calls)
         argv, cwd, _timeout = runner.calls[0]
-        self.assertEqual(
-            (
-                str(adapters.CODEX_EXECUTABLE), "queue", "--thread", "thread-fq6",
-                "--message", "[floati] wd-3 wake",
-            ),
-            argv, argv,
-        )
+        self.assertEqual(("queue", "--thread", "thread-fq6",
+            "--message", "[floati] wd-3 wake"), argv[1:])
+        launched = Path(argv[0])
+        self.assertTrue(launched.is_absolute())
+        self.assertFalse(launched.is_symlink())
+        self.assertTrue(launched.is_file())
+        self.assertTrue(os.access(launched, os.X_OK))
+        self.assertEqual(binding["executable_digest"],
+            hashlib.sha256(launched.read_bytes()).hexdigest())
         self.assertEqual(workspace, cwd)
+
+        # A live holder authorizes a queue attempt, never different executable bytes.
+        trusted_bytes = launched.read_bytes()
+        launched.write_bytes(b"#!/bin/sh\n# swapped in place\nexit 0\n")
+        runner.calls.clear()
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "[floati] wd-3 wake", 60)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
+        launched.write_bytes(trusted_bytes)
+        replacement = launched.with_name("foreign-codex")
+        replacement.write_bytes(b"#!/bin/sh\n# untrusted retarget\nexit 0\n")
+        replacement.chmod(0o700)
+        adapters.CODEX_EXECUTABLE.unlink()
+        adapters.CODEX_EXECUTABLE.symlink_to(replacement)
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "[floati] wd-3 wake", 60)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
 
     def test_absent_testimony_queues_exactly_as_today(self) -> None:
         """Control: no testimony proves nothing either way; today's behavior."""

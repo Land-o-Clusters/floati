@@ -13,7 +13,7 @@ from unittest import mock
 from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
-from floati.records import validate_record
+from floati.records import WAKE_HOLD_KINDS, validate_record
 from floati.root import FloatiRoot
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 
@@ -118,6 +118,105 @@ class WakeHoldRecordTests(unittest.TestCase):
             validate_record(row, "alpha", frozenset({"wake_hold_receipt"}), integrity=False)
         self.assertEqual("wake_hold_decision_digest_invalid", caught.exception.code)
 
+    def test_roll_anchored_hold_preserves_decision_and_requires_closed_provenance(self) -> None:
+        """Carried testimony preserves both legacy selection shapes without open provenance."""
+        from floati.records import wake_hold_decision_digest
+
+        schema = Path(__file__).parents[1] / "schemas/v3/wake-hold-receipt-record.schema.json"
+        for released in (False, True):
+            with self.subTest(released=released):
+                original = self.receipt()
+                if released:
+                    original.update(schema_version=2, selection_reason="holder_released")
+                    original["decision_digest"] = wake_hold_decision_digest(original)
+                row = dict(original, schema_version=3,
+                    id="wake-hold-018f7e9b3c157abc8def0123456789ab",
+                    event_prefix_digest="d" * 64, delivery_prefix_digest="e" * 64,
+                    acknowledgment_prefix_digest="f" * 64,
+                    carried_from={"hold_id": original["id"],
+                        "roll_receipt_id": "bus-epoch-roll-receipt-018f7e9b3c167abc8def0123456789ab"})
+                self.assertEqual(original["decision_digest"], row["decision_digest"])
+                self.assertEqual(row, validate_record(row, "alpha", {"wake_hold_receipt"}, integrity=False))
+                validate_json_schema(row, schema)
+                missing = dict(row)
+                missing.pop("carried_from")
+                candidates = (
+                    missing, dict(row, unknown=True),
+                    dict(row, carried_from=dict(row["carried_from"], unknown=True)),
+                    dict(row, carried_from={"hold_id": original["id"]}),
+                    dict(row, carried_from=dict(row["carried_from"], hold_id="msg-" + original["id"][10:])),
+                    dict(row, carried_from=dict(row["carried_from"], roll_receipt_id="not-a-roll")),
+                    dict(row, selection_reason="fresh"), dict(row, decision_digest="not-a-digest"),
+                )
+                for index, candidate in enumerate(candidates):
+                    with self.subTest(released=released, malformed=index):
+                        with self.assertRaises(ProtocolRefusal):
+                            validate_record(candidate, "alpha", {"wake_hold_receipt"}, integrity=False)
+                        with self.assertRaises(SchemaValidationError):
+                            validate_json_schema(candidate, schema)
+
+    def test_carried_envelope_verification_requires_its_exact_roll_and_inventory(self) -> None:
+        """Borrowed frame testimony cannot move to another roll or change its inventory."""
+        from copy import deepcopy
+        from floati.events import validate_event_records
+        from floati.framing import decode_frames
+        from floati.records import epoch_carry_verification_digest
+        from tests.test_epoch_carry import EpochCarryTests
+
+        fixture = EpochCarryTests("runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.send("first-carried-envelope")
+        fixture.send("second-carried-envelope")
+        fixture.automatic_roll()
+        events = decode_frames((fixture.root.path / "events.jsonl").read_bytes())
+        row = next(record for record in events if record["kind"] == "epoch_carry_verification")
+        schema = Path(__file__).parents[1] / "schemas/v0/epoch-carry-verification.schema.json"
+        self.assertEqual(row, validate_record(row, fixture.root.tenant_id,
+            {"epoch_carry_verification"}, integrity=False))
+        validate_json_schema(row, schema)
+        validate_event_records(events)
+        missing = dict(row)
+        missing.pop("roll_receipt_id")
+        for candidate in (missing, dict(row, unknown=True), dict(row, carried_envelopes=[{"id": self.item_a}])):
+            with self.subTest(shape=candidate):
+                with self.assertRaises(ProtocolRefusal):
+                    validate_record(candidate, fixture.root.tenant_id,
+                        {"epoch_carry_verification"}, integrity=False)
+                with self.assertRaises(SchemaValidationError):
+                    validate_json_schema(candidate, schema)
+        candidates = [
+            dict(row, roll_receipt_id="bus-epoch-roll-receipt-018f7e9b3c177abc8def0123456789ab"),
+            dict(row, roll_receipt_sha256="f" * 64), dict(row, digest="f" * 64),
+        ]
+        for entries in (list(reversed(row["carried_envelopes"])),
+                        row["carried_envelopes"] + row["carried_envelopes"][:1]):
+            candidates.append(dict(row, carried_envelopes=entries,
+                digest=epoch_carry_verification_digest(entries)))
+        changed = deepcopy(row)
+        changed["carried_envelopes"][0]["sha256"] = "f" * 64
+        candidates.append(changed)
+        for index, candidate in enumerate(candidates):
+            with self.subTest(corruption=index):
+                altered = [candidate if record["id"] == row["id"] else record for record in events]
+                with self.assertRaises(IntegrityFailure):
+                    validate_event_records(altered)
+        for altered in (events[1:], events + [row], [row, *events]):
+            with self.subTest(anchor_or_duplicate=altered):
+                with self.assertRaises(IntegrityFailure):
+                    validate_event_records(altered)
+
+    def test_preserved_legacy_hold_fixtures_remain_schema_and_runtime_valid(self) -> None:
+        """The assessment fixtures retain old-valid v1 and v2 receipt behavior."""
+        root = Path(__file__).parents[1]
+        fixtures = json.loads((root / "tests/fixtures/waiter-sealed-r3-holds.json").read_text())
+        for schema_name, rows in fixtures.items():
+            for row in rows:
+                with self.subTest(schema=schema_name):
+                    validate_json_schema(row, root / schema_name)
+                    self.assertEqual(row, validate_record(row, row["tenant_id"],
+                        {"wake_hold_receipt"}, integrity=False))
+
 
     def test_sealed_ledger_refuses_cross_recipient_and_session_before_writing(self) -> None:
         """Catches a controller owner writing testimony into another ledger namespace."""
@@ -163,12 +262,16 @@ class WakeHoldRecordTests(unittest.TestCase):
         row = self.receipt()
         relative = "receipts/deliveries/bob.jsonl"
         path = root.resolve_relative(relative)
-        for writer in (
+        for case_index, writer in enumerate((
             lambda: append_record(root, relative, row, allowed_kinds={"wake_hold_receipt"}),
             lambda: transact(root, relative, lambda _prior: (None, row), allowed_kinds={"wake_hold_receipt"}),
             lambda: _append_frame(path, encode_frame(row)),
-        ):
-            with self.subTest(writer=writer):
+        )):
+            with self.subTest(case=(
+                "append_record",
+                "transact",
+                "_append_frame",
+            )[case_index]):
                 before = path.read_bytes() if path.exists() else b""
                 with self.assertRaises(ProtocolRefusal) as caught:
                     writer()
@@ -209,8 +312,12 @@ class WakeHoldRecordTests(unittest.TestCase):
             lambda: type(ledger).append(ledger, row),
             lambda: recovered(ledger, row),
         )
-        for attempt in attempts:
-            with self.subTest(attempt=attempt):
+        for case_index, attempt in enumerate(attempts):
+            with self.subTest(case=(
+                "bound-ledger-append",
+                "class-ledger-append",
+                "recovered-function-append",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     attempt()
                 self.assertEqual("wake_controller_only", caught.exception.code)
@@ -307,7 +414,7 @@ class WakeHoldRecordTests(unittest.TestCase):
         root, item_id = seeded()
         artifact = WakeHoldController(root).evaluate("bob", idempotency_key="lawful-controller")
         self.assertEqual([item_id], artifact["receipt"]["item_ids"])
-        self.assertEqual(1, len(read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"})))
+        self.assertEqual(1, len(read_records(root, "receipts/deliveries/bob.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS))))
 
         subclass_root, _ = seeded()
         class UntrustedSubclass(WakeHoldController):
@@ -406,6 +513,166 @@ class WakeAttemptReceiptTests(unittest.TestCase):
         registry.register(public_ids.worker('alpha'), "worker")
         registry.register("bob", "worker")
         self.events = EventLog(self.root, registry)
+
+    def test_attempt_uses_certified_selected_envelopes_and_preserves_physical_order(self) -> None:
+        """Unrelated retained mail must not be replayed to prove an existing decision."""
+        from floati import jsonl
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        selected = [self.events.send(
+            public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+            "docs/evidence/wake-attempt.md", "selected attempt",
+            idempotency_key="selected-attempt-" + str(index),
+        ) for index in range(2)]
+        decision = WakeHoldController(self.root).evaluate("bob", idempotency_key="selected-decision")
+        for index in range(3):
+            self.events.send(public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+                "docs/evidence/wake-attempt.md", "unrelated retained mail",
+                idempotency_key="unrelated-attempt-" + str(index))
+        reads = []
+        native = jsonl._read_path_records
+        def observe(path, *args, **kwargs):
+            if Path(path) == self.events.path:
+                reads.append(str(path))
+            return native(path, *args, **kwargs)
+        arguments = dict(recipient="bob", acting_session_id="selected-session",
+            item_ids=[row["id"] for row in selected], decision_receipt_id=decision["receipt"]["id"],
+            message_worker_session_id=None, idempotency_key="selected-action", outcome="queued")
+        with mock.patch.object(jsonl, "_read_path_records", side_effect=observe):
+            receipt = WakeAttemptLedger(self.root).record(**arguments)
+            self.assertEqual("queued", receipt["outcome"])
+            self.assertEqual(receipt, WakeAttemptLedger(self.root).record(**arguments))
+            with self.assertRaises(ProtocolRefusal) as refused:
+                WakeAttemptLedger(self.root).record(**dict(arguments,
+                    item_ids=list(reversed(arguments["item_ids"])), idempotency_key="reversed-action"))
+            self.assertEqual("wake_envelope_not_owned", refused.exception.code)
+        self.assertEqual([], reads, "certified selected-envelope proof replayed retained events")
+
+    def test_cached_attempt_envelope_lookup_does_not_block_a_native_event_append(self) -> None:
+        import threading
+        from floati.send_prefix import Prefix
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        message = self.events.send(public_ids.worker('alpha'), "bob", "floati", "a" * 40,
+            "docs/evidence/wake-attempt.md", "selected attempt",
+            idempotency_key="concurrent-selected-attempt")
+        decision = WakeHoldController(self.root).evaluate("bob",
+            idempotency_key="concurrent-selected-decision")
+        arguments = dict(recipient="bob", acting_session_id="selected-session",
+            item_ids=[message["id"]], decision_receipt_id=decision["receipt"]["id"],
+            message_worker_session_id=None, idempotency_key="concurrent-selected-action",
+            outcome="queued")
+        native_get = Prefix.get
+
+        def exercise(mutation):
+            lookup_entered, release_lookup, append_completed = (
+                threading.Event(), threading.Event(), threading.Event())
+            reader_identity, receipts, failures = [], [], []
+
+            def get(prefix, domain, value):
+                if (threading.get_ident() in reader_identity and domain == "id"
+                        and value == message["id"] and not lookup_entered.is_set()):
+                    lookup_entered.set()
+                    if not release_lookup.wait(60):
+                        raise AssertionError("selected-envelope lookup was not released")
+                return native_get(prefix, domain, value)
+
+            def read():
+                reader_identity.append(threading.get_ident())
+                try:
+                    receipts.append(WakeAttemptLedger(self.root).record(**arguments))
+                except Exception as error:
+                    failures.append(error)
+
+            def append():
+                try:
+                    if mutation == "corrupt":
+                        # Hostile fixture bytes invalidate the captured cut;
+                        # they are never authored as a native ledger record.
+                        with self.events.path.open("ab") as stream:
+                            stream.write(b"{partial")
+                    else:
+                        self.events.send(public_ids.worker('alpha'), public_ids.worker('alpha'),
+                            "floati", "a" * 40, "docs/evidence/wake-attempt.md",
+                            "unrelated concurrent append", idempotency_key="concurrent-unrelated-append")
+                    append_completed.set()
+                except Exception as error:
+                    failures.append(error)
+
+            reader = threading.Thread(target=read, name="selected-attempt-reader")
+            writer = threading.Thread(target=append, name="unrelated-event-writer")
+            progressed = False
+            with mock.patch.object(Prefix, "get", get):
+                reader.start()
+                try:
+                    self.assertTrue(lookup_entered.wait(2), "native selected-envelope lookup was not reached")
+                    writer.start()
+                    # This event is a concurrency watchdog, not a timing metric.
+                    progressed = append_completed.wait(2)
+                finally:
+                    release_lookup.set()
+                    for thread in (reader, writer):
+                        if thread.ident is not None:
+                            thread.join(timeout=10)
+            for thread in (reader, writer):
+                self.assertFalse(thread.is_alive(), "native concurrency test did not collect " + thread.name)
+            self.assertTrue(progressed,
+                "cached selected-envelope lookup retained the event lock and blocked a native append")
+            return receipts, failures
+
+        for mutation in ("append", "corrupt"):
+            with self.subTest(mutation=mutation):
+                events_before = self.events.path.read_bytes()
+                attempt_path = self.root.resolve_relative("receipts/wakes/bob.jsonl")
+                attempts_before = attempt_path.read_bytes() if attempt_path.exists() else None
+                try:
+                    receipts, failures = exercise(mutation)
+                    if mutation == "corrupt":
+                        with self.assertRaises(IntegrityFailure) as native:
+                            self.events.event_records()
+                        self.assertEqual([], receipts)
+                        self.assertEqual(1, len(failures), failures)
+                        self.assertIsInstance(failures[0], IntegrityFailure)
+                        self.assertEqual((native.exception.code, native.exception.detail),
+                            (failures[0].code, failures[0].detail))
+                        self.assertEqual(attempts_before,
+                            attempt_path.read_bytes() if attempt_path.exists() else None)
+                    else:
+                        self.assertEqual([], failures)
+                        self.assertEqual(1, len(receipts))
+                        self.assertEqual(("queued", [message["id"]]),
+                            (receipts[0]["outcome"], receipts[0]["item_ids"]))
+                        self.assertEqual(receipts[0], WakeAttemptLedger(self.root).record(**arguments))
+                finally:
+                    if mutation == "corrupt":
+                        self.events.path.write_bytes(events_before)
+
+    def test_attempt_accepts_only_proven_original_decision_after_two_rolls(self) -> None:
+        from tests.test_epoch_carry import EpochCarryTests
+        from floati.wake_hold import WakeAttemptLedger, WakeHoldController
+
+        fixture = EpochCarryTests('runTest')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        message = fixture.send('attempt-before-carry')
+        original = WakeHoldController(fixture.root).evaluate('seat-a',
+            idempotency_key='attempt-decision')['receipt']
+        fixture.automatic_roll()
+        fixture.automatic_roll()
+        for known in (True, False):
+            with self.subTest(known=known):
+                decision_id = original['id'] if known else 'wake-hold-' + uuid7_hex()
+                def record():
+                    return WakeAttemptLedger(fixture.root).record(recipient='seat-a',
+                    acting_session_id='attempt-session', item_ids=[message['id']],
+                    decision_receipt_id=decision_id, message_worker_session_id=None,
+                    idempotency_key='carried-attempt-' + str(known), outcome='queued')
+                if known:
+                    self.assertEqual('queued', record()['outcome'])
+                else:
+                    with self.assertRaises(ProtocolRefusal) as refused:
+                        record()
+                    self.assertEqual('wake_decision_missing', refused.exception.code)
 
     def test_successful_prompt_records_closed_node_session_and_envelope_receipt(self) -> None:
         """Catches an actual wake remaining invisible after a lawful decision."""
@@ -1070,6 +1337,109 @@ class WakeHoldControllerTests(unittest.TestCase):
 
         return WakeHoldController(self.root).evaluate("bob", idempotency_key=key, **kwargs)
 
+    def test_bound_and_unbound_polls_share_only_a_current_event_cut(self):
+        from floati import cut_prefix, inbox_prefix, send_prefix
+        from floati.wake_hold import WakeHoldController
+        from tests.bus_scale_io import IOProbe
+
+        session = "worker-018f7e9b3c137abc8def0123456789ab"
+        unbound = self.send(key="unbound")
+        for bank in (send_prefix, inbox_prefix, cut_prefix):
+            self.assertIsNotNone(bank.warm(self.root))
+        controller = WakeHoldController(self.root)
+        bound = controller.evaluate("bob", worker_session_id=session, idempotency_key="bound")
+        self.assertEqual("caught_up", bound["state"])
+        with IOProbe(self.root.tenant_home) as probe:
+            lane = controller.evaluate("bob", idempotency_key="lane")
+        probe.assert_complete()
+        self.assertEqual([unbound], lane["fresh_messages"])
+        self.assertEqual(bound["event_prefix_digest"], lane["event_prefix_digest"])
+        directory_bytes = sum(probe.read_bytes_by_path.get(name + "/directory.bin", 0)
+                              for name in (cut_prefix.cache_name(), inbox_prefix.CACHE_NAME))
+        with self.subTest(source="unchanged"):
+            self.assertEqual(0, directory_bytes, "the second mail plane reread complete certified directories")
+
+        added = self.send(session=session, key="bound-after-append")
+        after_append = controller.evaluate("bob", worker_session_id=session, idempotency_key="changed")
+        self.assertEqual([added], after_append["fresh_messages"])
+        self.assertNotEqual(bound["event_prefix_digest"], after_append["event_prefix_digest"])
+
+        revision = send_prefix._revision()
+        current = [revision]
+        original = inbox_prefix.InboxPrefix.recipient_count
+        def change_reader(bank, node):
+            current[0] = "different-source-revision"
+            return original(bank, node)
+        with self.subTest(source="changed_during_acquisition"),\
+                mock.patch.object(send_prefix, "_revision", side_effect=lambda: current[0]),\
+                mock.patch.object(inbox_prefix.InboxPrefix, "recipient_count", change_reader):
+            self.assertIsNone(cut_prefix.certified_source(self.root, "bob", session),
+                              "the reader changed while the three certificates were being joined")
+
+        previous = cut_prefix.certified_source(self.root, "bob", session)
+        self.assertIsNotNone(previous)
+        checkpoint = self.root.tenant_home / inbox_prefix.CACHE_NAME / "checkpoint.json"
+        original_checkpoint = checkpoint.read_bytes()
+        checkpoint.write_bytes(b"{}")
+        with self.subTest(source="damaged_checkpoint"):
+            self.assertIsNone(cut_prefix.certified_source(self.root, "bob", previous=previous),
+                              "a second plane accepted a damaged checkpoint from the first plane")
+        checkpoint.write_bytes(original_checkpoint)
+
+        with self.subTest(source="reader_rebuilt_before_session_takeover"):
+            recipient = "charlie"
+            new_session = "worker-018f7e9b3c147abc8def0123456789ab"
+            first = self.send(recipient, session=session, key="before-takeover")
+            decision = controller.evaluate(recipient, worker_session_id=session, idempotency_key="first-poll")
+            self.assertEqual([first], decision["fresh_messages"])
+
+            def idle_poll():
+                for plane in (new_session, None):
+                    idle = controller.evaluate(recipient, worker_session_id=plane, idempotency_key="idle-poll")
+                    self.assertEqual("caught_up", idle["state"])
+
+            next_revision = hashlib.sha256((revision + "-updated").encode()).hexdigest()
+            with mock.patch.object(send_prefix, "_revision", return_value=next_revision):
+                # An ordinary writer rebuilds the native banks after the source
+                # update. A retained controller then polls the new binding.
+                self.send("bob", key="after-reader-update")
+                self.assertIsNotNone(cut_prefix.certified_source(self.root, recipient, new_session))
+                idle_poll()
+                with IOProbe(self.root.tenant_home) as recovered:
+                    idle_poll()
+                recovered.assert_complete()
+                self.assertEqual(0, recovered.read_bytes_by_path.get(cut_prefix.cache_name() + "/directory.bin", 0),
+                                 "the new binding kept replaying after the writer rebuilt the certified event cut")
+
+    def test_fresh_controller_keeps_exact_raw_digest_without_replaying_unrelated_history(self) -> None:
+        """Cold decisions retain exact testimony while reading only their certified answer."""
+        from floati import send_prefix
+        from floati.wake_hold import WakeHoldController
+        from tests.bus_scale_io import IOProbe
+
+        for number in range(3):
+            self.send("charlie", key="cold-unrelated-" + str(number))
+        for own_mail in (False, True):
+            with self.subTest(own_mail=own_mail):
+                selected = self.send(key="cold-selected") if own_mail else None
+                self.assertIsNotNone(send_prefix.warm(self.root))
+                from floati import cut_prefix, inbox_prefix
+                self.assertIsNotNone(inbox_prefix.warm(self.root))
+                self.assertIsNotNone(cut_prefix.warm(self.root))
+                before = self.events.path.read_bytes()
+                expected = hashlib.sha256(EVENT_DOMAIN.encode("ascii") + b"\0" + before).hexdigest()
+                first_frame = len(before.splitlines(keepends=True)[0])
+                with IOProbe(self.root.tenant_home) as probe:
+                    result = WakeHoldController(self.root).evaluate(
+                        "bob", idempotency_key="cold-controller-" + str(own_mail))
+                probe.assert_complete()
+                self.assertEqual(expected, result["event_prefix_digest"])
+                self.assertEqual("fresh_work" if own_mail else "caught_up", result["state"])
+                self.assertEqual([] if selected is None else [selected], result["fresh_messages"])
+                self.assertEqual(before, self.events.path.read_bytes())
+                self.assertLessEqual(probe.read_bytes_by_path.get("events.jsonl", 0), first_frame,
+                    "fresh controller replayed retained mail to reproduce raw prefix testimony")
+
     def test_unregistered_wake_spelling_refuses_before_minting_coordination_identity(self) -> None:
         """Catches wake evaluation creating a second identity system outside the registry."""
         from floati.wake_hold import WakeHoldController
@@ -1081,6 +1451,89 @@ class WakeHoldControllerTests(unittest.TestCase):
             )
         self.assertEqual("unknown_node", caught.exception.code)
         self.assertFalse(alias_path.exists())
+
+    def test_certified_and_native_decisions_and_refusals_match_on_small_histories(self):
+        import random
+        import shutil
+        from floati import cut_prefix, inbox_prefix, send_prefix
+        from floati.cursor import SparseCursor
+        from floati.framing import encode_frame
+        from floati.wake_hold import WakeHoldController
+        rng = random.Random(362)
+        session = "worker-018f7e9b3c137abc8def0123456789ab"
+        for fault in ("current", "missing", "stale", "corrupt", "unknown", "foreign_delivery"):
+            with self.subTest(fault=fault):
+                for number in range(rng.randrange(1, 4)):
+                    self.send("charlie", key=fault + "-unrelated-" + str(number))
+                own = self.send(session=session, key=fault + "-own")
+                # Native receipt creation precedes the comparison; both sides
+                # reconstruct that exact public decision on a retry.
+                with mock.patch.object(cut_prefix, "certified_source", return_value=None):
+                    original = WakeHoldController(self.root).evaluate("bob",
+                        worker_session_id=session, idempotency_key="diff-" + fault)
+                if rng.randrange(2):
+                    SparseCursor(self.root).ack("bob", [own["id"]],
+                        worker_session_id=session, acting_session_id="differential")
+                if rng.randrange(2):
+                    self.events.retract(own["id"], worker_session_id=session,
+                        reason="sent_in_error", author=public_ids.worker('alpha'))
+                send_prefix.warm(self.root)
+                inbox_prefix.warm(self.root)
+                cut_prefix.warm(self.root)
+                self.assertIsNotNone(cut_prefix.certified_source(self.root, "bob", session))
+                bank = self.root.tenant_home / cut_prefix.cache_name()
+                if fault == "missing":
+                    shutil.rmtree(bank)
+                elif fault == "stale":
+                    raw = self.events.path.read_bytes()
+                    self.events.path.write_bytes(raw)
+                elif fault == "corrupt":
+                    target = next((bank / "nodes").iterdir())
+                    target.write_bytes(target.read_bytes() + b" ")
+                elif fault == "unknown":
+                    future = {"schema_version": 2, "id": "future-" + uuid7_hex(),
+                        "tenant_id": self.root.tenant_id, "timestamp": NOW,
+                        "kind": "future_event_kind", "payload": {"newer": True}}
+                    with self.events.path.open("ab") as stream:
+                        stream.write(encode_frame(future))
+                elif fault == "foreign_delivery":
+                    held = dict(original["receipt"], id="wake-hold-" + uuid7_hex(),
+                        item_ids=["msg-" + uuid7_hex()], idempotency_key="foreign-testimony")
+                    from floati.records import wake_hold_decision_digest
+                    held["decision_digest"] = wake_hold_decision_digest(held)
+                    _persist_wake_hold_fixture(self.root, "bob", held, session=session)
+                def result():
+                    try:
+                        return ("ok", WakeHoldController(self.root).evaluate("bob",
+                            worker_session_id=session, idempotency_key="diff-" + fault))
+                    except (IntegrityFailure, ProtocolRefusal) as error:
+                        return (error.code, error.detail)
+                # Evaluate certified first so native fallback cannot repair the
+                # fault before the optimized reader observes it.
+                certified = result()
+                with mock.patch.object(cut_prefix, "certified_source", return_value=None):
+                    native = result()
+                self.assertEqual(native, certified)
+                if fault == "unknown":
+                    # Keep the next variant a known-kind source; no rewrite is
+                    # performed by either reader under comparison.
+                    self.events.path.write_bytes(self.events.path.read_bytes().rsplit(b"\n", 2)[0] + b"\n")
+
+        # Nearest native guard is test_prefix_digest_reader_is_stable_and_detects_one_framed_byte_mutation.
+        # A decodable but noncanonical frame must not become admissible merely
+        # because all three derived banks were rebuilt from those same bytes.
+        with self.subTest(fault="noncanonical_frame"):
+            session = "worker-018f7e9b3c147abc8def0123456789ab"
+            fault = "noncanonical_frame"
+            self.send(session=session, key="noncanonical-own")
+            self.events.path.write_bytes(self.events.path.read_bytes().replace(b"\n", b" \n", 1))
+            send_prefix.warm(self.root)
+            inbox_prefix.warm(self.root)
+            cut_prefix.warm(self.root)
+            certified = result()
+            with mock.patch.object(cut_prefix, "certified_source", return_value=None):
+                native = result()
+            self.assertEqual(native, certified)
 
     def test_first_evaluation_presents_fresh_work_once_with_a_wake_receipt(self) -> None:
         """Catches a controller that returns fresh work without durable hold testimony."""
@@ -1183,7 +1636,7 @@ class WakeHoldControllerTests(unittest.TestCase):
             with self.assertRaises(ProtocolRefusal) as caught:
                 self.evaluate("record-bound-key")
             self.assertEqual("ledger_record_limit", caught.exception.code)
-        rows = read_records(self.root, "receipts/deliveries/bob.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"})
+        rows = read_records(self.root, "receipts/deliveries/bob.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS))
         self.assertTrue(all(row["item_ids"] == [] for row in rows))
         self.assertEqual(3, len(rows))
         original = self.evaluate("record-bound-key")
@@ -1247,7 +1700,7 @@ class WakeHoldControllerTests(unittest.TestCase):
         self.send(key="unrelated-later")
         replay = self.evaluate("truncate-key", limit=1)
         self.assertEqual(original, replay)
-        rows = read_records(self.root, "receipts/deliveries/bob.jsonl", allowed_kinds={"delivery_receipt", "wake_hold_receipt"})
+        rows = read_records(self.root, "receipts/deliveries/bob.jsonl", allowed_kinds=set(WAKE_HOLD_KINDS))
         self.assertEqual(1, len(rows))
         with self.assertRaises(ProtocolRefusal) as changed:
             self.evaluate("truncate-key", limit=2)

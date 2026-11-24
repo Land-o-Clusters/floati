@@ -20,7 +20,9 @@ FACT WEARING A CONSTANT'S CLOTHES.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import re
+import stat
 import sys
 import tempfile
 
@@ -34,7 +36,40 @@ def _real_temp_root() -> str:
     return os.path.realpath(tempfile.gettempdir())
 
 
-REAL_TEMP_ROOT = _real_temp_root()
+def _worker_temp_root(value: str, platform_root: str) -> str:
+    """Accept only an existing owned ordinary test directory below the root.
+
+    The explicit override is a test-runner input, never a best-effort hint:
+    malformed or stale inputs refuse rather than escaping worker isolation.
+    """
+
+    label = "FLOATI_TEST_TEMP_ROOT"
+    if not value or not os.path.isabs(value) or os.path.normpath(value) != value:
+        raise ValueError(f"{label} must be an absolute normalized path")
+    root = Path(platform_root)
+    candidate = Path(value)
+    if candidate == root or root not in candidate.parents:
+        raise ValueError(f"{label} must be strictly below the real platform temporary root")
+    try:
+        # Check every component explicitly; resolving a symlink and then using
+        # its target would weaken the fixtures' ordinary-path fence.
+        for component in (*reversed(candidate.parents), candidate):
+            metadata = component.lstat()
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise ValueError(f"{label} must have only ordinary directory components")
+        if candidate.stat().st_uid != os.getuid():
+            raise ValueError(f"{label} must be owned by the current uid")
+    except OSError as exc:
+        raise ValueError(f"{label} must name an existing ordinary directory") from exc
+    return value
+
+
+_PLATFORM_TEMP_ROOT = _real_temp_root()
+REAL_TEMP_ROOT = (
+    _worker_temp_root(os.environ["FLOATI_TEST_TEMP_ROOT"], _PLATFORM_TEMP_ROOT)
+    if "FLOATI_TEST_TEMP_ROOT" in os.environ
+    else _PLATFORM_TEMP_ROOT
+)
 
 
 # The fence vocabulary lives HERE, not in the test module that applies it: a

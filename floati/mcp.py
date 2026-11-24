@@ -396,7 +396,7 @@ class McpServer:
             return self.node
         if action.dest == "session":
             return self.session
-        if action.dest == "recipient" and path in {("inbox",), ("ack",)}:
+        if action.dest == "recipient" and path in {("inbox",), ("ack",), ("consume",)}:
             return self.node
         if action.dest == "json" and path in {
             ("describe",),

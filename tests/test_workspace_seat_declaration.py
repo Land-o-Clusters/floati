@@ -9,9 +9,11 @@ import unittest
 from pathlib import Path
 
 from floati import fixture_ids as public_ids
+from tests.banked_sha_fixture import banked_send_repository
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SHA = "a" * 40
+
+
 COORDINATOR_AUTHORITY = (
     "dispatch_bounded_work",
     "gate_results_before_merge",
@@ -117,6 +119,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
     def send_pending_mail(
         self, root: Path, recipient: str
     ) -> dict[str, object]:
+        repository, sha = banked_send_repository(self.base)
         sent, artifact = self.invoke(
             "send",
             "--root",
@@ -128,13 +131,14 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             "--repo",
             "floati",
             "--sha",
-            SHA,
+            sha,
             "--doc",
-            "docs/evidence/task-2-red.md",
+            "note.md",
             "--note",
             "workspace identity guard fixture",
+            cwd=repository,
         )
-        self.assertEqual(0, sent.returncode, sent.stderr)
+        self.assertEqual(0, sent.returncode, artifact)
         return artifact
 
     def write_seat_fixture(self, workspace: Path, root: Path, node: str) -> None:
@@ -180,7 +184,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             "permanent",
         )
 
-        self.assertEqual(0, added.returncode, added.stderr)
+        self.assertEqual(0, added.returncode, (added.stderr, add_artifact))
         self.assertEqual("ok", add_artifact["status"])
         workspace = root / "nodes" / public_ids.builder("a")
         marker = workspace / "SEAT.json"
@@ -220,7 +224,7 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
             "permanent",
         )
 
-        self.assertEqual(0, added.returncode, added.stderr)
+        self.assertEqual(0, added.returncode, (added.stderr, add_artifact))
         self.assertEqual("ok", add_artifact["status"])
         marker = root / "nodes" / public_ids.builder("mesh") / "SEAT.json"
         self.assertTrue(marker.is_file())
@@ -418,7 +422,11 @@ class WorkspaceSeatDeclarationTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode)
         self.assertEqual("ok", artifact["status"])
         evidence = artifact["evidence"]
-        self.assertEqual([sent["evidence"]["message"]], evidence["messages"])
+        envelope = sent["evidence"]["message"]
+        self.assertEqual(
+            [envelope],
+            [{key: row[key] for key in envelope} for row in evidence["messages"]],
+        )
         self.assertEqual(str(root.resolve()), evidence["scope"]["root"])
         self.assertEqual(root.name, evidence["scope"]["tenant"])
         self.assertEqual("explicit", evidence["scope"]["root_source"])

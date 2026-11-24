@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import wait_barrier, wait_poll, wait_until
 import hashlib
 import multiprocessing
 import json
@@ -1483,7 +1484,7 @@ class SpawnGroupControllerTests(unittest.TestCase):
 
         def create() -> None:
             try:
-                barrier.wait(3)
+                wait_barrier(barrier, 'spawn_groups: barrier synchronization')
                 outcomes.append(case.controller.create_group(**deepcopy(kwargs)))
             except BaseException as exc:  # retained for exact race testimony
                 outcomes.append(exc)
@@ -1644,7 +1645,7 @@ class SpawnGroupControllerTests(unittest.TestCase):
 
         def activate() -> None:
             try:
-                barrier.wait(3)
+                wait_barrier(barrier, 'spawn_groups: barrier synchronization')
                 outcomes["activate"] = case.controller.create_group(
                     **case.create_kwargs(now=case.now(9))
                 )
@@ -1653,7 +1654,7 @@ class SpawnGroupControllerTests(unittest.TestCase):
 
         def abort() -> None:
             try:
-                barrier.wait(3)
+                wait_barrier(barrier, 'spawn_groups: barrier synchronization')
                 resolved = CancellationCoordinator(case.ledger).request(
                     case.run_id, {"node-a": Adapter()}, item_id=case.parent,
                     now=case.now(8),
@@ -2330,18 +2331,18 @@ class SpawnGroupJoinTests(unittest.TestCase):
             retry_cancelled,
             Path("schemas/v1/attempt-cancelled-before-start-record.schema.json"),
         )
-        for attempt_opened_id, retry_scheduled_id in ((None, None), (
+        for case_index, (attempt_opened_id, retry_scheduled_id) in enumerate(((None, None), (
             "attempt-opened-" + uuid7_hex(), retry_cancelled["retry_scheduled_id"],
-        )):
+        ))):
             hostile = dict(
                 retry_cancelled,
                 attempt_opened_id=attempt_opened_id,
                 retry_scheduled_id=retry_scheduled_id,
             )
-            with self.subTest(
-                attempt_opened_id=attempt_opened_id,
-                retry_scheduled_id=retry_scheduled_id,
-            ):
+            with self.subTest(case=(
+                "both-retry-references-absent",
+                "fabricated-opened-reference-with-native-retry",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal):
                     validate_record(hostile, "alpha", RUN_KINDS, integrity=False)
                 with self.assertRaises(SchemaValidationError):
@@ -2388,7 +2389,7 @@ class SpawnGroupJoinTests(unittest.TestCase):
 
             def _append(self, record: dict[str, object]) -> dict[str, object]:
                 if record.get("retry_scheduled_id") is not None:
-                    barrier.wait(3)
+                    wait_barrier(barrier, 'spawn_groups: barrier synchronization')
                 winner = super()._append(record)
                 if record.get("retry_scheduled_id") is not None:
                     self.scheduled_winner = winner
@@ -2905,7 +2906,7 @@ class SpawnGroupRecordTests(unittest.TestCase):
                 schema = True
             return runtime, schema
 
-        for workspace, expected in (
+        for case_index, (workspace, expected) in enumerate((
             (str(worker_workspace_root() / fixture.child), (True, True)),
             # The RETIRED governed-workspace root, built rather than spelled:
             # this row asserts that exact coordinate is refused, so its bytes
@@ -2914,8 +2915,11 @@ class SpawnGroupRecordTests(unittest.TestCase):
                 f"\x2fprivate/tmp/{RETIRED_PRODUCT_NAME}-work/{fixture.child}",
                 (False, False),
             ),
-        ):
-            with self.subTest(workspace=workspace):
+        )):
+            with self.subTest(workspace_role=(
+                "governed-floati-workspace",
+                "retired-product-workspace",
+            )[case_index], expected=expected):
                 self.assertEqual(
                     expected,
                     accepted(dict(admitted, workspace=workspace)),
@@ -4035,8 +4039,12 @@ class SpawnGroupManagedTests(unittest.TestCase):
             dict(policy_intent, spawn_budget_ceiling=list(reversed(policy_intent["spawn_budget_ceiling"]))),
             dict(policy_intent, workspace_policies=["patch_only", "isolated_worktree"]),
         )
-        for hostile in policy_hostiles:
-            with self.subTest(policy_hostile=hostile):
+        for case_index, hostile in enumerate(policy_hostiles):
+            with self.subTest(case=(
+                "reversed-capability-ceiling",
+                "reversed-budget-ceiling",
+                "reversed-workspace-policies",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     _canonical_evaluated_intent(
                         "spawn_policy_bind_evaluation", hostile,
@@ -4072,8 +4080,12 @@ class SpawnGroupManagedTests(unittest.TestCase):
             dict(group_intent, children=list(reversed(children))),
             dict(group_intent, children=children, dependency_edges=list(reversed(edges))),
         )
-        for hostile in group_hostiles:
-            with self.subTest(group_hostile=hostile):
+        for case_index, hostile in enumerate(group_hostiles):
+            with self.subTest(case=(
+                "group-key-control-U180E",
+                "reversed-children",
+                "reversed-dependency-edges",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     _canonical_evaluated_intent(
                         "spawn_group_create_evaluation", hostile,
@@ -4390,8 +4402,13 @@ class SpawnGroupManagedTests(unittest.TestCase):
             dict(lawful, base_plan=2.5),
             dict(lawful, policy={"schema_version": 0}),
         )
-        for hostile in mutations:
-            with self.subTest(hostile=hostile):
+        for case_index, hostile in enumerate(mutations):
+            with self.subTest(case=(
+                "extra-now-field",
+                "boolean-base-plan",
+                "fractional-base-plan-2.5",
+                "policy-version-zero",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as caught:
                     managed.client.append_intent(operation, hostile)
                 self.assertEqual("intent_fields_invalid", caught.exception.code)
@@ -4438,8 +4455,11 @@ class SpawnGroupManagedTests(unittest.TestCase):
         bad_edge["dependency_edges"][0]["requires"] = "caller_nominated"
         bad_contract = deepcopy(group_intent)
         bad_contract["children"][0]["task_contract_digest"] = "0" * 64
-        for malformed_nested in (bad_edge, bad_contract):
-            with self.subTest(malformed_nested=malformed_nested):
+        for case_index, malformed_nested in enumerate((bad_edge, bad_contract)):
+            with self.subTest(case=(
+                "caller-nominated-edge-requirement",
+                "zero-child-contract-digest",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as nested:
                     managed_group.client.append_intent(
                         "spawn_group_create_evaluation", malformed_nested,
@@ -4497,18 +4517,12 @@ class SpawnGroupManagedTests(unittest.TestCase):
             lost.connect(str(first_service.service.socket_path))
             lost.sendall(_encode_frame(request))
             # Deliberately lose the response after the service owns the request.
-        first = None
-        for _attempt in range(100):
-            projected = first_service.ledger.project().run(case.run_id)
-            if projected["spawn_admission"] is not None:
-                first = {
-                    key: deepcopy(value)
-                    for key, value in projected["spawn_admission"].items()
-                    if key != "current_plan"
-                }
-                break
-            time.sleep(0.01)
-        self.assertIsNotNone(first, "lost response operation did not become durable")
+        admission = wait_until(
+            lambda: first_service.ledger.project().run(case.run_id)["spawn_admission"],
+            "lost response operation did not become durable",
+        )
+        first = {key: deepcopy(value) for key, value in admission.items()
+                 if key != "current_plan"}
         restarted = first_service.restart()
         second = AdmissionBinder.enable_spawn(
             restarted.ledger, case.run_id, case.plan, case.policy,
@@ -4900,7 +4914,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
                 self, record: dict[str, object],
             ) -> dict[str, object]:
                 if record.get("kind") == "cancel_requested":
-                    barrier.wait(3)
+                    wait_barrier(barrier, 'spawn_groups: barrier synchronization')
                 return super()._append(record)
 
         results: list[dict[str, object]] = []
@@ -5226,7 +5240,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
         process = context.Process(target=forked_probe)
         process.start()
         sending.close()
-        self.assertTrue(receiving.poll(3), "forked launch probe returned no result")
+        self.assertTrue(wait_poll(receiving, 'spawn_groups: receiving synchronization'), "forked launch probe returned no result")
         forked_result = receiving.recv()
         receiving.close()
         process.join(3)
@@ -5398,7 +5412,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
             fork_process.start()
             fork_sending.close()
             self.assertTrue(
-                fork_receiving.poll(3),
+                wait_poll(fork_receiving, 'spawn_groups: fork_receiving synchronization'),
                 "live launch fork-copy probe returned no result",
             )
             live_fork_result = fork_receiving.recv()
@@ -6508,7 +6522,9 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
                                 f"runtime accepted {schema_name} {path} "
                                 f"U+{ord(control):04X}"
                             )
-                        if not list(validator.iter_errors(hostile)):
+                        # HARBOR-SPEED-R-C: "the schema refuses" is "at least one
+                        # error"; stop at the first instead of materialising all.
+                        if next(validator.iter_errors(hostile), None) is None:
                             note_parity_failure(
                                 f"schema accepted {schema_name} {path} "
                                 f"U+{ord(control):04X}"
@@ -6537,7 +6553,9 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
                                 f"runtime accepted key {schema_name} {path} "
                                 f"U+{ord(control):04X}"
                             )
-                        if not list(validator.iter_errors(hostile)):
+                        # HARBOR-SPEED-R-C: "the schema refuses" is "at least one
+                        # error"; stop at the first instead of materialising all.
+                        if next(validator.iter_errors(hostile), None) is None:
                             note_parity_failure(
                                 f"schema accepted key {schema_name} {path} "
                                 f"U+{ord(control):04X}"

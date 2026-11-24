@@ -379,6 +379,95 @@ class WakeDaemonContractTests(unittest.TestCase):
         self.assertEqual(1, receipt["schema_version"])
         self.assertEqual("grok-build", receipt["harness"])
 
+    def test_install_directory_ownership_is_closed_and_round_trips(self) -> None:
+        from floati.jsonl import read_records_snapshot
+        from floati.records import validate_record
+        from floati.wake_daemon_contract import (
+            DAEMON_KINDS, DaemonConsentLedger, DaemonLifecycleLedger,
+        )
+        from floati.wake_daemon_roll import lifecycle_relative
+
+        ownership = [{"path": str(self.base / ".config"), "device": 0, "inode": 1}]
+        for harness, schema_root in (("cursor", SCHEMA_ROOT), ("grok-build", SCHEMA_V1_ROOT)):
+            with self.subTest(harness=harness):
+                DaemonConsentLedger(self.root).consent(
+                    self.coordinate(harness), adapter_version="1",
+                    adapter_digest="b" * 64, min_poll_seconds=1,
+                    max_poll_seconds=30, max_backoff_seconds=120,
+                    activation_epoch=1, idempotency_key="directory-consent-" + harness,
+                )
+                ledger = DaemonLifecycleLedger(self.root)
+                arguments = dict(
+                    daemon_instance_id="daemon-1", activation_epoch=1,
+                    event="installed", state="installed", reason_code=None,
+                    adapter_digest="b" * 64, plist_digest="c" * 64,
+                    session_digest="d" * 64, predecessor_receipt_id=None,
+                    idempotency_key="directory-install-" + harness,
+                )
+                receipt = ledger.record(self.coordinate(harness), **arguments)
+                self.assertNotIn("created_directories", receipt)
+                self.assertEqual(receipt, ledger.record(self.coordinate(harness), **arguments))
+                lifecycle_schema = schema_root / "wake-daemon-lifecycle-receipt.schema.json"
+                validate_json_schema(receipt, lifecycle_schema)
+                with self.assertRaises(AssertionError):
+                    validate_json_schema(dict(receipt, created_directories=ownership), lifecycle_schema)
+
+                record_ownership = getattr(ledger, "record_directory_ownership", None)
+                self.assertTrue(callable(record_ownership), "installed directories need separate ownership testimony")
+                ownership_arguments = dict(
+                    lifecycle_receipt_id=receipt["id"],
+                    unit_path=str(self.base / ".config" / "systemd" / "user" / "owned.service"),
+                    unit_digest="c" * 64,
+                    created_directories=ownership,
+                    idempotency_key="directory-ownership-" + harness,
+                )
+                recorded = record_ownership(self.coordinate(harness), **ownership_arguments)
+                self.assertEqual("wake_daemon_directory_ownership_record", recorded["kind"])
+                self.assertEqual(1, recorded["schema_version"])
+                self.assertEqual(receipt["id"], recorded["lifecycle_receipt_id"])
+                self.assertEqual(ownership, recorded["created_directories"])
+                self.assertEqual(recorded, record_ownership(self.coordinate(harness), **ownership_arguments))
+                rows = read_records_snapshot(
+                    self.root, lifecycle_relative(public_ids.builder('a')),
+                    allowed_kinds=DAEMON_KINDS,
+                )
+                self.assertIn(receipt, rows)
+                self.assertIn(recorded, rows)
+                self.assertLess(rows.index(receipt), rows.index(recorded))
+                schema = SCHEMA_V1_ROOT / "wake-daemon-directory-ownership-record.schema.json"
+                validate_json_schema(recorded, schema)
+
+                entry = ownership[0]
+                invalid = (
+                    {"created_directories": None},
+                    {"created_directories": [entry] * 4},
+                    {"created_directories": [entry, entry]},
+                    {"schema_version": 0},
+                    {"lifecycle_receipt_id": "not-a-receipt"},
+                    {"unit_path": "relative.service"},
+                    {"unit_digest": "not-a-digest"},
+                    {"foreign": True},
+                    *({"created_directories": [dict(entry, path=path)]} for path in (
+                        "relative", "\x2ftmp/../foreign", "\x2ftmp/./foreign",
+                        "\x2ftmp//foreign", "\x2ftmp/foreign/", "/\x2ftmp/foreign",
+                    )),
+                    {"created_directories": [dict(entry, device=-1)]},
+                    {"created_directories": [dict(entry, device=True)]},
+                    {"created_directories": [dict(entry, inode=0)]},
+                    {"created_directories": [dict(entry, inode=True)]},
+                    {"created_directories": [dict(entry, foreign=True)]},
+                )
+                for changes in invalid:
+                    with self.subTest(changes=changes):
+                        changed = dict(recorded, **changes)
+                        with self.assertRaises(ProtocolRefusal):
+                            validate_record(
+                                changed, self.root.tenant_id, DAEMON_KINDS,
+                                integrity=False,
+                            )
+                        with self.assertRaises(AssertionError):
+                            validate_json_schema(changed, schema)
+
     def test_wake_daemon_ledger_reads_legacy_v0_and_grok_v1_rows_together(self) -> None:
         from floati.wake_daemon_contract import DaemonConsentLedger
 
@@ -408,6 +497,88 @@ class WakeDaemonContractTests(unittest.TestCase):
         self.assertEqual(1, grok["schema_version"])
         self.assertEqual(cursor, ledger.require_active(self.coordinate("cursor")))
         self.assertEqual(grok, ledger.require_active(self.coordinate("grok-build")))
+
+
+class CodexBindingRepairReceiptTests(unittest.TestCase):
+    """Upgrade repair testimony has one additive, closed v1 contract."""
+
+    @staticmethod
+    def receipt() -> dict:
+        return {
+            "schema_version": 1,
+            "id": "codex-binding-repair-00000000000070008000000000000000",
+            "tenant_id": "fleet-alpha",
+            "timestamp": "2026-10-30T00:00:00Z",
+            "kind": "codex_binding_repair_receipt",
+            "node_id": public_ids.builder("a"),
+            "coordinate_digest": "a" * 64,
+            "acting_session_id": "upgrade-session",
+            "workspace": "\x2ftmp/upgrade-workspace",
+            "arm_receipt_id": "codex-wait-session-00000000000070008000000000000001",
+            "declared_executable": "/usr/local/bin/codex",
+            "old_executable": "/usr/local/lib/codex/0.163.0/codex",
+            "old_executable_digest": "b" * 64,
+            "new_executable": "/usr/local/lib/codex/0.164.0/codex",
+            "new_executable_digest": "c" * 64,
+            "provider_banner": "codex-cli 0.164.0",
+            "reason": "recorded_path_vanished",
+            "idempotency_key": "upgrade-repair-1",
+        }
+
+    def invalid_receipts(self):
+        receipt = self.receipt()
+        for field in receipt:
+            yield "missing-" + field, {key: value for key, value in receipt.items() if key != field}
+        changes = [
+            {"foreign": True}, {"schema_version": 0}, {"schema_version": 2},
+            {"schema_version": True}, {"id": "wake-control-00000000000070008000000000000000"},
+            {"node_id": "Invalid Node"},
+            {"arm_receipt_id": "wake-control-00000000000070008000000000000001"},
+            {"arm_receipt_id": None}, {"reason": "digest_changed"},
+        ]
+        for field in ("coordinate_digest", "old_executable_digest", "new_executable_digest"):
+            changes.extend({field: value} for value in (None, "a" * 63, "A" * 64, "z" * 64))
+        for field in ("workspace", "declared_executable", "old_executable", "new_executable"):
+            changes.extend({field: value} for value in (
+                None, "relative", "\x2ftmp/../codex", "\x2ftmp/./codex", "\x2ftmp//codex",
+                "\x2ftmp/codex/", "/\x2ftmp/codex", "\x2ftmp/co\0dex", "\x2ftmp/co\ndex",
+            ))
+        for field, maximum in (("acting_session_id", 512), ("idempotency_key", 128)):
+            changes.extend({field: value} for value in (None, "", "a" * (maximum + 1), "unsafe\n"))
+        changes.extend({"provider_banner": value} for value in (
+            None, "", "codex-cli", "codex-cli 0.164", "other-cli 0.164.0",
+            "codex-cli 0.164.0\n", "codex-cli 0.164.0\nimpostor", "codex-cli 0.164.0 trailing",
+        ))
+        for change in changes:
+            yield repr(change), dict(receipt, **change)
+
+    def test_repair_receipt_runtime_validator_is_closed(self) -> None:
+        from floati.records import validate_record
+
+        receipt = self.receipt()
+        kinds = frozenset({"codex_binding_repair_receipt"})
+        for banner in ("codex-cli 0.164.0", "codex-cli 1.2.3-alpha.1+build.2"):
+            with self.subTest(banner=banner):
+                versioned = dict(receipt, provider_banner=banner)
+                self.assertEqual(versioned, validate_record(versioned, "fleet-alpha", kinds, integrity=False))
+        for label, changed in self.invalid_receipts():
+            with self.subTest(case=label):
+                with self.assertRaises(ProtocolRefusal):
+                    validate_record(changed, "fleet-alpha", kinds, integrity=False)
+                with self.assertRaises(IntegrityFailure):
+                    validate_record(changed, "fleet-alpha", kinds, integrity=True)
+        with self.assertRaises(IntegrityFailure):
+            validate_record(receipt, "foreign-fleet", kinds, integrity=True)
+
+    def test_repair_receipt_json_schema_is_closed(self) -> None:
+        schema = SCHEMA_V1_ROOT / "codex-binding-repair-receipt.schema.json"
+        for banner in ("codex-cli 0.164.0", "codex-cli 1.2.3-alpha.1+build.2"):
+            with self.subTest(banner=banner):
+                validate_json_schema(dict(self.receipt(), provider_banner=banner), schema)
+        for label, changed in self.invalid_receipts():
+            with self.subTest(case=label):
+                with self.assertRaises(AssertionError):
+                    validate_json_schema(changed, schema)
 
 
 if __name__ == "__main__":

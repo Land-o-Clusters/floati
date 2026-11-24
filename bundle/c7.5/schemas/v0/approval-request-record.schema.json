@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/approval-request-record.schema.json",
+  "title": "Floati Approval Request Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "requester", "capability", "scope", "requested_ttl_seconds", "requested_at", "expires_at", "authority_subject", "authority_epoch"],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^approval-request-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "approval_request"},
+    "requester": {"type": "string", "minLength": 1, "maxLength": 64},
+    "capability": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"},
+    "scope": {"type": "string", "minLength": 1, "maxLength": 512},
+    "requested_ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+    "requested_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "authority_subject": {"type": "string", "minLength": 1, "maxLength": 64},
+    "authority_epoch": {"type": "integer", "minimum": 1}
+  }
+}

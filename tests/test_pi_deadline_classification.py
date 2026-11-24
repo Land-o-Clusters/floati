@@ -9,6 +9,7 @@ from pathlib import Path
 from floati.adapters.pi import PiRpcSession
 from floati.workers import WorkerAdapterFailure
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.readiness import wait_until
 
 
 HARNESS = Path(__file__).parent / "fixtures" / "pi-rpc" / "deadline_race_harness.py"
@@ -26,10 +27,7 @@ class PiDeadlineClassificationTests(unittest.TestCase):
             try:
                 session.start(deadline_seconds=5)
                 session._write({"id": "req-1", "type": "prompt", "message": "fixture"})
-                deadline = time.monotonic() + 2
-                while not marker.exists() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                self.assertTrue(marker.is_file(), "fixture must queue malformed output before the read")
+                wait_until(marker.is_file, "fixture queues malformed output before the read")
                 session._deadline = time.monotonic() - 1
                 with self.assertRaises(WorkerAdapterFailure) as caught:
                     session._read()

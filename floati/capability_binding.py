@@ -113,12 +113,19 @@ class CapabilityBinder:
             raise ProtocolRefusal("capability_route_unresolved", "policy must resolve one route for worker profile and rank")
         route = routes[0]
         required = set(policy.capability_selectors[route.capability_selector].all_of)
+        native_grant = None
+        if "native_launch" in required:
+            from .adhoc_execution import authorize_adhoc_capability
+            native_grant = authorize_adhoc_capability(self.run_ledger.root, run, item_id,
+                chosen_worker, worker_profile, routing_rank, policy, current)
 
         def bind_under_grant_lock(records: List[Dict[str, object]]):
             effective = self.grant_ledger._project_records(
                 records, chosen_worker, policy.digest, current, integrity=True
             )
-            observed_names = {name for name, _, _ in effective.grant_triples}
+            triples = [triple for triple in effective.grant_triples
+                if triple[0] != "native_launch" or triple[1] == native_grant]
+            observed_names = {name for name, _, _ in triples}
             if not required <= observed_names:
                 raise ProtocolRefusal(
                     "capability_selector_unsatisfied",
@@ -130,7 +137,7 @@ class CapabilityBinder:
                     "grant_id": grant_id,
                     "physical_position": position,
                 }
-                for name, grant_id, position in effective.grant_triples
+                for name, grant_id, position in triples
             ]
             record: Dict[str, object] = {
                 "schema_version": 1,

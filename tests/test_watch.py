@@ -21,6 +21,29 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WATCH_REPRO_TRACE_VARIABLE = "FLOATI_WATCH_TRACE"
 
 
+def _slow_streaming_watch(arguments, ready_descriptor, gate_descriptor):
+    """Keep slow startup and observe each real CLI flush before another poll."""
+    select.select([], [], [], 2.25)
+    from floati import cli
+    native_deltas = cli.iter_deltas
+
+    def gated_deltas(*args, **kwargs):
+        for delta in native_deltas(*args, **kwargs):
+            yield delta
+            # The actual CLI has consumed the delta, emitted and flushed it,
+            # and requested the next one. No publication is fabricated here.
+            os.write(ready_descriptor, b"1")
+            if os.read(gate_descriptor, 1) != b"1":
+                return
+
+    try:
+        with mock.patch.object(cli, "iter_deltas", gated_deltas):
+            return cli.main(arguments)
+    finally:
+        os.close(ready_descriptor)
+        os.close(gate_descriptor)
+
+
 def watch_liveness_bound_seconds() -> float:
     """TIMEOUT-PUB-1: the child liveness backstop, derived from this host.
 
@@ -128,21 +151,36 @@ class WatchTests(unittest.TestCase):
         )
 
     def test_unbounded_watch_streams_initial_and_changed_artifacts_before_exit(self) -> None:
-        child = subprocess.Popen(
-            [
-                sys.executable, "-m", "floati", "watch", "--root", str(self.home),
-                "--destination", str(self.destination), "--interval", "0.05",
-            ],
-            cwd=REPOSITORY_ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=self.environment,
-        )
+        ready_read, ready_write = os.pipe()
+        gate_read, gate_write = os.pipe()
+        try:
+            child = subprocess.Popen(
+                [
+                    sys.executable, "-B", "-m", "tests.test_watch", "--scratch-streaming-watch",
+                    str(ready_write), str(gate_read), "watch", "--root", str(self.home),
+                    "--destination", str(self.destination), "--interval", "0.05",
+                ],
+                cwd=REPOSITORY_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=self.environment,
+                pass_fds=(ready_write, gate_read),
+            )
+        except BaseException:
+            os.close(ready_read)
+            os.close(gate_write)
+            raise
+        finally:
+            os.close(ready_write)
+            os.close(gate_read)
+
         def close_child() -> None:
             if child.poll() is None:
-                child.kill()
-            child.wait(timeout=2)
+                child.terminate()
+            child.wait()
+            os.close(ready_read)
+            os.close(gate_write)
             if child.stdout is not None:
                 child.stdout.close()
             if child.stderr is not None:
@@ -151,23 +189,31 @@ class WatchTests(unittest.TestCase):
         self.addCleanup(close_child)
         self.assertIsNotNone(child.stdout)
 
-        ready, _, _ = select.select([child.stdout], [], [], 1.0)
-        self.assertTrue(ready, "initial watch artifact must stream before the unbounded loop exits")
-        initial = json.loads(child.stdout.readline())
+        def flushed_artifact():
+            self.assertEqual(b"1", os.read(ready_read, 1),
+                             "watch exited before requesting another native observation")
+            ready, _, _ = select.select([child.stdout], [], [], 0)
+            self.assertTrue(ready, "the native artifact was not flushed before the next poll")
+            raw = os.read(child.stdout.fileno(), 1024 * 1024)
+            self.assertTrue(raw.endswith(b"\n"), "watch must stream a complete JSON line")
+            self.assertEqual(1, len(raw.splitlines()))
+            return json.loads(raw)
+
+        initial = flushed_artifact()
         self.assertEqual("initial", initial["evidence"]["delta"]["kind"])
+        self.assertIsNone(child.poll())
 
         registered = self.run_cli(
             "register", "--root", str(self.home), public_ids.builder('a'), "--harness", "Codex"
         )
         self.assertEqual(0, registered.returncode, registered.stderr)
-        ready, _, _ = select.select([child.stdout], [], [], 1.0)
-        self.assertTrue(ready, "changed watch artifact must stream while the loop remains active")
-        changed = json.loads(child.stdout.readline())
+        os.write(gate_write, b"1")
+        changed = flushed_artifact()
         self.assertEqual("change", changed["evidence"]["delta"]["kind"])
         self.assertIsNone(child.poll())
 
         child.terminate()
-        child.wait(timeout=2)
+        child.wait()
 
     def test_interval_below_floor_refuses_with_artifact_exit(self) -> None:
         result = self.run_cli(
@@ -655,4 +701,6 @@ class WatchTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--scratch-streaming-watch":
+        raise SystemExit(_slow_streaming_watch(sys.argv[4:], int(sys.argv[2]), int(sys.argv[3])))
     unittest.main()

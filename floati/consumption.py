@@ -69,6 +69,10 @@ class ConsumptionLedger:
                         "artifact_bindings": list(record["artifact_bindings"]),
                         "last_activity": record["timestamp"],
                     }
+                    if "car_binding" in record:
+                        states[str(record["id"])].update(car_binding=dict(record["car_binding"]), claim_id=None)
+                    if "adhoc_binding" in record:
+                        states[str(record["id"])].update(adhoc_binding=copy.deepcopy(record["adhoc_binding"]), claim_id=None)
                     continue
                 item = states.get(str(record["work_item_id"]))
                 if item is None:
@@ -95,6 +99,10 @@ class ConsumptionLedger:
                     item["holder"] = record["actor"]
                     item["authority_subject"] = record["authority_subject"]
                     item["authority_epoch"] = record["authority_epoch"]
+                    if item.get("car_binding") is not None or item.get("adhoc_binding") is not None:
+                        if item["owner"] != record["actor"]:
+                            raise IntegrityFailure("work_owner_mismatch", "durable car claim is not owned")
+                        item["claim_id"] = record["id"]
                 elif action == "complete":
                     if item["state"] != "claimed" or item["holder"] != record["actor"]:
                         raise IntegrityFailure(

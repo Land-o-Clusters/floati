@@ -7,6 +7,7 @@ from floati import fixture_ids as public_ids
 import json
 import io
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,28 @@ REPOSITORY_ROOT = Path(__file__).parents[1]
 class TTY(io.StringIO):
     def isatty(self) -> bool:
         return True
+
+
+class AdminCliParserTests(unittest.TestCase):
+    def test_lifecycle_missing_flags_keep_precedence_over_unknown_arguments(self) -> None:
+        """Catches dual-mode parsing changing existing required-flag refusals."""
+        from floati.cli import _parser
+        from floati.errors import ProtocolRefusal
+
+        projection_flags = "--root, --node, --declared-roots, --managed-executable, --profile"
+        for arguments, missing in (
+            (["boot", "--bogus"], projection_flags),
+            (["teardown", "--bogus"], projection_flags),
+            (["boot", "--root", "/fixture/fleet", "--bogus"],
+                "--node, --declared-roots, --managed-executable, --profile"),
+            (["teardown", "--session", "fresh", "--bogus"], "--repo, --doc"),
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(ProtocolRefusal) as caught:
+                    _parser().parse_args(["node", *arguments])
+                self.assertEqual("arguments_invalid", caught.exception.code)
+                self.assertEqual("the following arguments are required: " + missing,
+                    caught.exception.detail)
 
 
 class AdminCliTests(unittest.TestCase):
@@ -230,11 +253,14 @@ class AdminCliTests(unittest.TestCase):
             "DRAFT - floati node add --root ROOT --node NODE --harness HARNESS "
             "--lifetime permanent|temporary [--lease-minutes N]"
         )
-        for arguments in (
+        for case_index, arguments in enumerate((
             ("node", "add", "--root", str(self.root), "--node", "builder-partial"),
             ("node", "add"),
-        ):
-            with self.subTest(arguments=arguments):
+        )):
+            with self.subTest(case=(
+                "partial-explicit-root-node-add",
+                "missing-interactive-node-add-arguments",
+            )[case_index]):
                 stdout = io.StringIO()
                 stderr = io.StringIO()
                 with (
@@ -614,10 +640,33 @@ class AdminCliTests(unittest.TestCase):
         teardown = self.run_cli("node", "teardown", *common)
         explained = self.run_cli("node", "explain", *common)
 
-        self.assertEqual(0, boot.returncode, boot.stderr)
-        self.assertEqual("node_boot_projection", self.artifact(boot)["evidence"]["kind"])
-        self.assertEqual(0, teardown.returncode, teardown.stderr)
-        self.assertEqual("node_teardown_projection", self.artifact(teardown)["evidence"]["kind"])
+        # No-session callers retain the original read-only projection contract.
+        from floati.admin_cli import _projection_source, _templates
+        from floati.cli import _parser
+        from floati.node_projections import NodeBootProjection, NodeTeardownProjection
+        from floati.root import FloatiRoot
+
+        root = FloatiRoot.open_direct_home(self.root)
+        for verb, result, projection_type in (
+            ("boot", boot, NodeBootProjection),
+            ("teardown", teardown, NodeTeardownProjection),
+        ):
+            with self.subTest(verb=verb):
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                args = _parser().parse_args(["node", verb, *common])
+                expected = projection_type(
+                    root, args.node, _projection_source(args, root), _templates(root)
+                ).project()
+                self.assertEqual("", result.stderr)
+                self.assertEqual(json.dumps({
+                    "artifact_version": 0, "command": "node",
+                    "status": "ok", "evidence": expected,
+                }, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+                    result.stdout)
+                plain = self.run_cli("node", verb, *common[:-1])
+                self.assertEqual((0, result.stdout, ""),
+                    (plain.returncode, plain.stdout, plain.stderr))
+
         self.assertEqual(0, explained.returncode, explained.stderr)
         self.assertEqual("node_boot_projection", self.artifact(explained)["evidence"]["kind"])
 
@@ -630,6 +679,47 @@ class AdminCliTests(unittest.TestCase):
         receipt = self.artifact(flushed)["evidence"]
         self.assertEqual("node_state_flush_receipt", receipt["kind"])
         self.assertNotIn("private seat content", flushed.stdout)
+
+    def test_roleless_lifecycle_remedy_assigns_the_callers_chosen_role(self) -> None:
+        """A role-list remedy cannot clear the lifecycle refusal; an interview can."""
+        from floati.cli import main
+
+        def cli(arguments, answers=""):
+            output, errors = io.StringIO(), io.StringIO()
+            with patch.object(sys, "stdin", io.StringIO(answers)), redirect_stdout(output), redirect_stderr(errors):
+                code = main(arguments)
+            return code, json.loads(output.getvalue()), errors.getvalue()
+
+        for node in ("architect-a", "unassigned-a"):
+            code, artifact, _ = cli(["node", "add", "--root", str(self.root),
+                "--node", node, "--harness", "Codex", "--lifetime", "permanent"])
+            self.assertEqual(0, code, artifact)
+        code, artifact, _ = cli(["node", "role", "--root", str(self.root),
+            "--node", "architect-a", "--template", "architect", "--answer", "repo=floati",
+            "--answer", "never_touch=foreign-bus", "--answer", "owner_stops=publishing"])
+        self.assertEqual(0, code, artifact)
+        declarations = self.base / "declared-roleless.json"
+        declarations.write_text(json.dumps({"schema_version": 0, "roots": [{
+            "bus_id": "fleet", "root": str(self.root), "architect_node": "architect-a", "downstream": []}]}))
+        common = ["--root", str(self.root), "--node", "unassigned-a",
+            "--declared-roots", str(declarations), "--managed-executable", "/usr/local/bin/floati-fleet",
+            "--profile", "fixture", "--json"]
+        for verb in ("boot", "explain", "teardown"):
+            with self.subTest(verb=verb):
+                code, artifact, _ = cli(["node", verb, *common])
+                self.assertEqual(20, code, artifact)
+                self.assertEqual("role_assignment_missing", artifact["evidence"]["code"])
+                command = shlex.split(artifact["evidence"]["remedy"])
+                self.assertEqual(["floati", "node", "role", "--root", str(self.root.resolve()),
+                    "--node", "unassigned-a"], command)
+        code, assigned, prompts = cli(command[1:], "builder\nfloati\nforeign-bus\narchitect-a\n")
+        self.assertEqual(0, code, assigned)
+        self.assertIn("role template", prompts)
+        self.assertEqual("builder", assigned["evidence"]["records"][0]["template_role"])
+        for verb in ("boot", "explain", "teardown"):
+            code, artifact, _ = cli(["node", verb, *common])
+            self.assertEqual(0, code, artifact)
+            self.assertEqual("builder", artifact["evidence"]["role"]["template_role"])
 
 
 if __name__ == "__main__":

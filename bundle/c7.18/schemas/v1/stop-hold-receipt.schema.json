@@ -1,0 +1,27 @@
+{
+  "$id": "https://landoclusters.com/floati/schemas/v1/stop-hold-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "description": "Closed native Stop testimony. Native validation additionally requires a start timestamp equal to started_at, an exit not earlier than started_at, and exact start/exit invocation correspondence; standard JSON Schema cannot compare sibling timestamps or ledger records.",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "invocation_id", "node_id", "acting_session_id", "consent_receipt_id", "workspace", "harness", "started_at", "deadline_seconds", "phase"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "id": {"type": "string", "pattern": "^stop-hold-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"},
+    "kind": {"const": "stop_hold_receipt"},
+    "invocation_id": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true},
+    "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "acting_session_id": {"type": "string", "minLength": 1, "maxLength": 512, "x-floati-terminal-unsafe": true},
+    "consent_receipt_id": {"type": "string", "pattern": "^codex-wait-consent-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "workspace": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
+    "harness": {"enum": ["codex", "cursor", "zcode", "claude"]},
+    "started_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"},
+    "deadline_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 86400},
+    "phase": {"enum": ["start", "exit"]},
+    "holder_pid": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+    "process_start_epoch": {"type": "number", "minimum": 0, "maximum": 253402300799}
+  },
+  "dependentRequired": {"holder_pid": ["process_start_epoch"], "process_start_epoch": ["holder_pid"]}
+}

@@ -11,6 +11,7 @@ shell would resolve to first, with each copy's measured version.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -45,6 +46,9 @@ def declared_harness_executables(root) -> List[Dict[str, str]]:
                 record.get("executable") if isinstance(record, dict) else None
             )
             if isinstance(executable, str) and executable:
+                if binding_path.stem == 'codex':
+                    from .wake_daemon_adapters import CODEX_EXECUTABLE
+                    executable = str(CODEX_EXECUTABLE)
                 declared.append({
                     "node": node_dir.name,
                     "harness": binding_path.stem,
@@ -134,7 +138,31 @@ def harness_version_artifact(
     declared_rows: List[Dict[str, object]] = []
     for row in declared_harness_executables(root):
         entry: Dict[str, object] = dict(row)
-        entry["version"] = probe_version(row["executable"])
+        if row["harness"] == "codex":
+            # A stable Codex declaration can be repointed by an upgrade.
+            # Inventory is still execution: verify the binding and probe
+            # the digest-checked canonical target, not the unchecked link.
+            from .errors import IntegrityFailure, ProtocolRefusal
+            from .wake_daemon_contract import AdapterBindingStore, DaemonCoordinate
+
+            try:
+                coordinate = DaemonCoordinate(root, row["node"], "codex")
+                store = AdapterBindingStore(root)
+                binding = store.read(coordinate)
+                executable = store._binding_executable(coordinate, Path(binding["executable"]))
+                from .wake_daemon_adapters import CODEX_EXECUTABLE
+                if executable != store._binding_executable(coordinate, CODEX_EXECUTABLE):
+                    raise ProtocolRefusal('wake_daemon_codex_declaration_changed',
+                        'declared Codex executable resolves to a different target')
+                trusted = hashlib.sha256(executable.read_bytes()).hexdigest() == binding["executable_digest"]
+            except (IntegrityFailure, ProtocolRefusal, OSError, RuntimeError) as exc:
+                trusted = False
+                entry['version_reason'] = getattr(exc, 'code', 'wake_daemon_executable_invalid')
+            if not trusted and 'version_reason' not in entry:
+                entry['version_reason'] = 'wake_daemon_executable_digest_mismatch'
+            entry["version"] = probe_version(str(executable)) if trusted else None
+        else:
+            entry["version"] = probe_version(row["executable"])
         inventory = path_inventory(row["executable"], environ)
         entry["shadow_inventory"] = inventory
         shadows = inventory["shadows"]

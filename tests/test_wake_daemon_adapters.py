@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.readiness import READY_SECONDS, wait_until
+
 from floati import fixture_ids as public_ids
 
 import hashlib
@@ -96,20 +98,45 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         )
 
         self.assertEqual("queued", result.outcome)
+        self.assertEqual(1, len(runner.calls))
+        argv = runner.calls[0][0]
         self.assertEqual(
             (
-                str(self.link),
                 "queue",
                 "--thread",
                 "session-1",
                 "--message",
                 "[floati] 1 new message: msg-1",
             ),
-            runner.calls[0][0],
+            argv[1:],
         )
-        self.assertNotIn("not in argv", runner.calls[0][0])
+        launched = Path(argv[0])
+        self.assertTrue(launched.is_absolute())
+        self.assertFalse(launched.is_symlink())
+        self.assertTrue(launched.is_file())
+        self.assertTrue(os.access(launched, os.X_OK))
+        trusted_bytes = launched.read_bytes()
+        self.assertEqual(binding["executable_digest"], hashlib.sha256(trusted_bytes).hexdigest())
+        self.assertNotIn("not in argv", argv)
         self.assertEqual(self.workspace, runner.calls[0][1])
         self.assertEqual(30, runner.calls[0][2])
+
+        runner.calls.clear()
+        self.target.write_bytes(b"#!/bin/sh\n# substituted bytes\nexit 0\n")
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "wake", 30)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
+        self.target.write_bytes(trusted_bytes)
+        replacement = self.base / "foreign-target"
+        replacement.write_bytes(b"#!/bin/sh\n# different binary\nexit 0\n")
+        replacement.chmod(0o700)
+        self.link.unlink()
+        self.link.symlink_to(replacement)
+        with self.assertRaises(ProtocolRefusal) as caught:
+            adapter.request_wake(binding, "wake", 30)
+        self.assertEqual("wake_daemon_executable_digest_mismatch", caught.exception.code)
+        self.assertEqual([], runner.calls)
 
     def test_cursor_uses_only_the_bound_resume_vector(self) -> None:
         from floati.wake_daemon_adapters import CursorResumeWakeAdapter
@@ -489,15 +516,11 @@ class WakeDaemonAdapterTests(unittest.TestCase):
         node.chmod(0o700)
         return node
 
-    def _wait_for_resume_files(self, timeout: float = 8.0) -> None:
+    def _wait_for_resume_files(self, timeout: float = READY_SECONDS) -> None:
         prompt = self.workspace / "resume-prompt.txt"
         pid_path = self.workspace / "resume-pid"
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if prompt.is_file() and pid_path.is_file():
-                return
-            time.sleep(0.02)
-        self.fail("recording harness did not write resume-prompt.txt and resume-pid")
+        wait_until(lambda: prompt.is_file() and pid_path.is_file(),
+            "recording harness resume prompt and pid", timeout=timeout)
 
     def _resume_pid(self) -> int:
         return int((self.workspace / "resume-pid").read_text(encoding="utf-8"))
@@ -809,8 +832,14 @@ class WakeDaemonAdapterTests(unittest.TestCase):
             str(not_executable),          # present but not executable
             str(self.workspace),          # a directory
         )
-        for candidate in rejected:
-            with self.subTest(declared=candidate):
+        for case_index, candidate in enumerate(rejected):
+            with self.subTest(case=(
+                "relative-node-interpreter",
+                "symlink-node-interpreter",
+                "missing-node-interpreter",
+                "nonexecutable-node-interpreter",
+                "directory-node-interpreter",
+            )[case_index]):
                 with self.assertRaises(ProtocolRefusal) as raised:
                     ZcodeResumeWakeAdapter(
                         coordinate, runner=_Runner(), node_executable=candidate

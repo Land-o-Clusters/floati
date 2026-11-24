@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.committed_source import complete_source
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -47,12 +48,15 @@ class UninstallLinuxForeignFilesTests(unittest.TestCase):
             clone = base / "source"
             destination = base / "installed"
             cloned = subprocess.run(
-                ["/usr/bin/git", "clone", "--local", str(REPOSITORY_ROOT), str(clone)],
+                # Exercise the same shallow source that actions/checkout supplies.
+                ["/usr/bin/git", "clone", "--depth", "1",
+                 REPOSITORY_ROOT.as_uri(), str(clone)],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             self.assertEqual(0, cloned.returncode, cloned.stderr)
+            clone = complete_source(clone)
             install = subprocess.run(
                 [
                     str(clone / "scripts" / "floati"),

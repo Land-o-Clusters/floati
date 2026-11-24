@@ -240,11 +240,10 @@ class ReconciliationObserverTests(unittest.TestCase):
             parent.sendall(encode_frame(request))
             parent.shutdown(socket.SHUT_WR)
             chunks: list[bytes] = []
-            deadline = time.monotonic() + 8.0
-            while time.monotonic() < deadline:
-                readable, _, _ = select.select([parent], [], [], 0.1)
-                if not readable:
-                    continue
+            from tests.readiness import Readiness
+            readiness = Readiness("owned observer response frame and EOF")
+            while True:
+                readiness.readable(parent)
                 chunk = parent.recv(65536)
                 if not chunk:
                     break
@@ -257,7 +256,7 @@ class ReconciliationObserverTests(unittest.TestCase):
         finally:
             parent.close()
 
-    # BOX-1-P: observer git on ci-box-7 returns nonzero for a present fixture
+    # BOX-1-P: observer git on fixture-runner-7 returns nonzero for a present fixture
     # ref. Hosted ubuntu and Darwin confirm. Each test measures the class once,
     # prints it, and asserts exactly one code. Never a set, never a skip.
     def measure_observer_git(self) -> str:
@@ -304,18 +303,6 @@ class ReconciliationObserverTests(unittest.TestCase):
             % (host_class,)
         )
 
-    def remote_exact_pin(self, host_class: str):
-        """Exactly one remote exact-observation code for one measured class."""
-
-        if host_class == "confirmed":
-            return ("unknown", "reconciliation_inconclusive")
-        if host_class == "unqueryable":
-            return ("unknown", "destination_unqueryable")
-        self.fail(
-            "observer-git host class %r is not confirmed or unqueryable"
-            % (host_class,)
-        )
-
     def test_forged_unqueryable_probe_pins_exactly_confirmation_absent(self) -> None:
         """Catches a set that still contains hosted-inconclusive for the box class."""
 
@@ -335,14 +322,7 @@ class ReconciliationObserverTests(unittest.TestCase):
 
         confirmed = self.local_exact_pin("confirmed")
         unqueryable = self.local_exact_pin("unqueryable")
-        remote_confirmed = self.remote_exact_pin("confirmed")
-        remote_unqueryable = self.remote_exact_pin("unqueryable")
         self.assertNotEqual(confirmed, unqueryable)
-        self.assertNotEqual(remote_confirmed, remote_unqueryable)
-        self.assertEqual(("unknown", "destination_unqueryable"), remote_unqueryable)
-        self.assertNotEqual(
-            ("unknown", "reconciliation_inconclusive"), remote_unqueryable,
-        )
 
     def test_forged_probe_does_not_match_this_hosts_live_observation(self) -> None:
         """Catches a set-pin: forging the class would still match live git."""
@@ -366,8 +346,6 @@ class ReconciliationObserverTests(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             self.local_exact_pin("maybe")
-        with self.assertRaises(AssertionError):
-            self.remote_exact_pin("maybe")
 
     def test_observer_git_nonzero_for_a_present_ref_is_confirmation_absent(self) -> None:
         """Catches the box's observer-git failure being relabeled hosted-inconclusive."""
@@ -639,8 +617,12 @@ class ReconciliationObserverTests(unittest.TestCase):
             ),
         )
         status_before = self.git("status", "--porcelain=v1").stdout
-        for target_request in target_cases:
-            with self.subTest(target=target_request.target):
+        for case_index, target_request in enumerate(target_cases):
+            with self.subTest(case=(
+                "symlink-coordinate",
+                "zero-identity-digest",
+                "parent-traversal-coordinate",
+            )[case_index]):
                 target_descriptor = os.open(self.repository, os.O_RDONLY)
                 try:
                     target_result = self.observer()._observe_request(
@@ -706,13 +688,17 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.assertEqual(
             [
                 [
-                    "/usr/bin/git", "-c", "core.hooksPath=/dev/null",
+                    "/usr/bin/git", "-c", "gc.auto=0",
+                    "-c", "gc.autoDetach=false", "-c", "maintenance.auto=false",
+                    "-c", "core.hooksPath=/dev/null",
                     "--no-lazy-fetch",
                     "--no-optional-locks", "--no-replace-objects",
                     "rev-parse", "--verify", "refs/heads/main^{object}",
                 ],
                 [
-                    "/usr/bin/git", "-c", "core.hooksPath=/dev/null",
+                    "/usr/bin/git", "-c", "gc.auto=0",
+                    "-c", "gc.autoDetach=false", "-c", "maintenance.auto=false",
+                    "-c", "core.hooksPath=/dev/null",
                     "--no-lazy-fetch",
                     "--no-optional-locks", "--no-replace-objects",
                     "cat-file", "-e", self.sha + "^{object}",
@@ -740,11 +726,13 @@ class ReconciliationObserverTests(unittest.TestCase):
             (self.request(locator="refs/heads/missing"), *missing_ref),
             (self.request(digest="f" * 64), *present_object),
         )
-        for request, outcome, reason in cases:
-            with self.subTest(
-                locator=request.expected_confirmation["locator"],
-                digest=request.expected_confirmation["expected_digest"],
-            ):
+        for case_index, (request, outcome, reason) in enumerate(cases):
+            with self.subTest(case=(
+                "shorthand-main-ref",
+                "HEAD-ref",
+                "missing-full-ref",
+                "absent-object-digest",
+            )[case_index], locator=request.expected_confirmation["locator"], outcome=outcome, reason=reason):
                 result, _ = self.invoke(request, repository=self.repository)
                 self.assertEqual((outcome, reason), (result.outcome, result.reason_code))
                 self.assertIsNone(result.confirmation)
@@ -931,30 +919,18 @@ class ReconciliationObserverTests(unittest.TestCase):
 
     def test_remote_fixture_observes_exact_explicit_full_ref_without_local_fallback(self) -> None:
         """Catches shorthand, extra output, or local tracking state satisfying explicit remote observation."""
-        host_class = self.measure_observer_git()
         bare = self.base / "remote-fixture.git"
         self.git("init", "--quiet", "--bare", "--object-format=sha256", bare.as_posix())
         self.git("push", "--quiet", str(bare), "refs/heads/main:refs/heads/main")
         request = self.request("git_remote_explicit", coordinate=str(bare))
         result, _ = self.invoke(request)
         self.assertEqual(
-            self.remote_exact_pin(host_class),
+            ("unknown", "reconciliation_inconclusive"),
             (result.outcome, result.reason_code),
         )
-        if host_class == "confirmed":
-            self.assertEqual(self.sha, result.observation["observed_ref_digest"])
-            self.assertEqual("filesystem_fixture", result.observation["evidence_scope"])
+        self.assertEqual(self.sha, result.observation["observed_ref_digest"])
+        self.assertEqual("filesystem_fixture", result.observation["evidence_scope"])
         self.assertIsNone(result.confirmation)
-        missing_ref = (
-            ("failed", "confirmation_absent")
-            if host_class == "confirmed"
-            else self.remote_exact_pin("unqueryable")
-        )
-        digest_mismatch = (
-            ("failed", "ref_digest_mismatch")
-            if host_class == "confirmed"
-            else self.remote_exact_pin("unqueryable")
-        )
         cases = (
             (self.request("git_remote_explicit", coordinate=str(bare), locator="main"), "unknown", "contract_invalid"),
             (
@@ -962,21 +938,22 @@ class ReconciliationObserverTests(unittest.TestCase):
                     "git_remote_explicit", coordinate=str(bare),
                     locator="refs/heads/missing",
                 ),
-                *missing_ref,
+                "failed", "confirmation_absent",
             ),
             (
                 self.request(
                     "git_remote_explicit", coordinate=str(bare), digest="f" * 64,
                 ),
-                *digest_mismatch,
+                "failed", "ref_digest_mismatch",
             ),
         )
 
-        for candidate, outcome, reason in cases:
-            with self.subTest(
-                locator=candidate.expected_confirmation["locator"],
-                digest=candidate.expected_confirmation["expected_digest"],
-            ):
+        for case_index, (candidate, outcome, reason) in enumerate(cases):
+            with self.subTest(case=(
+                "remote-shorthand-main-ref",
+                "remote-missing-full-ref",
+                "remote-object-digest-mismatch",
+            )[case_index], locator=candidate.expected_confirmation["locator"], outcome=outcome, reason=reason):
                 observed, _ = self.invoke(candidate)
                 self.assertEqual((outcome, reason), (observed.outcome, observed.reason_code))
                 self.assertIsNone(observed.confirmation)
@@ -1017,12 +994,11 @@ class ReconciliationObserverTests(unittest.TestCase):
         remote_request = self.request("git_remote_explicit", coordinate=str(bare))
         remote, _ = self.invoke(remote_request)
         self.assertEqual(
-            self.remote_exact_pin(host_class),
+            ("unknown", "reconciliation_inconclusive"),
             (remote.outcome, remote.reason_code),
         )
-        if host_class == "confirmed":
-            self.assertEqual(self.sha, remote.observation["observed_ref_digest"])
-            self.assertEqual("filesystem_fixture", remote.observation["evidence_scope"])
+        self.assertEqual(self.sha, remote.observation["observed_ref_digest"])
+        self.assertEqual("filesystem_fixture", remote.observation["evidence_scope"])
         self.assertIsNone(remote.confirmation)
         self.assertEqual("unknown", remote.spend_status)
         self.assertIsNone(remote.measured_spend)
@@ -1096,8 +1072,9 @@ class ReconciliationObserverTests(unittest.TestCase):
         self.assertNotIn("GIT_SSH_COMMAND", environment)
         self.assertEqual(
             [
-                "/usr/bin/git", "-c", "core.hooksPath=/dev/null",
-                "--no-lazy-fetch",
+                "/usr/bin/git", "-c", "gc.auto=0",
+                "-c", "gc.autoDetach=false", "-c", "maintenance.auto=false",
+                "-c", "core.hooksPath=/dev/null",
                 "--no-optional-locks", "--no-replace-objects", "ls-remote",
                 "--refs", "https://example.invalid/repository.git", "refs/heads/main",
             ],

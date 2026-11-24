@@ -12,15 +12,17 @@ environment-root fallback, daemon, or wake command.
 | builder-app | Codex | `~/fleet/app` |
 | builder-floati | Codex | `~/fleet/floati` |
 
-These are the only example node identities. Each node registers itself; an
-operator must not pre-create another node's row. Initialize the durable home
-once from this repository:
+These are the only example node identities. Each node registers itself by
+operating convention; an operator must not pre-create another node's row in this
+example. The low-level `register` and `retire` verbs accept caller-selected NODE
+and do not bind it to the calling seat. This is fleet practice, not identity
+enforcement. Initialize the durable home once from this repository:
 
 ```sh
 /repo/floati/scripts/floati init --root /var/tmp/floati-tenant-a
 ```
 
-Then each harness runs only its own first registration command:
+Then each harness follows that convention for its first registration command:
 
 ```sh
 # Run by the reviewer from the Claude harness.

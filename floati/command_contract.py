@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from .help_copy import name_line_description
-from .host_paths import worker_workspace_root
+from .host_paths import native_worker_workspace_root
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 
@@ -112,9 +112,9 @@ def _example_value(action: argparse.Action) -> str:
     if action.type is float:
         return "1.0"
     if action.dest in {"root", "source", "destination", "workspace"}:
-        return str(worker_workspace_root().parent / "floati-contract")
+        return str(native_worker_workspace_root().parent / "floati-contract")
     if action.dest in {"roots", "declared_roots", "plan", "policy"}:
-        return str(worker_workspace_root().parent / "floati-contract.json")
+        return str(native_worker_workspace_root().parent / "floati-contract.json")
     return "value"
 
 
@@ -134,6 +134,8 @@ def _argument_example(action: argparse.Action) -> List[str]:
 
 
 def _required_arguments(parser: argparse.ArgumentParser) -> List[str]:
+    # Generated examples use the no-session mode unless a session is required.
+    conditional_required = getattr(parser, "floati_required_without_session", ())
     selected_group_actions = {
         id(group._group_actions[0])
         for group in parser._mutually_exclusive_groups
@@ -144,7 +146,8 @@ def _required_arguments(parser: argparse.ArgumentParser) -> List[str]:
         if isinstance(action, argparse._SubParsersAction):
             continue
         positional_required = not action.option_strings and action.nargs not in ("?", "*")
-        if not (action.required or positional_required or id(action) in selected_group_actions):
+        if not (action.required or action.dest in conditional_required
+                or positional_required or id(action) in selected_group_actions):
             continue
         argv.extend(_argument_example(action))
     return argv
@@ -214,7 +217,7 @@ def _mcp_bound_argument(path: Tuple[str, ...], argument: Dict[str, object]) -> b
     name = argument["name"]
     if name in {"root", "actor", "sender", "session"}:
         return True
-    return name == "recipient" and path in {("inbox",), ("ack",)}
+    return name == "recipient" and path in {("inbox",), ("ack",), ("consume",)}
 
 
 def _mcp_forced_argument(path: Tuple[str, ...], argument: Dict[str, object]) -> bool:

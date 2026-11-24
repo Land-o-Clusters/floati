@@ -12,11 +12,19 @@ from floati.errors import ProtocolRefusal
 from floati.records import validate_record
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.test_fu1_g0 import REPOSITORY_ROOT, _tree_bytes
-from tests.test_fu1_g3 import FU1G3CompletionTests
+from tests import test_fu1_g3
 
 
-class FU1G4Tests(FU1G3CompletionTests):
+class FU1G4Tests(test_fu1_g3._FU1G3CompletionFixture, unittest.TestCase):
     """The production breaks are losing durable recovery facts or reading history partially."""
+
+    # The fixed subtest parity reader still selects these two inherited IDs.
+    test_g1_fix3_bindings_validate_before_empty_or_excluded_workspace_maps = (
+        test_fu1_g3.FU1G3CompletionTests.test_g1_fix3_bindings_validate_before_empty_or_excluded_workspace_maps
+    )
+    test_g1_reader_schema_and_runtime_reject_fabricated_rows = (
+        test_fu1_g3.FU1G3CompletionTests.test_g1_reader_schema_and_runtime_reject_fabricated_rows
+    )
 
     def _projector(self):
         from floati import doctor
@@ -707,9 +715,35 @@ class FU1G4Tests(FU1G3CompletionTests):
             )
         plan = FU1G2Tests._prepare_real_g2_plan(self)
         key = "g4-real-g2-g3-retry"
-        g2 = FU1G2Tests._commit_real_g2(self, plan, key)
+        # This fixture's one binding is FU1-G0's legacy digest launcher with
+        # timeout 900; G2 moves it to the target source's generation, which
+        # CHANGES the Stop definition. The operator pair is stated here from
+        # those coordinates, not computed by the planner.
+        from floati.codex_hook_trust import codex_hook_current_hash
+        from floati.waiter_bundle import waiter_runtime_digest
+
+        def group(launcher):
+            return {"hooks": [{
+                "type": "command",
+                "command": f"/usr/bin/python3 {launcher} --root {self.root.path}",
+                "timeout": 900,
+                "statusMessage": "Watching Floati bus",
+            }]}
+
+        moved = (
+            self.waiter_store / waiter_runtime_digest(self.target_source)
+            / "scripts" / "floati-codex-wait"
+        )
+        pairs = [{
+            "preimage": codex_hook_current_hash(
+                group(self.current_waiter / "scripts" / "floati-codex-wait")
+            ),
+            "target": codex_hook_current_hash(group(moved)),
+        }]
+        g2 = FU1G2Tests._commit_real_g2(self, plan, key, stop_hook_acknowledgements=pairs)
         g2_receipts = self._receipt_path().read_bytes()
-        g2_retry = FU1G2Tests._commit_real_g2(self, plan, key)
+        # The retry finds the definition already moved: nothing to acknowledge.
+        g2_retry = FU1G2Tests._commit_real_g2(self, plan, key, stop_hook_acknowledgements=[])
         self.assertEqual(g2, g2_retry)
         self.assertEqual(g2_receipts, self._receipt_path().read_bytes())
         completed = commit_fleet_update_g3(

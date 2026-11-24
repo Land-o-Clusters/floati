@@ -111,9 +111,88 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
         self._send_at(3, public_ids.worker('alpha'), "bob")
         self._drain_at(1, "bob")
 
-        artifact, _status = Doctor(Path.cwd(), self.home, ref="HEAD").artifact()
+        class EmptyProcesses:
+            def snapshot(self):
+                return []
+
+        # This boundary tests live delivery-health time arithmetic, not the
+        # unrelated host process table. Keep the actual finding projector.
+        with patch("floati.cursor_workers.DEFAULT_SOURCE", EmptyProcesses()):
+            artifact, _status = Doctor(Path.cwd(), self.home, ref="HEAD").artifact()
 
         self.assertIn("findings", artifact)
+
+    def test_warm_doctor_preserves_complete_mail_health_without_replaying_history(self):
+        """Certified native history supplies the same public health findings."""
+        from floati import mail_summary, send_prefix
+        from floati.errors import IntegrityFailure
+        from tests.bus_scale_io import IOProbe
+
+        sender = public_ids.worker("alpha")
+        nodes = [sender, "bob"]
+        for node in nodes:
+            self.registry.register(node, "opencode")
+        cursor = SparseCursor(self.root)
+        observation = datetime.now(timezone.utc).replace(microsecond=0)
+        # Keep this small live-epoch fixture younger than native automatic
+        # retention, rather than reusing the historical module clock.
+        with patch(__name__ + ".NOW", observation):
+            for number in range(6):
+                message = self._send_at(30 - number, sender, "bob", "retained mail")
+                self._drain_at(20 - number, "bob")
+                if number:
+                    cursor.ack("bob", [message], acting_session_id="history-" + str(number),
+                        now=observation - timedelta(minutes=10 - number))
+            self._send_at(2, sender, "bob", "still waiting")
+        self.assertIsNotNone(send_prefix.warm(self.root))
+        mail_summary.warm(self.root)
+        self.assertIsNotNone(mail_summary.observe(self.root), "the native mail banks must be warm")
+        expected = DeliveryHealthAnalyzer.analyze(
+            events=self.log.records(), root=self.root, nodes=nodes, now=observation,
+        ).findings
+        sources = [self.log.path, cursor.delivery_path_for("bob"), cursor.path_for("bob")]
+        with self.log.path.open("rb") as stream:
+            first_frame_bytes = len(stream.readline())
+
+        class EmptyProcesses:
+            def snapshot(self):
+                return []
+
+        # An absent source reports its ordinary currency/manifest findings
+        # without launching unrelated source Git checks inside the mail probe.
+        # All fleet/root health projectors still run through the public artifact.
+        source = self.root.tenant_home.parent / "absent-source"
+        for state in ("certified", "corrupt_event_tail"):
+            with self.subTest(state=state):
+                if state == "corrupt_event_tail":
+                    with self.log.path.open("ab") as stream:
+                        stream.write(b"{broken-event-tail}\n")
+                    with self.assertRaises(IntegrityFailure) as native:
+                        EventLog(self.root).event_records()
+                before = {path: path.read_bytes() for path in sources}
+                with patch("floati.cursor_workers.DEFAULT_SOURCE", EmptyProcesses()),\
+                        patch("floati.doctor._utc_now", return_value=observation),\
+                        IOProbe(self.root.tenant_home) as probe:
+                    artifact, status = Doctor(source, self.root.tenant_home,
+                        ref="HEAD", no_sandbox=True).artifact(now=observation)
+                probe.assert_complete()
+                self.assertEqual(before, {path: path.read_bytes() for path in sources})
+                if state == "corrupt_event_tail":
+                    self.assertEqual(33, status, artifact)
+                    refusal = next(row for row in artifact["findings"]
+                        if row["code"] == "delivery_health_unavailable")
+                    self.assertIn(native.exception.detail, refusal["detail"])
+                    continue
+                actual = [row for row in artifact["findings"]
+                    if row["code"] in {"delivery_health", "acknowledgment_health"}]
+                self.assertEqual(expected, actual)
+                native_reads = {path.relative_to(self.root.tenant_home).as_posix():
+                    probe.read_bytes_by_path.get(path.relative_to(self.root.tenant_home).as_posix(), 0)
+                    for path in sources}
+                # Doctor's roll-policy line may read its bounded first frame;
+                # retained envelopes and cursor receipts are already certified.
+                self.assertLessEqual(sum(native_reads.values()), 2 * first_frame_bytes,
+                    "warm Doctor replayed certified mail history: " + repr(native_reads))
 
     def test_aged_pending_is_red_with_intake_sentence(self):
         self.registry.register(public_ids.worker('alpha'), "opencode")
@@ -310,13 +389,13 @@ class DeliveryHealthScoreboardTests(DeliveryHealthTestBase):
 class DoctorProbeTests(DeliveryHealthTestBase):
     def setUp(self):
         super().setUp()
-        self.registry.register(public_ids.worker('alpha'), "opencode")
+        self.registry.register(public_ids.worker('alpha'), "Codex")
         self.registry.register("deaf", "opencode")
 
     def test_pass_when_drain_lands_within_budget(self):
         probe = DoctorProbe(
             self.root, budget_seconds=5,
-            sleeper=self._draining_sleeper(public_ids.worker('alpha')),
+            sleeper=self._publishing_sleeper(public_ids.worker('alpha')),
         )
         result = probe.run([public_ids.worker('alpha')])
         self.assertEqual(result.by_node[public_ids.worker('alpha')].verdict, "PASS")
@@ -340,10 +419,79 @@ class DoctorProbeTests(DeliveryHealthTestBase):
         self.assertEqual(finding["severity"], "error")
         self.assertIn("DEAF", finding["detail"])
 
+    def test_unpresented_only_probe_does_not_prove_a_live_wake_layer(self):
+        """An ordinary inbox read without a presenter must not turn DEAF into PASS."""
+        from floati.jsonl import read_records_snapshot
+
+        probe = DoctorProbe(
+            self.root, budget_seconds=2,
+            sleeper=self._draining_sleeper("deaf"),
+        )
+        result = probe.run(["deaf"])
+        envelopes = self.log.records()
+        self.assertEqual(1, len(envelopes))
+        probe_id = envelopes[0]["id"]
+        self.assertEqual("deaf", envelopes[0]["recipient"])
+        self.assertIn("doctor-probe", envelopes[0]["note"])
+        rows = read_records_snapshot(
+            self.root, "receipts/deliveries/deaf.jsonl",
+            allowed_kinds={"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"},
+        )
+        self.assertTrue(rows, "the negative case must have real native delivery evidence")
+        for row in rows:
+            self.assertEqual("delivered_unpresented", row["kind"])
+            self.assertEqual([probe_id], row["item_ids"])
+            self.assertFalse(row["presenter_evidence"]["shown"])
+        messages, receipt = self.log.present("deaf")
+        self.assertEqual([probe_id], [row["id"] for row in messages])
+        self.assertEqual("delivered_unpresented", receipt["kind"])
+        self.assertFalse(self.root.resolve_relative("receipts/acks/deaf.jsonl").exists())
+        self.assertEqual("DEAF", result.by_node["deaf"].verdict)
+        self.assertEqual(35, result.rc)
+        self.assertEqual("error", result.findings_by_node["deaf"]["severity"])
+        self.assertEqual(2, result.by_node["deaf"].elapsed_ticks)
+
+    def test_wake_hold_only_probe_does_not_prove_successful_publication(self):
+        """A native wake decision reserves mail; it cannot prove its output was heard."""
+        from floati.jsonl import read_records_snapshot
+        from floati.wake_hold import WakeHoldController
+
+        controller = WakeHoldController(self.root)
+        ticks = 0
+
+        def reserve_without_publishing(_seconds):
+            nonlocal ticks
+            ticks += 1
+            controller.evaluate("deaf", idempotency_key="probe-reservation-" + str(ticks))
+
+        result = DoctorProbe(
+            self.root, budget_seconds=2, sleeper=reserve_without_publishing,
+        ).run(["deaf"])
+        envelopes = self.log.records()
+        self.assertEqual(1, len(envelopes))
+        probe_id = envelopes[0]["id"]
+        self.assertEqual("deaf", envelopes[0]["recipient"])
+        self.assertIn("doctor-probe", envelopes[0]["note"])
+        rows = read_records_snapshot(
+            self.root, "receipts/deliveries/deaf.jsonl",
+            allowed_kinds={"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"},
+        )
+        self.assertEqual(1, len(rows), rows)
+        self.assertEqual("wake_hold_receipt", rows[0]["kind"])
+        self.assertEqual([probe_id], rows[0]["item_ids"])
+        messages, receipt = self.log.present("deaf")
+        self.assertEqual([probe_id], [row["id"] for row in messages])
+        self.assertEqual("delivered_unpresented", receipt["kind"])
+        self.assertFalse(self.root.resolve_relative("receipts/acks/deaf.jsonl").exists())
+        self.assertEqual("DEAF", result.by_node["deaf"].verdict)
+        self.assertEqual(35, result.rc)
+        self.assertEqual("error", result.findings_by_node["deaf"]["severity"])
+        self.assertEqual(2, result.by_node["deaf"].elapsed_ticks)
+
     def test_mixed_fleet_reports_each_node_and_degrades_once(self):
         probe = DoctorProbe(
             self.root, budget_seconds=4,
-            sleeper=self._draining_sleeper(public_ids.worker('alpha')),
+            sleeper=self._publishing_sleeper(public_ids.worker('alpha')),
         )
         result = probe.run([public_ids.worker('alpha'), "deaf"])
         self.assertEqual(result.by_node[public_ids.worker('alpha')].verdict, "PASS")
@@ -358,6 +506,79 @@ class DoctorProbeTests(DeliveryHealthTestBase):
             probe.run(["nobody-here"])
 
     # -- helpers ------------------------------------------------------------
+
+    def _publishing_sleeper(self, node: str):
+        """Publish existing probe mail through one real native Stop invocation.
+
+        Consent, mapping, claim, hold and flushed testimony are native writes;
+        no presenter row or clock is fabricated. The optional daemon binding
+        is kept away from a host Codex executable in this private fixture.
+        """
+        import io
+        import os
+        from floati.codex_wait import run_stop_waiter
+        from floati.codex_wait_contract import (
+            CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant,
+        )
+        from floati.cursor_presentations import CursorPresentationLedger
+        from floati.jsonl import read_records_snapshot
+        from floati.waiter_consent import arm_waiter_consent
+
+        base = Path(self.temp.name).resolve()
+        workspace = base / "probe-waiter-workspace"
+        workspace.mkdir()
+        codex_home = base / "probe-codex-home"
+        codex_home.mkdir()
+        session = "doctor-probe-native-session"
+        arm_waiter_consent(self.root.path, workspace, node, "Codex", 10, 2)
+        participant = resolve_participant(self.root.path, workspace)
+        self.assertIsNotNone(participant)
+        consent = CodexWaitConsentLedger(self.root).require_armed(participant.binding)
+        CodexWaitSessionLedger(self.root).arm(
+            participant.binding, consent, session, idempotency_key="doctor-probe-native-arm",
+        )
+        published = False
+
+        def _tick(_seconds: float) -> None:
+            nonlocal published
+            if published:
+                return
+            published = True
+            probe_ids = [row["id"] for row in self.log.records()
+                         if row["kind"] == "message_envelope" and row["recipient"] == node]
+            self.assertEqual(1, len(probe_ids))
+            stdout, stderr, native_result = io.StringIO(), io.StringIO(), {}
+            with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}), patch(
+                "floati.wake_daemon_adapters.CODEX_EXECUTABLE", base / "absent-codex",
+            ):
+                code = run_stop_waiter(
+                    bus_home=self.root.path,
+                    hook_payload={"cwd": str(workspace), "session_id": session},
+                    stdout=stdout, stderr=stderr, _waiter_result=native_result,
+                )
+            self.assertEqual(0, code, stderr.getvalue())
+            self.assertEqual("fresh_work", native_result["kind"], native_result)
+            self.assertEqual(probe_ids, native_result["item_ids"])
+            decision = json.loads(stdout.getvalue())
+            self.assertEqual("block", decision["decision"])
+            self.assertIn(probe_ids[0], decision["reason"])
+            delivery = native_result["receipt"]
+            self.assertEqual("delivery_receipt", delivery["kind"])
+            self.assertEqual(probe_ids, delivery["item_ids"])
+            holds = read_records_snapshot(self.root,
+                Path("receipts/stop-holds") / (node + ".jsonl"),
+                allowed_kinds={"stop_hold_receipt"})
+            self.assertEqual(["start", "exit"], [row["phase"] for row in holds])
+            self.assertEqual(holds[0]["invocation_id"], holds[1]["invocation_id"])
+            self.assertTrue(all(row["acting_session_id"] == session for row in holds))
+            presentations = CursorPresentationLedger(self.root).read(node)
+            self.assertEqual(["prepared", "flushed"], [row["phase"] for row in presentations])
+            self.assertEqual(delivery["id"], presentations[-1]["delivery_receipt_id"])
+            self.assertEqual(probe_ids, presentations[-1]["item_ids"])
+            self.assertFalse(self.root.resolve_relative(
+                Path("receipts/acks") / (node + ".jsonl")).exists())
+
+        return _tick
 
     def _draining_sleeper(self, node: str):
         """Injected sleeper whose FIRST tick performs the node's own drain,

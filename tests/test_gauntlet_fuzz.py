@@ -36,6 +36,7 @@ from tests.test_spawn_groups import (
     _Task3Case,
 )
 from tests.test_effects import EffectRecordFixture
+from tests.test_process_atomicity import assert_send_companions
 from tests.hm3i_gauntlet_fixtures import (
     CANONICAL_RUN_KINDS,
     ITEM5_OUTCOMES,
@@ -871,10 +872,14 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
             self.assertEqual(message_a["id"], retraction["retracted_message_id"])
             self.assertEqual(session_a, retraction["worker_session_id"])
             self.assertEqual("sent_in_error", retraction["reason"])
+            physical = events.event_records()
             self.assertEqual(
-                ["message_envelope", "message_envelope", "message_retracted"],
-                [record["kind"] for record in events.event_records()],
+                ["message_envelope", "send_readiness_observation",
+                 "message_envelope", "send_readiness_observation", "message_retracted"],
+                [record["kind"] for record in physical],
             )
+            self.assertEqual([message_a["id"], message_b["id"]],
+                             [row["id"] for row in assert_send_companions(self, physical)])
             self.assertIn(
                 message_a["id"], [record["id"] for record in events.records()]
             )

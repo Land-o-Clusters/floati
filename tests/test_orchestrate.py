@@ -43,6 +43,34 @@ class _TimedCompletingAdapter:
         return []
 
 
+class _StaggeredCompletingAdapter(_TimedCompletingAdapter):
+    """Hold initial drives until all three are ready, including a late arrival."""
+
+    def __init__(self, trace: Path) -> None:
+        super().__init__(trace)
+        context = multiprocessing.get_context("fork")
+        self.first_driving = context.Event()
+        self.initial_driving = context.Barrier(3)
+
+    def spawn(self, item: dict, *, deadline_seconds: float) -> object:
+        if not item["needs"] and item["owner"] == public_ids.builder('c'):
+            self.first_driving.wait()
+            # An adversarial launch stall, not a permitted product latency.
+            time.sleep(0.35)
+        return super().spawn(item, deadline_seconds=deadline_seconds)
+
+    def drive(
+        self, handle: object, item: dict, *, deadline_seconds: float
+    ) -> list[dict[str, str]]:
+        if not item["needs"] and item["owner"] == public_ids.builder('a'):
+            self.first_driving.set()
+        if not item["needs"]:
+            # Serial progress cannot release this gate. The orchestrator's
+            # existing deadline owns the failure/cleanup backstop.
+            self.initial_driving.wait()
+        return super().drive(handle, item, deadline_seconds=deadline_seconds)
+
+
 class _ZeroDelayAdapter:
     name = "fixture"
 
@@ -204,7 +232,7 @@ class OrchestrationPlanTests(unittest.TestCase):
                 self.assertEqual("retry_policy_invalid", caught.exception.code)
 
 
-class FleetOrchestratorTests(unittest.TestCase):
+class _FleetOrchestratorFixture:
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -238,11 +266,14 @@ class FleetOrchestratorTests(unittest.TestCase):
         )
         return OrchestrationPlan.load(path)
 
+
+class FleetOrchestratorTests(_FleetOrchestratorFixture, unittest.TestCase):
     def test_three_controllers_drain_four_item_dag_with_full_receipt_chains(self) -> None:
+        """Concurrent progress and complete receipts survive a late controller."""
         from floati.orchestrate import FleetOrchestrator
 
         trace = self.directory / "timing.txt"
-        adapter = _TimedCompletingAdapter(trace)
+        adapter = _StaggeredCompletingAdapter(trace)
         frames: list[dict] = []
         controller_names: set[str] = set()
         expected_controller_names = {
@@ -296,37 +327,15 @@ class FleetOrchestratorTests(unittest.TestCase):
             intervals.setdefault(item_id, {})[phase] = float(stamp)
         seeded = result["seeded_items"]
         initial = [intervals[seeded[key]] for key in ("a", "b", "c")]
-        # CI-GREEN-24. The claim here is that the three controllers ran
-        # CONCURRENTLY. `max(start) < min(end)` states that as strict
-        # simultaneity, and it is true only while the host launches all three
-        # inside the fixture's own drive delay: it is arithmetically equivalent
-        # to a start spread below `adapter.delay`. Measured on a quiet Mac the
-        # spread is 11-25 ms against a 150 ms delay; on a macOS runner it was
-        # 156.6 ms and the assertion failed by 6.6 ms - a launch cost, with the
-        # product perfectly concurrent underneath. So the spread is MEASURED and
-        # the world is named. Nothing is conceded: serial execution puts a full
-        # delay between consecutive starts, so a spread at or above two delays
-        # is indistinguishable from serial and still REDS.
-        start_spread = max(row["start"] for row in initial) - min(
-            row["start"] for row in initial
-        )
-        print(
-            f"[CI-GREEN-24] {self.id()}: start spread {start_spread * 1000:.1f} ms "
-            f"against a {adapter.delay * 1000:.0f} ms fixture drive; host loadavg "
-            f"{[round(value, 2) for value in os.getloadavg()]}"
-        )
+        # CI-GREEN-24 guards concurrent progress, not controller launch latency.
+        # Native readiness holds each initial drive until all three have entered
+        # it; a delayed controller cannot spend another's observation window.
+        # This is causal overlap, with no scheduler-inclusive elapsed ceiling.
+        # A serial implementation cannot release the barrier and cannot drain.
         self.assertLess(
-            start_spread,
-            2 * adapter.delay,
-            f"three controllers started {start_spread * 1000:.1f} ms apart, at or "
-            f"beyond the {2 * adapter.delay * 1000:.0f} ms a SERIAL run would "
-            f"need - the fleet did not run concurrently",
+            max(row["start"] for row in initial),
+            min(row["end"] for row in initial),
         )
-        if start_spread < adapter.delay:
-            self.assertLess(
-                max(row["start"] for row in initial),
-                min(row["end"] for row in initial),
-            )
         self.assertGreaterEqual(
             intervals[seeded["d"]]["start"], max(row["end"] for row in initial)
         )
@@ -412,7 +421,7 @@ class FleetOrchestratorTests(unittest.TestCase):
         )
 
 
-class FleetFaultDrillTests(FleetOrchestratorTests):
+class FleetFaultDrillTests(_FleetOrchestratorFixture, unittest.TestCase):
     def test_fault_adapter_without_a_hang_action_completes(self) -> None:
         from floati.orchestrate import FleetOrchestrator
 
@@ -454,7 +463,7 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
             redraw_interval=0.01,
             worker_timeout=1.5,
         ).run(
-            self.plan(),
+            (plan := self.plan()),
             deadline_seconds=6,
             drills=(
                 DrillAction("kill_worker", public_ids.builder('a')),
@@ -491,15 +500,26 @@ class FleetFaultDrillTests(FleetOrchestratorTests):
             outcomes,
             {node: session["outcome_code"] for node, session in sessions.items()},
         )
-        child_pids = [int(line.split()[1]) for line in pid_trace.read_text(encoding="utf-8").splitlines()]
+        trace_lines = pid_trace.read_text(encoding="utf-8").splitlines()
+        child_pids = [int(line.split()[1]) for line in trace_lines]
         self.assertEqual(4, len(child_pids))
-        for pid in [*result["controller_pids"], *child_pids]:
-            with self.subTest(
-                pid=pid,
-                controllers=result["controller_pids"],
-                children=child_pids,
-                audits=result["process_audits"],
-            ):
+        for process_index, pid in enumerate([*result["controller_pids"], *child_pids]):
+            if process_index < len(result["controller_pids"]):
+                owners = plan.workers[process_index:process_index + 1]
+                role = "controller"
+            else:
+                trace_role = trace_lines[process_index - len(result["controller_pids"])].split()[0]
+                role = "adapter" if trace_role != "grandchild" else "registered-grandchild"
+                owners = [trace_role] if trace_role != "grandchild" else [
+                    row["node_id"] for row in result["process_audits"]
+                    if pid in row["registered_process_groups"]
+                ]
+            labels = {"process_kind": role, "owner": owners[0]} if len(owners) == 1 else {
+                "unresolved_process_kind": role, "pid": pid,
+                "controllers": result["controller_pids"], "children": child_pids,
+                "audits": result["process_audits"],
+            }
+            with self.subTest(**labels):
                 with self.assertRaises(ProcessLookupError):
                     os.kill(pid, 0)
         self.assertTrue(all(not row["alive_after_cleanup"] for row in result["process_audits"]))

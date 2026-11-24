@@ -17,6 +17,8 @@ from floati.events import EventLog
 from floati.jsonl import read_records
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.bus_scale_io import IOProbe
+from tests.git_fixture_cache import cached_tree, fixture_git
 
 try:
     from floati.verification import DeliveryVerifier, parse_unittest_measurement
@@ -39,31 +41,36 @@ class VerifyReceiptTests(unittest.TestCase):
             self.registry.register(node, "Codex")
         self.events = EventLog(self.root, self.registry)
         self.repository = self.base / "subject"
-        self._git("init", "-b", "main", str(self.repository), cwd=self.base)
-        self._git("config", "user.name", "Floati Test", cwd=self.repository)
-        self._git("config", "user.email", "floati@example.invalid", cwd=self.repository)
-        (self.repository / "tests").mkdir()
-        (self.repository / "tests" / "__init__.py").write_text("", encoding="utf-8")
-        (self.repository / "tests" / "test_sample.py").write_text(
-            "import unittest\n\n"
-            "class SampleTests(unittest.TestCase):\n"
-            "    def test_truth(self):\n"
-            "        self.assertTrue(True)\n",
-            encoding="utf-8",
-        )
-        (self.repository / "artifact.txt").write_text("landed\n", encoding="utf-8")
-        self._git("add", ".", cwd=self.repository)
-        self._git("commit", "-m", "subject fixture", cwd=self.repository)
-        self.sha = self._git("rev-parse", "HEAD", cwd=self.repository).stdout.strip()
-        self._git(
-            "update-ref", "refs/remotes/origin/main", self.sha, cwd=self.repository
-        )
+
+        def build(repository: Path) -> str:
+            self._git("init", "-b", "main", str(repository), cwd=self.base)
+            self._git("config", "user.name", "Floati Test", cwd=repository)
+            self._git("config", "user.email", "floati@example.invalid", cwd=repository)
+            (repository / "tests").mkdir()
+            (repository / "tests" / "__init__.py").write_text("", encoding="utf-8")
+            (repository / "tests" / "test_sample.py").write_text(
+                "import unittest\n\n"
+                "class SampleTests(unittest.TestCase):\n"
+                "    def test_truth(self):\n"
+                "        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            (repository / "artifact.txt").write_text("landed\n", encoding="utf-8")
+            self._git("add", ".", cwd=repository)
+            self._git("commit", "-m", "subject fixture", cwd=repository)
+            sha = self._git("rev-parse", "HEAD", cwd=repository).stdout.strip()
+            self._git("update-ref", "refs/remotes/origin/main", sha, cwd=repository)
+            return sha
+
+        # Built once per process; every test owns an independent copy.
+        self.sha = cached_tree(
+            self.repository, ("test_verify_receipts.subject",), build, git="/usr/bin/git")
 
     def _git(
         self, *arguments: str, cwd: Path
     ) -> subprocess.CompletedProcess[str]:
         completed = subprocess.run(
-            ["/usr/bin/git", *arguments],
+            [fixture_git("/usr/bin/git"), *arguments],
             cwd=cwd,
             text=True,
             capture_output=True,
@@ -133,9 +140,35 @@ class VerifyReceiptTests(unittest.TestCase):
         self.assertEqual("delivery-claim-", first["claim"]["id"][:15])
         rows = self.events.event_records()
         self.assertEqual(
-            ["message_envelope", "delivery_claim"],
+            ["message_envelope", "delivery_claim", "send_readiness_observation"],
             [row["kind"] for row in rows],
         )
+
+    def test_claim_lookup_uses_the_certified_prefix_without_event_history_reads(self) -> None:
+        sent = self._send_claim()
+        claim = sent["claim"]
+        inbox_bank = self.root.tenant_home / ".inbox-prefix"
+        self.assertFalse(inbox_bank.exists())
+        self.assertEqual(claim, self._verifier()._claim(claim["id"]))
+        self.assertFalse(inbox_bank.exists(), "claim observation created an unrelated recipient index")
+        self.events.send("recipient", "sender", "floati", self.sha,
+                         "docs/other.md", "unrelated claim lookup history",
+                         idempotency_key="unrelated-claim-lookup")
+
+        # Resolve the exact native claim with a fresh verifier after a native
+        # append. The full verification runner has separate receipt coverage.
+        with IOProbe(self.root.tenant_home) as probe:
+            selected = self._verifier()._claim(claim["id"])
+        probe.assert_complete()
+        self.assertEqual(claim, selected)
+        self.assertEqual(sent["message"]["id"], selected["note_ref"])
+        self.assertEqual(0, probe.read_bytes_by_path.get("events.jsonl", 0),
+                         "exact claim lookup replayed certified global event history")
+        checkpoint = self.root.tenant_home / ".send-prefix/checkpoint.json"
+        checkpoint.unlink()
+        self.assertEqual(claim, self._verifier()._claim(claim["id"]))
+        self.assertFalse(checkpoint.exists(), "cold claim observation repaired its disposable certificate")
+        self.assertFalse(inbox_bank.exists(), "cold claim observation created a recipient index")
 
     def test_v1a_claim_is_part_of_the_idempotency_payload(self) -> None:
         self._send_claim()
@@ -145,7 +178,7 @@ class VerifyReceiptTests(unittest.TestCase):
             self._send_claim(changed)
 
         self.assertEqual("idempotency_conflict", caught.exception.code)
-        self.assertEqual(2, len(self.events.event_records()))
+        self.assertEqual(3, len(self.events.event_records()))
 
     def test_v1a_malformed_claim_refuses_before_any_event_mutation(self) -> None:
         malformed = self._claim_payload()
@@ -362,7 +395,9 @@ class VerifyReceiptTests(unittest.TestCase):
                 "--doc", "docs/evidence/v1.md", "--note", "V1 delivery",
                 "--idempotency-key", "cli-v1", "--claim", str(claim_path),
             ],
-            cwd=REPOSITORY_ROOT,
+            # SEND-SHA-RESOLVES-1: the send runs from the checkout that
+            # holds the sha, not from an unrelated repository checkout.
+            cwd=self.repository,
             text=True,
             capture_output=True,
             check=False,
@@ -410,7 +445,9 @@ class VerifyReceiptTests(unittest.TestCase):
                 "--doc", "docs/evidence/v1.md", "--note", "V1 delivery",
                 "--claim", str(claim_path),
             ],
-            cwd=REPOSITORY_ROOT,
+            # SEND-SHA-RESOLVES-1: sent from the checkout holding the sha so
+            # the malformed-claim refusal, not the absent-sha fence, answers.
+            cwd=self.repository,
             text=True,
             capture_output=True,
             check=False,

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/bus-epoch-recovery-receipt.schema.json",
+  "title": "Floati Bus Epoch Recovery Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "tenant_id", "timestamp", "kind", "actor", "idempotency_key", "request_id", "roll_receipt_id", "direction", "reason_code", "archive_path", "archive_sha256", "observed_live_sha256"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^bus-epoch-recovery-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"},
+    "kind": {"type": "string", "const": "bus_epoch_recovery_receipt"},
+    "actor": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 128, "x-floati-terminal-unsafe": true},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "roll_receipt_id": {"type": "string", "pattern": "^bus-epoch-roll-receipt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "direction": {"type": "string", "const": "rollback"},
+    "reason_code": {"type": "string", "const": "live_epoch_extended"},
+    "archive_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/", "x-floati-terminal-unsafe": true},
+    "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "observed_live_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

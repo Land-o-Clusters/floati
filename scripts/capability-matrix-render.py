@@ -283,8 +283,9 @@ def render_compact(dataset: dict) -> str:
 
     lines.append("")
     lines.append(
-        "● measured live · ○ classified from the surface, with the unexercised probe named "
-        "in the receipt · `—` no receipt yet. A cell claims only what its receipt measured."
+        "● measured live · ○ classified from surfaces (the unexercised probe is named "
+        "in the receipt) · — no receipt yet: we do not claim what we have not measured "
+        "([matrix methodology](docs/capability-matrix.md))."
     )
 
     deep = []
@@ -295,11 +296,11 @@ def render_compact(dataset: dict) -> str:
     if deep:
         lines.append("")
         lines.append(
-            "Deep integrations for codex: "
+            "**Deep integrations (codex):** "
             + " · ".join(deep)
-            + ". These sit in a note, outside the grid, so that one harness's extra "
-            + "integrations do not show up as gaps for every other harness. The full "
-            + "{0}-surface grid, every cell receipt-linked, is in ".format(len(rows))
+            + " — receipt-linked notes rather than grid columns, so one harness's "
+            + "head start does not read as everyone else's gap. The full "
+            + "{0}-surface grid, every cell receipt-linked, lives in ".format(len(rows))
             + "[docs/capability-matrix.md](docs/capability-matrix.md)."
         )
 

@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .codex_hook_trust import observe_codex_waiter_hooks
 from .errors import DEPLOY_CURRENCY_REMEDY, IntegrityFailure, ProtocolRefusal
 from .git_process import fixed_git_command, fixed_git_environment, is_shallow_repository
 from .installer_shadow import enumerate_installer_shadow
@@ -26,6 +27,16 @@ from . import wiring_journal
 
 _METADATA_DIR = INSTALL_METADATA_DIRECTORY
 _METADATA_NAME = "manifest.v0.json"
+_HOST_WIRING_NAME = "host-wiring.v0.json"
+_PHOTOGRAPH_RECORD_NAME = "host-photograph.taken"
+_HOST_ARTIFACT_KEYS = (
+    ("hooks.json", ("hooks.json",)),
+    ("config.toml", ("config.toml",)),
+    ("floati-wake/current", ("floati-wake", "current")),
+    ("bin/codex-fleet-bus", ("bin", "codex-fleet-bus")),
+    ("bin/boardbus.md", ("bin", "boardbus.md")),
+    ("fleet-bus-profiles.json", ("fleet-bus-profiles.json",)),
+)
 
 
 def _entry_path(value: os.PathLike[str] | str, label: str) -> Path:
@@ -139,6 +150,169 @@ def _metadata_path(destination: Path) -> Path:
     return destination / _METADATA_DIR / _METADATA_NAME
 
 
+def _host_wiring_path(destination: Path) -> Path:
+    return destination / _METADATA_DIR / _HOST_WIRING_NAME
+
+
+def _photograph_record_path(destination: Path) -> Path:
+    return destination / _METADATA_DIR / _PHOTOGRAPH_RECORD_NAME
+
+
+def _codex_home() -> Path:
+    return Path(os.environ.get("HOME", "")).expanduser() / ".codex"
+
+
+def _fingerprint(path: Path) -> Dict[str, object]:
+    if path.is_symlink():
+        try:
+            return {"kind": "symlink", "target": os.readlink(path)}
+        except OSError:
+            return {"kind": "other"}
+    if not path.exists():
+        return {"kind": "absent"}
+    if path.is_dir():
+        entries = []
+        for child in sorted(path.rglob("*")):
+            if child.is_file() and not child.is_symlink():
+                entries.append([
+                    str(child.relative_to(path)),
+                    hashlib.sha256(child.read_bytes()).hexdigest(),
+                ])
+        return {"kind": "dir", "entries": entries}
+    if path.is_file():
+        return {
+            "kind": "file",
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+    return {"kind": "other"}
+
+
+def photograph_host_wiring() -> Dict[str, object]:
+    """Read-only snapshot of Codex host artifacts rollback must not lose."""
+
+    codex = _codex_home()
+    hooks = codex / "hooks.json"
+    trust = codex / "config.toml"
+    stop: object = []
+    if hooks.is_file() and not hooks.is_symlink():
+        try:
+            stop = json.loads(hooks.read_text(encoding="utf-8"))["hooks"]["Stop"]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+            stop = None
+    trust_rows: List[Dict[str, object]] = []
+    if hooks.is_file() and trust.is_file() and not hooks.is_symlink() and not trust.is_symlink():
+        try:
+            trust_rows = observe_codex_waiter_hooks(hooks, trust)
+        except ProtocolRefusal:
+            trust_rows = []
+    artifacts = {
+        key: _fingerprint(codex.joinpath(*parts)) for key, parts in _HOST_ARTIFACT_KEYS
+    }
+    return {
+        "stop": stop,
+        "trust": trust_rows,
+        "artifacts": artifacts,
+    }
+
+
+def _changed_host_paths(before: Dict[str, object], after: Dict[str, object]) -> List[str]:
+    previous = before.get("artifacts") if isinstance(before.get("artifacts"), dict) else {}
+    current = after.get("artifacts") if isinstance(after.get("artifacts"), dict) else {}
+    names = sorted(set(previous) | set(current))
+    return [name for name in names if previous.get(name) != current.get(name)]
+
+
+def _previous_source_sha(destination: Path) -> Optional[str]:
+    path = _metadata_path(destination)
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    sha = raw.get("source_sha") if isinstance(raw, dict) else None
+    return sha if isinstance(sha, str) and sha else None
+
+
+def _is_reverse_transition(
+    source: Path,
+    previous_sha: Optional[str],
+    source_sha: str,
+    git_executable: str,
+) -> bool:
+    if not previous_sha or previous_sha == source_sha:
+        return False
+    try:
+        result = subprocess.run(
+            fixed_git_command(
+                git_executable,
+                source,
+                ("merge-base", "--is-ancestor", source_sha, previous_sha),
+            ),
+            env=fixed_git_environment(git_executable),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    return True
+
+
+def _load_host_photograph(
+    destination: Path, *, required: bool
+) -> Optional[Dict[str, object]]:
+    path = _host_wiring_path(destination)
+    if path.is_symlink():
+        raise ProtocolRefusal(
+            "rollback_host_photograph_invalid",
+            "host wiring photograph is a symlink",
+        )
+    if not path.exists():
+        if required:
+            raise ProtocolRefusal(
+                "rollback_host_photograph_invalid",
+                "host wiring photograph is missing",
+            )
+        return None
+    if not path.is_file():
+        raise ProtocolRefusal(
+            "rollback_host_photograph_invalid",
+            "host wiring photograph is not a file",
+        )
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProtocolRefusal(
+            "rollback_host_photograph_invalid",
+            "host wiring photograph is garbage",
+        ) from exc
+    if not isinstance(raw, dict) or not isinstance(raw.get("artifacts"), dict):
+        raise ProtocolRefusal(
+            "rollback_host_photograph_invalid",
+            "host wiring photograph is garbage",
+        )
+    return raw
+
+
+def _write_host_photograph(destination: Path, photograph: Dict[str, object]) -> None:
+    path = _host_wiring_path(destination)
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    payload = (json.dumps(photograph, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(payload)
+    os.replace(tmp, path)
+    record = _photograph_record_path(destination)
+    marker = record.with_name(record.name + ".tmp")
+    marker.write_bytes(b"true\n")
+    os.replace(marker, record)
+
+
 def render_install_metadata(
     *,
     destination: Path,
@@ -238,6 +412,16 @@ def _load_previous(
             raise ProtocolRefusal("deployment_metadata_invalid", f"metadata owns reserved path: {relative}")
         previous[relative] = digest
     return previous, ownership
+
+
+def _install_recorded_photograph(destination: Path) -> bool:
+    path = _photograph_record_path(destination)
+    if path.is_symlink():
+        raise ProtocolRefusal(
+            "rollback_host_photograph_invalid",
+            "host wiring photograph record is a symlink",
+        )
+    return path.is_file()
 
 
 def _destination_path(destination: Path, relative: str) -> Path:
@@ -978,6 +1162,28 @@ class DeploymentWriter:
         if not joined_prefix:
             self._preflight_collisions(destination, entries, previous)
 
+        host_now = photograph_host_wiring()
+        host_rollback_proof = None
+        reverse = previous_install is not None and _is_reverse_transition(
+            source,
+            _previous_source_sha(destination),
+            source_sha,
+            self.git_executable,
+        )
+        if reverse:
+            if _install_recorded_photograph(destination):
+                stored = _load_host_photograph(destination, required=True)
+                changed = _changed_host_paths(stored, host_now)
+                if changed:
+                    raise ProtocolRefusal(
+                        "rollback_host_artifacts_differ",
+                        "host wiring changed since the last install photograph: "
+                        + ", ".join(changed),
+                    )
+                host_rollback_proof = {"before": stored, "readback": host_now}
+            else:
+                host_rollback_proof = "unverified_legacy"
+
         if not destination.exists():
             destination.mkdir(mode=0o700)
         elif destination.is_symlink():
@@ -1095,7 +1301,8 @@ class DeploymentWriter:
             if relative not in current_paths and relative not in preserved:
                 preserved.append(relative)
 
-        return {
+        _write_host_photograph(destination, photograph_host_wiring())
+        receipt = {
             "operation": self.operation,
             "currency_mode": "committed-tree-ci" if self.committed_tree else "named-ref",
             "ref": self.ref,
@@ -1108,3 +1315,6 @@ class DeploymentWriter:
             "installer_shadow": installer_shadow,
             "warnings": [] if outcome == "affirmative_none" else [installer_shadow],
         }
+        if host_rollback_proof is not None:
+            receipt["host_rollback"] = host_rollback_proof
+        return receipt

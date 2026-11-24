@@ -27,6 +27,12 @@ DELIVERY_STALL_RED_MINUTES = 15
 # amendments enter by ruling.
 
 
+def oldest_unread_from_summary(node: str, summary: Mapping[str, object], now: datetime):
+    """Render the native age from a certified timestamp, with a fresh clock."""
+    stamp = summary["oldest_unread_at"]
+    return oldest_unread_fact(node, [] if stamp is None else [{"timestamp": stamp}], now=now)
+
+
 @dataclass(frozen=True)
 class NodeDeliveryHealth:
     node: str
@@ -85,6 +91,8 @@ class DeliveryHealthAnalyzer:
         now: datetime,
         cadences: Optional[Mapping[str, str]] = None,
         ack_slas: Optional[Mapping[str, int]] = None,
+        *,
+        receipt_facts: Optional[Mapping[str, Mapping[str, object]]] = None,
     ) -> DeliveryHealthReport:
         envelopes_by_node: Dict[str, List[Dict[str, object]]] = {
             node: [] for node in nodes
@@ -101,8 +109,13 @@ class DeliveryHealthAnalyzer:
         acknowledgments_by_node: Dict[str, NodeAcknowledgmentHealth] = {}
         acknowledgment_findings_by_node: Dict[str, dict] = {}
         for node in nodes:
-            delivery_times = _receipt_item_times(root, "deliveries", node)
-            acknowledgment_times = _receipt_item_times(root, "acks", node)
+            if receipt_facts is None:
+                delivery_times = _receipt_item_times(root, "deliveries", node)
+                acknowledgment_times = _receipt_item_times(root, "acks", node)
+            else:
+                facts = receipt_facts[node]
+                delivery_times = facts["delivery_times"]
+                acknowledgment_times = facts["acknowledgment_times"]
             delivered_ids = set(delivery_times)
             pending = sorted(
                 (
@@ -112,7 +125,12 @@ class DeliveryHealthAnalyzer:
                 ),
                 key=lambda envelope: str(envelope["timestamp"]),
             )
-            last_drain_minutes_ago = _last_drain_minutes_ago(root, node, now)
+            if receipt_facts is None:
+                last_drain_minutes_ago = _last_drain_minutes_ago(root, node, now)
+            else:
+                latest = receipt_facts[node]["latest_delivery_at"]
+                last_drain_minutes_ago = (None if latest is None
+                    else int((now - latest).total_seconds() // 60))
             oldest_unread = oldest_unread_fact(node, pending, now=now)
             oldest_pending_minutes = (
                 None if oldest_unread is None else int(oldest_unread["age_minutes"])

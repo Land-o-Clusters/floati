@@ -367,7 +367,8 @@ def adopt_local(
         from .solo import resolve_solo_node
 
         owner = resolve_solo_node(root)
-    work_item = WorkLog(root).add(title, owner, [], now=current)
+    # Intake idempotency is keyed by source_id + content_digest above.
+    work_item = WorkLog(root).add(title, owner, [], refuse_duplicates=False, now=current)
     if after_work_item is not None:
         after_work_item(work_item)
 
@@ -458,7 +459,8 @@ def adopt_github(
         from .solo import resolve_solo_node
 
         owner = resolve_solo_node(root)
-    work_item = WorkLog(root).add(title, owner, [], now=current)
+    # Intake idempotency is keyed by source_id + content_digest above.
+    work_item = WorkLog(root).add(title, owner, [], refuse_duplicates=False, now=current)
     record: Dict[str, object] = {
         "schema_version": 0,
         "id": snapshot_id,

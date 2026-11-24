@@ -52,6 +52,22 @@ class PackagedSmokeBattery(unittest.TestCase):
             "the packaged tree carries the dark locks package")
         cls.fleet = Path(cls.temp.name) / "fleet"
         cls.solo = Path(cls.temp.name) / "solo"
+        # SEND-SHA-RESOLVES-1: every command runs with cwd at the tree, so
+        # the tree is made the servable checkout of the sha the bus-family
+        # send carries — a real installation lives inside a checkout.
+        def tree_git(*arguments: str) -> str:
+            completed = subprocess.run(
+                ["/usr/bin/git", *arguments], cwd=str(cls.tree), check=True,
+                capture_output=True, text=True,
+                env=dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null"))
+            return completed.stdout.strip()
+        tree_git("init", "--quiet", "--initial-branch=main")
+        tree_git("config", "user.name", "Packaged Smoke")
+        tree_git("config", "user.email", "packaged-smoke@example.invalid")
+        tree_git("add", ".")
+        tree_git("commit", "--quiet", "-m", "packaged tree")
+        cls.send_sha = tree_git("rev-parse", "HEAD")
+        tree_git("update-ref", "refs/remotes/origin/main", cls.send_sha)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -97,7 +113,7 @@ class PackagedSmokeBattery(unittest.TestCase):
         # bus family: send, inbox, ack round-trip
         self.floati(
             "send", "--root", str(self.fleet), "--from", "smoke-a",
-            "--to", "smoke-b", "--repo", "smoke", "--sha", "a" * 40,
+            "--to", "smoke-b", "--repo", "smoke", "--sha", self.send_sha,
             "--doc", "docs/design/f10-1-remedy-ruling-2026-08-30.md",
             "--note", "packaged smoke battery")
         inbox = self.floati(

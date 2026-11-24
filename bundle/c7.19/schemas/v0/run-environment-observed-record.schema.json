@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v0/run-environment-observed-record.schema.json",
+  "title": "Floati Run Environment Observed Record v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "tenant_id", "timestamp", "kind",
+    "run_id", "item_id", "attempt_id", "adapter", "harness_version",
+    "model_observed", "provider_observed", "workspace_base_commit",
+    "toolchain_fingerprint", "unknown_fields", "self_reported_fields"
+  ],
+  "properties": {
+    "schema_version": {"const": 0},
+    "id": {"type": "string", "pattern": "^run-environment-observed-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "tenant_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "kind": {"const": "run_environment_observed"},
+    "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "item_id": {"type": "string", "pattern": "^work-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "attempt_id": {"type": "string", "pattern": "^attempt-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"},
+    "adapter": {"enum": ["claude", "codex", "pi"]},
+    "harness_version": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "model_observed": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "provider_observed": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "workspace_base_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+    "toolchain_fingerprint": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "unknown_fields": {
+      "type": "array", "uniqueItems": true, "x-floati-sorted-unique": true,
+      "items": {"enum": ["harness_version", "model_observed", "provider_observed", "toolchain_fingerprint", "workspace_base_commit"]}
+    },
+    "self_reported_fields": {
+      "type": "array", "uniqueItems": true, "x-floati-sorted-unique": true,
+      "items": {"enum": ["harness_version", "model_observed", "provider_observed", "toolchain_fingerprint", "workspace_base_commit"]}
+    }
+  }
+}

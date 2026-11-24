@@ -224,11 +224,14 @@ class InstallerShadowEnumeratorTests(unittest.TestCase):
         unreadable = self.base / "not-a-directory"
         unreadable.write_bytes(b"present but unusable\n")
 
-        for path in (
+        for case_index, path in enumerate((
             str(unreadable),
             os.pathsep.join((str(unreadable), str(destination / "scripts"))),
-        ):
-            with self.subTest(path=path):
+        )):
+            with self.subTest(case=(
+                "nondirectory-path-entry",
+                "nondirectory-then-destination-scripts",
+            )[case_index]):
                 self.assertEqual("path_entry_unreadable", self.observe(destination, path)["outcome"])
 
     def test_explicit_source_script_is_never_reported_as_a_shadow(self) -> None:

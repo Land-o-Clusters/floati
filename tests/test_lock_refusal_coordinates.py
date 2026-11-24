@@ -187,8 +187,8 @@ class LockRefusalCoordinateTests(unittest.TestCase):
 # lock is `jsonl._locked_path`; every other entry is a DIFFERENT lock class with
 # its own timeout, ordering domain and refusal vocabulary.
 #
-# This is an allowlist and not a prohibition because 12 of these are legitimate:
-# a blanket "only _locked_path may flock" would red on eleven correct call sites
+# This is an allowlist and not a prohibition because 13 of these are legitimate:
+# a blanket "only _locked_path may flock" would red on twelve correct call sites
 # and teach the next reader to disable the check. What it buys is that a NEW
 # lock implementation cannot appear in silence — the author must either route it
 # through the shared helper or come here and say why not.
@@ -197,12 +197,21 @@ class LockRefusalCoordinateTests(unittest.TestCase):
 # LOCK-2 routed it through `_locked_path`. Its absence is this row's regression
 # guard.
 _ADVISORY_LOCK_SITES = {
+    ("floati/bridge_rebank.py", "_apply_lock"):
+        "home-wide bridge writer custody shared by update/apply/replay and the private adoption tool; "
+        "covers selector, banks, configurations and receipts outside bus ledgers, with bridge_rebank_busy refusal",
     ("floati/jsonl.py", "_locked_path"):
         "THE shared ledger lock; the one LOCK-1's coordinate census fences",
     ("floati/bus_epoch.py", "_acquire_epoch_descriptor"):
         "epoch descriptor, held across a roll rather than one transaction",
     ("floati/bus_epoch.py", "epoch_guard"):
         "the epoch guard that _locked_path itself defers to for lock ORDER",
+    ("floati/car_fence.py", "_acquire"):
+        "descriptor-confined car fence; locks retained work directory and leaf "
+        "after epoch guard, before recipient and ledger locks",
+    ("floati/claude_hook_relay.py", "_gate_directory"):
+        "nonblocking per-session relay watermark lease held across the inbox scan and context flush; "
+        "concurrent hooks skip instead of waiting, outside the shared ledger lock class",
     ("floati/planes.py", "_cas_lock"):
         "outer CAS lock; its own cas_lock_timeout vocabulary and budget",
     ("floati/planes.py", "_existing_cas_read_lock"):
@@ -221,6 +230,18 @@ _ADVISORY_LOCK_SITES = {
         "wake control file, outside every ledger plane",
     ("floati/seat_declaration.py", "__init__"):
         "seat declaration lease taken in a constructor, released on close",
+    ("floati/waiter_invocation.py", "__init__"):
+        "nonqueueing root/node/session invocation lease retained through the native waiter "
+        "lifecycle and final stdout flush; concurrent duplicates exit instead of waiting",
+    ("floati/waiter_invocation.py", "retire_waiter_invocations"):
+        "the same invocation lease held across cooperative retirement and teardown, outside "
+        "the node guard so the holder can publish its exit; excludes successor invocations",
+    ("floati/worker_launch_anchors.py", "worker_runner_anchor"):
+        "private parent-provenance lease held before worker launch through finalized cleanup, "
+        "not a ledger append; an unfinalized anchor is retained after a crash",
+    ("floati/worker_launch_anchors.py", "live_worker_runner_pids"):
+        "nonblocking probe of that parent-provenance lease; unlocked or unproved anchors "
+        "suppress host-worker exemption rather than proving launched work has exited",
 }
 
 

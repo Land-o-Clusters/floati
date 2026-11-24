@@ -23,13 +23,16 @@ import unittest
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
+from types import MemberDescriptorType, MethodType
 from typing import Callable, Mapping
 from unittest import mock
 
 from floati.codex_wait import run_stop_waiter
 from floati.codex_wait_contract import CodexWaitConsentLedger, CodexWaitSessionLedger, resolve_participant
 from floati.cursor import SparseCursor
+from floati.cursor_presentations import CursorPresentationLedger
 from floati.doctor import Doctor
 from floati.doctor_probe import DoctorProbe
 from floati.errors import IntegrityFailure, ProtocolRefusal, SnapshotRefusal
@@ -54,6 +57,7 @@ from floati.wake_daemon_contract import (
 from floati.wake_hold import WakeAttemptLedger, WakeHoldController
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.waiter_timing import scripted_readiness
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -67,11 +71,38 @@ READER_FAMILIES = {
     "snapshot_inbox_status_board", "sparse_inbox_ack_cursor", "wake_prefix_attempt",
     "watch_board_probe", "codex_waiter", "wake_daemon", "external_path_follower",
 }
+# Each family maps to a collected scenario that validates its durable roll receipt.
+READER_SCENARIO_METHODS = {
+    "snapshot_inbox_status_board": "test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild",
+    "sparse_inbox_ack_cursor": "test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild",
+    "wake_prefix_attempt": "test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild",
+    "watch_board_probe": "test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail",
+    "codex_waiter": "test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail",
+    "wake_daemon": "test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail",
+    "external_path_follower": "test_external_tail_f_follower_observes_post_roll_mail",
+}
+
+
+@lru_cache(maxsize=1024)
+def _parsed_source(path: Path, source: str) -> ast.AST:
+    """Inventory consumers share read-only trees without hiding rewritten bytes."""
+    return ast.parse(source, filename=path.as_posix())
+
+
+def _parse_file(path: Path) -> ast.AST:
+    return _parsed_source(path, path.read_text(encoding="utf-8"))
+
+
 # Test-owned, occurrence-counted assignments.  Targets preserve receiver syntax so
 # the daemon's tide evaluator cannot masquerade as either wake-controller read.
 READER_ASSIGNMENTS = (
-    ("floati/events.py", "EventLog._inbox_snapshot_store", "SnapshotStore", 1, "snapshot_inbox_status_board"),
+    ("floati/multi_bus_chart.py", "MultiBusHarborChart._bus", "read_catalog", 1, "snapshot_inbox_status_board"),
+    ("floati/inbox_prefix.py", "_open", "InboxPrefix", 1, "snapshot_inbox_status_board"),
+    ("floati/seat_teardown_prefix.py", "_certified", "InboxPrefix", 1, "snapshot_inbox_status_board"),
+    ("floati/cut_prefix.py", "certified_source", "InboxPrefix", 1, "wake_prefix_attempt"),
+    ("floati/cursor_presentations.py", "CursorPresentationLedger._cold_event_prefix", "InboxPrefix", 1, "codex_waiter"),
     ("floati/projection.py", "FleetProjection._status_snapshot_store", "SnapshotStore", 1, "snapshot_inbox_status_board"),
+    ("floati/projection.py", "FleetProjection.status_artifact", "SnapshotStore", 1, "snapshot_inbox_status_board"),
     ("floati/tui.py", "model_from_root", "SnapshotStore", 1, "snapshot_inbox_status_board"),
     ("floati/cli.py", "_ack", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/conformance.py", "ReferenceAdapter.__init__", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
@@ -79,11 +110,9 @@ READER_ASSIGNMENTS = (
     ("floati/demo.py", "seed_demo", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog.drain", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog.unacked_ids", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
-    ("floati/events.py", "EventLog.unacked_ids", "SparseCursor(self.root).acked_ids", 1, "sparse_inbox_ack_cursor"),
+    ("floati/events.py", "EventLog.unacked_ids", "SparseCursor(self.root).state_for", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog._present_from_frames", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/events.py", "EventLog._present_from_frames", "SparseCursor(self.root).state_for", 1, "sparse_inbox_ack_cursor"),
-    ("floati/events.py", "EventLog._messages_from_snapshot", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
-    ("floati/events.py", "EventLog._messages_from_snapshot", "SparseCursor(self.root)._relative_path_for", 1, "sparse_inbox_ack_cursor"),
     ("floati/tui.py", "acknowledge_visible", "SparseCursor", 1, "sparse_inbox_ack_cursor"),
     ("floati/cursor.py", "SparseCursor.path_for", "self._relative_path_for", 1, "sparse_inbox_ack_cursor"),
     ("floati/cursor.py", "SparseCursor.delivery_path_for", "self._delivery_relative_path_for", 1, "sparse_inbox_ack_cursor"),
@@ -95,6 +124,9 @@ READER_ASSIGNMENTS = (
     ("floati/wake_hold.py", "WakeHoldLedger.__init__", "SparseCursor(root)._delivery_relative_path_for", 1, "wake_prefix_attempt"),
     ("floati/wake_hold.py", "WakeAttemptLedger.record", "SparseCursor", 1, "wake_prefix_attempt"),
     ("floati/wake_hold.py", "WakeAttemptLedger.record", "SparseCursor(self.root)._delivery_relative_path_for", 1, "wake_prefix_attempt"),
+    ("floati/wake_hold.py", "_RolledWakeProjection.__init__", "SparseCursor", 1, "wake_prefix_attempt"),
+    ("floati/wake_hold.py", "_RolledWakeProjection.__init__", "cursor._delivery_relative_path_for", 1, "wake_prefix_attempt"),
+    ("floati/wake_hold.py", "_RolledWakeProjection.__init__", "cursor._relative_path_for", 1, "wake_prefix_attempt"),
     ("floati/wake_hold.py", "WakeHoldController._read", "SparseCursor", 1, "wake_prefix_attempt"),
     ("floati/wake_hold.py", "WakeHoldController._read", "cursor._delivery_relative_path_for", 1, "wake_prefix_attempt"),
     ("floati/wake_hold.py", "WakeHoldController._read", "cursor._relative_path_for", 1, "wake_prefix_attempt"),
@@ -104,13 +136,90 @@ READER_ASSIGNMENTS = (
     ("floati/projection.py", "iter_deltas", "<definition>", 1, "watch_board_probe"),
     ("floati/doctor_probe.py", "DoctorProbe._drained", "<definition>", 1, "watch_board_probe"),
     ("floati/codex_wait.py", "run_stop_waiter", "<definition>", 1, "codex_waiter"),
-    ("floati/codex_wait.py", "run_stop_waiter", "controller.evaluate", 1, "codex_waiter"),
+    ("floati/codex_wait.py", "_run_stop_waiter", "controller.evaluate", 1, "codex_waiter"),
     ("floati/wake_daemon.py", "WakeDaemon.run_cycle", "<definition>", 1, "wake_daemon"),
     ("floati/wake_daemon.py", "WakeDaemon.serve", "<definition>", 1, "wake_daemon"),
     ("floati/wake_daemon.py", "WakeDaemon.run_cycle", "controller.evaluate", 2, "wake_daemon"),
 )
-WAIT_SECONDS = 3.0
+from tests.readiness import Readiness, wait_barrier, wait_event, wait_join
+
+WAIT_SECONDS = 60.0
 SUBPROCESS_SECONDS = 8.0
+# Captured at import, before any _MutationProbe patches io.open/builtins.open.
+_UNPATCHED_IO_OPEN = io.open
+_UNPATCHED_BUILTIN_OPEN = builtins.open
+_UNPATCHED_OS_OPEN = os.open
+_UNPATCHED_PATH_TYPE = type(Path())
+_UNPATCHED_PATH_NAMESPACES = tuple(
+    (kind, tuple(kind.__dict__.items())) for kind in _UNPATCHED_PATH_TYPE.__mro__
+)
+_UNPATCHED_PATH_STRING_SLOT = inspect.getattr_static(_UNPATCHED_PATH_TYPE, "_str", None)
+_UNPATCHED_PATH_OPENER = getattr(Path, "_opener", None)
+_UNPATCHED_PATH_ACCESSOR = getattr(Path(), "_accessor", None)
+_UNPATCHED_PATH_ACCESSOR_TYPE = type(_UNPATCHED_PATH_ACCESSOR)
+_UNPATCHED_PATH_ACCESSOR_SLOT = inspect.getattr_static(Path, "_accessor", None)
+_UNPATCHED_PATH_ACCESSOR_OPEN = inspect.getattr_static(_UNPATCHED_PATH_ACCESSOR, "open", None)
+# HARBOR-SPEED-R-A: the abrupt-death matrix used to exec one fresh interpreter
+# per case (~130 of them), and each spent ~0.5 s importing this module from
+# source and re-discovering the public roll seam before reaching the one roll
+# it exists to kill.  The fork server pays import + discovery ONCE, then forks
+# one real child process per case.  Each child still runs the public roll seam
+# in its own process and still dies by os._exit(91) at its boundary/ordinal, so
+# no finally block, atexit hook or buffered flush of the dying process runs;
+# the parent only learns the exit status, exactly as subprocess.run reported it.
+_ABRUPT_FORK_SERVER_PROGRAM = r"""
+import json, os, sys, threading, traceback
+from pathlib import Path
+from floati.root import FloatiRoot
+from tests.test_bus_epoch_roll import GovernedBusEpochRollTests, _MutationProbe
+
+contract_root = FloatiRoot.open_direct_home(Path(sys.argv[1]))
+c = GovernedBusEpochRollTests()
+c.base = contract_root.path.parent / ("." + contract_root.path.name + "-contract")
+c.root = contract_root
+c._roll_adapter = None; c._fault_boundaries = None; c._roll_target = None
+c._archive_verifier_fn = None; c._discovered_authority_subject = None
+fn = c._public_roll_contract()[1]
+if threading.active_count() != 1:
+    raise SystemExit("abrupt fork server must be single-threaded before fork")
+sys.stdout.write(json.dumps({"ready": True}) + "\n"); sys.stdout.flush()
+
+
+def case(request):
+    root = FloatiRoot.open_direct_home(Path(request["root"]))
+    if request["mode"] == "boundary":
+        boundary = request["arg"]
+
+        def fault(point):
+            if point == boundary:
+                os._exit(91)
+
+        fn(root, actor="actor-a", idempotency_key="abrupt-key", fault=fault)
+    elif request["mode"] == "ordinal":
+        probe = _MutationProbe(root, abort_after=int(request["arg"]))
+        with probe.installed():
+            fn(root, actor="actor-a", idempotency_key="ordinal-key", fault=probe.boundary)
+    else:
+        raise ValueError("unknown abrupt case mode " + repr(request["mode"]))
+
+
+for line in sys.stdin:
+    request = json.loads(line)
+    sys.stdout.flush(); sys.stderr.flush()
+    pid = os.fork()
+    if pid == 0:
+        try:
+            sink = os.open(request["stderr"], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.dup2(sink, 1); os.dup2(sink, 2); os.close(sink)
+            devnull = os.open(os.devnull, os.O_RDONLY); os.dup2(devnull, 0); os.close(devnull)
+            case(request)
+        except BaseException:
+            traceback.print_exc(); sys.stderr.flush(); os._exit(93)
+        os._exit(92)
+    _pid, status = os.waitpid(pid, 0)
+    sys.stdout.write(json.dumps({"returncode": os.waitstatus_to_exitcode(status)}) + "\n")
+    sys.stdout.flush()
+"""
 
 
 @dataclass(frozen=True)
@@ -141,12 +250,6 @@ class _ReaderAnchor:
     @property
     def stable_coordinate(self) -> str:
         return f"{self.path}::{self.owner}::{self.target}#{self.ordinal}"
-
-
-@dataclass(frozen=True)
-class _ReaderCase:
-    family: str
-    helper_name: str
 
 
 class _WriteProxy:
@@ -218,19 +321,48 @@ class _MutationProbe:
         self._original_exit = os._exit
         self._stack_prefix = stack_prefix
         self._guard_active = guard_active or (lambda: False)
+        self._home = os.path.abspath(self.root.tenant_home)
+
+    @staticmethod
+    def _tree(home: Path) -> list[tuple[tuple[str, ...], Path]]:
+        """The entries of ``sorted(home.rglob("*"))``, in that order.
+
+        rglob lists every entry of every non-symlink directory under ``home``;
+        this walk does the same in one scandir pass (rglob scans each directory
+        twice and re-parses every Path), keyed by relative parts, which orders
+        paths under one ``home`` exactly as PurePath comparison does.
+        """
+
+        found: list[tuple[tuple[str, ...], Path]] = []
+        pending: list[tuple[tuple[str, ...], Path]] = [((), home)]
+        while pending:
+            parts, directory = pending.pop()
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    child = (parts + (entry.name,), directory / entry.name)
+                    found.append(child)
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(child)
+        found.sort(key=lambda item: item[0])
+        return found
 
     @staticmethod
     def snapshot(root: FloatiRoot) -> tuple[tuple[object, ...], ...]:
         rows: list[tuple[object, ...]] = []
-        for path in sorted(root.tenant_home.rglob("*")):
+        for parts, path in _MutationProbe._tree(root.tenant_home):
             status = path.lstat()
-            relative = path.relative_to(root.tenant_home).as_posix()
-            if path.is_symlink():
+            relative = "/".join(parts)
+            # One lstat answers both questions: a non-symlink's stat IS its lstat.
+            if stat.S_ISLNK(status.st_mode):
                 kind, payload = "symlink", os.readlink(path)
-            elif path.is_dir():
+            elif stat.S_ISDIR(status.st_mode):
                 kind, payload = "directory", None
             elif stat.S_ISREG(status.st_mode):
-                kind, payload = "file", path.read_bytes()
+                # The unpatched opener: a snapshot read was never a recorded event
+                # (invoke() skips it at depth > 0), so routing it through the
+                # installed wrappers only cost two path classifications per file.
+                with _UNPATCHED_IO_OPEN(path, "rb") as handle:
+                    kind, payload = "file", handle.read()
             else:
                 kind, payload = "nonregular", stat.S_IFMT(status.st_mode)
             rows.append((relative, kind, status.st_mode, status.st_dev, status.st_ino, status.st_size,
@@ -246,9 +378,14 @@ class _MutationProbe:
             return None
         if not path.is_absolute():
             path = Path.cwd() / path
-        normalized = Path(os.path.abspath(path))
-        home = Path(os.path.abspath(self.root.tenant_home))
-        return normalized if normalized == home or home in normalized.parents else None
+        # Both sides are os.path.abspath-normalized, so "equal to home or home is
+        # one of its parents" is exactly string equality or a separator-bounded
+        # prefix; the Path.parents walk was the probe's single largest cost.
+        normalized = os.path.abspath(path)
+        home = self._home
+        if normalized == home or normalized.startswith(home.rstrip(os.sep) + os.sep):
+            return Path(normalized)
+        return None
 
     def associate_handle(self, handle: object, target: Path) -> int | None:
         try:
@@ -328,12 +465,124 @@ class _MutationProbe:
                 originals[optional] = getattr(os, optional)
         builtin_open, io_open = builtins.open, io.open
 
+        def ordinary_path(value: object) -> bool:
+            if type(value) is str:
+                rendered = value
+            elif type(value) is _UNPATCHED_PATH_TYPE:
+                # The native protocol reaches __str__ and, on a cache miss,
+                # the mutable flavour formatter. Admit only an existing exact
+                # string while every class namespace retains native identities.
+                # Identity checks never execute unknown descriptors or equality.
+                for kind, originals in _UNPATCHED_PATH_NAMESPACES:
+                    namespace = kind.__dict__
+                    if (len(namespace) != len(originals) or any(
+                            name not in namespace or namespace[name] is not original
+                            for name, original in originals)):
+                        return False
+                if type(_UNPATCHED_PATH_STRING_SLOT) is not MemberDescriptorType:
+                    return False
+                try:
+                    rendered = _UNPATCHED_PATH_STRING_SLOT.__get__(value, _UNPATCHED_PATH_TYPE)
+                except AttributeError:
+                    return False
+                if type(rendered) is not str:
+                    return False
+            else:
+                return False
+            return bool(rendered) and "\x00" not in rendered
+
+        def pure_path_opener(file: object, opener: object) -> bool:
+            # Python 3.9 Path.open passes this bound stdlib stub to io.open.
+            # Its receiver and shared accessor must be the exact captured
+            # native objects; inspect statically so a replaced descriptor
+            # cannot run while deciding whether the call is nonmutating.
+            if (_UNPATCHED_PATH_OPENER is None or type(file) is not _UNPATCHED_PATH_TYPE
+                    or type(opener) is not MethodType
+                    or opener.__func__ is not _UNPATCHED_PATH_OPENER
+                    or opener.__self__ is not file):
+                return False
+            slot = inspect.getattr_static(file, "_accessor", None)
+            if slot is not _UNPATCHED_PATH_ACCESSOR_SLOT or slot is None:
+                return False
+            # Reading the captured slot directly cannot execute a replaced
+            # Path property or __getattribute__ callback.
+            accessor = slot.__get__(file, _UNPATCHED_PATH_TYPE)
+            if (accessor is not _UNPATCHED_PATH_ACCESSOR
+                    or type(accessor) is not _UNPATCHED_PATH_ACCESSOR_TYPE):
+                return False
+            raw_open = inspect.getattr_static(accessor, "open", None)
+            if (raw_open is not _UNPATCHED_PATH_ACCESSOR_OPEN
+                    or type(raw_open) is not type(_UNPATCHED_PATH_ACCESSOR_OPEN)):
+                return False
+            native_open = raw_open.__func__ if type(raw_open) is staticmethod else raw_open
+            return native_open is _UNPATCHED_OS_OPEN
+
+        def pure_stream_arguments(
+            file: object, mode: object, args: tuple[object, ...], kwargs: dict[str, object],
+            *, allow_path_opener: bool = False,
+        ) -> bool:
+            if (not ordinary_path(file) or type(mode) is not str
+                    or mode not in {"r", "rb", "rt"}):
+                return False
+            # Path.open supplies this ordinary default argument tail to io.open.
+            # Accept no codec, opener or other caller callback, and do not hide
+            # native argument errors from duplicated or unrecognized options.
+            defaults = (("buffering", -1), ("encoding", None), ("errors", None),
+                        ("newline", None), ("closefd", True), ("opener", None))
+            if len(args) > len(defaults) or any(type(name) is not str
+                    or name not in {field for field, _default in defaults} for name in kwargs):
+                return False
+            for index, (name, default) in enumerate(defaults):
+                if index < len(args):
+                    if name in kwargs:
+                        return False
+                    value = args[index]
+                else:
+                    value = kwargs.get(name, default)
+                if name == "opener" and value is not None:
+                    if not allow_path_opener or not pure_path_opener(file, value):
+                        return False
+                elif type(value) is not type(default) or value != default:
+                    return False
+            return True
+
+        readonly_flags = os.O_RDONLY
+        for name in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK", "O_DIRECTORY"):
+            readonly_flags |= getattr(os, name, 0)
+
+        def pure_os_arguments(args: tuple[object, ...], kwargs: dict[str, object]) -> bool:
+            fields = ("path", "flags", "mode")
+            if len(args) > len(fields) or any(type(name) is not str
+                    or name not in {*fields, "dir_fd"} for name in kwargs):
+                return False
+            supplied = {}
+            for index, name in enumerate(fields):
+                if index < len(args):
+                    if name in kwargs:
+                        return False
+                    supplied[name] = args[index]
+                elif name in kwargs:
+                    supplied[name] = kwargs[name]
+            if "path" not in supplied or "flags" not in supplied:
+                return False
+            flags, mode = supplied["flags"], supplied.get("mode", 0o777)
+            directory = kwargs.get("dir_fd")
+            return (ordinary_path(supplied["path"]) and type(flags) is int and flags >= 0
+                and flags & ~readonly_flags == 0
+                and type(mode) is int and 0 <= mode <= 0o7777
+                and (directory is None or (type(directory) is int and directory >= 0
+                    and directory in self._fds)))
+
         def open_wrapper(
             file: object, mode: str = "r", *args: object, **kwargs: object
         ) -> object:
-            handle = self.invoke(
-                "builtins.open", file, builtin_open, file, mode, *args, **kwargs
-            )
+            if (builtin_open is _UNPATCHED_BUILTIN_OPEN
+                    and pure_stream_arguments(file, mode, args, kwargs)):
+                handle = builtin_open(file, mode, *args, **kwargs)
+            else:
+                handle = self.invoke(
+                    "builtins.open", file, builtin_open, file, mode, *args, **kwargs
+                )
             target = self._path(file)
             if target is not None and any(flag in mode for flag in "wax+"):
                 return _WriteProxy(handle, self, target)
@@ -342,7 +591,11 @@ class _MutationProbe:
         def io_open_wrapper(
             file: object, mode: str = "r", *args: object, **kwargs: object
         ) -> object:
-            handle = self.invoke("io.open", file, io_open, file, mode, *args, **kwargs)
+            if (io_open is _UNPATCHED_IO_OPEN
+                    and pure_stream_arguments(file, mode, args, kwargs, allow_path_opener=True)):
+                handle = io_open(file, mode, *args, **kwargs)
+            else:
+                handle = self.invoke("io.open", file, io_open, file, mode, *args, **kwargs)
             target = self._path(file)
             if target is not None and any(flag in mode for flag in "wax+"):
                 return _WriteProxy(handle, self, target)
@@ -367,7 +620,11 @@ class _MutationProbe:
                     if candidate_path is not None and not candidate_path.is_absolute()\
                             and isinstance(directory_fd, int) and directory_fd in self._fds:
                         candidate = self._fds[directory_fd] / candidate_path
-                result = self.invoke(f"os.{name}", candidate, original, *args, **kwargs)
+                if (name == "open" and original is _UNPATCHED_OS_OPEN
+                        and pure_os_arguments(args, kwargs)):
+                    result = original(*args, **kwargs)
+                else:
+                    result = self.invoke(f"os.{name}", candidate, original, *args, **kwargs)
                 if name == "open" and isinstance(result, int):
                     path = self._path(candidate)
                     if path is not None:
@@ -664,22 +921,18 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         )
 
     def _wait(self, event: threading.Event, contract: str) -> None:
-        self.assertTrue(event.wait(WAIT_SECONDS), contract)
+        wait_event(event, contract)
 
     def _barrier(self, barrier: threading.Barrier, contract: str) -> None:
-        try:
-            barrier.wait(timeout=WAIT_SECONDS)
-        except threading.BrokenBarrierError as exc:
-            self.fail(contract + f": {exc}")
+        wait_barrier(barrier, contract)
 
     def _join(self, thread: threading.Thread, contract: str) -> None:
-        thread.join(timeout=WAIT_SECONDS)
-        self.assertFalse(thread.is_alive(), contract)
+        wait_join(thread, contract)
 
     def _read_json_line(self, stream: object) -> dict[str, object]:
         descriptor = stream.fileno()  # type: ignore[attr-defined]
         buffered = self._pipe_buffers.get(descriptor, b"")
-        deadline = time.monotonic() + WAIT_SECONDS
+        readiness = Readiness("bounded pipe produced no JSON object")
         rejected: list[bytes] = []
         while True:
             while b"\n" in buffered:
@@ -695,18 +948,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     continue
                 self.assertIsInstance(value, dict)
                 return value
-            remaining = deadline - time.monotonic()
-            if remaining <= 0.0:
-                self.fail(
-                    "bounded pipe produced no JSON object before timeout; "
-                    f"discarded_lines={len(rejected)}"
-                )
-            ready, _, _ = select.select([descriptor], [], [], remaining)
-            if not ready:
-                self.fail(
-                    "bounded pipe produced no JSON object before timeout; "
-                    f"discarded_lines={len(rejected)}"
-                )
+            readiness.readable(descriptor)
             chunk = os.read(descriptor, 4096)
             self.assertTrue(chunk, "bounded pipe closed before one complete line")
             buffered += chunk
@@ -1390,7 +1632,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
     @classmethod
     def _assert_no_native_mutation_escape(cls) -> None:
         module = cls._epoch_module()
-        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        tree = _parse_file(Path(module.__file__))
         forbidden_modules = {"ctypes", "mmap", "subprocess", "multiprocessing"}
         forbidden_calls = {
             "syscall", "system", "popen", "posix_spawn", "fork", "execv", "execve",
@@ -1443,13 +1685,13 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         discovered: list[_ReaderAnchor] = []
         replay_snapshots: list[Path] = []
         interesting_leaves = {
-            "SnapshotStore", "SparseCursor", "_relative_path_for",
+            "SnapshotStore", "InboxPrefix", "read_catalog", "SparseCursor", "_relative_path_for",
             "_delivery_relative_path_for", "state_for", "acked_ids",
             "read_records_with_prefix_digests", "evaluate",
         }
         for path in sorted((REPOSITORY_ROOT / "floati").rglob("*.py")):
             relative = path.relative_to(REPOSITORY_ROOT).as_posix()
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = _parse_file(path)
             parents: dict[ast.AST, ast.AST] = {}
             for node in ast.walk(tree):
                 for child in ast.iter_child_nodes(node):
@@ -1472,8 +1714,10 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                 if leaf not in interesting_leaves:
                     continue
                 selected = False
-                if leaf == "SnapshotStore":
-                    if relative == "floati/replay.py":
+                if leaf == "read_catalog":
+                    selected = relative == "floati/multi_bus_chart.py"
+                elif leaf in {"SnapshotStore", "InboxPrefix"}:
+                    if leaf == "SnapshotStore" and relative == "floati/replay.py":
                         replay_snapshots.append(path)
                         continue
                     selected = True
@@ -1535,84 +1779,16 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             raise AssertionError("all SnapshotStore constructors must be classified explicitly")
         return tuple(discovered)
 
-    def _run_live_reader_fixture(
-        self, label: str, test: Callable[[], None]
-    ) -> dict[str, object]:
-        """Run a real migration scenario on an isolated root and return evidence."""
-        original = (
-            self.base, self.root, self._discovered_authority_subject,
-            self._archive_verifier_fn, self._archive_verifier_identity,
-            self._roll_adapter, self._fault_boundaries,
-            self._roll_target,
+    def _assert_reader_roll(self, root: FloatiRoot, receipt: object, key: str) -> None:
+        """Keep the real-roll premise in each independently discovered scenario."""
+        self.assertIsInstance(receipt, dict)
+        assert isinstance(receipt, dict)
+        self.assertEqual(
+            ("bus_epoch_roll_receipt", root.tenant_id, "actor-a", key),
+            tuple(receipt.get(field) for field in
+                  ("kind", "tenant_id", "actor", "idempotency_key")),
         )
-        fixture_base = original[0] / ("reader-dispatch-" + label)  # type: ignore[operator]
-        fixture_base.mkdir()
-        self.base = fixture_base
-        self.root = self._new_root(fixture_base / "epoch-tenant")
-        self._archive_verifier_fn = None
-        self._archive_verifier_identity = None
-        self._roll_adapter = None
-        self._fault_boundaries = None
-        self._roll_target = None
-        receipts: list[dict[str, object]] = []
-        real_roll = self._roll_success
-
-        def recording_roll(*args: object, **kwargs: object) -> dict[str, object]:
-            receipt = real_roll(*args, **kwargs)  # type: ignore[arg-type]
-            receipts.append(receipt)
-            return receipt
-
-        try:
-            with mock.patch.object(self, "_roll_success", recording_roll):
-                test()
-            self.assertTrue(receipts, f"{label} fixture must perform a live roll")
-            return {
-                "root": str(self.root.path),
-                "receipts": tuple(receipts),
-                "live_ids": tuple(str(row["id"]) for row in EventLog(self.root).records()),
-            }
-        finally:
-            (
-                self.base, self.root, self._discovered_authority_subject,
-                self._archive_verifier_fn, self._archive_verifier_identity,
-                self._roll_adapter, self._fault_boundaries,
-                self._roll_target,
-            ) = original
-
-    def _fixture_snapshot_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "snapshot", self.test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild
-        )
-
-    def _fixture_sparse_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "sparse", self.test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild
-        )
-
-    def _fixture_wake_prefix_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "wake", self.test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild
-        )
-
-    def _fixture_watch_probe_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "watch", self.test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail
-        )
-
-    def _fixture_waiter_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "waiter", self.test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail
-        )
-
-    def _fixture_daemon_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "daemon", self.test_watch_probe_waiter_and_daemon_loops_observe_post_roll_mail
-        )
-
-    def _fixture_tail_family(self) -> dict[str, object]:
-        return self._run_live_reader_fixture(
-            "tail", self.test_external_tail_f_follower_reopens_recreated_event_path
-        )
+        self.assertEqual(encode_frame(receipt), root.resolve_relative("events.jsonl").read_bytes())
 
     def test_same_day_rolls_allocate_content_stating_archives_and_closed_receipts(self) -> None:
         controls = self._seed_control_state()
@@ -2132,7 +2308,30 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         from floati.ledger_repair import LedgerRepair
         from floati.wake_hold import wake_coordination_guard
 
-        tree = ast.parse(Path(jsonl.__file__).read_text(encoding="utf-8"))
+        def timestamp_normalization(call: ast.Call) -> bool:
+            # Native record timestamps are strings. This exact two-argument
+            # string operation cannot be pathlib.Path.replace(target), and
+            # does not exempt any os.replace(source, target) or file receiver.
+            return (
+                isinstance(call.func, ast.Attribute) and call.func.attr == "replace"
+                and isinstance(call.func.value, ast.Subscript)
+                and isinstance(call.func.value.slice, ast.Constant)
+                and call.func.value.slice.value == "timestamp"
+                and not call.keywords and len(call.args) == 2
+                and all(isinstance(argument, ast.Constant) for argument in call.args)
+                and [argument.value for argument in call.args] == ["Z", "+00:00"]
+            )
+
+        for expression, expected in (
+            ('rows[0]["timestamp"].replace("Z", "+00:00")', True),
+            ('path.replace("events.jsonl")', False),
+            ('os.replace("events.jsonl", "replacement.jsonl")', False),
+            ('rows[0]["timestamp"].replace("events.jsonl")', False),
+            ('rows[0]["path"].replace("Z", "+00:00")', False),
+        ):
+            self.assertEqual(expected, timestamp_normalization(ast.parse(expression, mode="eval").body))
+
+        tree = _parse_file(Path(jsonl.__file__))
         reaches_append = {
             node.name for node in tree.body
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
@@ -2159,7 +2358,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         for path in sorted((REPOSITORY_ROOT / "floati").rglob("*.py")):
             if path == Path(jsonl.__file__):
                 continue
-            module_tree = ast.parse(path.read_text(encoding="utf-8"))
+            module_tree = _parse_file(path)
             module_constants = {
                 node.targets[0].id: node.value.value
                 for node in module_tree.body
@@ -2246,6 +2445,8 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     )
                     if called not in mutation_calls:
                         continue
+                    if timestamp_normalization(call):
+                        continue
                     operands = list(call.args) + [keyword.value for keyword in call.keywords]
                     if isinstance(call.func, ast.Attribute):
                         operands.append(call.func.value)
@@ -2297,6 +2498,45 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     idempotency_key="wake-pending")
                 return lambda: WakeHoldController(root).evaluate(
                     "recipient", idempotency_key="barrier-hold")
+            if name == "_transact_consumption_records":
+                from floati.message_consumption import MessageConsumption
+                message = EventLog(root).send(
+                    "actor-a", "recipient", "floati", "e" * 40,
+                    "docs/evidence/consumption-pending.md", "consumption pending",
+                    idempotency_key="consumption-pending")
+                EventLog(root).present("recipient")
+                SparseCursor(root).ack(
+                    "recipient", [message["id"]], acting_session_id="barrier-consumption-seen")
+                return lambda: MessageConsumption(root).consume(
+                    "recipient", message["id"], "barrier-consumption-acted")
+            if name == "_transact_worker_receipt":
+                from floati.ids import uuid7_hex
+                from floati.work import WorkLog
+                from floati.workers import WorkerReceipts
+
+                now = datetime.now(timezone.utc)
+                work = WorkLog(root)
+                item = work.add("epoch barrier worker", "actor-a", [], now=now)
+                AuthorityGrantStore(root).claim("work-claims", "actor-a", 60, 60, now)
+                work.claim(item["id"], "actor-a", "work-claims", 1, now=now)
+                return lambda: WorkerReceipts(root).append(
+                    "worker-" + uuid7_hex(), item["id"], "actor-a", "fixture",
+                    "claim", None, [], now=now,
+                )
+            if name == "_transact_adhoc_records":
+                from tests.fixtures.adhoc_stage1 import AdhocFixture
+
+                class NativeAdhocFixture(AdhocFixture, unittest.TestCase):
+                    pass
+
+                fixture = NativeAdhocFixture()
+                self.addCleanup(fixture.doCleanups)
+                fixture.setUp(root=root)
+                profile = fixture.profile()
+                dispatch = fixture.dispatch(profile)
+                notice = fixture.envelope(dispatch)
+                journal = fixture.journal()
+                return lambda: fixture.admit(journal, profile, notice, dispatch)
             if name == "ledger_repair.LedgerRepair.quarantine":
                 bad_id = "registry-018f7e9b3c127abc8def0123456789ac"
                 bad = encode_frame({
@@ -2474,6 +2714,8 @@ class GovernedBusEpochRollTests(unittest.TestCase):
     ) -> None:
         """Catches any complete public operation escaping the epoch guard."""
 
+        from floati import epoch_rotation
+
         module, guard = self._epoch_guard_contract()
         _boundaries, roll = self._fault_contract()
         selected_paths = {
@@ -2532,10 +2774,33 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     roller_attempted = threading.Event()
                     release_writer = threading.Event()
                     release_roller = threading.Event()
+                    hint_complete = threading.Event()
+                    release_hint = threading.Event()
                     self.addCleanup(release_writer.set)
                     self.addCleanup(release_roller.set)
+                    self.addCleanup(release_hint.set)
                     results: dict[str, object] = {}
                     errors: list[BaseException] = []
+                    observation = threading.local()
+                    original_observation_scope = epoch_rotation._observation_scope
+
+                    @contextmanager
+                    def observed_hint_scope(selected_root: FloatiRoot):
+                        # The policy hint has its own read-only locks. The
+                        # placement contract below concerns the actual native
+                        # send/present/ack guard, not that preliminary read.
+                        depth = getattr(observation, "depth", 0)
+                        observation.depth = depth + 1
+                        try:
+                            with original_observation_scope(selected_root):
+                                yield
+                        finally:
+                            observation.depth = depth
+                        if threading.current_thread().name == "writer" and placement == "new":
+                            # Both real hint locks are released. Start EX now,
+                            # then let this writer reach the actual act guard.
+                            hint_complete.set()
+                            self._wait(release_hint, "completed hint release timed out")
 
                     def note(thread: str, mode: str, phase: str) -> None:
                         with trace_lock:
@@ -2547,7 +2812,8 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     ):
                         thread = threading.current_thread().name
                         mode = "exclusive" if exclusive else "shared"
-                        if thread not in {"writer", "roller"}:
+                        if (thread not in {"writer", "roller"}
+                                or getattr(observation, "depth", 0)):
                             with guard(selected_root, exclusive=exclusive):
                                 yield
                             return
@@ -2606,18 +2872,19 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                         target=high_level_operation, name="writer", daemon=True
                     )
                     roller = threading.Thread(target=public_roll, name="roller", daemon=True)
-                    deadline = time.monotonic() + WAIT_SECONDS
+                    readiness = Readiness("exclusive roll/writer synchronization")
                     started: list[threading.Thread] = []
 
                     def wait_until(event: threading.Event, contract: str) -> None:
-                        remaining = max(0.0, deadline - time.monotonic())
-                        self.assertTrue(event.wait(remaining), contract)
+                        wait_event(event, contract, timeout=readiness.remaining())
 
                     def finish(thread: threading.Thread, contract: str) -> None:
-                        thread.join(max(0.0, deadline - time.monotonic()))
-                        self.assertFalse(thread.is_alive(), contract)
+                        wait_join(thread, contract, timeout=readiness.remaining())
 
                     with ExitStack() as stack:
+                        stack.enter_context(mock.patch.object(
+                            epoch_rotation, "_observation_scope", observed_hint_scope
+                        ))
                         self._patch_guard_references(
                             stack, module, guard, observed_guard
                         )
@@ -2629,9 +2896,11 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                                 wait_until(roller_attempted, "exclusive guard attempt was not observed")
                                 release_writer.set()
                             else:
+                                writer.start(); started.append(writer)
+                                wait_until(hint_complete, f"{plane} hint did not release its locks")
                                 roller.start(); started.append(roller)
                                 wait_until(roller_acquired, "exclusive roll guard was not acquired")
-                                writer.start(); started.append(writer)
+                                release_hint.set()
                                 wait_until(writer_attempted, f"{plane} shared attempt was not observed")
                                 release_roller.set()
                             finish(roller, "public roll did not finish")
@@ -2674,9 +2943,10 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                         finally:
                             release_writer.set()
                             release_roller.set()
+                            release_hint.set()
                             for started_thread in started:
                                 if started_thread.is_alive():
-                                    started_thread.join(max(0.0, deadline - time.monotonic()))
+                                    wait_join(started_thread, "released roll/writer cleanup")
                                 self.assertFalse(
                                     started_thread.is_alive(),
                                     f"{started_thread.name} escaped bounded cleanup",
@@ -2705,16 +2975,53 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     archived = self._archive_files(Path(str(receipt["archive_path"])))
                     selected_path = selected_paths[plane]
                     live_path = root.resolve_relative(selected_path)
+                    operation_frames = [frame]
+                    if plane == "events":
+                        physical_events = (
+                            archived[selected_path] if placement == "old"
+                            else live_path.read_bytes()
+                        )
+                        companions = [
+                            row for row in decode_frames(physical_events)
+                            if row.get("kind") == "send_readiness_observation"
+                            and row.get("envelope_id") == record["id"]
+                        ]
+                        self.assertEqual(1, len(companions))
+                        observation = companions[0]
+                        operation = results["operation"]
+                        self.assertIsInstance(operation, Mapping)
+                        assert isinstance(operation, Mapping)
+                        self.assertEqual(
+                            {
+                                "schema_version": 1,
+                                "id": observation["id"],
+                                "tenant_id": record["tenant_id"],
+                                "timestamp": record["timestamp"],
+                                "kind": "send_readiness_observation",
+                                "envelope_id": record["id"],
+                                "sender": record["sender"],
+                                "recipient": record["recipient"],
+                                "observed_at": record["timestamp"],
+                                "readiness": operation["recipient_readiness"],
+                                "idempotency_key": record["idempotency_key"],
+                            },
+                            observation,
+                        )
+                        operation_frames.append(encode_frame(observation))
+                    batch = b"".join(operation_frames)
                     if placement == "old":
-                        self.assertEqual(frame, archived[selected_path])
+                        self.assertEqual(batch, archived[selected_path])
                         if plane == "events":
-                            self.assertNotIn(str(record["id"]), live_path.read_text())
+                            self.assertEqual(encode_frame(receipt), live_path.read_bytes())
                         else:
                             self.assertFalse(live_path.exists())
                     else:
-                        self.assertNotIn(frame, archived.values())
+                        for exact_frame in operation_frames:
+                            self.assertFalse(any(
+                                exact_frame in payload for payload in archived.values()
+                            ))
                         expected_live = (
-                            encode_frame(receipt) + frame if plane == "events" else frame
+                            encode_frame(receipt) + batch if plane == "events" else batch
                         )
                         self.assertEqual(expected_live, live_path.read_bytes())
                         if plane == "acks":
@@ -2743,11 +3050,12 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     physical = list(archived.values())
                     if live_path.exists():
                         physical.append(live_path.read_bytes())
-                    self.assertEqual(
-                        1,
-                        sum(payload.count(frame) for payload in physical),
-                        "one high-level operation frame must land in exactly one epoch",
-                    )
+                    for exact_frame in operation_frames:
+                        self.assertEqual(
+                            1,
+                            sum(payload.count(exact_frame) for payload in physical),
+                            "each high-level operation frame must land in exactly one epoch",
+                        )
 
     @staticmethod
     def _marker_from_snapshot(
@@ -3315,8 +3623,101 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                 )
         self.assertGreater(verifier_doctor_calls, 0, "Doctor must consume the roll verifier seam")
 
-    def test_02_abrupt_boundary_and_every_real_mutation_ordinal_converge(self) -> None:
-        boundaries, roll = self._fault_contract()
+    def _abrupt_fork_server(self) -> Callable[[str, FloatiRoot, str], tuple[int, str]]:
+        """Return run(mode, root, arg) -> (returncode, stderr) backed by a fork server.
+
+        The reply follows actual waitpid collection of the native fault child.
+        Mutation probing snapshots the real tree before and after each native
+        operation; elapsed host time is not a recovery property. Wait for the
+        reply or EOF instead of racing that work against a startup/work budget.
+        Cleanup still owns the server and its child session, including when the
+        outer test command is interrupted for a genuinely stuck child.
+        """
+
+        logs = self.base / "abrupt-fork-server-logs"
+        logs.mkdir()
+        live: list[subprocess.Popen[str]] = []
+        counter = {"servers": 0, "cases": 0}
+
+        def stop(server: subprocess.Popen[str]) -> None:
+            if server.poll() is None:
+                try:
+                    os.killpg(server.pid, 9)
+                except ProcessLookupError:
+                    pass
+            server.wait(timeout=WAIT_SECONDS)
+            for stream in (server.stdin, server.stdout):
+                if stream is not None:
+                    stream.close()
+            if server in live:
+                live.remove(server)
+
+        def stop_all() -> None:
+            for server in tuple(live):
+                stop(server)
+
+        self.addCleanup(stop_all)
+
+        def reply(server: subprocess.Popen[str], stderr_path: Path, contract: str) -> dict[str, object]:
+            assert server.stdout is not None
+            line = server.stdout.readline()
+            if not line:
+                stop(server)
+                self.fail(
+                    f"{contract}: fork server closed before its native reply: "
+                    + stderr_path.read_text(encoding="utf-8")
+                )
+            value = json.loads(line)
+            self.assertIsInstance(value, dict, contract)
+            return value
+
+        def server() -> subprocess.Popen[str]:
+            if live and live[0].poll() is None:
+                return live[0]
+            stop_all()
+            counter["servers"] += 1
+            index = counter["servers"]
+            contract_root = self._new_root(self.base / f"abrupt-fork-server-{index}")
+            stderr_path = logs / f"server-{index}.stderr"
+            with stderr_path.open("w", encoding="utf-8") as server_stderr:
+                started = subprocess.Popen(
+                    [sys.executable, "-c", _ABRUPT_FORK_SERVER_PROGRAM, str(contract_root.path)],
+                    cwd=REPOSITORY_ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=server_stderr, text=True, start_new_session=True,
+                )
+            live.append(started)
+            self.assertEqual(
+                {"ready": True},
+                reply(started, stderr_path, "fork server must discover the public roll seam"),
+            )
+            return started
+
+        def run(mode: str, root: FloatiRoot, arg: str) -> tuple[int, str]:
+            counter["cases"] += 1
+            stderr_path = logs / f"case-{counter['cases']}.stderr"
+            stderr_path.touch()
+            current = server()
+            assert current.stdin is not None
+            current.stdin.write(json.dumps({
+                "mode": mode, "root": str(root.path), "arg": arg, "stderr": str(stderr_path),
+            }) + "\n")
+            current.stdin.flush()
+            returncode = reply(current, stderr_path, f"{mode} {arg}")["returncode"]
+            self.assertIsInstance(returncode, int)
+            assert isinstance(returncode, int)
+            return returncode, stderr_path.read_text(encoding="utf-8")
+
+        return run
+
+    # The abrupt-death matrix (formerly one method, test_02) is run by the
+    # module-level _AbruptConvergenceUnit classes below: one boundary unit and
+    # ABRUPT_ORDINAL_SHARDS ordinal units, each its own class so a class-level
+    # parallel scheduler can place them independently.  The case bodies are
+    # unchanged; AbruptOrdinalCoveragePinTests reds a dropped or duplicated
+    # ordinal or a missing/duplicated unit.
+
+    def _abrupt_mutation_count(self) -> int:
+        _boundaries, roll = self._fault_contract()
         count_root = self._new_root(self.base / "abrupt-count")
         self._grant_roll_authority(count_root, "actor-a")
         self._seed_control_state(count_root)
@@ -3327,117 +3728,96 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                  fault=count_probe.boundary)
         mutation_count = sum(isinstance(item, _MutationEvent) for item in count_probe.events)
         self.assertGreater(mutation_count, 0)
+        return mutation_count
 
-        boundary_program = (
-            "import os,sys\nfrom pathlib import Path\n"
-            "from floati.root import FloatiRoot\n"
-            "from tests.test_bus_epoch_roll import GovernedBusEpochRollTests\n"
-            "r=FloatiRoot.open_direct_home(Path(sys.argv[1])); b=sys.argv[2]\n"
-            "c=GovernedBusEpochRollTests(); c.base=r.path.parent/('.'+r.path.name+'-contract'); c.root=r\n"
-            "c._roll_adapter=None; c._fault_boundaries=None; c._roll_target=None; c._archive_verifier_fn=None; c._discovered_authority_subject=None\n"
-            "fn=c._public_roll_contract()[1]\n"
-            "def f(p):\n    if p==b: os._exit(91)\n"
-            "fn(r,actor='actor-a',idempotency_key='abrupt-key',fault=f)\n"
-            "raise SystemExit(92)\n"
+    @staticmethod
+    def _abrupt_shard_ordinals(mutation_count: int, shard: int, shards: int) -> tuple[int, ...]:
+        return tuple(
+            ordinal for ordinal in range(1, mutation_count + 1)
+            if (ordinal - 1) % shards == shard
         )
-        for index, boundary in enumerate(boundaries):
-            with self.subTest(boundary=boundary):
-                root = self._new_root(self.base / f"abrupt-{index}")
-                self._grant_roll_authority(root, "actor-a")
-                controls = self._seed_control_state(root)
-                selected = self._seed_opaque_triple(root)
-                controls_before = {path: self._identity(path) for path in controls}
-                baseline = self._snapshot(root)
-                child = subprocess.run([sys.executable, "-c", boundary_program, str(root.path),
-                                        boundary],
-                                       cwd=REPOSITORY_ROOT, text=True,
-                                       capture_output=True, check=False,
-                                       timeout=SUBPROCESS_SECONDS)
-                self.assertEqual(91, child.returncode, child.stderr)
-                classification, request_id, _marker, terminal_receipt = (
-                    self._durable_roll_classification(
-                        root, actor="actor-a", key="abrupt-key"
-                    )
-                )
-                committed = classification in {"committed", "complete"}
-                before_doctor = self._snapshot(root)
-                doctor, doctor_rc = self._doctor_recover(root)
-                self.assertIn(doctor_rc, {0, 20, 21, 22, 33, 35})
-                receipt = terminal_receipt
-                if classification == "complete":
-                    self._assert_doctor_complete_noop(doctor, before_doctor, root)
-                else:
-                    if committed:
-                        receipt = decode_frames(
-                            root.resolve_relative("events.jsonl").read_bytes()
-                        )[0]
-                    self._assert_doctor_recovery(
-                        doctor,
-                        root=root,
-                        actor="unknown" if classification == "partial" else "actor-a",
-                        key="unknown" if classification == "partial" else "abrupt-key",
-                        committed=committed,
-                        request_id=str(request_id),
-                        receipt=receipt,
-                    )
-                self._assert_recovered(
-                    root, selected, baseline, controls_before, committed=committed,
-                    actor="actor-a", key="abrupt-key",
-                )
 
-        ordinal_program = (
-            "import sys\nfrom pathlib import Path\n"
-            "from floati.root import FloatiRoot\n"
-            "from tests.test_bus_epoch_roll import GovernedBusEpochRollTests,_MutationProbe\n"
-            "r=FloatiRoot.open_direct_home(Path(sys.argv[1])); c=GovernedBusEpochRollTests()\n"
-            "c.base=r.path.parent/('.'+r.path.name+'-contract'); c.root=r\n"
-            "c._roll_adapter=None; c._fault_boundaries=None; c._roll_target=None; c._archive_verifier_fn=None; c._discovered_authority_subject=None\n"
-            "fn=c._public_roll_contract()[1]\n"
-            "p=_MutationProbe(r,abort_after=int(sys.argv[2]))\n"
-            "with p.installed(): fn(r,actor='actor-a',idempotency_key='ordinal-key',fault=p.boundary)\n"
-            "raise SystemExit(92)\n"
+    def _abrupt_boundary_case(
+        self, abrupt_child: Callable[[str, FloatiRoot, str], tuple[int, str]],
+        index: int, boundary: str,
+    ) -> None:
+        root = self._new_root(self.base / f"abrupt-{index}")
+        self._grant_roll_authority(root, "actor-a")
+        controls = self._seed_control_state(root)
+        selected = self._seed_opaque_triple(root)
+        controls_before = {path: self._identity(path) for path in controls}
+        baseline = self._snapshot(root)
+        child_returncode, child_stderr = abrupt_child("boundary", root, boundary)
+        self.assertEqual(91, child_returncode, child_stderr)
+        classification, request_id, _marker, terminal_receipt = (
+            self._durable_roll_classification(
+                root, actor="actor-a", key="abrupt-key"
+            )
         )
-        for ordinal in range(1, mutation_count + 1):
-            with self.subTest(mutation_ordinal=ordinal):
-                root = self._new_root(self.base / f"ordinal-{ordinal}")
-                self._grant_roll_authority(root, "actor-a")
-                controls = self._seed_control_state(root)
-                selected = self._seed_opaque_triple(root)
-                controls_before = {path: self._identity(path) for path in controls}
-                baseline = self._snapshot(root)
-                child = subprocess.run(
-                    [sys.executable, "-c", ordinal_program, str(root.path),
-                     str(ordinal)],
-                    cwd=REPOSITORY_ROOT, text=True, capture_output=True, check=False,
-                    timeout=SUBPROCESS_SECONDS,
-                )
-                self.assertEqual(91, child.returncode, child.stderr)
-                classification, request_id, _marker, terminal_receipt = (
-                    self._durable_roll_classification(
-                        root, actor="actor-a", key="ordinal-key"
-                    )
-                )
-                committed = classification in {"committed", "complete"}
-                before_doctor = self._snapshot(root)
-                doctor, _doctor_rc = self._doctor_recover(root)
-                receipt = terminal_receipt
-                if classification == "complete":
-                    self._assert_doctor_complete_noop(doctor, before_doctor, root)
-                else:
-                    if committed:
-                        receipt = decode_frames(
-                            root.resolve_relative("events.jsonl").read_bytes()
-                        )[0]
-                    self._assert_doctor_recovery(
-                        doctor, root=root,
-                        actor="unknown" if classification == "partial" else "actor-a",
-                        key="unknown" if classification == "partial" else "ordinal-key",
-                        committed=committed, request_id=str(request_id), receipt=receipt,
-                    )
-                self._assert_recovered(
-                    root, selected, baseline, controls_before, committed=committed,
-                    actor="actor-a", key="ordinal-key",
-                )
+        committed = classification in {"committed", "complete"}
+        before_doctor = self._snapshot(root)
+        doctor, doctor_rc = self._doctor_recover(root)
+        self.assertIn(doctor_rc, {0, 20, 21, 22, 33, 35})
+        receipt = terminal_receipt
+        if classification == "complete":
+            self._assert_doctor_complete_noop(doctor, before_doctor, root)
+        else:
+            if committed:
+                receipt = decode_frames(
+                    root.resolve_relative("events.jsonl").read_bytes()
+                )[0]
+            self._assert_doctor_recovery(
+                doctor,
+                root=root,
+                actor="unknown" if classification == "partial" else "actor-a",
+                key="unknown" if classification == "partial" else "abrupt-key",
+                committed=committed,
+                request_id=str(request_id),
+                receipt=receipt,
+            )
+        self._assert_recovered(
+            root, selected, baseline, controls_before, committed=committed,
+            actor="actor-a", key="abrupt-key",
+        )
+
+    def _abrupt_ordinal_case(
+        self, abrupt_child: Callable[[str, FloatiRoot, str], tuple[int, str]],
+        ordinal: int,
+    ) -> None:
+        root = self._new_root(self.base / f"ordinal-{ordinal}")
+        self._grant_roll_authority(root, "actor-a")
+        controls = self._seed_control_state(root)
+        selected = self._seed_opaque_triple(root)
+        controls_before = {path: self._identity(path) for path in controls}
+        baseline = self._snapshot(root)
+        child_returncode, child_stderr = abrupt_child("ordinal", root, str(ordinal))
+        self.assertEqual(91, child_returncode, child_stderr)
+        classification, request_id, _marker, terminal_receipt = (
+            self._durable_roll_classification(
+                root, actor="actor-a", key="ordinal-key"
+            )
+        )
+        committed = classification in {"committed", "complete"}
+        before_doctor = self._snapshot(root)
+        doctor, _doctor_rc = self._doctor_recover(root)
+        receipt = terminal_receipt
+        if classification == "complete":
+            self._assert_doctor_complete_noop(doctor, before_doctor, root)
+        else:
+            if committed:
+                receipt = decode_frames(
+                    root.resolve_relative("events.jsonl").read_bytes()
+                )[0]
+            self._assert_doctor_recovery(
+                doctor, root=root,
+                actor="unknown" if classification == "partial" else "actor-a",
+                key="unknown" if classification == "partial" else "ordinal-key",
+                committed=committed, request_id=str(request_id), receipt=receipt,
+            )
+        self._assert_recovered(
+            root, selected, baseline, controls_before, committed=committed,
+            actor="actor-a", key="ordinal-key",
+        )
 
     def test_doctor_never_initiates_roll_or_mutates_complete_state(self) -> None:
         untouched = self._snapshot(self.root)
@@ -3461,7 +3841,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             ))
         self.assertEqual(complete, self._snapshot(self.root))
 
-    def test_test_owned_reader_inventory_dispatches_all_seven_migration_fixtures(self) -> None:
+    def test_reader_inventory_assigns_every_anchor_to_a_collected_scenario(self) -> None:
         inventory = self._reader_anchor_inventory()
         actual_counts = Counter((row.path, row.owner, row.target) for row in inventory)
         expected_counts = Counter({
@@ -3476,31 +3856,17 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         assigned = [assignment[(row.path, row.owner, row.target)] for row in inventory]
         self.assertEqual(len(inventory), len({row.stable_coordinate for row in inventory}))
         self.assertEqual(READER_FAMILIES - {"external_path_follower"}, set(assigned))
-        cases = (
-            _ReaderCase("snapshot_inbox_status_board", "_fixture_snapshot_family"),
-            _ReaderCase("sparse_inbox_ack_cursor", "_fixture_sparse_family"),
-            _ReaderCase("wake_prefix_attempt", "_fixture_wake_prefix_family"),
-            _ReaderCase("watch_board_probe", "_fixture_watch_probe_family"),
-            _ReaderCase("codex_waiter", "_fixture_waiter_family"),
-            _ReaderCase("wake_daemon", "_fixture_daemon_family"),
-            _ReaderCase("external_path_follower", "_fixture_tail_family"),
-        )
-        self.assertEqual(READER_FAMILIES, {case.family for case in cases})
-        self.assertEqual(len(cases), len({case.helper_name for case in cases}))
-        live_counts: list[int] = []
-        evidence: list[dict[str, object]] = []
-        with mock.patch.object(self, "_roll_success", wraps=self._roll_success) as roll_spy:
-            for case in cases:
-                before = roll_spy.call_count
-                helper = getattr(self, case.helper_name)
-                result = helper()
-                self.assertIsInstance(result, dict)
-                self.assertTrue(result["receipts"])
-                live_counts.append(len(result["receipts"]))
-                evidence.append(result)
-                self.assertEqual(len(result["receipts"]), roll_spy.call_count - before)
-        self.assertTrue(all(count >= 1 for count in live_counts))
-        self.assertEqual(7, len(evidence))
+        scenarios = READER_SCENARIO_METHODS
+        self.assertEqual(READER_FAMILIES, set(scenarios))
+        self.assertEqual(3, len(set(scenarios.values())))
+        loader = unittest.TestLoader()
+        collected = loader.loadTestsFromTestCase(type(self))
+        self.assertFalse(loader.errors)
+        collected_ids = {case.id() for case in collected}
+        prefix = type(self).__module__ + "." + type(self).__qualname__ + "."
+        expected_ids = {prefix + method for method in scenarios.values()}
+        self.assertEqual(expected_ids, expected_ids & collected_ids,
+                         "every assigned reader scenario must remain discovered")
 
     def test_snapshot_cursor_and_wake_readers_detect_archive_and_rebuild(self) -> None:
         self.assertEqual(7, len(READER_FAMILIES), "the governed anchored-reader family count")
@@ -3515,15 +3881,55 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         projection = FleetProjection(self.root)
         projection.status_artifact(datetime.now(timezone.utc))
         model_from_root(self.root)
-        stores = (events._inbox_snapshot_store("recipient", 100),
-                  projection._status_snapshot_store(),
+        from floati.multi_bus_chart import MultiBusHarborChart
+        from floati.registry_prefix import RegistryPrefix
+        declarations = self.base / "reader-chart.json"
+        declarations.write_text(json.dumps({"schema_version": 0, "roots": [{
+            "bus_id": "fixture", "root": str(self.root.path),
+            "architect_node": "actor-a", "downstream": []}]}))
+        chart = MultiBusHarborChart(declarations)
+        chart_before = chart.artifact()["buses"][0]
+        registry_prefix = RegistryPrefix(self.root)
+        registry_prefix.load()
+        registry_identity = registry_prefix.payload["identity"]
+        registry_fold = dict(registry_prefix.payload["folds"])
+        from floati.inbox_prefix import InboxPrefix
+        from floati.send_prefix import CacheMiss
+        inbox_prefix = InboxPrefix(self.root)
+        inbox_prefix.load()
+        inbox_generation = inbox_prefix.payload["generation"]
+        inbox_identity = inbox_prefix.payload["identity"]
+        from floati.seat_teardown_prefix import certified_mail, prefix_proof
+        native_events = events.event_records()
+        self.assertEqual(([pre["message"]], [pre["message"]],
+                          prefix_proof(native_events, events.relative_path)),
+                         certified_mail(self.root, "recipient"))
+        from floati.cut_prefix import CutPrefix, certified_source, warm as warm_cut
+        self.assertIsNotNone(warm_cut(self.root))
+        cut_prefix = CutPrefix(self.root, read_only=True)
+        cut_prefix.load()
+        self.assertIsNotNone(certified_source(self.root, "recipient"))
+        stores = (projection._status_snapshot_store(),
                   SnapshotStore(self.root, reader="board", key="full-redraw",
                                 discover_sources=projection._status_sources))
         for store in stores:
             if not store.path.is_file():
                 store.refresh({"fixture_reader": store.reader})
         self.assertTrue(all(store.path.is_file() for store in stores))
-        self._roll_success(key="reader-roll")
+        receipt = self._roll_success(key="reader-roll")
+        self._assert_reader_roll(self.root, receipt, "reader-roll")
+        self.assertIsNone(certified_mail(self.root, "recipient"))
+        # Registry is retained across an epoch; its catalog and activity fold
+        # stay valid while chart's separate events reader follows the new file.
+        registry_prefix.load()
+        self.assertEqual(registry_identity, registry_prefix.payload["identity"])
+        self.assertEqual(registry_fold, registry_prefix.payload["folds"])
+        self.assertEqual(chart_before["nodes"], chart.artifact()["buses"][0]["nodes"])
+        with self.assertRaises(CacheMiss):
+            inbox_prefix.load()
+        with self.assertRaises(CacheMiss):
+            cut_prefix.load()
+        self.assertIsNone(certified_source(self.root, "recipient"))
         for store in stores:
             with self.subTest(reader=store.reader):
                 with self.assertRaises(SnapshotRefusal) as caught:
@@ -3542,8 +3948,16 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             {"node": "recipient", "age_minutes": 10, "observed_at": "2026-08-30T12:10:00Z"},
             status_node["oldest_unread"],
         )
-        inbox, _ = events.present("recipient")
+        inbox, unpresented = events.present("recipient")
         self.assertEqual([post["id"]], [row["id"] for row in inbox])
+        rebuilt_inbox = InboxPrefix(self.root)
+        rebuilt_inbox.load()
+        self.assertNotEqual(inbox_generation, rebuilt_inbox.payload["generation"])
+        self.assertNotEqual(inbox_identity, rebuilt_inbox.payload["identity"])
+        self.assertEqual(receipt, rebuilt_inbox.get("first", "physical"))
+        self.assertIsNone(certified_mail(self.root, "recipient"))
+        self.assertEqual("delivered_unpresented", unpresented["kind"])
+        self.assertFalse(unpresented["presenter_evidence"]["shown"])
         board = model_from_root(self.root, observation)
         board_node = next(row for row in board.nodes if row["node_id"] == "recipient")
         self.assertEqual(post["id"], board_node["visible_message_id"])
@@ -3558,8 +3972,18 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             )
         held = wake.evaluate("recipient", idempotency_key="post-reader-hold")
         self.assertEqual(
-            [wake_post["id"]], [row["id"] for row in held["fresh_messages"]]
+            [post["id"], wake_post["id"]],
+            [row["id"] for row in held["fresh_messages"]],
         )
+        deliveries_path = self.root.resolve_relative("receipts/deliveries/recipient.jsonl")
+        deliveries_before = deliveries_path.read_bytes()
+        held_again = wake.evaluate("recipient", idempotency_key="post-reader-held-again")
+        self.assertEqual("held_only", held_again["state"])
+        self.assertFalse(held_again["wake_required"])
+        self.assertEqual([], held_again["fresh_messages"])
+        self.assertEqual(2, held_again["held_total"])
+        self.assertIsNone(held_again["receipt"])
+        self.assertEqual(deliveries_before, deliveries_path.read_bytes())
         with self.assertRaises(ProtocolRefusal) as ack_refusal:
             cursor.ack("recipient", [pre["id"]], acting_session_id="old-ack")
         self.assertIn("archiv", ack_refusal.exception.code)
@@ -3582,14 +4006,17 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         SparseCursor(self.root).ack(
             "recipient", [str(watch_pre["id"])], acting_session_id="watch-pre-ack"
         )
-        ready, released = threading.Barrier(2), threading.Barrier(2)
+        ready, released = threading.Event(), threading.Event()
         rows: list[dict[str, object]] = []
         errors: list[BaseException] = []
         watch_now = datetime(2026, 8, 30, 13, 10, tzinfo=timezone.utc)
 
         def watch_sleep(_seconds: float) -> None:
-            self._barrier(ready, "watch did not publish its initial observation")
-            self._barrier(released, "watch did not resume after the post-roll write")
+            # The watch has yielded its initial observation. Its next read
+            # depends on the completed roll and append, not how much host
+            # time those real operations take.
+            ready.set()
+            released.wait()
 
         def run_watch() -> None:
             try:
@@ -3598,18 +4025,31 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                     now=lambda: watch_now, sleeper=watch_sleep))
             except BaseException as exc:
                 errors.append(exc)
+            finally:
+                # An initial reader failure must also release the parent's
+                # rendezvous so its original exception can be propagated.
+                ready.set()
 
         thread = threading.Thread(target=run_watch, daemon=True)
         thread.start()
-        self._barrier(ready, "main thread did not meet the watch rendezvous")
-        self._roll_success(key="watch-roll")
-        with mock.patch("floati.events.utc_now", return_value="2026-08-30T13:00:00.000Z"):
-            watch_post = EventLog(self.root).send(
-                "actor-a", "recipient", "floati", "2" * 40,
-                "docs/evidence/watch.md", "watch post", idempotency_key="watch-post")
-        self._barrier(released, "main thread did not release the watch")
-        self._join(thread, "watch did not leave its bounded fixture")
-        self.assertEqual([], errors)
+        try:
+            ready.wait()
+            if errors:
+                raise errors[0]
+            self.assertEqual(["initial"], [row["kind"] for row in rows])
+            receipt = self._roll_success(key="watch-roll")
+            self._assert_reader_roll(self.root, receipt, "watch-roll")
+            with mock.patch("floati.events.utc_now", return_value="2026-08-30T13:00:00.000Z"):
+                watch_post = EventLog(self.root).send(
+                    "actor-a", "recipient", "floati", "2" * 40,
+                    "docs/evidence/watch.md", "watch post", idempotency_key="watch-post")
+        finally:
+            # Even a roll/assertion failure must unblock and collect our
+            # exact watch thread before the scratch root is removed.
+            released.set()
+            thread.join()
+        if errors:
+            raise errors[0]
         self.assertEqual(["initial", "change"], [row["kind"] for row in rows])
         changed = rows[1]["snapshot"]
         self.assertIsInstance(changed, dict)
@@ -3622,15 +4062,45 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         self.assertEqual([watch_post["id"]], [row["id"] for row in EventLog(self.root).records()])
 
         probe_root = self._new_root(self.base / "probe-reader")
+        probe_workspace = self.base / "probe-workspace"
+        probe_workspace.mkdir()
+        probe_mapping = probe_root.resolve_relative("codex-wait/workspaces.v0.json")
+        probe_mapping.parent.mkdir(parents=True, exist_ok=True)
+        probe_mapping.write_text(json.dumps(
+            {"schema_version": 0, "tenant_id": probe_root.tenant_id,
+             "mappings": [{"workspace": str(probe_workspace), "node_id": "actor-a"}]},
+            sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        probe_participant = resolve_participant(probe_root.path, probe_workspace)
+        self.assertIsNotNone(probe_participant)
+        assert probe_participant is not None
+        probe_consent = CodexWaitConsentLedger(probe_root).arm(
+            probe_participant.binding, hook_timeout_seconds=10, wait_deadline_seconds=2,
+            idempotency_key="probe-reader-consent")
+        CodexWaitSessionLedger(probe_root).arm(
+            probe_participant.binding, probe_consent, "probe-reader-session",
+            idempotency_key="probe-reader-session-claim")
+        probe_output, probe_errors = io.StringIO(), io.StringIO()
         ticks = 0
 
         def probe_sleep(_seconds: float) -> None:
             nonlocal ticks
             ticks += 1
             if ticks == 1:
-                self._roll_success(root=probe_root, key="probe-roll")
+                receipt = self._roll_success(root=probe_root, key="probe-roll")
+                self._assert_reader_roll(probe_root, receipt, "probe-roll")
             else:
-                EventLog(probe_root).present("actor-a")
+                probe_rc = run_stop_waiter(
+                    bus_home=probe_root.path,
+                    hook_payload={"cwd": str(probe_workspace),
+                                  "session_id": "probe-reader-session"},
+                    stdout=probe_output, stderr=probe_errors,
+                    # The probe envelope is already durable. Startup may
+                    # not consume this immediate native reader's budget.
+                    monotonic=lambda: 0.0,
+                    wait_readable=lambda *_args: self.fail(
+                        "the post-roll probe envelope must be admitted without waiting"),
+                )
+                self.assertEqual(0, probe_rc, probe_errors.getvalue())
 
         report = DoctorProbe(probe_root, budget_seconds=2, sleeper=probe_sleep,
                              poll_interval_seconds=1).run(["actor-a"])
@@ -3642,7 +4112,26 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             probe_root.resolve_relative("receipts/deliveries/actor-a.jsonl").read_bytes()
         )
         self.assertEqual(1, len(probe_deliveries))
+        self.assertEqual("delivery_receipt", probe_deliveries[0]["kind"])
         self.assertEqual([probe_id], probe_deliveries[0]["item_ids"])
+        probe_body = json.loads(probe_output.getvalue())
+        self.assertEqual("block", probe_body["decision"])
+        self.assertTrue(probe_body["reason"].startswith(
+            "[floati] 1 new message(s) for actor-a: " + probe_id))
+        self.assertEqual("", probe_errors.getvalue())
+        probe_holds = decode_frames(
+            probe_root.resolve_relative("receipts/stop-holds/actor-a.jsonl").read_bytes()
+        )
+        self.assertEqual(["start", "exit"], [row["phase"] for row in probe_holds])
+        self.assertEqual(probe_holds[0]["invocation_id"], probe_holds[1]["invocation_id"])
+        self.assertTrue(all(row["acting_session_id"] == "probe-reader-session"
+                            for row in probe_holds))
+        probe_presentations = CursorPresentationLedger(probe_root).read("actor-a")
+        self.assertEqual(["prepared", "flushed"],
+                         [row["phase"] for row in probe_presentations])
+        self.assertEqual(probe_deliveries[0]["id"],
+                         probe_presentations[-1]["delivery_receipt_id"])
+        self.assertEqual([probe_id], probe_presentations[-1]["item_ids"])
         self.assertEqual("delivery_probe", report.findings_by_node["actor-a"]["code"])
 
         waiter_root = self._new_root(self.base / "waiter-reader")
@@ -3674,13 +4163,19 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             idempotency_key="reader-session-claim")
         rolled = False
         waiter_post: dict[str, object] = {}
+        waiter_clock = [0.0]
 
         def waiter_sleep(_seconds: float) -> None:
             nonlocal rolled
+            self.assertGreater(_seconds, 0)
+            self.assertLessEqual(_seconds, 1)
+            waiter_clock[0] += _seconds
+            self.assertLessEqual(waiter_clock[0], 2)
             if rolled:
                 return
             rolled = True
-            self._roll_success(root=waiter_root, key="waiter-roll")
+            receipt = self._roll_success(root=waiter_root, key="waiter-roll")
+            self._assert_reader_roll(waiter_root, receipt, "waiter-roll")
             send_result = EventLog(waiter_root).send(
                 "actor-b", "actor-a", "floati", "3" * 40,
                 "docs/evidence/waiter.md", "waiter post", idempotency_key="waiter-post")
@@ -3688,12 +4183,11 @@ class GovernedBusEpochRollTests(unittest.TestCase):
 
         output = io.StringIO()
         waiter_errors = io.StringIO()
-        clock_values = iter((0.0, 0.0, 1.0, 1.0, 2.0, 2.0))
         waiter_rc = run_stop_waiter(
             bus_home=waiter_root.path,
             hook_payload={"cwd": str(workspace), "session_id": "reader-session"},
-            stdout=output, stderr=waiter_errors, monotonic=lambda: next(clock_values),
-            sleep=waiter_sleep, wall_time=lambda: 1000.0, poll_interval_seconds=1)
+            stdout=output, stderr=waiter_errors, monotonic=lambda: waiter_clock[0],
+            wait_readable=scripted_readiness((waiter_sleep), interval=(1)), sleep=waiter_sleep, wall_time=lambda: 1000.0, poll_interval_seconds=1)
         self.assertEqual(0, waiter_rc)
         self.assertIn(
             '"decision": "block"',
@@ -3703,17 +4197,10 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             ),
         )
         waiter_artifact = json.loads(output.getvalue())
-        expected_waiter = {
-            "decision": "block",
-            "reason": (
-                "[floati] 1 new message(s) for actor-a: " + str(waiter_post["id"])
-            ),
-        }
-        self.assertEqual(expected_waiter, waiter_artifact)
-        self.assertEqual(
-            json.dumps(expected_waiter) + "\n",
-            output.getvalue(),
-        )
+        self.assertEqual("block", waiter_artifact["decision"])
+        self.assertTrue(waiter_artifact["reason"].startswith(
+            "[floati] 1 new message(s) for actor-a: " + str(waiter_post["id"])
+        ))
         self.assertEqual("", waiter_errors.getvalue())
 
         daemon_root = self._new_root(self.base / "daemon-reader")
@@ -3743,7 +4230,8 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             activation_epoch=1, idempotency_key="daemon-consent")
         daemon = WakeDaemon(coordinate, adapter)
         self.assertEqual("idle", daemon.run_cycle(100.0)["state"])
-        self._roll_success(root=daemon_root, key="daemon-roll")
+        receipt = self._roll_success(root=daemon_root, key="daemon-roll")
+        self._assert_reader_roll(daemon_root, receipt, "daemon-roll")
         daemon_post = EventLog(daemon_root).send(
             "actor-a", "recipient", "floati", "4" * 40,
             "docs/evidence/daemon.md", "daemon post", worker_session_id="daemon-session",
@@ -3755,12 +4243,14 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             [daemon_post["id"]], [row["id"] for row in EventLog(daemon_root).records()]
         )
 
-    def test_external_tail_f_follower_reopens_recreated_event_path(self) -> None:
+    def test_external_tail_f_follower_observes_post_roll_mail(self) -> None:
         pre = EventLog(self.root).send(
             "actor-a", "recipient", "floati", "5" * 40,
             "docs/evidence/tail-pre.md", "tail pre", idempotency_key="tail-pre")
+        events_path = self.root.resolve_relative("events.jsonl")
+        before_bytes = events_path.read_bytes()
         follower = subprocess.Popen(
-            ["tail", "-n", "+1", "-F", str(self.root.resolve_relative("events.jsonl"))],
+            ["tail", "-n", "+1", "-F", str(events_path)],
             cwd=REPOSITORY_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -3785,7 +4275,9 @@ class GovernedBusEpochRollTests(unittest.TestCase):
         self.assertIsNotNone(follower.stdout)
         assert follower.stdout is not None
         self.assertEqual(pre["id"], self._read_json_line(follower.stdout)["id"])
-        self._roll_success(key="tail-roll")
+        receipt = self._roll_success(key="tail-roll")
+        self._assert_reader_roll(self.root, receipt, "tail-roll")
+        self.assertEqual(before_bytes, (Path(str(receipt["archive_path"])) / "events.jsonl").read_bytes())
         post = EventLog(self.root).send(
             "actor-a", "recipient", "floati", "6" * 40,
             "docs/evidence/tail-post.md", "tail post", idempotency_key="tail-post")
@@ -3796,7 +4288,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                 seen.add(row["id"])
             if post["id"] in seen:
                 break
-        self.assertIn(post["id"], seen, "tail -F must reopen within four bounded lines")
+        self.assertIn(post["id"], seen, "tail -F must observe post-roll mail within four bounded lines")
         close_follower()
 
     def test_bounded_follower_reader_skips_a_transient_blank_line(self) -> None:
@@ -3810,6 +4302,56 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             os.close(write_descriptor)
 
         self.assertEqual({"id": "post"}, self._read_json_line(stream))
+
+
+ABRUPT_ORDINAL_SHARDS = 4
+
+
+class AbruptOrdinalCoveragePinTests(unittest.TestCase):
+    """The split must cover every boundary and every real mutation ordinal exactly once."""
+
+    def test_every_mutation_ordinal_is_owned_by_exactly_one_unit(self) -> None:
+        loader = unittest.TestLoader()
+        module = "tests.harbor_epoch_roll_crash"
+        explicit = loader.loadTestsFromName(module)
+        self.assertEqual([], loader.errors)
+        units = [type(test) for class_suite in explicit for test in class_suite]
+        for unit in units:
+            self.assertEqual(module, unit.__module__)
+        self.assertEqual(
+            {"boundary", "ordinal"}, {unit.ABRUPT_MODE for unit in units},
+            "every unit is a boundary unit or an ordinal unit",
+        )
+        boundary_units = [unit for unit in units if unit.ABRUPT_MODE == "boundary"]
+        ordinal_units = [unit for unit in units if unit.ABRUPT_MODE == "ordinal"]
+        self.assertEqual(1, len(boundary_units), "exactly one unit runs every boundary")
+        self.assertEqual(
+            list(range(ABRUPT_ORDINAL_SHARDS)),
+            sorted(unit.ABRUPT_SHARD for unit in ordinal_units),
+            "one ordinal unit per shard, none missing, none duplicated",
+        )
+        for unit in units:
+            self.assertEqual(
+                ["test_abrupt_cases_converge"], loader.getTestCaseNames(unit),
+                f"{unit.__name__} must be collected with its one case method",
+            )
+        harness = GovernedBusEpochRollTests(
+            "test_doctor_never_initiates_roll_or_mutates_complete_state"
+        )
+        harness.setUp()
+        self.addCleanup(harness.doCleanups)
+        mutation_count = harness._abrupt_mutation_count()
+        claims = Counter(
+            ordinal
+            for unit in ordinal_units
+            for ordinal in GovernedBusEpochRollTests._abrupt_shard_ordinals(
+                mutation_count, unit.ABRUPT_SHARD, ABRUPT_ORDINAL_SHARDS
+            )
+        )
+        self.assertEqual(
+            {ordinal: 1 for ordinal in range(1, mutation_count + 1)}, dict(claims),
+            "every real mutation ordinal must be run by exactly one unit",
+        )
 
 
 if __name__ == "__main__":

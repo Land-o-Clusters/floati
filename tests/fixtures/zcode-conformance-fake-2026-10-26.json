@@ -1,0 +1,373 @@
+{
+  "artifact_version": 0,
+  "mode": "fixture-fake",
+  "home": "scratch",
+  "started_at": "2026-10-26T04:12:57.861+00:00",
+  "nonce": "zcode-01a176695885751593eeb15b062c721d",
+  "source_sha": "f7585a8f633af5750128d258d82fa1174b3a9f08",
+  "invocation": {
+    "argv": [
+      "/usr/bin/python3",
+      "-B",
+      "\u002fUsers/penguinspecz/Projects/floati-hw-issues-15-zcode/scripts/measure_zcode_conformance.py",
+      "fixture-harness",
+      "--json",
+      "--no-color",
+      "--prompt",
+      "Run this exact scratch bus command once: /usr/bin/python3 -B \u002fUsers/penguinspecz/Projects/floati-hw-issues-15-zcode/scripts/measure_zcode_conformance.py bus-step --root \u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/conformance-bus --nonce zcode-01a176695885751593eeb15b062c721d --source-sha f7585a8f633af5750128d258d82fa1174b3a9f08. Then write the nonce to answer.txt in your current workspace. Do nothing else.\nFLOATI_CONFORMANCE_REQUEST={\"nonce\": \"zcode-01a176695885751593eeb15b062c721d\", \"bus_argv\": [\"/usr/bin/python3\", \"-B\", \"\u002fUsers/penguinspecz/Projects/floati-hw-issues-15-zcode/scripts/measure_zcode_conformance.py\", \"bus-step\", \"--root\", \"\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/conformance-bus\", \"--nonce\", \"zcode-01a176695885751593eeb15b062c721d\", \"--source-sha\", \"f7585a8f633af5750128d258d82fa1174b3a9f08\"]}"
+    ],
+    "pid": 15863,
+    "home": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/home",
+    "workspace": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518",
+    "started_at": "2026-10-26T04:12:57.901+00:00",
+    "owned_child_reaped": true,
+    "stdout": "{\"sessionId\": \"fake-session\", \"traceId\": \"fake-trace\", \"turnId\": \"fake-turn\", \"response\": \"done\", \"usage\": {\"source\": \"provider\", \"inputTokens\": 1, \"outputTokens\": 1}}\n",
+    "stderr": "",
+    "exit_code": 0,
+    "ended_at": "2026-10-26T04:12:58.439+00:00"
+  },
+  "bus": {
+    "message": {
+      "attempt_binding": "absent_legacy",
+      "doc": "README.md",
+      "id": "msg-01a176695aa474e2b69613f8d187e460",
+      "idempotency_key": "zcode-01a176695885751593eeb15b062c721d",
+      "kind": "message_envelope",
+      "note": "zcode-01a176695885751593eeb15b062c721d",
+      "recipient": "zc-recipient",
+      "repo": "floati",
+      "schema_version": 0,
+      "sender": "zc-source",
+      "sha": "f7585a8f633af5750128d258d82fa1174b3a9f08",
+      "tenant_id": "conformance-bus",
+      "timestamp": "2026-10-26T04:12:58.408Z"
+    },
+    "delivery": {
+      "id": "delivery-01a176695ab87daebf7cfc917ecd1362",
+      "item_ids": [
+        "msg-01a176695aa474e2b69613f8d187e460"
+      ],
+      "kind": "delivered_unpresented",
+      "presentation_count": 1,
+      "presenter_evidence": {
+        "reason": "no_live_presenter_evidence",
+        "shown": false,
+        "sources": [
+          {
+            "path": "receipts/stop-holds/zc-recipient.jsonl",
+            "record_id": null
+          }
+        ]
+      },
+      "recipient": "zc-recipient",
+      "schema_version": 0,
+      "tenant_id": "conformance-bus",
+      "timestamp": "2026-10-26T04:12:58.423Z"
+    },
+    "ack": {
+      "acting_session_id": "zcode-conformance",
+      "id": "ack-01a176695aba7192baf59c19adbb0169",
+      "item_ids": [
+        "msg-01a176695aa474e2b69613f8d187e460"
+      ],
+      "kind": "ack_receipt",
+      "node_lease_expires_at": null,
+      "node_lease_id": null,
+      "node_lease_state_at_ack": "not_leased",
+      "recipient": "zc-recipient",
+      "schema_version": 1,
+      "tenant_id": "conformance-bus",
+      "timestamp": "2026-10-26T04:12:58.426Z"
+    },
+    "ledger_records": [
+      {
+        "attempt_binding": "absent_legacy",
+        "doc": "README.md",
+        "id": "msg-01a176695aa474e2b69613f8d187e460",
+        "idempotency_key": "zcode-01a176695885751593eeb15b062c721d",
+        "kind": "message_envelope",
+        "note": "zcode-01a176695885751593eeb15b062c721d",
+        "recipient": "zc-recipient",
+        "repo": "floati",
+        "schema_version": 0,
+        "sender": "zc-source",
+        "sha": "f7585a8f633af5750128d258d82fa1174b3a9f08",
+        "tenant_id": "conformance-bus",
+        "timestamp": "2026-10-26T04:12:58.408Z"
+      },
+      {
+        "envelope_id": "msg-01a176695aa474e2b69613f8d187e460",
+        "id": "send-readiness-01a176695ab374978d03be196fe2a0c0",
+        "idempotency_key": "zcode-01a176695885751593eeb15b062c721d",
+        "kind": "send_readiness_observation",
+        "observed_at": "2026-10-26T04:12:58.408Z",
+        "readiness": {
+          "checked_mechanisms": [
+            "lease",
+            "stop_hook",
+            "seat_board"
+          ],
+          "mechanism_evidence": [
+            {
+              "mechanism": "lease",
+              "reason": "no_active_lease",
+              "sources": [
+                {
+                  "path": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/conformance-bus/registry/entries.jsonl",
+                  "record_id": null
+                }
+              ],
+              "state": "absent"
+            },
+            {
+              "mechanism": "stop_hook",
+              "reason": "harness_has_no_stop_hook",
+              "sources": [
+                {
+                  "path": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/conformance-bus/registry/entries.jsonl",
+                  "record_id": "registry-01a176695aa370f5922f02aaccfc0bd6"
+                }
+              ],
+              "state": "absent"
+            },
+            {
+              "mechanism": "seat_board",
+              "reason": "no_board_or_claim",
+              "sources": [
+                {
+                  "path": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518/.floati/conformance-bus/receipts/seat-board/zc-recipient.jsonl",
+                  "record_id": null
+                }
+              ],
+              "state": "absent"
+            }
+          ],
+          "observed_at": "2026-10-26T04:12:58.408Z",
+          "reason": "all_mechanisms_absent",
+          "state": "recipient_not_listening"
+        },
+        "recipient": "zc-recipient",
+        "schema_version": 1,
+        "sender": "zc-source",
+        "tenant_id": "conformance-bus",
+        "timestamp": "2026-10-26T04:12:58.408Z"
+      },
+      {
+        "id": "delivery-01a176695ab87daebf7cfc917ecd1362",
+        "item_ids": [
+          "msg-01a176695aa474e2b69613f8d187e460"
+        ],
+        "kind": "delivered_unpresented",
+        "presentation_count": 1,
+        "presenter_evidence": {
+          "reason": "no_live_presenter_evidence",
+          "shown": false,
+          "sources": [
+            {
+              "path": "receipts/stop-holds/zc-recipient.jsonl",
+              "record_id": null
+            }
+          ]
+        },
+        "recipient": "zc-recipient",
+        "schema_version": 0,
+        "tenant_id": "conformance-bus",
+        "timestamp": "2026-10-26T04:12:58.423Z"
+      },
+      {
+        "acting_session_id": "zcode-conformance",
+        "id": "ack-01a176695aba7192baf59c19adbb0169",
+        "item_ids": [
+          "msg-01a176695aa474e2b69613f8d187e460"
+        ],
+        "kind": "ack_receipt",
+        "node_lease_expires_at": null,
+        "node_lease_id": null,
+        "node_lease_state_at_ack": "not_leased",
+        "recipient": "zc-recipient",
+        "schema_version": 1,
+        "tenant_id": "conformance-bus",
+        "timestamp": "2026-10-26T04:12:58.426Z"
+      }
+    ]
+  },
+  "work": {
+    "item": {
+      "schema_version": 0,
+      "id": "work-01a17669589275ffbffb61c88b252518",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-26T04:12:57.874Z",
+      "kind": "work_item",
+      "title": "scratch conformance",
+      "owner": "zc-worker",
+      "artifact_bindings": [],
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518"
+    },
+    "result": {
+      "schema_version": 0,
+      "id": "worker-receipt-01a176695b007d22bd0f543e6fd847f4",
+      "tenant_id": "fleet",
+      "timestamp": "2026-10-26T04:12:58.496Z",
+      "kind": "worker_receipt",
+      "session_id": "worker-01a1766958947341bc339d547b013c7e",
+      "work_item_id": "work-01a17669589275ffbffb61c88b252518",
+      "node_id": "zc-worker",
+      "adapter": "zcode",
+      "transition": "complete",
+      "outcome_code": null,
+      "authority_subject": "zc-claims",
+      "authority_epoch": 1,
+      "artifact_bindings": [
+        {
+          "repo": "local/work-01a17669589275ffbffb61c88b252518",
+          "sha": "ab79d622597ca7fdbcac196c3d1142d9705adcef",
+          "doc": "answer.txt"
+        }
+      ]
+    },
+    "receipts": [
+      {
+        "adapter": "zcode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "zc-claims",
+        "id": "worker-receipt-01a1766958947549b8dda4be1e9c406a",
+        "kind": "worker_receipt",
+        "node_id": "zc-worker",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a1766958947341bc339d547b013c7e",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:12:57.876Z",
+        "transition": "claim",
+        "work_item_id": "work-01a17669589275ffbffb61c88b252518"
+      },
+      {
+        "adapter": "zcode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "zc-claims",
+        "id": "worker-receipt-01a1766958ae7d7188ac78622aa38e76",
+        "kind": "worker_receipt",
+        "node_id": "zc-worker",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a1766958947341bc339d547b013c7e",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:12:57.901Z",
+        "transition": "spawn",
+        "work_item_id": "work-01a17669589275ffbffb61c88b252518"
+      },
+      {
+        "adapter": "zcode",
+        "artifact_bindings": [],
+        "authority_epoch": 1,
+        "authority_subject": "zc-claims",
+        "id": "worker-receipt-01a1766958af7041b042b92037c32907",
+        "kind": "worker_receipt",
+        "node_id": "zc-worker",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a1766958947341bc339d547b013c7e",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:12:57.903Z",
+        "transition": "drive",
+        "work_item_id": "work-01a17669589275ffbffb61c88b252518"
+      },
+      {
+        "adapter": "zcode",
+        "artifact_bindings": [
+          {
+            "doc": "answer.txt",
+            "repo": "local/work-01a17669589275ffbffb61c88b252518",
+            "sha": "ab79d622597ca7fdbcac196c3d1142d9705adcef"
+          }
+        ],
+        "authority_epoch": 1,
+        "authority_subject": "zc-claims",
+        "id": "worker-receipt-01a176695aff76e3b16ab12e1426f67e",
+        "kind": "worker_receipt",
+        "node_id": "zc-worker",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a1766958947341bc339d547b013c7e",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:12:58.494Z",
+        "transition": "bind_artifact",
+        "work_item_id": "work-01a17669589275ffbffb61c88b252518"
+      },
+      {
+        "adapter": "zcode",
+        "artifact_bindings": [
+          {
+            "doc": "answer.txt",
+            "repo": "local/work-01a17669589275ffbffb61c88b252518",
+            "sha": "ab79d622597ca7fdbcac196c3d1142d9705adcef"
+          }
+        ],
+        "authority_epoch": 1,
+        "authority_subject": "zc-claims",
+        "id": "worker-receipt-01a176695b007d22bd0f543e6fd847f4",
+        "kind": "worker_receipt",
+        "node_id": "zc-worker",
+        "outcome_code": null,
+        "schema_version": 0,
+        "session_id": "worker-01a1766958947341bc339d547b013c7e",
+        "tenant_id": "fleet",
+        "timestamp": "2026-10-26T04:12:58.496Z",
+        "transition": "complete",
+        "work_item_id": "work-01a17669589275ffbffb61c88b252518"
+      }
+    ],
+    "work_after": {
+      "id": "work-01a17669589275ffbffb61c88b252518",
+      "title": "scratch conformance",
+      "owner": "zc-worker",
+      "state": "completed",
+      "holder": "zc-worker",
+      "authority_subject": "zc-claims",
+      "authority_epoch": 1,
+      "workspace": "\u002fprivate/tmp/floati-work/work-01a17669589275ffbffb61c88b252518",
+      "needs": [],
+      "artifact_bindings": [
+        {
+          "doc": "answer.txt",
+          "repo": "local/work-01a17669589275ffbffb61c88b252518",
+          "sha": "ab79d622597ca7fdbcac196c3d1142d9705adcef"
+        }
+      ],
+      "last_activity": "2026-10-26T04:12:58.495Z",
+      "readiness": "done"
+    },
+    "process_audit": {
+      "adapter_pid": 15861,
+      "registered_process_groups": [
+        15863
+      ],
+      "alive_after_cleanup": [],
+      "isolation_backend": null
+    },
+    "artifacts": [
+      {
+        "binding": {
+          "repo": "local/work-01a17669589275ffbffb61c88b252518",
+          "sha": "ab79d622597ca7fdbcac196c3d1142d9705adcef",
+          "doc": "answer.txt"
+        },
+        "content": "zcode-01a176695885751593eeb15b062c721d\n"
+      }
+    ]
+  },
+  "cleanup": {
+    "scratch_removed": true,
+    "workspaces_removed": true
+  },
+  "ended_at": "2026-10-26T04:12:58.511+00:00",
+  "classification": {
+    "status": "ok",
+    "surface": "native_success",
+    "bus": "send_delivery_ack_verified",
+    "work": "complete_with_bound_artifact",
+    "live_conformance": false
+  }
+}

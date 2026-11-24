@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from textwrap import wrap
+
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Mapping, Sequence
@@ -65,6 +68,7 @@ OLDER_DENIALS_SUFFIX = register("tui.denial_older", "older denials · floati log
 WORK_HEADER = register("tui.work_header", "WORK DAG", "TUI work panel")
 RECEIPTS_HEADER = register("tui.receipts_header", "RECEIPTS", "TUI receipts ticker")
 DENIAL_LABEL = register("tui.denial", "! DENIAL", "TUI refusal alert")
+UNPRESENTED_LABEL = register("tui.unpresented", "UNPRESENTED", "TUI unpresented delivery flag")
 HINT_BAR = register("tui.hints", "↑/k ↓/j select  enter detail  a ack  q quit", "TUI hint bar")
 OBSERVED_LABEL = register("tui.observed", "OBSERVED", "TUI observation label")
 STALE_LABEL = register("tui.stale", "! STALE", "TUI stale lease alert")
@@ -72,13 +76,29 @@ NO_NODES_LABEL = register("tui.no_nodes", "NO NODES", "TUI empty node state")
 NONE_LABEL = register("tui.none", "NONE", "TUI empty value")
 DELIVERY_LABEL = register("tui.delivery", "DELIVERY", "TUI delivery receipt label")
 ACK_LABEL = register("tui.ack", "ACK", "TUI acknowledgment receipt label")
+MESSAGE_PROGRESS_LABEL = register("tui.message_progress", "DELIVERED / ACKNOWLEDGED / CONSUMED", "TUI explicit message receipt progress")
+MESSAGE_PROGRESS_SHORT = register("tui.message_progress_short", "D/A/C", "TUI message receipt progress columns")
 ITEM_LABEL = register("tui.item", "ITEM", "TUI singular receipt item")
 ITEMS_LABEL = register("tui.items", "ITEMS", "TUI plural receipt items")
 HOLDER_LABEL = register("tui.holder", "holder:", "TUI work holder label")
 DETAIL_LABEL = register("tui.detail", "DETAIL", "TUI selected node detail")
 ROLE_LABEL = register("tui.role", "ROLE", "TUI node role label")
 VISIBLE_MAIL_LABEL = register("tui.visible_mail", "VISIBLE MAIL", "TUI visible mail label")
+PENDING_AT_PAUSE_LABEL = register("tui.pending_at_pause", "PENDING-AT-PAUSE", "TUI non-waking mail label")
 UNKNOWN_LABEL = register("tui.unknown", "UNKNOWN", "TUI unknown value")
+ROSTER_OWNER = register("tui.roster.owner", "DRAFT - OWNER", "TUI roster")
+ROSTER_HARNESS = register("tui.roster.harness", "DRAFT - HARNESS", "TUI roster")
+ROSTER_REPOSITORY = register("tui.roster.repository", "DRAFT - REPOSITORY", "TUI roster")
+ROSTER_ACTIVITY = register("tui.roster.activity", "DRAFT - ACTIVITY", "TUI roster")
+ROSTER_ACTION = register("tui.roster.action", "DRAFT - ACTION", "TUI roster")
+ROSTER_LIVENESS = register("tui.roster.liveness", "DRAFT - LIVENESS", "TUI roster")
+ROSTER_MEASURED = register("tui.roster.measured", "DRAFT - MEASURED", "TUI roster")
+ROSTER_UNKNOWN = register("tui.roster.unknown", "DRAFT - UNKNOWN", "TUI roster")
+ROSTER_AGE = register("tui.roster.age", "DRAFT - age", "TUI roster")
+ROSTER_REPORTED = register("tui.roster.reported", "DRAFT - reported", "TUI roster")
+ROSTER_NO_REPORT = register(
+    "tui.roster.no_report_since", "DRAFT - no report since", "TUI roster"
+)
 VIOLATION_PREFIX = register("tui.violation_prefix", "x ", "TUI violation fallback prefix")
 LIVE_MAP_HEADER = register(
     "tui.live_map.header",
@@ -142,6 +162,31 @@ EFFECT_EXECUTED_LABEL = register("tui.effect_executed", "executed:", "TUI effect
 EFFECT_UNKNOWN_ALERT = register("tui.effect_unknown", "!! EFFECT UNKNOWN", "TUI effect alert")
 EFFECT_INCOMPLETE_ALERT = register("tui.effect_incomplete", "!! EFFECT INCOMPLETE", "TUI effect alert")
 EFFECT_FAILED_ALERT = register("tui.effect_failed", "! EFFECT FAILED", "TUI effect alert")
+DISK_WATCH_ALERT = register(
+    "tui.disk_watch_below",
+    "! HOST DISK BELOW FLEET FLOOR",
+    "TUI host disk alert",
+)
+DISK_WATCH_UNMEASURED_ALERT = register(
+    "tui.disk_watch_unmeasured",
+    "! HOST DISK CANNOT BE MEASURED",
+    "TUI host disk alert",
+)
+DISK_WATCH_PARTIAL_ALERT = register(
+    "tui.disk_watch_partial",
+    "! HOST DISK PARTIAL: {free} free, build size not fully measured",
+    "TUI host disk alert; DRAFT-OPUS 2026-10-25",
+)
+DISK_WATCH_ONE_CAPPED_TREE = register(
+    "tui.disk_watch_one_capped_tree",
+    " (1 folder too large to count)",
+    "TUI host disk alert suffix; DRAFT-OPUS 2026-10-25",
+)
+DISK_WATCH_CAPPED_TREES = register(
+    "tui.disk_watch_capped_trees",
+    " ({count} folders too large to count)",
+    "TUI host disk alert suffix; DRAFT-OPUS 2026-10-25",
+)
 TIDE_LABEL = register("tui.tide", "TIDE", "TUI tide turnover state")
 APPROVAL_HEADER = register(
     "tui.approval.header",
@@ -174,6 +219,8 @@ class HarborBoardModel:
     worker_refusals: Sequence[Mapping[str, object]] = ()
     worker_receipts: Sequence[Mapping[str, object]] = ()
     effects: Mapping[str, object] = field(default_factory=dict)
+    adhoc_threads: Mapping[str, object] = field(default_factory=dict)
+    fleet_presence: str = ""
 
     @classmethod
     def from_projection(
@@ -182,11 +229,25 @@ class HarborBoardModel:
         work_items: Sequence[Mapping[str, object]],
         receipts: Mapping[str, Sequence[Mapping[str, object]]],
     ) -> "HarborBoardModel":
+        nodes = tuple(dict(node) for node in snapshot.get("nodes", []))
+        deliveries = tuple(dict(item) for item in receipts.get("deliveries", []))
+        # BUS-DELIVERY-UNPRESENTED-1: the seat board counts each node's
+        # delivered_unpresented receipts; the frozen status contract's node
+        # shape stays closed, so the count lives on the board only.
+        unpresented: Dict[str, int] = {}
+        for row in deliveries:
+            if row.get("kind") == "delivered_unpresented":
+                recipient = str(row.get("recipient", ""))
+                unpresented[recipient] = unpresented.get(recipient, 0) + 1
+        for node in nodes:
+            node_id = str(node.get("node_id", ""))
+            if node_id in unpresented:
+                node["delivered_unpresented"] = unpresented[node_id]
         return cls(
             observed_at=str(snapshot.get("observed_at", "unknown")),
-            nodes=tuple(dict(node) for node in snapshot.get("nodes", [])),
+            nodes=nodes,
             work_items=tuple(dict(item) for item in work_items),
-            deliveries=tuple(dict(item) for item in receipts.get("deliveries", [])),
+            deliveries=deliveries,
             acknowledgments=tuple(dict(item) for item in receipts.get("acks", [])),
             denials=tuple(dict(item) for item in receipts.get("denials", [])),
             stale_leases=tuple(dict(item) for item in snapshot.get("stale_leases", [])),
@@ -197,10 +258,11 @@ class HarborBoardModel:
             ),
             worker_receipts=tuple(dict(item) for item in receipts.get("workers", [])),
             effects=dict(snapshot.get("effects", {})),
+            adhoc_threads=dict(snapshot.get("adhoc_threads", {})),
         )
 
     def to_snapshot(self) -> Dict[str, object]:
-        return {
+        snapshot = {
             "observed_at": self.observed_at,
             "nodes": [dict(item) for item in self.nodes],
             "work_items": [dict(item) for item in self.work_items],
@@ -214,6 +276,9 @@ class HarborBoardModel:
             "worker_receipts": [dict(item) for item in self.worker_receipts],
             "effects": dict(self.effects),
         }
+        if self.adhoc_threads:
+            snapshot["adhoc_threads"] = dict(self.adhoc_threads)
+        return snapshot
 
     @classmethod
     def from_snapshot(cls, payload: Mapping[str, object]) -> "HarborBoardModel":
@@ -228,7 +293,8 @@ class HarborBoardModel:
             "worker_refusals",
             "worker_receipts",
         }
-        if set(payload) != sequence_fields | {"observed_at", "consumption", "effects"}:
+        base_fields = sequence_fields | {"observed_at", "consumption", "effects"}
+        if set(payload) not in (base_fields, base_fields | {"adhoc_threads"}):
             raise SnapshotRefusal(
                 "snapshot_payload_invalid", "board model fields are invalid"
             )
@@ -273,6 +339,7 @@ class HarborBoardModel:
                 dict(item) for item in payload["worker_receipts"]
             ),
             effects=dict(payload["effects"]),
+            adhoc_threads=dict(payload.get("adhoc_threads", {})),
         )
 
 
@@ -321,6 +388,42 @@ def _node_columns(node_width: int, width: int) -> str:
     return _clip(f"{NODE_COLUMN:<{node_width}} {NODE_COLUMN_TAIL}", width)
 
 
+def _roster_lines(node: Mapping[str, object], width: int) -> List[str]:
+    roster = node.get("roster")
+    if not isinstance(roster, Mapping):
+        return []
+    labels = (
+        ("owner", ROSTER_OWNER),
+        ("harness", ROSTER_HARNESS),
+        ("repository_branch", ROSTER_REPOSITORY),
+        ("activity", ROSTER_ACTIVITY),
+        ("current_action", ROSTER_ACTION),
+        ("liveness", ROSTER_LIVENESS),
+    )
+    lines = []
+    for key, label in labels:
+        cell = roster.get(key)
+        if not isinstance(cell, Mapping) or cell.get("stamp") != "MEASURED":
+            lines.append(_clip(f"  {label} {ROSTER_UNKNOWN}", width))
+            continue
+        value = cell.get("value")
+        age = cell.get("age_seconds")
+        if not isinstance(value, str) or not isinstance(age, int) or isinstance(age, bool):
+            lines.append(_clip(f"  {label} {ROSTER_UNKNOWN}", width))
+            continue
+        if value == "no_report_since" and isinstance(cell.get("named_time"), str):
+            shown = f"{ROSTER_NO_REPORT} {cell['named_time']}"
+        elif value == "recent_report":
+            shown = ROSTER_REPORTED
+        else:
+            shown = value
+        lines.append(_clip(
+            f"  {label} {ROSTER_MEASURED} {shown} {ROSTER_AGE} {age}s",
+            width,
+        ))
+    return lines
+
+
 def _node_line(
     node: Mapping[str, object],
     selected: bool,
@@ -342,14 +445,32 @@ def _node_line(
     activity = ""
     if activity_by_node is not None and node_id in activity_by_node:
         activity = "  " + activity_braille(activity_by_node[node_id])
+    unpresented = int(node.get("delivered_unpresented", 0) or 0)
+    unpresented_flag = (
+        f"  {UNPRESENTED_LABEL} {unpresented}" if unpresented > 0 else ""
+    )
+    progress_flag = _message_progress_flag(node)
+    pending = int(node.get("pending_at_pause", 0) or 0)
+    pause_flag = f"  {PENDING_AT_PAUSE_LABEL} {pending}" if pending else ""
     line = (
         f"{marker} {node_id:<{node_width}} "
         f"{str(node.get('liveness', UNKNOWN_LABEL)).upper():<10} "
         f"{str(node.get('authority', 'none')).upper():<10} "
         f"{str(node.get('mutex', 'none')).upper():<10} "
-        f"{int(node.get('inbox_depth', 0)):>5}  {last}{tide_flag}{activity}"
+        f"{int(node.get('inbox_depth', 0)):>5}  {last}{pause_flag}{progress_flag}{tide_flag}{unpresented_flag}{activity}"
     )
     return _clip(line, width)
+
+
+def _message_progress_flag(node: Mapping[str, object]) -> str:
+    progress = node.get("message_progress")
+    if not isinstance(progress, Mapping):
+        return ""
+    if progress.get("state") == "unknown":
+        return f"  {MESSAGE_PROGRESS_SHORT} {UNKNOWN_LABEL.upper()} " + str(progress["reason_code"])
+    return f"  {MESSAGE_PROGRESS_SHORT} " + "/".join(
+        str(progress[key]) for key in ("delivered", "acknowledged", "consumed")
+    )
 
 
 def _lamp(value: object) -> str:
@@ -382,12 +503,19 @@ def _interactive_node_line(
     activity = ""
     if activity_by_node is not None and node_id in activity_by_node:
         activity = "  " + activity_braille(activity_by_node[node_id])
+    unpresented = int(node.get("delivered_unpresented", 0) or 0)
+    unpresented_flag = (
+        f"  {UNPRESENTED_LABEL} {unpresented}" if unpresented > 0 else ""
+    )
+    progress_flag = _message_progress_flag(node)
+    pending = int(node.get("pending_at_pause", 0) or 0)
+    pause_flag = f"  {PENDING_AT_PAUSE_LABEL} {pending}" if pending else ""
     return _clip(
         f"{marker} {node_id:<{node_width}} "
         f"{_lamp(node.get('liveness')):^10} "
         f"{_lamp(node.get('authority', 'none')):^10} "
         f"{_lamp(node.get('mutex', 'none')):^10} "
-        f"{int(node.get('inbox_depth', 0)):>5}  {last}{tide_flag}{activity}",
+        f"{int(node.get('inbox_depth', 0)):>5}  {last}{pause_flag}{progress_flag}{tide_flag}{unpresented_flag}{activity}",
         width,
     )
 
@@ -453,7 +581,13 @@ def _receipt_lines(model: HarborBoardModel, width: int) -> List[str]:
                 )
             )
         else:
-            label = DELIVERY_LABEL if receipt.get("kind") == "delivery_receipt" else ACK_LABEL
+            kind = receipt.get("kind")
+            if kind == "delivery_receipt":
+                label = DELIVERY_LABEL
+            elif kind == "delivered_unpresented":
+                label = UNPRESENTED_LABEL
+            else:
+                label = ACK_LABEL
             count = len(receipt.get("item_ids", []))
             noun = ITEM_LABEL if count == 1 else ITEMS_LABEL
             lines.append(_clip(f"  {label:<8} {count} {noun}", width))
@@ -655,6 +789,75 @@ def _detail_lines(model: HarborBoardModel, width: int, selected: int) -> List[st
         _clip(f"  {ROLE_LABEL} {node.get('role', UNKNOWN_LABEL)}", width),
         _clip(f"  {VISIBLE_MAIL_LABEL} {visible}", width),
     ]
+    if node.get("fleet_presence"):
+        lines.append(_clip(str(node["fleet_presence"]), width))
+    progress = node.get("message_progress")
+    if isinstance(progress, Mapping):
+        counts = (UNKNOWN_LABEL.upper() + " " + str(progress["reason_code"])) if progress.get("state") == "unknown" else " / ".join(str(progress[key]) for key in ("delivered", "acknowledged", "consumed"))
+        lines.append(_clip(f"  {MESSAGE_PROGRESS_LABEL} {counts}", width))
+    execution = node.get("car_execution")
+    if isinstance(execution, Mapping):
+        state = execution.get("state", "UNKNOWN")
+        binding = execution.get("car_binding") or {}
+        lines.append(_clip("  CAR " + str(state) + " " + str(binding.get("row", "")), width))
+        lines.append(_clip("  CAUSE " + str(execution.get("reason", "UNKNOWN")), width))
+        latest = execution.get("latest_execution")
+        if isinstance(latest, Mapping):
+            # Refusal BODY is data. Escape controls before terminal rendering.
+            if latest.get("command") is not None:
+                lines.append(_clip("  ACTION " + str(latest["command"]), width))
+            if latest.get("detail") is not None:
+                lines.append(_clip("  DETAIL " + json.dumps(latest["detail"], ensure_ascii=True), width))
+            source = latest.get("source_binding")
+            if isinstance(source, Mapping) and latest.get("source_kind") == "cursor_host":
+                lines.append(_clip("  CURSOR LOOP ENDED " + _host_text(source.get("status"))
+                    + "; loop_count=" + _host_text(source.get("loop_count")), width))
+            if isinstance(source, Mapping) and latest.get("event") == "tool_request_refused":
+                lines.append(_clip("  FACT tool request refused at " + _host_text(source.get("observed_at"))
+                    + "; tool=" + _host_text(source.get("tool_name")), width))
+            if isinstance(source, Mapping) and latest.get("source_kind") == "desktop_host":
+                lines.append(_clip("  FACT " + _host_text(source.get("harness")) + " "
+                    + _host_text(source.get("notification_type")) + " observed at "
+                    + _host_text(source.get("observed_at")), width))
+                if source.get("native_prompt_id") is None:
+                    lines.append(_clip("  SESSION SCOPED; native turn identity absent", width))
+        support = execution.get("host_callbacks")
+        if isinstance(support, Mapping):
+            for key, label in (("pending_approval", "PENDING APPROVAL"), ("ended_turn", "ENDED TURN")):
+                row = support.get(key)
+                if isinstance(row, Mapping) and row.get("state") == "UNKNOWN":
+                    lines.append(_clip("  " + label + " UNKNOWN " + _host_text(row.get("reason")), width))
+    approval = execution.get("host_approval") if isinstance(execution, Mapping) else None
+    lines.extend(_host_approval_lines(approval, width))
+    waiting = node.get("stop_waiting")
+    if isinstance(waiting, Mapping):
+        state = "STOP_WAITING" if waiting.get("state") == "STOP_WAITING" else "UNKNOWN"
+        reason = waiting.get("reason")
+    else:
+        state, reason = "UNKNOWN", "stop_observation_absent"
+    lines.append(_clip("  STOP " + state + " " + _host_text(reason), width))
+    # Stop attempts and live waiter ownership supply no Codex completion fact.
+    latest = execution.get("latest_execution") if isinstance(execution, Mapping) else None
+    if isinstance(latest, Mapping) and latest.get("source_kind") == "desktop_host":
+        source = latest["source_binding"]
+        if latest.get("event") == "ended":
+            label = "RESPONSE ENDED" if source.get("native_prompt_id") else "SESSION IDLE"
+            lines.append(_clip("  " + label + " FACT native_idle_notification", width))
+        else:
+            lines.append(_clip("  TURN ENDED UNKNOWN desktop_completion_not_observed", width))
+    else:
+        lines.append(_clip("  TURN ENDED UNKNOWN stop_is_not_turn_completion", width))
+    attention = node.get("seat_attention")
+    holds = node.get('project_holds', {})
+    from .holds import hold_line
+    for hold in holds.get('holds', []):
+        lines.append(_clip('  ' + hold_line(hold), width))
+    if holds.get('partial_records'):
+        lines.append(_clip('  HOLD history partial: ' + str(holds['partial_records']) + ' record(s)', width))
+    from .inbound_hold import inbound_hold_lines
+    lines.extend(_clip('  ' + line, width) for line in inbound_hold_lines(node.get('inbound_holds')))
+    if isinstance(attention, Mapping) and attention.get("state") == "unknown":
+        lines.extend(_attention_text_lines(attention, width))
     tide = node.get("tide")
     if isinstance(tide, Mapping) and tide.get("turnover_state") in {
         "directed", "state_flushed"
@@ -662,6 +865,61 @@ def _detail_lines(model: HarborBoardModel, width: int, selected: int) -> List[st
         lines.append(
             _clip(f"  {TIDE_LABEL} {str(tide['turnover_state']).upper()}", width)
         )
+    lines.extend(_roster_lines(node, width))
+    return lines
+
+
+def _adhoc_lines(model: HarborBoardModel, width: int) -> List[str]:
+    rows = model.adhoc_threads.get("profiles", [])
+    return [_clip("ADHOC " + str(row.get("node_id", "?")) + " "
+        + str(row.get("adapter", "?")) + " "
+        + str(row.get("phase", "unknown")) + " PROVIDER "
+        + str(row.get("provider_status", {}).get("value", "unknown")).upper(), width)
+        for row in rows[:20]]
+
+
+def _host_text(value):
+    """Escape observation metadata as terminal-safe data, including absences."""
+    if value is None:
+        return "UNKNOWN"
+    rendered = json.dumps(value, ensure_ascii=True)
+    return rendered[1:-1] if isinstance(value, str) else rendered
+
+
+def _host_approval_lines(approval, width):
+    if not isinstance(approval, Mapping):
+        return [_clip("  APPROVAL UNKNOWN host_observation_absent", width)]
+    state = "FACT" if approval.get("state") == "FACT" else "UNKNOWN"
+    lines = [_clip("  APPROVAL " + state + " " + _host_text(approval.get("reason")), width)]
+    if state == "FACT":
+        if approval.get("reason") == "interrupted":
+            lines.append(_clip("  FACT turn interrupted at " + _host_text(approval.get("observed_at")), width))
+        else:
+            lines.append(_clip("  FACT permission requested at " + _host_text(approval.get("observed_at"))
+                + " for " + _host_text(approval.get("tool_name"))
+                + "; no later host event recorded for this session", width))
+    if state == "UNKNOWN" and approval.get("reason") == "host_observation_storage_not_writable" and approval.get("errno") is not None:
+        lines.append(_clip("  STORAGE errno=" + _host_text(approval["errno"]), width))
+    if approval.get("observed_cursor_version") is not None:
+        lines.append(_clip("  ABSENCE BASELINE Cursor " + _host_text(approval["observed_cursor_version"]), width))
+    if approval.get("reopen_trigger") is not None:
+        lines.append(_clip("  REOPEN " + _host_text(approval["reopen_trigger"]), width))
+    return lines
+
+
+def _attention_text_lines(attention: Mapping[str, object], width: int) -> List[str]:
+    facts, ambiguity = str(attention["detail"]).rsplit(". ", 1)
+    return [line for text in (facts + ".", ambiguity, str(attention["remedy"]))
+            for line in wrap(text, width=max(1, width))]
+
+
+def _seat_attention_lines(model: HarborBoardModel, width: int) -> List[str]:
+    lines = []
+    for node in model.nodes:
+        attention = node.get("seat_attention")
+        if isinstance(attention, Mapping) and attention.get("state") == "unknown":
+            lines.append(_clip("! SEAT ATTENTION UNKNOWN", width))
+            lines.extend(_attention_text_lines(attention, width))
     return lines
 
 
@@ -758,6 +1016,34 @@ def _panel(title: str, rows: Sequence[str], width: int) -> List[str]:
     return [top, *body, bottom]
 
 
+def _stale_lease_lines(lease: Mapping[str, object], width: int) -> List[str]:
+    if str(lease.get("plane", "")) == "node":
+        node_id = str(lease.get("node_id", "?"))
+        expires_at = str(lease.get("expires_at", "?"))
+        command = str(lease.get("retire_command", ""))
+        return [
+            _clip(f"{STALE_LABEL} {node_id} {expires_at}", width),
+            command,
+        ]
+    return [
+        _clip(
+            f"{STALE_LABEL} {str(lease.get('plane', 'plane')).upper()} "
+            f"{lease.get('subject_id', '?')} {HOLDER_LABEL}{lease.get('holder', '?')}",
+            width,
+        )
+    ]
+
+
+def _disk_watch_lines(model: HarborBoardModel, width: int) -> List[str]:
+    from .doctor_disk_watch import disk_watch_line
+
+    observation = model.effects.get("disk_watch")
+    if not isinstance(observation, Mapping):
+        return []
+    line = disk_watch_line(observation)
+    return [_clip(line, width)] if line is not None else []
+
+
 def _interactive_lines(
     model: HarborBoardModel,
     width: int,
@@ -768,6 +1054,11 @@ def _interactive_lines(
 ) -> List[str]:
     panel_content_width = max(18, width - 2)
     alerts = [_clip(f"{OBSERVED_LABEL} {model.observed_at}", panel_content_width)]
+    if model.fleet_presence:
+        alerts.append(_clip(model.fleet_presence, panel_content_width))
+    alerts.extend(_seat_attention_lines(model, panel_content_width))
+    alerts.extend(_adhoc_lines(model, panel_content_width))
+    alerts.extend(_disk_watch_lines(model, panel_content_width))
     effects = _effect_lines(model, panel_content_width)
     alerts.extend(
         line.replace(
@@ -783,13 +1074,7 @@ def _interactive_lines(
     if model.consumption.get("wake_state") == "unsatisfied_wake":
         alerts.append(_clip(UNSATISFIED_WAKE_LABEL, panel_content_width))
     for lease in model.stale_leases[:3]:
-        alerts.append(
-            _clip(
-                f"{STALE_LABEL} {str(lease.get('plane', 'plane')).upper()} "
-                f"{lease.get('subject_id', '?')} {HOLDER_LABEL}{lease.get('holder', '?')}",
-                panel_content_width,
-            )
-        )
+        alerts.extend(_stale_lease_lines(lease, panel_content_width))
     node_width = _node_width(model)
     node_rows = [_node_columns(node_width, panel_content_width)]
     if model.nodes:
@@ -907,29 +1192,31 @@ def _raw_lines(
         _clip(HEADER, width),
         _clip(f"{OBSERVED_LABEL} {model.observed_at}", width),
     ]
+    if model.fleet_presence:
+        lines.append(_clip(model.fleet_presence, width))
+    lines.extend(_disk_watch_lines(model, width))
     lines.extend(_effect_lines(model, width))
+    lines.extend(_seat_attention_lines(model, width))
+    lines.extend(_adhoc_lines(model, width))
     lines.extend(_denial_lines(model, width))
     if model.consumption.get("wake_state") == "unsatisfied_wake":
         lines.append(_clip(UNSATISFIED_WAKE_LABEL, width))
     for lease in model.stale_leases[:3]:
-        lines.append(_clip(
-            f"{STALE_LABEL} {str(lease.get('plane', 'plane')).upper()} "
-            f"{lease.get('subject_id', '?')} {HOLDER_LABEL}{lease.get('holder', '?')}",
-            width,
-        ))
+        lines.extend(_stale_lease_lines(lease, width))
     node_width = _node_width(model)
     lines.extend(("", _node_columns(node_width, width)))
     if model.nodes:
-        lines.extend(
-            _node_line(
-                node,
-                index == selected,
-                width,
-                node_width,
-                activity_by_node,
+        for index, node in enumerate(model.nodes):
+            lines.append(
+                _node_line(
+                    node,
+                    index == selected,
+                    width,
+                    node_width,
+                    activity_by_node,
+                )
             )
-            for index, node in enumerate(model.nodes)
-        )
+            lines.extend(_roster_lines(node, width))
     else:
         lines.append("  " + NO_NODES_LABEL)
     if detail_open:

@@ -115,22 +115,26 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | Command | Syntax | Purpose |
 | --- | --- | --- |
 | `describe` | `floati describe --json` | project the live command contract |
-| `overlap` | `floati overlap {report}` | derive local overlap evidence |
+| `setup` | `floati setup --root PATH [--seat {claude,codex,cursor,zcode}] [--session SESSION] [--executable PATH] [--hook {claude,codex,cursor,zcode}] [--confirm TOKEN &#124; --teardown]` | set up one seat in a new local fleet |
+| `overlap` | `floati overlap {report&#124;observe}` | derive local overlap evidence |
 | `overlap report` | `floati overlap report --repository PATH --base-ref REF --left-ref REF --right-ref REF` | emit one local overlap fact |
+| `overlap observe` | `floati overlap observe --repository PATH --base-ref REF` | name worktree pairs that changed one path |
 | `lane` | `floati lane {open&#124;close}` | open and close recorded lane workspaces |
 | `lane open` | `floati lane open --root ROOT --as NODE --row ROW --repo REPO [--base REF]` | create one recorded row worktree |
 | `lane close` | `floati lane close --root ROOT --as NODE --row ROW [--force] [--why TEXT]` | remove one recorded row worktree |
 | `sweep` | `floati sweep --root ROOT [--apply]` | inspect recorded and unmanaged lane workspaces |
+| `reclaim` | `floati reclaim --root ROOT [--apply]` | delete idle declared build output |
+| `checkout-liveness` | `floati checkout-liveness --root ROOT --path PATH [--json]` | check whether a checkout is in use |
 | `init` | `floati init [--root ROOT] [--solo [SOLO]] [--harness HARNESS] [--topology {star,mesh}] [--coordinator COORDINATOR] [--coordinator-authority {dispatch_bounded_work,gate_results_before_merge,decide_non_owner_tier_questions}] [--owner-tier {publishing,credentials,key_custody}]` | create a direct fleet home |
 | `confluence` | `floati confluence {grant&#124;revoke&#124;status&#124;bundle&#124;adopt&#124;release}` | the read seam for a consuming observer app |
 | `confluence grant` | `floati confluence grant --root ROOT --consumer CONSUMER --idempotency-key KEY` | record one explicit read grant |
 | `confluence revoke` | `floati confluence revoke --root ROOT --consumer CONSUMER --idempotency-key KEY` | sever one explicit read grant |
 | `confluence status` | `floati confluence status --root ROOT` | list recorded read grants |
-| `confluence bundle` | `floati confluence bundle --root ROOT --consumer CONSUMER --out PATH` | materialize the receipts-read bundle |
+| `confluence bundle` | `floati confluence bundle --root ROOT --consumer CONSUMER --out PATH [--schema-version {1,2}]` | materialize the receipts-read bundle |
 | `confluence adopt` | `floati confluence adopt --root ROOT --consumer CONSUMER --session SESSION --manager NODE --authority-subject SUBJECT --authority-epoch N --authority-expires-at TIMESTAMP` | adopt one session into managed mode |
 | `confluence release` | `floati confluence release --root ROOT --consumer CONSUMER --session SESSION --manager NODE --authority-epoch N` | release one adopted session |
-| `register` | `floati register [--root ROOT] NODE --harness HARNESS [--create-workspace]` | register this node |
-| `retire` | `floati retire [--root ROOT] NODE` | retire this node's registry row |
+| `register` | `floati register [--root ROOT] NODE --harness HARNESS [--create-workspace]` | register one named node |
+| `retire` | `floati retire [--root ROOT] NODE` | retire one named registry row |
 | `journal` | `floati journal {checkpoint&#124;verify}` | exact-byte journal testimony |
 | `journal checkpoint` | `floati journal checkpoint --root ROOT --journal JOURNAL --journal-id ID --kind KINDS --output OUTPUT [--json]` | write one bounded checkpoint |
 | `journal verify` | `floati journal verify --root ROOT --journal JOURNAL --journal-id ID --kind KINDS --checkpoint CHECKPOINT [--historical] [--json]` | verify one bounded checkpoint |
@@ -139,7 +143,9 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `signature` | `floati signature {sign&#124;verify}` | Minisign artifact testimony |
 | `signature sign` | `floati signature sign --root ROOT --artifact ARTIFACT --signature SIGNATURE --secret-key PATH --version VERSION [--journal-id ID] [--through-seq N] [--minisign-executable EXE] [--json]` | sign one explicit artifact |
 | `signature verify` | `floati signature verify --root ROOT --artifact ARTIFACT --signature SIGNATURE --public-key PATH --version VERSION [--journal-id ID] [--through-seq N] [--minisign-executable EXE] [--json]` | verify one explicit artifact |
-| `send` | `floati send [--root ROOT] --from NODE --to NODE --repo REPO --sha SHA --doc DOC --note NOTE [--reply-to ID] [--idempotency-key KEY] [--claim PATH]` | append a Git notification |
+| `ask` | `floati ask --root ROOT --from NODE --to ADDRESS [--preview &#124; --recipient-preview PATH] [--repo REPO] [--sha SHA] [--repository PATH] [--doc DOC] [--note NOTE] [--session SESSION] [--idempotency-key KEY] [--wait-seconds N] [--reply-to ID] [--disposition {answer,decline}] [--reason REASON]` | DRAFT - ask one node and wait for its correlated reply |
+| `replay` | `floati replay --root ROOT (--question ID &#124; --work-item ID)` | read an ask or work receipt chain |
+| `send` | `floati send [--root ROOT] --from NODE --to ADDRESS [--preview &#124; --recipient-preview PATH] --repo REPO --sha SHA [--repository PATH] --doc DOC --note NOTE [--reply-to ID] [--message-class {normal,fyi}] [--idempotency-key KEY] [--claim PATH]` | append a Git notification |
 | `verify` | `floati verify --root ROOT --as NODE --claim PATH [--json]` | reproduce a typed delivery claim |
 | `inbox` | `floati inbox [--root ROOT] --as NODE [--session SESSION] [--peek]` | drain pending mail |
 | `ack` | `floati ack [--root ROOT] --as NODE --id ID --session SESSION` | acknowledge presented messages |
@@ -165,34 +171,52 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `wait` | `floati wait --for CONDITION --root PATH [--workspace PATH] [--session-id ID]` | hold a turn until a named condition |
 | `waiter` | `floati waiter {arm}` | arm exact waiter consent for a declared workspace |
 | `waiter arm` | `floati waiter arm --root PATH --node NODE --workspace PATH --harness HARNESS --hook-timeout-seconds N --wait-deadline-seconds N` | map one workspace and arm its waiter consent |
-| `receipts` | `floati receipts NODE [--root ROOT]` | inspect node receipt history |
+| `receipts` | `floati receipts NODE [--root ROOT] [--since TIMESTAMP]` | inspect node receipt history |
+| `consume` | `floati consume ID --root ROOT --as NODE --session SESSION --idempotency-key KEY` | record action on an acknowledged message |
 | `supervise` | `floati supervise [--root ROOT]` | report fleet health |
-| `presence` | `floati presence {report&#124;show}` | self-report or inspect node liveness |
+| `presence` | `floati presence {report&#124;show&#124;set}` | declare fleet presence or report node liveness |
 | `presence report` | `floati presence report [--root ROOT] --as NODE --ttl-seconds N` | record this node's own liveness |
 | `presence show` | `floati presence show [--root ROOT]` | inspect node self-reports |
+| `presence set` | `floati presence set --root ROOT --as NODE --mode {AWAY,PRESENT} --idempotency-key KEY` | declare the fleet AWAY or PRESENT |
 | `board` | `floati board [--root ROOT &#124; --demo] [--no-animation] [--session SESSION]` | open the TUI harbor board |
 | `orchestrate` | `floati orchestrate [--root ROOT] --plan PLAN --adapter {codex} --deadline DEADLINE [--no-animation]` | seed and run a worker fleet |
 | `sequencer` | `floati sequencer {status&#124;serve&#124;direct}` | manage the optional local writer |
 | `sequencer status` | `floati sequencer status [--root ROOT]` | observe local writer mode |
 | `sequencer serve` | `floati sequencer serve [--root ROOT] --as NODE [--takeover]` | run the local managed writer |
 | `sequencer direct` | `floati sequencer direct [--root ROOT] --as NODE` | restore daemonless writer mode |
-| `work` | `floati work {add&#124;claim&#124;complete&#124;show}` | operate the orchestration log |
-| `work add` | `floati work add [--root ROOT] --title TITLE [--owner NODE] [--workspace] [--needs NEEDS] [--repo REPO] [--sha SHA] [--doc DOC]` | append a work item |
+| `work` | `floati work {add&#124;claim&#124;complete&#124;show&#124;notify&#124;handoff}` | operate the orchestration log |
+| `work add` | `floati work add [--root ROOT] --title TITLE [--owner NODE] [--as NODE] [--workspace] [--adhoc-profile ID] [--needs NEEDS] [--edits PATH] [--repo REPO] [--sha SHA] [--doc DOC]` | append a work item |
 | `work claim` | `floati work claim [--root ROOT] --id ID [--as NODE] [--authority-subject SUBJECT] [--authority-epoch N] [--now NOW]` | claim with authority |
-| `work complete` | `floati work complete [--root ROOT] --id ID [--as NODE] [--now NOW] [--repo REPO] [--sha SHA] [--doc DOC]` | append completion |
-| `work show` | `floati work show [--root ROOT] [--id ID]` | project work state |
+| `work complete` | `floati work complete [--root ROOT] --id ID [--as NODE] [--now NOW] [--consume ID] [--session SESSION] [--repo REPO] [--sha SHA] [--doc DOC]` | append completion |
+| `work show` | `floati work show [--root ROOT] [--id ID] [--as NODE]` | project work state |
+| `work notify` | `floati work notify --root ROOT (--id ID &#124; --all) --as NODE` | replay pending work notifications |
+| `work handoff` | `floati work handoff {record&#124;show}` | record or inspect work handoffs |
+| `work handoff record` | `floati work handoff record --root ROOT --id ID --as NODE --repository PATH [--run ARGV] [--unittest SELECTOR] [--artifact PATH] [--remaining TEXT] [--statement TEXT] [--supersedes ID] --idempotency-key KEY` | capture a work handoff |
+| `work handoff show` | `floati work handoff show --root ROOT --id ID [--handoff-id ID] [--json]` | revalidate a work handoff |
+| `dispatch` | `floati dispatch {record&#124;return&#124;close&#124;show&#124;brief}` | record and recover local dispatch evidence |
+| `dispatch record` | `floati dispatch record --root ROOT --id ID --as NODE --idempotency-key KEY --to NODE --branch BRANCH --brief-file PATH (--external LABEL &#124; --envelope-id ID) [--supersedes ID]` | record a brief revision as you send it |
+| `dispatch return` | `floati dispatch return --root ROOT --id ID --as NODE --idempotency-key KEY [--revision N] --repository PATH --ref REF --artifact PATH [--statement TEXT]` | file a returned artifact against its brief |
+| `dispatch close` | `floati dispatch close --root ROOT --id ID --as NODE --idempotency-key KEY --reason TEXT` | close a dispatch with a reason |
+| `dispatch show` | `floati dispatch show --root ROOT [--id ID] [--json]` | read dispatch revisions, returns and outstanding work |
+| `dispatch brief` | `floati dispatch brief --root ROOT --id ID --as NODE [--json] --revision N` | read the local text of one brief revision |
 | `intake` | `floati intake {scan&#124;show&#124;adopt&#124;preview&#124;dispatch}` | adopt bounded work-queue sources |
 | `intake scan` | `floati intake scan --root ROOT --from DIR` | inspect local Markdown intake |
 | `intake show` | `floati intake show --root ROOT [--id ID]` | inspect immutable snapshots |
 | `intake adopt` | `floati intake adopt --root ROOT --source {local,github} [--from DIR] [--path RELATIVE] [--repo O/R] [--issue N] [--gh EXE] [--owner NODE] [--now NOW]` | adopt one explicit intake source |
 | `intake preview` | `floati intake preview --root ROOT --snapshot ID --operation {comment,label_add,label_remove,close,pr_link} [--body BODY] [--body-file PATH] [--label NAME] [--reason {completed,not_planned}] [--pr N]` | preview one GitHub mutation |
 | `intake dispatch` | `floati intake dispatch --root ROOT --snapshot ID --operation {comment,label_add,label_remove,close,pr_link} [--body BODY] [--body-file PATH] [--label NAME] [--reason {completed,not_planned}] [--pr N] --confirm-digest SHA256 --run-id ID --item-id ID --attempt-id ID --fence-token TOKEN [--approval-request ID] [--approval-decision ID] [--approval-consumption ID]` | bind a preview to one effect intent |
-| `worker` | `floati worker {run}` | run one authority-checked worker |
+| `worker` | `floati worker {adhoc&#124;run}` | run one authority-checked worker |
+| `worker adhoc` | `floati worker adhoc {profile&#124;run&#124;show&#124;teardown}` | operate one governed persistent native worker |
+| `worker adhoc profile` | `floati worker adhoc profile --root ROOT --as NODE --adapter {codex,claude,pi} --lane-opening ID --repository REPO --to NODE --idempotency-key KEY [--authority-subject SUBJECT] [--authority-epoch N] [--grant-launch]` | preview one leased profile and an explicit human launch grant |
+| `worker adhoc run` | `floati worker adhoc run --root ROOT --as NODE --session SESSION --profile ID --envelope ID --idempotency-key KEY` | execute one authenticated native dispatch |
+| `worker adhoc show` | `floati worker adhoc show --root ROOT --dispatch ID` | inspect one durable native dispatch |
+| `worker adhoc teardown` | `floati worker adhoc teardown --root ROOT --as NODE --session SESSION --dispatch ID --idempotency-key KEY` | close one proved complete native worker row |
 | `worker run` | `floati worker run [--root ROOT] --as NODE --adapter {claude,codex,pi} [--claude-executable EXE] [--codex-executable EXE] [--pi-executable EXE]` | run one authority-checked worker |
 | `mcp` | `floati mcp {serve}` | expose launch-bound agent tools |
 | `mcp serve` | `floati mcp serve --root ROOT --as NODE --session SESSION` | serve one launch-bound MCP session |
 | `install` | `floati install --source SOURCE --destination DESTINATION [--ref REF] [--committed-tree] [--json]` | install the exact governed bundle |
-| `update` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] [{fleet}]` | update the exact governed bundle |
+| `update` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] [{prepare&#124;fleet}]` | update the exact governed bundle |
+| `update prepare` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] prepare --root ROOT [--status]` | prepare one root for sends after an update |
 | `update fleet` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet {preview&#124;apply}` | plan or apply one explicit fleet-wide update |
 | `update fleet preview` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet preview --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json]` | derive one immutable fleet update plan |
 | `update fleet apply` | `floati update [--source SOURCE] [--destination DESTINATION] [--ref REF] [--committed-tree] [--json] [--profile-registry PATH] [--fleet-profile PROFILE] fleet apply --root ROOT --as NODE --destination DESTINATION --channel CHANNEL --version VERSION --waiter-binding PATH --transport-registry PATH --transport TRANSPORT [--json] --plan-digest SHA256 --idempotency-key KEY` | apply one consented immutable fleet update plan |
@@ -200,15 +224,18 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `epoch roll` | `floati epoch roll --root ROOT --as NODE --idempotency-key KEY` | archive and replace one bus epoch |
 | `grant` | `floati grant [--root ROOT] [--as NODE] [--holder NODE] [--subject SUBJECT] [--epoch N] [{revoke}]` | append exact work authority |
 | `grant revoke` | `floati grant [--root ROOT] [--as NODE] [--holder NODE] [--subject SUBJECT] [--epoch N] revoke [--root ROOT] --as NODE --holder NODE --subject SUBJECT --epoch N` | revoke exact work authority |
-| `node` | `floati node {add&#124;spawn&#124;retire&#124;drain&#124;switch&#124;role&#124;boot&#124;teardown&#124;explain&#124;prep-clear&#124;state-flush&#124;prompts}` | node administration |
+| `node` | `floati node {person&#124;add&#124;spawn&#124;retire&#124;drain&#124;switch&#124;role&#124;boot&#124;teardown&#124;explain&#124;prep-clear&#124;state-flush&#124;prompts}` | node administration |
+| `node person` | `floati node person {set&#124;clear}` | record explicit person membership |
+| `node person set` | `floati node person set --root ROOT --node NODE --person PERSON` | record one node person |
+| `node person clear` | `floati node person clear --root ROOT --node NODE` | clear one node person |
 | `node add` | `floati node add [--root ROOT] [--node NODE] [--harness HARNESS] [--lifetime {permanent,temporary}] [--lease-minutes N] [--tide-metric METRIC] [--tide-threshold VALUE] [--tide-action {recommend,direct}] [--tide-idempotency-key KEY] [--plan FILE]` | add one node |
 | `node spawn` | `floati node spawn --root ROOT --as NODE --profile PROFILE [--ordinal N]` | create one numbered role instance |
 | `node retire` | `floati node retire --root ROOT (--node NODE &#124; --instance INSTANCE) [--as NODE] [--drain]` | retire one node or numbered instance |
 | `node drain` | `floati node drain --root ROOT --node NODE --session SESSION` | empty one node's inbox without retiring it |
 | `node switch` | `floati node switch --root ROOT --node NODE --harness HARNESS --model MODEL` | switch provider assignment |
-| `node role` | `floati node role --root ROOT --node NODE --template TEMPLATE [--answer ANSWERS]` | assign a shipped role |
-| `node boot` | `floati node boot --root ROOT --node NODE --declared-roots FILE --managed-executable EXE --profile PROFILE [--json]` | project live boot context |
-| `node teardown` | `floati node teardown --root ROOT --node NODE --declared-roots FILE --managed-executable EXE --profile PROFILE [--json]` | project the retention ritual |
+| `node role` | `floati node role --root ROOT --node NODE [--template TEMPLATE] [--answer ANSWERS] [--expected-predecessor EXPECTED_PREDECESSOR]` | assign a shipped role |
+| `node boot` | `floati node boot [--root ROOT] [--node NODE] [--declared-roots FILE] [--managed-executable EXE] [--profile PROFILE] [--json] [--session SESSION] [--runtime RUNTIME] [--hooks HOOKS] [--destination DESTINATION] [--acknowledge-stop-hook-change ACKNOWLEDGE_STOP_HOOK_CHANGE]` | board and hold the current declared seat |
+| `node teardown` | `floati node teardown [--root ROOT] [--node NODE] [--declared-roots FILE] [--managed-executable EXE] [--profile PROFILE] [--json] [--session SESSION] [--repo REPO] [--doc DOC]` | end one declared seat session |
 | `node explain` | `floati node explain --root ROOT --node NODE --declared-roots FILE --managed-executable EXE --profile PROFILE [--json]` | explain one live node |
 | `node prep-clear` | `floati node prep-clear --root ROOT --as ACTOR --session SESSION --workspace WORKSPACE --repo REPO --doc DOC --note NOTE [--complement COMPLEMENT] [--to TO] [--idempotency-key IDEMPOTENCY_KEY] [--git-executable GIT_EXECUTABLE]` | wind one seat down |
 | `node state-flush` | `floati node state-flush --root ROOT --node NODE [--prior-mtime-ns N]` | receipt one state flush |
@@ -229,16 +256,22 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `chart remove-root` | `floati chart [--declared-roots FILE] [--live] [--json] remove-root --declared-roots FILE --bus-id ID` | remove one declared root |
 | `chart timings` | `floati chart [--declared-roots FILE] [--live] [--json] timings --root ROOT [--command C] [--since ISO]` | derived timing percentiles for instrumented verbs |
 | `survey` | `floati survey --declared-roots FILE [--search-path PATH] [--hooks PATH] [--targets PATH] [--json]` | read-only foreign-bus survey |
-| `seat` | `floati seat {board}` | board one declared workspace explicitly |
+| `seat` | `floati seat {add&#124;remove&#124;board&#124;teardown&#124;migrate&#124;retire}` | create, remove, and board explicit seats |
+| `seat add` | `floati seat add --root ROOT --home PATH --source PATH --gateway-config PATH --codex-config PATH --transport TRANSPORT --coordinator NODE --repo REPO [--mode {desktop,cli}] [--node NODE] [--profile PROFILE] [--codex-executable EXE] [--codex-hooks PATH] [--warm-build-script FILE] [--rehome]` | prepare one owned Codex seat home |
+| `seat remove` | `floati seat remove --root ROOT --home PATH` | retire one unchanged owned seat home |
 | `seat board` | `floati seat board --root ROOT --as NODE --workspace PATH --session SESSION --idempotency-key KEY [--take-over]` | arm, resume, and drain one declared session |
-| `hook` | `floati hook {install}` | install one harness stop hook |
-| `hook install` | `floati hook install --harness {cursor} --root ROOT --as NODE --workspace WORKSPACE --runtime RUNTIME` | write one Cursor project stop hook |
+| `seat teardown` | `floati seat teardown --root ROOT --as NODE --home HOME --session SESSION --repo REPO --doc DOC --idempotency-key KEY` | pause and report one completed declared session |
+| `seat migrate` | `floati seat migrate --root ROOT --as NODE --workspace PATH --idempotency-key KEY [--coordinator NODE]` | migrate one registered pre-governance seat once |
+| `seat retire` | `floati seat retire --root ROOT [--apply]` | offer git worktree remove for finished row trees |
+| `hook` | `floati hook {install&#124;uninstall}` | install explicit native harness hooks |
+| `hook install` | `floati hook install --harness {cursor,codex,zcode,claude} --root ROOT [--as NODE] [--workspace WORKSPACE] [--prepare-only] --runtime RUNTIME [--hooks HOOKS] [--destination DESTINATION] [--hook-timeout-seconds HOOK_TIMEOUT_SECONDS] [--wait-deadline-seconds WAIT_DEADLINE_SECONDS] [--acknowledge-stop-hook-change ACKNOWLEDGE_STOP_HOOK_CHANGE]` | install Cursor, Codex, zcode, or Claude native hooks |
+| `hook uninstall` | `floati hook uninstall --harness {cursor,zcode,claude} [--hooks HOOKS] --root ROOT --as NODE --workspace WORKSPACE --runtime RUNTIME` | remove one cursor seat marker or restore one zcode or Claude Stop hook |
 | `wake` | `floati wake {pause&#124;resume&#124;status&#124;arm&#124;wait&#124;daemon}` | control exact wake coordinates |
 | `wake pause` | `floati wake pause --root ROOT --as NODE --session SESSION [--idempotency-key KEY]` | pause one exact session |
 | `wake resume` | `floati wake resume --root ROOT --as NODE --session SESSION [--idempotency-key KEY]` | resume one exact session |
 | `wake status` | `floati wake status --root ROOT --as NODE --session SESSION` | inspect one exact session |
 | `wake arm` | `floati wake arm --root ROOT --as NODE --session SESSION --workspace WORKSPACE --idempotency-key KEY [--take-over]` | arm one exact acting session |
-| `wake wait` | `floati wake wait --harness {cursor} --root ROOT --as NODE --runtime RUNTIME [--deadline-seconds N] [--hook-timeout-seconds N] [--poll-seconds N] [--loop-limit N]` | hold a Cursor stop until mail or a deadline |
+| `wake wait` | `floati wake wait --harness {cursor,zcode,claude} --root ROOT --as NODE --runtime RUNTIME [--deadline-seconds N] [--hook-timeout-seconds N] [--poll-seconds N] [--loop-limit N]` | hold a Cursor, zcode or Claude stop until mail or a deadline |
 | `wake daemon` | `floati wake daemon {consent&#124;bind&#124;install&#124;start&#124;status&#124;stop&#124;remove&#124;revoke}` | manage one local wake daemon |
 | `wake daemon consent` | `floati wake daemon consent --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode} --min-poll-seconds N --max-poll-seconds N --max-backoff-seconds N --activation-epoch N` | record exact activation consent |
 | `wake daemon bind` | `floati wake daemon bind --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode} --session SESSION --workspace WORKSPACE --executable EXE --binding-epoch N [--yes] [--zcode-node-executable EXE] [--zcode-entry-executable EXE]` | bind one exact session |
@@ -259,10 +292,38 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `context reading` | `floati context reading {record}` | record seated context testimony |
 | `context reading record` | `floati context reading record --root ROOT --as NODE --metric METRIC --value VALUE --command {/context,/status,/usage,/cost} --idempotency-key KEY [--json]` | append context testimony |
 | `purge` | `floati purge --root ROOTS [--dry-run]` | move the exact roots you list into the account Trash; never deletes |
+| `hold` | `floati hold {start&#124;release&#124;inbound}` | manage project holds and inbound mail holds |
+| `hold start` | `floati hold start --root ROOT --as NODE --idempotency-key KEY --reason TEXT [--expected-release TIMESTAMP]` | append one versioned project hold |
+| `hold release` | `floati hold release --root ROOT --as NODE --idempotency-key KEY [--hold HOLD]` | append one terminal project-hold release |
+| `hold inbound` | `floati hold inbound {start&#124;show}` | start or inspect a node’s inbound mail hold |
+| `hold inbound start` | `floati hold inbound start --root ROOT --node NODE --idempotency-key KEY --reason TEXT [--expected-release TIMESTAMP]` | hold incoming mail for an active node |
+| `hold inbound show` | `floati hold inbound show --root ROOT --node NODE` | inspect a node’s inbound mail holds and decisions |
+| `needs` | `floati needs {file&#124;close&#124;show&#124;observe&#124;admission&#124;read&#124;budget&#124;release}` | raise and read what needs a person |
+| `needs file` | `floati needs file --root ROOT --as NODE --kind {approval,question,review} --title TEXT [--detail TEXT] [--repository PATH] [--ref REF] [--commit SHA] [--path PATH] [--supersedes ID] --idempotency-key KEY` | raise one item for a person |
+| `needs close` | `floati needs close --root ROOT --as NODE --item ID --reason TEXT --idempotency-key KEY` | close one item its node raised |
+| `needs show` | `floati needs show --root ROOT [--all]` | list what needs a person, with freshness |
+| `needs observe` | `floati needs observe --root ROOT --as NODE --source-config PATH` | observe one orchestrator for threads that need a person |
+| `needs admission` | `floati needs admission --root ROOT` | preview attention admission for a new dispatch |
+| `needs read` | `floati needs read --root ROOT --item ID --idempotency-key KEY` | mark items read, as a person |
+| `needs budget` | `floati needs budget --root ROOT (--limit N &#124; --clear) [--hold-dispatches] --idempotency-key KEY` | declare the attention budget, as a person |
+| `needs release` | `floati needs release --root ROOT --hold ID --idempotency-key KEY` | release one held dispatch, as a person |
+| `territory` | `floati territory {declare&#124;release&#124;show&#124;preview}` | declare leased working paths and preview overlap |
+| `territory declare` | `floati territory declare --root ROOT --as NODE --path PATH --ttl-seconds N --idempotency-key KEY [--now TIMESTAMP]` | lease working paths for one node |
+| `territory release` | `floati territory release --root ROOT --as NODE --territory ID --idempotency-key KEY` | end one territory lease |
+| `territory show` | `floati territory show --root ROOT` | list territory leases and their state |
+| `territory preview` | `floati territory preview --root ROOT --owner NODE --edits PATH [--base-ref REF]` | preview the territories a dispatch would enter |
+| `quiet` | `floati quiet {run&#124;status&#124;show&#124;release}` | hold enrolled seats' builds and tests for one quiet window |
+| `quiet run` | `floati quiet run --root ROOT --as NODE --idempotency-key KEY [--trigger {operator,memory_pressure}] [--load-bound LOAD] [--pressure-metric {psi_memory_full_avg10,psi_memory_some_avg10,vm_pressure_level}] [--pressure-threshold VALUE] [--pressure-release-below VALUE] --settle-cap-seconds N --cap-seconds N [--interval-seconds N] [--release-file PATH] [--exempt NODE]` | settle, hold and release one quiet window |
+| `quiet status` | `floati quiet status --root ROOT [--json] [--command TEXT]` | say whether a quiet window holds this fleet now |
+| `quiet show` | `floati quiet show --root ROOT [--window ID]` | list quiet windows or show one with its exposure receipts |
+| `quiet release` | `floati quiet release --root ROOT --as NODE --window ID --idempotency-key KEY [--resolve-pid PID] [--start-token TOKEN]` | release a quiet window whose driver died |
+| `backup` | `floati backup DIR --root ROOT --epoch EPOCH_ID` | export one retained epoch archive |
 <!-- END GENERATED COMMAND TABLE -->
 
 Delivery and acknowledgment are separate receipts; a successful send proves the
-append, never the delivery. Retirement is self-only. Node changes are preview-first.
+append, never the delivery. For low-level `register` and `retire`, using your own
+seat is an operating convention: caller-selected NODE is not bound to the calling
+seat. Node changes are preview-first.
 Confluence is a read seam with no discovery, watcher, network or mutation API.
 Wake control is marker-only and receipted; it never edits hook registration.
 `wake status` reports the wake-daemon breaker from the runtime; a coordinate is
