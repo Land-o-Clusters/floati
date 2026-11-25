@@ -49,8 +49,8 @@ def tree_bytes(root: Path) -> dict[Path, tuple[str, bytes]]:
 class AU1S3Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = au1_s2.AU1S2Tests(methodName="runTest")
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.fleet_home = self.fixture.base / "doctor-fleet"
         FloatiRoot.open_direct_home(self.fleet_home, create=True)
 

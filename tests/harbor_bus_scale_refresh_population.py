@@ -57,6 +57,7 @@ REQUIRED_ROUTINE = frozenset([
     "node prep-clear",
     "node state-flush",
     "node prompts",
+    "net route list",
     "role list",
     "role show",
     "role validate",
@@ -89,8 +90,6 @@ REQUIRED_ROUTINE = frozenset([
 NONROUTINE = frozenset([
     "work notify",
     "hook relay",
-    "ask",
-    "replay",
     "confluence adopt",
     "confluence release",
     "effect reconcile",
@@ -155,12 +154,16 @@ class BusScaleRefreshPopulationTests(unittest.TestCase):
         self.assertTrue(scope["excluded"]["quiet release"].startswith("Native workload pending. "))
         amendment = json.loads(commands._TRAIN_AMENDMENT.read_bytes())
         pending = {" ".join(row["path"]) for row in amendment["commands"]} - {"work add"}
-        self.assertEqual(EXECUTABLE_COUNT + 1 + len(pending), len(scope["inventory"]))
+        self.assertEqual(EXECUTABLE_COUNT + 6 + len(pending), len(scope["inventory"]))
         admin = commands.classify_contract(scope["inventory"])["administration"]
-        self.assertEqual(ADMINISTRATION_COUNT + 1, len(admin))
+        self.assertEqual(ADMINISTRATION_COUNT + 4, len(admin))
         self.assertIn("setup", admin)
         self.assertIn("seat retire", admin)
-        self.assertEqual(NONROUTINE | pending | set(admin), set(scope["excluded"]))
+        self.assertEqual(NONROUTINE | pending | set(admin) | {"ask", "replay", "who"},
+                         set(scope["excluded"]))
+        for path in ("ask", "replay"):
+            with self.subTest(path=path):
+                self.assertTrue(scope["excluded"][path].startswith("Native workload pending. "))
         self.assertFalse(REQUIRED_ROUTINE & set(scope["excluded"]))
         self.assertEqual(set(scope["inventory"]), REQUIRED_ROUTINE | {"wake daemon serve"} | set(scope["excluded"]))
 
@@ -188,11 +191,17 @@ class BusScaleAm7PopulationTests(unittest.TestCase):
 
         pending = {command(tool) for tool in tools if command(tool) not in native_paths}
         self.assertEqual({
+            "ask", "who",
             "checkout-liveness", "dispatch show", "needs admission", "needs close",
             "needs file", "needs show", "quiet show", "quiet status", "work handoff show",
         }, pending)
         with self.assertRaisesRegex(ValueError, "served MCP tool has no measured native implementation"):
             workloads.mcp_tool_bindings(parser)
+        # Another unmeasured tool must not produce the refusal on ask's behalf.
+        ask_tools = [tool for tool in tools if command(tool) == "ask"]
+        with patch.object(workloads, "project_mcp_surface", return_value={"tools": ask_tools}):
+            with self.assertRaisesRegex(ValueError, r"implementation: ask$"):
+                workloads.mcp_tool_bindings(parser)
         # The previously covered tools still bind their actual native handlers.
         tools = [tool for tool in tools if command(tool) not in pending]
         with patch.object(workloads, "project_mcp_surface", return_value={"tools": tools}):

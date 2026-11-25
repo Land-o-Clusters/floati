@@ -8,6 +8,7 @@ import os
 import json
 import shutil
 import subprocess
+import sys
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,19 @@ class SeatTeardownHostWorkerTests(unittest.TestCase):
         self.assertIsNone(process.poll(), 'activity observation must never signal a host or job')
 
     def test_managed_native_worker_allows_teardown_and_is_named_in_receipt(self):
+        if sys.platform.startswith('linux'):
+            # The exemption needs evidence that no ancestor is itself a
+            # managed host. Probe that capability before starting the fixtures.
+            pid = os.getppid()
+            while pid > 1:
+                proc = Path('/proc') / str(pid)
+                try:
+                    (proc / 'exe').readlink()
+                except PermissionError:
+                    self.skipTest('native_ancestor_executable_unreadable: managed host attribution requires readable process ancestry')
+                parent = next(line for line in (proc / 'status').read_text().splitlines()
+                    if line.startswith('PPid:'))
+                pid = int(parent.split()[1])
         custom = (self.base / 'short-data/User/globalStorage/anysphere.cursor-agent-worker/'
             'agent-cli/.local/share/cursor-agent/versions/fixture/cursor-agent')
         custom.parent.mkdir(parents=True)

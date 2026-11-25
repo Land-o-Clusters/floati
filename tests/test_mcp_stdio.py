@@ -95,6 +95,12 @@ class McpStdioTests(unittest.TestCase):
             },
             {
                 "jsonrpc": "2.0",
+                "id": "who",
+                "method": "tools/call",
+                "params": {"name": "who", "arguments": {}},
+            },
+            {
+                "jsonrpc": "2.0",
                 "id": "invalid-tool-input",
                 "method": "tools/call",
                 "params": {
@@ -106,7 +112,7 @@ class McpStdioTests(unittest.TestCase):
 
         responses = self.responses(completed)
         self.assertEqual(
-            ["initialize", "ping", "list", "status", "invalid-tool-input"],
+            ["initialize", "ping", "list", "status", "who", "invalid-tool-input"],
             [response["id"] for response in responses],
         )
         initialize = responses[0]["result"]
@@ -132,15 +138,19 @@ class McpStdioTests(unittest.TestCase):
         )
         validate_mcp_observation(initialize["floatiIntegrationPin"])
         self.assertEqual({}, responses[1]["result"])
-        self.assertIn(
-            "status",
-            {tool["name"] for tool in responses[2]["result"]["tools"]},
+        self.assertTrue(
+            {"status", "ask", "send", "who"}
+            <= {tool["name"] for tool in responses[2]["result"]["tools"]},
         )
         status = responses[3]["result"]
         self.assertEqual("status", status["structuredContent"]["command"])
         self.assertEqual("ok", status["structuredContent"]["status"])
         self.assertNotIn("isError", status)
-        invalid = responses[4]["result"]
+        who = responses[4]["result"]["structuredContent"]
+        self.assertEqual("ok", who["status"])
+        self.assertEqual([public_ids.builder("a")],
+                         [row["node_id"] for row in who["evidence"]["roster"]])
+        invalid = responses[5]["result"]
         self.assertIs(True, invalid["isError"])
         self.assertEqual(
             "arguments_invalid",

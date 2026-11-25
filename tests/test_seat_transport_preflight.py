@@ -1,6 +1,7 @@
 """Selected gateway transport integrity is an offline, scratch-only prerequisite."""
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import json
 import os
@@ -10,12 +11,15 @@ from pathlib import Path
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from floati.install_limits import MAX_INSTALL_FILES, MAX_INSTALL_FILE_BYTES, MAX_INSTALL_TOTAL_BYTES
 from floati.seat_transport_preflight import preflight_transport
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
 CLIENTS = ("floati/__init__.py", "floati/__main__.py", "floati/cli.py",
            "floati/codex_hook_install.py", "floati/codex_wait.py")
+# Published readers keep their compiled bounds after the runtime updates.
+MIN_DEPLOYED_INSTALL_FILES = 4096
 
 
 class SeatTransportPreflightTests(unittest.TestCase):
@@ -80,6 +84,48 @@ class SeatTransportPreflightTests(unittest.TestCase):
         self.document.update(schema_version=1, ownership={"fixture": "opaque gateway metadata"})
         self.save_manifest()
         self.assertEqual("verified", preflight_transport(self.transport)["state"])
+
+    def test_shipped_bundle_has_room_for_three_more_contract_cuts(self):
+        """Reserve the next indexed cut and two more against deployed readers."""
+        from scripts.ledger_contract import archive_schema_path
+
+        source = Path(__file__).resolve().parents[1]
+        entries = json.loads((source / "bundle-manifest.v0.json").read_bytes())["files"]
+        cut_files = Counter()
+        cut_bytes = Counter()
+        archived, live = set(), set()
+        indexed_cuts = set()
+        total = largest = 0
+        for entry in entries:
+            relative = entry["path"]
+            size = (source / relative).stat().st_size
+            total += size
+            largest = max(largest, size)
+            parts = relative.split("/")
+            if len(parts) > 2 and parts[0] == "bundle" and parts[1].startswith("c7."):
+                cut_files[parts[1]] += 1
+                cut_bytes[parts[1]] += size
+                if (len(parts) == 3 and parts[2] == "ledger-contract.json"
+                        and json.loads((source / relative).read_bytes())["format_version"] == 2):
+                    indexed_cuts.add(parts[1])
+            if archive_schema_path(relative) is not None:
+                archived.add(entry["sha256"])
+            if relative.startswith("schemas/") and relative.endswith(".json"):
+                live.add(entry["sha256"])
+        # The next cut uses two envelope files and one file per novel schema digest.
+        candidate_growth = 2 + len(live - archived)
+        growth = max([candidate_growth] + [cut_files[version] for version in indexed_cuts])
+        required = len(entries) + 3 * growth
+        self.assertLessEqual(
+            required, MIN_DEPLOYED_INSTALL_FILES,
+            f"{len(entries)} shipped files and three cuts of {growth} files require {required} slots",
+        )
+        self.assertLessEqual(largest, MAX_INSTALL_FILE_BYTES)
+        self.assertLessEqual(total + 3 * max(cut_bytes.values()), MAX_INSTALL_TOTAL_BYTES)
+        self.assertEqual(
+            "verified", preflight_transport({**self.transport, "max_files": required})["state"],
+            f"{len(entries)} shipped files and three cuts of {growth} files require {required} slots",
+        )
 
     def test_missing_install_is_refused(self):
         absent = self.base / "missing-install"
@@ -246,7 +292,7 @@ class SeatTransportPreflightTests(unittest.TestCase):
 
     def test_transport_closed_metadata_and_bound_types_are_refused(self):
         for updates in ({"foreign": True}, {"kind": "foreign"}, {"max_files": True},
-                        {"max_files": 4097}, {"max_file_bytes": 67108865},
+                        {"max_files": MAX_INSTALL_FILES + 1}, {"max_file_bytes": 67108865},
                         {"max_total_bytes": 268435457}, {"source_sha": "z" * 40},
                         {"manifest_sha256": "short"}, {"max_file_bytes": 100, "max_total_bytes": 99}):
             with self.subTest(updates=updates):

@@ -423,7 +423,7 @@ def delivery_membership(root, node, requested, *, worker_session_id=None, proof=
         return frozenset(_validated_membership(rows, events, node, worker_session_id).intersection(requested))
 
 
-def transact_delivery(root, node, requested, decide, *, worker_session_id=None):
+def transact_delivery(root, node, requested, decide, *, worker_session_id=None, _before_append=None):
     """Append a native plain/unpresented receipt and preserve certified joins.
 
     The caller still owns presenter/bridge admission. This closed transaction
@@ -482,6 +482,8 @@ def transact_delivery(root, node, requested, decide, *, worker_session_id=None):
         if duplicate:
             raise ProtocolRefusal("duplicate_record_id", f"record id {row['id']} already exists")
         _assert_transaction_prefix(prefix)
+        if _before_append is not None:
+            _before_append()
         identity = jsonl._append_frame(path, encoded)
         if prefix is not None:
             try:

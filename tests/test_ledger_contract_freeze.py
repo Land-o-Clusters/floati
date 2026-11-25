@@ -56,6 +56,10 @@ class LedgerContractFreezeTests(unittest.TestCase):
     def cut(self):
         return self.tool.cut(self.root, "c7.3", self.tool.inventory(self.root))
 
+    def cut_payload(self, version, name="schemas/v0/sample.schema.json"):
+        document = self.tool.load_contract(self.root, version)
+        return self.root / document["schema_index"][name]["storage"]
+
     def assert_refused(self, code, call):
         with self.assertRaises(self.tool.ContractRefusal) as caught:
             call()
@@ -233,7 +237,7 @@ class LedgerContractFreezeTests(unittest.TestCase):
         self.assertEqual(notes, contract["ratification_notes"])
         self.assertEqual("unchanged", self.tool.check(self.root)["classification"])
         self.assertEqual(self.tool.inventory(self.root), contract["members"])
-        snapshot = bundle / "schemas/v0/sample.schema.json"
+        snapshot = self.cut_payload("c7.3")
         self.assertEqual(self.schema_path.read_bytes(), snapshot.read_bytes())
         self.assertEqual(hashlib.sha256(snapshot.read_bytes()).hexdigest(),
                          contract["members"]["schemas"]["schemas/v0/sample.schema.json"])
@@ -280,9 +284,71 @@ class LedgerContractFreezeTests(unittest.TestCase):
 
     def test_recut_keeps_earlier_published_cuts_under_the_guard(self):
         self.cut()
+        snapshot = self.cut_payload("c7.3")
         self.tool.cut(self.root, "c7.4", self.tool.inventory(self.root))
-        (self.root / "bundle/c7.3/schemas/v0/sample.schema.json").write_text("{}\n")
+        snapshot.write_text("{}\n")
         self.assert_refused("ledger_contract_bundle_invalid", lambda: self.tool.check(self.root))
+
+    def test_unchanged_schemas_are_readable_without_another_payload_copy(self):
+        twin = self.schema_path.with_name("twin.schema.json")
+        twin.write_bytes(self.schema_path.read_bytes())
+        self.cut()
+        self.assertEqual(self.cut_payload("c7.3"), self.cut_payload("c7.3", "schemas/v0/twin.schema.json"))
+        self.tool.cut(self.root, "c7.4", self.tool.inventory(self.root))
+        added = {
+            path.relative_to(self.root / "bundle/c7.4").as_posix()
+            for path in (self.root / "bundle/c7.4").rglob("*") if path.is_file()
+        }
+        self.assertEqual({"ledger-contract.json", "ledger-contract.sha256"}, added)
+        self.assertEqual("unchanged", self.tool.check(self.root)["classification"])
+
+    def test_legacy_cut_is_verified_and_reused_without_changing_its_files(self):
+        pins = self.tool.inventory(self.root)
+        version = "c7.3"
+        legacy = self.root / "bundle" / version
+        schema_name = "schemas/v0/sample.schema.json"
+        payload = legacy / schema_name
+        payload.parent.mkdir(parents=True)
+        payload.write_bytes(self.schema_path.read_bytes())
+        self.tool.save_contract(legacy, {
+            "format_version": 1, "kind": "ledger_contract", "version": version,
+            "predecessor": "c7.2", "source_pin": self.tool.SOURCE_PIN,
+            "predecessor_contract_sha256": None, "members": pins, "ratifications": [],
+        })
+        (self.root / self.tool.PREPARATION).parent.mkdir(parents=True)
+        self.tool.write_json(self.root / self.tool.PREPARATION, {"state": "cut", "version": version})
+        self.tool.write_json(self.root / self.tool.CURRENT, {
+            "version": version, "sha256": hashlib.sha256(
+                (legacy / "ledger-contract.json").read_bytes(),
+            ).hexdigest(),
+        })
+        before = {name: content for name, content in self.bundle_bytes().items()
+                  if name.startswith("c7.3/")}
+        self.tool.cut(self.root, "c7.4", pins)
+        self.assertEqual(payload, self.cut_payload("c7.4"))
+        self.assertEqual(before, {name: content for name, content in self.bundle_bytes().items()
+                                  if name.startswith("c7.3/")})
+        payload.write_text("{}\n")
+        self.assert_refused("ledger_contract_bundle_invalid", lambda: self.tool.check(self.root))
+
+    def test_index_cannot_redirect_to_unapproved_storage_with_identical_bytes(self):
+        self.cut()
+        version = "c7.3"
+        cut = self.root / "bundle" / version
+        name = "schemas/v0/sample.schema.json"
+        document = self.tool.load_contract(self.root, version)
+        storage = document["schema_index"][name]["storage"]
+        wrong_paths = ("outside.json", storage.replace("c7.3/", "c7.4/"),
+                       f"bundle/{version}/{name}")
+        for wrong in wrong_paths:
+            with self.subTest(storage=wrong):
+                path = self.root / wrong
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(self.schema_path.read_bytes())
+                document["schema_index"][name]["storage"] = wrong
+                self.tool.save_contract(cut, document)
+                self.assert_refused("ledger_contract_bundle_invalid",
+                                    lambda: self.tool.load_contract(self.root, version))
 
     def test_semantic_code_change_requires_recut_even_with_schema_fixture(self):
         self.cut()
@@ -348,7 +414,7 @@ class LedgerContractFreezeTests(unittest.TestCase):
 
     def test_tampered_frozen_schema_is_not_a_ratification_baseline(self):
         self.cut()
-        path = self.root / "bundle/c7.3/schemas/v0/sample.schema.json"
+        path = self.cut_payload("c7.3")
         path.write_text("{}\n")
         self.assert_refused("ledger_contract_bundle_invalid", lambda: self.tool.assess(self.root, "c7.3", {}))
 
@@ -432,13 +498,13 @@ class LedgerContractFreezeTests(unittest.TestCase):
 
     def test_multiple_ratifications_preserve_the_full_audit_chain(self):
         fixtures = self.loosen()
+        path = self.cut_payload("c7.3")
         self.tool.ratify(self.root, "c7.3", fixtures)
         schema = json.loads(self.schema_path.read_text())
         schema["required"].remove("value")
         self.write_schema(schema)
         self.tool.ratify(self.root, "c7.3", fixtures)
         self.assertEqual("unchanged", self.tool.check(self.root)["classification"])
-        path = self.root / "bundle/c7.3/ratifications/1/schemas/v0/sample.schema.json"
         path.write_text("{}\n")
         self.assert_refused("ledger_contract_bundle_invalid", lambda: self.tool.check(self.root))
 

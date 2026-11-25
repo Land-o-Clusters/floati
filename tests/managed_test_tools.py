@@ -25,3 +25,17 @@ def executable(declaration_variable: str, fallback_name: str) -> Optional[Path]:
         )
     selected = shutil.which(fallback_name)
     return None if selected is None else Path(selected).resolve(strict=True)
+
+
+def require_minisign(test) -> Path:
+    selected = executable("FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign")
+    if selected is None:
+        test.skipTest("test_tool_absent: minisign")
+    return selected
+
+
+def require_node(test) -> Path:
+    selected = executable("FLOATI_TEST_NODE_EXECUTABLE", "node")
+    if selected is None:
+        test.skipTest("test_tool_absent: node")
+    return selected

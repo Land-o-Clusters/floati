@@ -842,7 +842,7 @@ def build_carry_plan(root, old_payloads):
                 dependency = row[reference_field]
                 if dependency in retained:
                     retained.add(row["id"])
-            elif kind in {"ask_answer", "ask_decline", "ask_timeout"} and row.get("reply_to") in retained:
+            elif kind in {"ask_presentation", "ask_answer", "ask_decline", "ask_timeout"} and row.get("reply_to") in retained:
                 retained.add(row["id"])
             elif kind == "seat_execution":
                 if row["id"] in retained or row.get("envelope_id") in retained:

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from floati.cli import _parser
 from floati.command_contract import describe_parser
@@ -27,6 +28,7 @@ except ImportError:
 from floati.registry import REGISTRY_KINDS, Registry
 from floati.work import WorkLog
 from floati.root import FloatiRoot
+from floati.timings import derive_chart
 from tests.temp_roots import REAL_TEMP_ROOT
 from tests.banked_sha_fixture import banked_send_repository
 
@@ -50,11 +52,13 @@ READ_TOOLS = {
     "quiet_status",
     "receipts",
     "status",
+    "who",
     "work_handoff_show",
     "dispatch_show",
 }
 GOVERNED_TOOLS = {
     "ack",
+    "ask",
     "consume",
     "confluence_grant",
     "confluence_revoke",
@@ -193,6 +197,86 @@ class McpToolSurfaceTests(unittest.TestCase):
             self.assertNotIn("DRAFT", tool["description"])
             self.assertNotEqual(tool["description"], "floati " + tool["name"].replace("_", " "))
         self.assertEqual("approved", self.surface()["copy_state"])
+
+    def test_ask_returns_the_correlated_mcp_answer_receipt(self) -> None:
+        from floati.ask import wait_for_question
+
+        self.use_send_repository()
+        asker = self.server()
+        respondent = self.server(public_ids.builder("b"))
+        self.assertIn("ask", {tool["name"] for tool in asker.list_tools()})
+        arguments = self.send_arguments(note="Can you review this?", key="mcp-question")
+
+        def answer_then_observe(root, question, wait_seconds, *, stop_waiting=None):
+            reply = respondent.call_tool("ask", {
+                **arguments, "recipient": public_ids.builder("a"),
+                "idempotency_key": "mcp-answer", "reply_to": question["id"],
+                "disposition": "answer", "note": "--help",
+            })["structuredContent"]
+            self.assertEqual("ok", reply["status"], reply)
+            return wait_for_question(root, question, wait_seconds, stop_waiting=stop_waiting)
+
+        with patch("floati.ask.wait_for_question", side_effect=answer_then_observe):
+            result = asker.call_tool("ask", {**arguments, "wait_seconds": 0})
+
+        self.assertEqual("ok", result["structuredContent"]["status"], result)
+        evidence = result["structuredContent"]["evidence"]
+        records = {row["id"]: row for row in EventLog(self.root).event_records()}
+        self.assertEqual("answered", evidence["outcome"])
+        question = records[evidence["question_id"]]
+        answer = records[evidence["answer_id"]]
+        self.assertEqual(public_ids.builder("a"), question["sender"])
+        self.assertEqual(public_ids.builder("b"), answer["sender"])
+        self.assertEqual(question["id"], answer["reply_to"])
+        self.assertEqual("--help", evidence["answer_note"])
+        chart = derive_chart(self.root, command="mcp ask")
+        self.assertEqual(2, chart["commands"]["mcp ask"]["count"])
+
+    def test_who_returns_the_bound_roster_and_receipts_the_read(self) -> None:
+        result = self.server().call_tool("who", {})["structuredContent"]
+        self.assertEqual("ok", result["status"], result)
+        rows = {row["node_id"]: row for row in result["evidence"]["roster"]}
+        self.assertEqual({public_ids.builder("a"), public_ids.builder("b")}, set(rows))
+        self.assertEqual("UNKNOWN", rows[public_ids.builder("b")]["liveness"]["stamp"])
+        chart = derive_chart(self.root, command="mcp who")
+        self.assertEqual(1, chart["commands"]["mcp who"]["count"])
+
+    def test_unanswered_mcp_question_returns_the_durable_timeout(self) -> None:
+        self.use_send_repository()
+        arguments = self.send_arguments(note="Can you review this?", key="mcp-timeout")
+        result = self.server().call_tool("ask", {**arguments, "wait_seconds": 0})
+        artifact = result["structuredContent"]
+        self.assertIs(True, result["isError"])
+        self.assertEqual("orchestration_deadline", artifact["status"])
+        evidence = artifact["evidence"]
+        self.assertEqual(("UNKNOWN", "ask_timeout"), (evidence["outcome"], evidence["code"]))
+        rows = {row["id"]: row for row in EventLog(self.root).event_records()}
+        self.assertEqual(evidence["question_id"], rows[evidence["timeout_id"]]["reply_to"])
+
+    def test_message_tools_refuse_approval_inputs_and_receipt_the_refusal(self) -> None:
+        from floati.approvals import ApprovalLedger
+
+        self.use_send_repository()
+        server = self.server()
+        for name, extra in (
+            ("ask", {"disposition": "approve", "wait_seconds": 0}),
+            ("send", {"approval_decision_id": "approve"}),
+        ):
+            with self.subTest(tool=name):
+                arguments = self.send_arguments(note="Approve this.", key="mcp-approval")
+                self.assert_tool_error(server.call_tool(name, {**arguments, **extra}),
+                                       "arguments_invalid")
+                self.assertEqual([], EventLog(self.root).event_records())
+                chart = derive_chart(self.root, command=f"mcp {name}")
+                self.assertEqual(1.0, chart["commands"][f"mcp {name}"]["refused_share"])
+
+        arguments = self.send_arguments(note="I approve this.", key="mcp-peer-note")
+        result = server.call_tool("send", arguments)["structuredContent"]
+        self.assertEqual("ok", result["status"], result)
+        self.assertEqual(arguments["note"], result["evidence"]["message"]["note"])
+        approvals = ApprovalLedger(self.root)
+        self.assertEqual([], read_records(self.root, approvals.decision_path,
+                                         allowed_kinds={"approval_decision"}))
 
     def test_handoff_reader_reports_absent_evidence_for_the_bound_root(self) -> None:
         item = WorkLog(self.root).add("Prepare review", public_ids.builder("a"), [])
@@ -531,6 +615,8 @@ class McpToolSurfaceTests(unittest.TestCase):
         self.assertEqual(0, direct_exit)
         self.assertEqual(direct_artifact, first["structuredContent"])
         self.assertEqual(first, second)
+        chart = derive_chart(self.root, command="mcp send")
+        self.assertEqual(2, chart["commands"]["mcp send"]["count"])
         self.assertNotIn("isError", first)
         self.assertEqual(
             public_ids.builder('a'),
@@ -722,10 +808,8 @@ class McpToolSurfaceTests(unittest.TestCase):
             after = self._root_record_bytes()
             if after != before:
                 mutated.append(str(tool["name"]))
-        # SN-R1 Am.4: mcp serve reaches tools through cli.main, so doctor
-        # writes exactly its one post-bind timing receipt — a receipt about
-        # the invocation, not a fleet write. No other listed tool writes.
-        self.assertEqual(["doctor"], mutated)
+        # These reads write invocation timing receipts only.
+        self.assertEqual(["who", "doctor"], mutated)
         rows = read_records(
             self.root,
             Path("receipts/timings/doctor.jsonl"),
@@ -752,8 +836,8 @@ class McpToolSurfaceTests(unittest.TestCase):
                 artifact = self.assert_tool_error(server.call_tool(name, {}), "unknown_node")
                 self.assertIn("node add", str(artifact["evidence"]["remedy"]))
 
-    def test_expired_lease_refuses_at_the_cli_boundary_without_hiding_tool(self) -> None:
-        """Catches MCP caching lease state or replacing the CLI's typed refusal."""
+    def test_expired_launch_lease_refuses_writes_without_hiding_tools(self) -> None:
+        """Catches a long-running MCP connection keeping expired write authority."""
 
         expired_at = datetime.now(timezone.utc) - timedelta(minutes=1)
         append_record(
@@ -778,17 +862,16 @@ class McpToolSurfaceTests(unittest.TestCase):
         )
         server = self.server()
 
-        self.assertIn("send", {tool["name"] for tool in server.list_tools()})
+        self.assertTrue({"ask", "send"} <= {tool["name"] for tool in server.list_tools()})
         self.use_send_repository()
-        result = server.call_tool(
-            "send",
-            self.send_arguments(note="after expiry", key="expired-send"),
-        )
-
-        artifact = self.assert_tool_error(result, "node_lease_expired")
-        self.assertIsInstance(artifact["evidence"]["remedy"], str)
-        self.assertTrue(artifact["evidence"]["remedy"])
-        self.assertEqual([], EventLog(self.root).records())
+        for name, extra in (("send", {}), ("ask", {"wait_seconds": 0})):
+            with self.subTest(tool=name):
+                args = self.send_arguments(note="after expiry", key=f"expired-{name}")
+                result = server.call_tool(name, {**args, **extra})
+                artifact = self.assert_tool_error(result, "node_lease_expired")
+                self.assertIsInstance(artifact["evidence"]["remedy"], str)
+                self.assertTrue(artifact["evidence"]["remedy"])
+                self.assertEqual([], EventLog(self.root).event_records())
 
 
 if __name__ == "__main__":

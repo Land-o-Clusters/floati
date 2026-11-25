@@ -49,7 +49,7 @@ class RoutineExternalPolicyTests(unittest.TestCase):
         original = {"send", "status", "doctor", "log-history", "receipts-history",
                     "readiness-read", "receipt-append", "wait-start", "wait-idle"}
         cases = set(scope_contract(_parser())["cases"]) - original
-        self.assertEqual(61, len(cases))
+        self.assertEqual(62, len(cases))
         for case in sorted(cases):
             with self.subTest(case=case):
                 helper = entry.routine_module(case)

@@ -44,7 +44,7 @@ from floati.worker_bootstrap_protocol import (
 from floati.worker_isolation import cleanup_worker_isolation, prepare_worker_isolation
 from tests.test_spawn_groups import _Task2Case
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.readiness import Readiness, wait_until
+from tests.readiness import READY_SECONDS, Readiness, wait_until
 from floati.identity_fence import RETIRED_PRODUCT_NAME as _RETIRED_NAME
 
 
@@ -138,8 +138,8 @@ class _HangingAdapter:
     name = "fixture"
 
     def spawn(self, item: dict, *, deadline_seconds: float) -> object:
-        time.sleep(0.2)
-        return object()
+        threading.Event().wait()
+        raise AssertionError("the hanging adapter must be stopped by its runner")
 
     def drive(self, handle: object, item: dict, *, deadline_seconds: float) -> list[dict[str, str]]:
         return []
@@ -974,10 +974,10 @@ class WorkerContractTests(unittest.TestCase):
         )
 
     def test_hang_and_untyped_exception_become_distinct_typed_degradation(self) -> None:
-        for adapter, expected in (
-            (_HangingAdapter(), "process_timeout"),
-            (_ExplodingAdapter(), "adapter_error"),
-            (_ProcessDeathAdapter(), "process_died"),
+        for adapter, expected, call_timeout in (
+            (_HangingAdapter(), "process_timeout", 0.05),
+            (_ExplodingAdapter(), "adapter_error", READY_SECONDS),
+            (_ProcessDeathAdapter(), "process_died", READY_SECONDS),
         ):
             with self.subTest(expected=expected):
                 with tempfile.TemporaryDirectory() as temporary:
@@ -986,12 +986,13 @@ class WorkerContractTests(unittest.TestCase):
                     AuthorityGrantStore(root).claim("work-claims", public_ids.builder('a'), 60, 60, NOW)
                     WorkLog(root).add("bounded adapter", public_ids.builder('a'), [], now=NOW)
 
+                    watchdog = Readiness(f"worker outcome {expected}", timeout=call_timeout)
                     result = WorkerRunner(
-                        root, {"fixture": adapter}, call_timeout=0.05
+                        root, {"fixture": adapter}, call_timeout=watchdog.bound
                     ).run(public_ids.builder('a'), "fixture", now=NOW)
 
                     self.assertEqual("degrade", result["transition"])
-                    self.assertEqual(expected, result["outcome_code"])
+                    self.assertEqual(expected, result["outcome_code"], str(watchdog.failure()))
 
     def test_runner_passes_a_deadline_clipped_to_ttl_minus_the_fixed_margin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

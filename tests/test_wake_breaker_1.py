@@ -14,7 +14,9 @@ Am.1 (architect msg-01a073ea):
 from __future__ import annotations
 
 import unittest
+from itertools import count
 from pathlib import Path
+from unittest.mock import patch
 
 from floati import fixture_ids as public_ids
 from floati.cursor import SparseCursor
@@ -78,17 +80,19 @@ class WakeBreakerHalfOpenTests(_WakeDaemonFixture):
         self.adapter.outcome = "unknown"
         self.adapter.reason_code = reason_code
         daemon = self.daemon()
-        for now in (100.0, 102.0, 106.0):
-            daemon.run_cycle(now)
+        daemon.run_cycle(100.0)
+        for _ in range(2):
+            daemon.run_cycle(self.due_probe_time(daemon))
         return daemon
 
     def due_probe_time(self, daemon) -> float:
         return float(daemon.read_runtime()["next_poll_at"])
 
     def test_an_open_circuit_with_elapsed_backoff_makes_exactly_one_probe(self) -> None:
-        """RED today: elapsed backoff still returns circuit-open backpressure."""
-
-        daemon = self.open_breaker()
+        """The opening schedule honors a poll deferred by the CPU budget."""
+        cpu = count()
+        with patch("floati.wake_daemon._cpu_seconds", side_effect=lambda: float(next(cpu))):
+            daemon = self.open_breaker()
         calls_at_open = len(self.adapter.calls)
         self.assertEqual("open", daemon.read_runtime()["circuit_state"])
         self.adapter.outcome = "woke"

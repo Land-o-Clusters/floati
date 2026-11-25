@@ -1,11 +1,25 @@
 {
   "fixtures": {
+    "tests/fixtures/bus-scale-census/native-command-amendment-4aa55427.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "45dbea3df203ed50865be6902f8a6fb79c32411f9649d154f4a056a5606bb390",
+      "source_sha256": "c19992536c3309ca5dfa69ab1bf0ad89220bc6ace61b95d54c301c3ed0c85c3a"
+    },
     "tests/fixtures/bus-scale-census/native-command-amendment-7d0c404e.json": {
       "adapters": [
         "machine_literal_escape"
       ],
       "projected_sha256": "504592b97655a9b8ed2e4e3d61f389338800491ced8ffaef242ecb0ebdafb4b3",
       "source_sha256": "0aae1d48ec08b1ffb4bf8997e96bdc37e890bdc152819cf7af297bd7026c45b8"
+    },
+    "tests/fixtures/bus-scale-census/native-command-amendment-7faae5cd.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "9d12e4614b30cec7d54da5a1e0f844a3f03413578892402f106875957d77b576",
+      "source_sha256": "f97fca08deced2ecd016a7b849e4367e5118fdd5a3be6268ad99b36f68fcfc7a"
     },
     "tests/fixtures/bus-scale-census/native-command-amendment-d6263c86.json": {
       "adapters": [

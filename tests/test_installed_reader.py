@@ -9,8 +9,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from floati.errors import IntegrityFailure, ProtocolRefusal
 from floati.framing import encode_frame
+from floati.installed_reader import installed_reader_identity
+from floati.jsonl import VerifiedLedgerCursor, read_records
+from floati.root import FloatiRoot
 
 
 class InstalledReaderTests(unittest.TestCase):
@@ -70,6 +75,55 @@ except FloatiError as exc:
         result = self.read(compatible=True)
         self.assertEqual('IntegrityFailure', result['status'])
         self.assertEqual('timestamp_invalid', result['code'])
+
+    def test_known_kind_with_newer_version_uses_the_installed_reader_refusal(self):
+        root = FloatiRoot.open_direct_home(self.base / 'fleet', create=True)
+        relative = Path('registry/entries.jsonl')
+        ledger = root.resolve_relative(relative)
+        ledger.parent.mkdir(exist_ok=True)
+        kinds = {'registry_role_record'}
+        role = {
+            'schema_version': 1, 'kind': 'registry_role_record',
+            'id': 'registry-role-01a04900000070008000000000000001',
+            'tenant_id': root.tenant_id, 'timestamp': self.record['timestamp'],
+            'node_id': 'fixture-reader', 'state': 'retired',
+            'predecessor_role_record_id': 'registry-role-01a04900000070008000000000000000',
+            'idempotency_key': 'clear-role',
+        }
+        next_role = dict(role, id='registry-role-01a04900000070008000000000000002')
+        future = dict(next_role, schema_version=2, extra={'introduced': True})
+        prefix = encode_frame(role)
+
+        def read_cursor(cursor):
+            return cursor.read(root, relative, allowed_kinds=kinds, domain='registry-fixture',
+                               skip_unknown_kinds=True)
+
+        identity = installed_reader_identity(self.runtime)
+        with mock.patch('floati.installed_reader.installed_reader_identity', return_value=identity):
+            ledger.write_bytes(encode_frame(dict(self.record, tenant_id=root.tenant_id)))
+            with self.assertRaises(ProtocolRefusal) as unknown_kind:
+                read_records(root, relative, allowed_kinds=kinds)
+
+            for appended in (False, True):
+                for row, error in (
+                    (dict(next_role, state='invalid'), IntegrityFailure),
+                    (dict(future, tenant_id='foreign'), IntegrityFailure),
+                    (dict(future, schema_version=True), IntegrityFailure),
+                    (future, ProtocolRefusal),
+                ):
+                    with self.subTest(appended=appended, row=row):
+                        cursor = VerifiedLedgerCursor()
+                        ledger.write_bytes(prefix)
+                        if appended:
+                            self.assertEqual([role], read_cursor(cursor)[0])
+                        with ledger.open('ab') as stream:
+                            stream.write(encode_frame(row))
+                        with self.assertRaises(error) as caught:
+                            read_cursor(cursor)
+                        if error is ProtocolRefusal:
+                            self.assertEqual(unknown_kind.exception.code, caught.exception.code)
+                            self.assertEqual(unknown_kind.exception.remedy, caught.exception.remedy)
+                            self.assertIn(row['kind'], caught.exception.detail)
 
     def test_known_kind_in_wrong_ledger_remains_corruption(self):
         self.record['kind'] = 'registry_entry'

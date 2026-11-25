@@ -17,9 +17,10 @@ def event(kind, sid, **fields):
 
 
 def trace(version):
-    modern = version == "modern"
+    modern = version != "legacy"
     fork = MAINTENANCE_SID if modern else GC_SID
-    repack = fork + "/20261008T000000.000003Z-H00000000-P00000067"
+    repack_parent = GC_SID if version == "nested-gc" else fork
+    repack = repack_parent + "/20261008T000000.000003Z-H00000000-P00000067"
     rows = [
         event("start", ROOT_SID, argv=ROOT_ARGV.copy()),
         event("cmd_name", ROOT_SID, name="commit"),
@@ -45,15 +46,27 @@ def trace(version):
     ])
     if modern:
         rows.append(event("region_leave", fork, category="maintenance", label="detach", nesting=1))
+    if version == "nested-gc":
+        argv = ["git", "gc", "--auto", "--quiet", "--no-detach", "--skip-foreground-tasks"]
+        rows.extend([
+            event("child_start", fork, child_id=1, argv=argv.copy()),
+            event("start", GC_SID, argv=argv.copy()),
+            event("cmd_name", GC_SID, name="gc"),
+        ])
     rows.extend([
-        event("child_start", fork, child_id=2, argv=["git", "repack", "-d", "-l"]),
+        event("child_start", repack_parent, child_id=2, argv=["git", "repack", "-d", "-l"]),
         event("start", repack, argv=["git", "repack", "-d", "-l"]),
         event("cmd_name", repack, name="repack"),
         event("exit", repack, code=0, file="git.c"),
         event("atexit", repack, code=0),
-        event("child_exit", fork, child_id=2, pid=103, code=0),
-        event("atexit", fork, code=0),
+        event("child_exit", repack_parent, child_id=2, pid=103, code=0),
     ])
+    if version == "nested-gc":
+        rows.extend([
+            event("atexit", GC_SID, code=0),
+            event("child_exit", fork, child_id=1, pid=102, code=0),
+        ])
+    rows.append(event("atexit", fork, code=0))
     if not modern:
         rows.extend([
             event("child_exit", MAINTENANCE_SID, child_id=1, pid=102, code=0),
@@ -91,6 +104,29 @@ class DetachedTraceContractTests(unittest.TestCase):
         witness = detached_witness(rows)
         self.assertIs(type(witness), dict)
         self.assertTrue(witness)
+
+    def test_detached_maintenance_can_complete_repack_through_its_foreground_gc_child(self):
+        rows, fork, repack = trace("nested-gc")
+        witness = detached_witness(rows)
+        self.assertEqual(fork, witness["fork_sid"])
+        self.assertEqual([repack], witness["completed_repack_sids"])
+
+    def test_nested_repack_requires_a_completed_native_gc_edge(self):
+        for missing in ("no-detach", "gc-exit", "gc-atexit"):
+            with self.subTest(missing=missing):
+                rows, fork, _ = trace("nested-gc")
+                if missing == "no-detach":
+                    for row in rows:
+                        if "--no-detach" in row.get("argv", []):
+                            row["argv"].remove("--no-detach")
+                elif missing == "gc-exit":
+                    rows.remove(next(row for row in rows if row["sid"] == fork
+                                     and row["event"] == "child_exit"))
+                else:
+                    rows.remove(next(row for row in rows if row["sid"] == GC_SID
+                                     and row["event"] == "atexit"))
+                with self.assertRaises(ValueError):
+                    detached_witness(rows)
 
     def test_spawn_only_rows_cannot_testify_to_detached_execution(self):
         self.reject_both(lambda rows, fork, repack:

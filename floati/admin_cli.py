@@ -398,6 +398,12 @@ def _node_role(args: argparse.Namespace) -> HandlerResult:
     return "ok", _previewed(result, preview), OK
 
 
+def _node_role_clear(args: argparse.Namespace) -> HandlerResult:
+    from .fleet_design import clear_node_role
+
+    return "ok", clear_node_role(_root(args.root), args.node, args.idempotency_key), OK
+
+
 def _role_list(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
     return "ok", {"roles": sorted(_templates(root))}, OK
@@ -1577,6 +1583,12 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     role_step.add_argument("--answer", dest="answers", action="append", default=[])
     role_step.add_argument("--expected-predecessor")
     role_step.set_defaults(handler=_node_role)
+
+    role_clear = node_commands.add_parser("role-clear")
+    role_clear.add_argument("--root", required=True)
+    role_clear.add_argument("--node", required=True, metavar="NODE")
+    role_clear.add_argument("--idempotency-key", required=True, metavar="KEY")
+    role_clear.set_defaults(handler=_node_role_clear)
 
     boot = node_commands.add_parser("boot",
         floati_required_without_session=_NODE_PROJECTION_ARGUMENTS)

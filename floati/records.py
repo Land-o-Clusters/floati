@@ -16,7 +16,7 @@ from typing import Any, Dict, FrozenSet, Mapping, Optional
 from .errors import IntegrityFailure, ProtocolRefusal
 from .ids import uuid7_hex
 from .root import IDENTIFIER_PATTERN
-from .adhoc_records import ADHOC_KINDS, ADHOC_SPECS, validate_adhoc_record
+from .adhoc_records import ADHOC_KINDS, ADHOC_RECORD_VERSIONS, ADHOC_SPECS, validate_adhoc_record
 from .needs_records import NEEDS_KINDS, NEEDS_SPECS, validate_needs_record
 from .territory_records import TERRITORY_KINDS, TERRITORY_SPECS, validate_territory_record
 from .inbound_hold_records import INBOUND_HOLD_KINDS, INBOUND_HOLD_SPECS, validate_inbound_hold_record
@@ -160,7 +160,7 @@ def _validate_quiet(record, refuse):
 
 _COMMON = frozenset(("schema_version", "id", "tenant_id", "timestamp", "kind"))
 ASK_RECORD_KINDS = frozenset({
-    "ask_question", "ask_answer", "ask_decline", "ask_timeout",
+    "ask_question", "ask_presentation", "ask_answer", "ask_decline", "ask_timeout",
 })
 WAKE_HOLD_KINDS = frozenset({"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"})
 HOOK_BURN_EFFECT_CLASSES = frozenset(
@@ -388,6 +388,9 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
         "sender", "recipient", "repo", "sha", "doc", "note",
         "idempotency_key", "acting_session_id",
     }),
+    "ask_presentation": ("ask-presentation-", _COMMON | {
+        "sender", "recipient", "reply_to", "idempotency_key", "acting_session_id",
+    }),
     "ask_answer": ("ask-answer-", _COMMON | {
         "sender", "recipient", "repo", "sha", "doc", "note", "reply_to",
         "idempotency_key", "acting_session_id",
@@ -472,6 +475,10 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
             "node_id", "template_role", "template_version", "template_sha256",
             "answers", "state", "predecessor_role_record_id",
         },
+    ),
+    "declared_route_receipt": (
+        "declared-route-",
+        _COMMON | {"from_node", "to_node", "action", "idempotency_key"},
     ),
     "registry_role_transfer": (
         "registry-role-transfer-",
@@ -690,6 +697,9 @@ _MESSAGE_ENVELOPE_FIELD_SHAPES = _message_envelope_field_shapes(_MESSAGE_ENVELOP
 
 
 _V1_FIELDS: Mapping[str, FrozenSet[str]] = {
+    "registry_role_record": _COMMON | {
+        "node_id", "state", "predecessor_role_record_id", "idempotency_key",
+    },
     "epoch_carry_verification": (_SPECS["epoch_carry_verification"][1] - {"carried_envelopes"})
     | {"envelope_count"},
     "delivery_receipt": _SPECS["delivery_receipt"][1] | {"claude_inbox"},
@@ -751,6 +761,54 @@ THREAD_OBSERVATION_KINDS = frozenset({
     "thread_observation_recorded",
     "thread_attachment_detached",
 })
+
+# These versions share the generic nonzero-version admission below. Other
+# validators can still require a particular version or a version-specific shape.
+_NONZERO_RECORD_VERSIONS = dict.fromkeys({
+    "hold_receipt", "stop_hold_receipt", "send_readiness_observation",
+    "seat_execution", "cursor_presentation_receipt", "consumption_receipt",
+    "delivery_receipt", "epoch_carry_verification", "seat_board_receipt",
+    "seat_migration_receipt", "retired_home_disarm_receipt",
+    "role_template_write_receipt", "ack_receipt", "approval_request",
+    "approval_decision", "approval_consumed_for_resume",
+    "attempt_harness_session_bound", "attempt_suspended_for_approval",
+    "bus_epoch_roll_receipt", "capability_grant", "capability_revoked",
+    "capability_set_bound", "credential_lease_granted", "credential_lease_consumed",
+    "credential_lease_revoked", "confluence_grant", "timing_receipt",
+    "dispatch_decision", "hook_burn_record", "mcp_integration_pin",
+    "result_accepted", "run_admission_bound", "run_manifest_fact",
+    "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment",
+    "cancel_requested", "cancel_scope_resolved", "wake_attempt_receipt",
+    "codex_wait_consent_receipt", "codex_wait_session_receipt",
+    "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt",
+    "tide_policy_record", "tide_receipt", "wake_daemon_lifecycle_receipt",
+    "ledger_repair_receipt", "fleet_update_started", "fleet_update_step",
+    "fleet_update_completed",
+} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS, (1,))
+_NONZERO_RECORD_VERSIONS.update({
+    **dict.fromkeys(THREAD_OBSERVATION_KINDS, (1, 2)),
+    "work_item": (1, 2),
+    "seat_teardown_receipt": (1, 2, 3),
+    "wake_daemon_consent_receipt": (1, 2),
+    "wake_hold_receipt": (1, 2, 3, 4),
+})
+_SPECIAL_V1_RECORD_KINDS = frozenset({
+    "registry_person_record", "registry_role_record", "work_handoff_record",
+    "dispatch_revision", "dispatch_return", "dispatch_close", "fleet_presence_receipt",
+    "native_dispatch_launcher_record", "wake_daemon_directory_ownership_record",
+    "codex_binding_repair_receipt", "epoch_history_commit", "bus_epoch_recovery_receipt",
+    "declared_route_receipt",
+}) | NEEDS_KINDS | TERRITORY_KINDS | INBOUND_HOLD_KINDS | QUIET_KINDS | ASK_RECORD_KINDS
+
+
+def is_newer_record_version(kind: str, version: object) -> bool:
+    """Compare an integer stamp to the newest version this reader knows for the kind."""
+    if type(version) is not int or version <= 0:
+        return False
+    versions = _NONZERO_RECORD_VERSIONS.get(kind) or ADHOC_RECORD_VERSIONS.get(kind)
+    if versions is not None:
+        return version > versions[-1]
+    return version > (1 if kind in _SPECIAL_V1_RECORD_KINDS else 0)
 
 
 def _json_integer(value: object) -> Optional[int]:
@@ -849,7 +907,7 @@ def _validate_ask_record(record: Mapping[str, Any], refuse: Any, ident: Any, int
     """Closed field contract for one local ask record."""
 
     kind = record["kind"]
-    if kind in {"ask_question", "ask_answer", "ask_decline"}:
+    if kind != "ask_timeout":
         ident("sender")
         ident("recipient")
         _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
@@ -861,7 +919,7 @@ def _validate_ask_record(record: Mapping[str, Any], refuse: Any, ident: Any, int
         _bounded_note(record["note"], refuse)
         if not str(record["note"]).strip():
             refuse("note_empty", "note is empty")
-    if kind in {"ask_answer", "ask_decline", "ask_timeout"}:
+    if kind != "ask_question":
         _record_ref(record["reply_to"], "ask-question-", "reply_to", refuse)
     if kind == "ask_decline":
         _bounded_string(record["reason"], 1, 1024, "reason", refuse)
@@ -948,7 +1006,11 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     if kind in {"message_envelope", "ask_question"} and "address_preview" in record:
         from .addressing import validate_preview
         preview = record["address_preview"]
-        validate_preview(preview, refuse)
+        if kind == "ask_question" and isinstance(preview, dict) and preview.get("preview_version") == 2:
+            from .role_addressing import validate_role_preview
+            validate_role_preview(preview, refuse)
+        else:
+            validate_preview(preview, refuse)
         if (preview["tenant_id"] != expected_tenant or preview["sender"] != record.get("sender")
                 or record.get("recipient") not in preview["recipients"]):
             refuse("address_preview_invalid", "envelope parties differ from the recipient preview")
@@ -1112,18 +1174,11 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
             schema_version=normalized_version,
             epoch=normalized_epoch,
         )
+    version_stamp = record["schema_version"]
     is_v1_record = (
-        kind in {"hold_receipt", "stop_hold_receipt", "send_readiness_observation", "seat_execution", "work_item", "cursor_presentation_receipt", "consumption_receipt", "delivery_receipt", "epoch_carry_verification"}
-        and isinstance(record["schema_version"], int)
-        and not isinstance(record["schema_version"], bool)
-        and (record["schema_version"] == 1 or (kind == "work_item" and record["schema_version"] == 2))
-    ) or (
-        kind in ({"seat_teardown_receipt", "seat_board_receipt", "seat_migration_receipt", "retired_home_disarm_receipt", "role_template_write_receipt", "ack_receipt", "approval_request", "approval_decision", "approval_consumed_for_resume", "attempt_harness_session_bound", "attempt_suspended_for_approval", "bus_epoch_roll_receipt", "capability_grant", "capability_revoked", "capability_set_bound", "credential_lease_granted", "credential_lease_consumed", "credential_lease_revoked", "confluence_grant", "timing_receipt", "dispatch_decision", "hook_burn_record", "mcp_integration_pin", "result_accepted", "run_admission_bound", "run_manifest_fact", "segment_opened", "segment_sealed", "sequencer_epoch", "plan_amendment", "cancel_requested", "cancel_scope_resolved", "wake_hold_receipt", "wake_attempt_receipt", "codex_wait_consent_receipt", "codex_wait_session_receipt", "codex_wait_exhaustion_receipt", "wake_waiter_exit_receipt", "prep_clear_receipt", "tide_policy_record", "tide_receipt", "wake_daemon_consent_receipt", "wake_daemon_lifecycle_receipt", "ledger_repair_receipt", "fleet_update_started", "fleet_update_step", "fleet_update_completed"} | SPAWN_GROUP_KINDS | TASK3_CANCELLATION_KINDS | EFFECT_KINDS | THREAD_OBSERVATION_KINDS)
-        and isinstance(record["schema_version"], int)
-        and not isinstance(record["schema_version"], bool)
-        and (record["schema_version"] == 1 or (
-            kind in THREAD_OBSERVATION_KINDS | {"wake_hold_receipt"} and record["schema_version"] == 2)
-            or (kind == "wake_hold_receipt" and record["schema_version"] in {3, 4}))
+        isinstance(version_stamp, int)
+        and not isinstance(version_stamp, bool)
+        and version_stamp in _NONZERO_RECORD_VERSIONS.get(kind, ())
     )
     if kind in QUIET_KINDS:
         if type(record["schema_version"]) is not int or record["schema_version"] != 1:
@@ -1234,6 +1289,12 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         and not isinstance(record["schema_version"], bool)
         and record["schema_version"] == 1
     )
+    if kind == "declared_route_receipt":
+        if type(version) is not int or version != 1:
+            refuse("schema_version_invalid", "declared route receipts require integer version one")
+        is_v1_record = True
+    if kind == "registry_role_record" and type(version) is int and version == 1:
+        is_v1_record = True
     if kind in ASK_RECORD_KINDS and not is_ask_v1:
         refuse("schema_version_invalid", "ask records require integer version one")
     if (
@@ -1811,6 +1872,23 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
                 refuse("role_template_predecessor_invalid", "prepared role template write has no predecessor")
         else:
             _record_ref(predecessor, "role-template-write-", "predecessor_receipt_id", refuse)
+    elif kind == "declared_route_receipt":
+        ident("from_node")
+        ident("to_node")
+        if record["from_node"] == record["to_node"]:
+            refuse("route_endpoints_invalid", "a route needs two distinct nodes")
+        _enum(record["action"], {"add", "remove"}, "action", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
+    elif kind == "registry_role_record" and normalized_version == 1:
+        ident("node_id")
+        _enum(record["state"], {"retired"}, "state", refuse)
+        _record_ref(record["predecessor_role_record_id"], "registry-role-",
+                    "predecessor_role_record_id", refuse)
+        _bounded_string(record["idempotency_key"], 1, 128, "idempotency_key", refuse)
+        if _terminal_unsafe(record["idempotency_key"]):
+            refuse("idempotency_key_invalid", "idempotency key is terminal-unsafe")
     elif kind == "registry_role_record":
         ident("node_id")
         ident("template_role")

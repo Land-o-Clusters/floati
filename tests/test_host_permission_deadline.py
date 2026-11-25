@@ -2,6 +2,7 @@
 import importlib
 import os
 import select
+import threading
 import time
 import unittest
 from contextlib import ExitStack
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 from floati.events import EventLog
 from tests import test_seat_execution_host_tool_native as native_fixture
-from tests.readiness import Readiness, wait_readable, wait_until
+from tests.readiness import Readiness, wait_join, wait_readable, wait_until
 
 
 class HostPermissionDeadlineTests(unittest.TestCase):
@@ -214,10 +215,21 @@ class HostPermissionDeadlineTests(unittest.TestCase):
                 self.assertEqual(owner.pid, events[0].ident)
                 self.assertTrue(events[0].fflags & select.KQ_NOTE_EXIT)
             else:
-                descriptor = os.pidfd_open(owner.pid)
-                resources.callback(os.close, descriptor)
+                # Keep the kernel exit wait on Python builds without pidfd_open.
+                # WNOWAIT leaves the actual reap to the product owner.
+                observed = []
+                def wait_for_exit():
+                    observed.append(os.waitid(os.P_PID, owner.pid, os.WEXITED | os.WNOWAIT))
                 self.clear(observer)
-                exited.readable(descriptor)
+                watcher = threading.Thread(target=wait_for_exit, daemon=True)
+                watcher.start()
+                try:
+                    wait_join(watcher, "owned native invalidation child kernel exit")
+                finally:
+                    if watcher.is_alive():
+                        owner.cancel()
+                        wait_join(watcher, "owned native invalidation child cleanup")
+                self.assertEqual(owner.pid, observed[0].si_pid)
             self.assertEqual(0, owner.poll())
         self.assertEqual([], EventLog(self.fixture.root).event_records())
 

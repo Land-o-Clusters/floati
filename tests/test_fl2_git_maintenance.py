@@ -19,6 +19,7 @@ from tests.test_no_listener_fence import _literal_python_programs
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
+    "floati/ask_git.py": {"_git": 1},
     "floati/checkout_liveness.py": {"_read_git": 1},
     "floati/adhoc_threads.py": {"_git": 1},
     # Task1 source composition adds this one native Git owner; the next
@@ -403,10 +404,9 @@ class ProductGitMaintenanceTests(unittest.TestCase):
             for path, sites in self.sites.items()
         }
         self.assertEqual(EXPECTED, observed)
-        # 41 direct Git subprocess sites (bound records and checkout liveness
-        # add one each) + one actual nested Git exec. The two Python launch
-        # owners are independently bound by the contract.
-        self.assertEqual(42, sum(sum(rows.values()) for rows in observed.values()))
+        # 42 direct Git subprocess sites and one actual nested Git exec.
+        # The two Python launch owners are independently bound by the contract.
+        self.assertEqual(43, sum(sum(rows.values()) for rows in observed.values()))
         # Generic teardown Git must still go through its explicit producer.
         source = (ROOT / "floati/seat_teardown_activity.py").read_text()
         tree = ast.parse(source)

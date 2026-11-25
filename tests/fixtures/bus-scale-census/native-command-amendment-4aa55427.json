@@ -1,0 +1,408 @@
+{
+  "commands": [
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "consumer",
+          "nargs": null,
+          "option_strings": [
+            "--consumer"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "PATH",
+          "mutually_exclusive_group": null,
+          "name": "out",
+          "nargs": null,
+          "option_strings": [
+            "--out"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [
+            1,
+            2,
+            3
+          ],
+          "default": 1,
+          "item_type": "integer",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "schema_version",
+          "nargs": null,
+          "option_strings": [
+            "--schema-version"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "integer"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "confluence",
+        "bundle",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--consumer",
+        "value",
+        "--out",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "read",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "confluence",
+        "bundle"
+      ],
+      "program": "floati confluence bundle",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "node",
+          "nargs": null,
+          "option_strings": [
+            "--node"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "KEY",
+          "mutually_exclusive_group": null,
+          "name": "idempotency_key",
+          "nargs": null,
+          "option_strings": [
+            "--idempotency-key"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "node",
+        "role-clear",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--node",
+        "value",
+        "--idempotency-key",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "node",
+        "role-clear"
+      ],
+      "program": "floati node role-clear",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "from_node",
+          "nargs": null,
+          "option_strings": [
+            "--from"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "to_node",
+          "nargs": null,
+          "option_strings": [
+            "--to"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "KEY",
+          "mutually_exclusive_group": null,
+          "name": "idempotency_key",
+          "nargs": null,
+          "option_strings": [
+            "--idempotency-key"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "net",
+        "route",
+        "add",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--from",
+        "value",
+        "--to",
+        "value",
+        "--idempotency-key",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "net",
+        "route",
+        "add"
+      ],
+      "program": "floati net route add",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "from_node",
+          "nargs": null,
+          "option_strings": [
+            "--from"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "to_node",
+          "nargs": null,
+          "option_strings": [
+            "--to"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "KEY",
+          "mutually_exclusive_group": null,
+          "name": "idempotency_key",
+          "nargs": null,
+          "option_strings": [
+            "--idempotency-key"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "net",
+        "route",
+        "remove",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--from",
+        "value",
+        "--to",
+        "value",
+        "--idempotency-key",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "net",
+        "route",
+        "remove"
+      ],
+      "program": "floati net route remove",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "net",
+        "route",
+        "list",
+        "--root",
+        "\u002fprivate/tmp/floati-contract"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "net",
+        "route",
+        "list"
+      ],
+      "program": "floati net route list",
+      "public": true
+    }
+  ],
+  "predecessors": {
+    "confluence bundle": "{\"arguments\":[{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"root\",\"nargs\":null,\"option_strings\":[\"--root\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"consumer\",\"nargs\":null,\"option_strings\":[\"--consumer\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"PATH\",\"mutually_exclusive_group\":null,\"name\":\"out\",\"nargs\":null,\"option_strings\":[\"--out\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[1,2],\"default\":1,\"item_type\":\"integer\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"schema_version\",\"nargs\":null,\"option_strings\":[\"--schema-version\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"integer\"}],\"artifact_schema_version\":null,\"example_argv\":[\"confluence\",\"bundle\",\"--root\",\"\u002fprivate/tmp/floati-contract\",\"--consumer\",\"value\",\"--out\",\"value\"],\"executable\":true,\"mcp_exposure\":\"read\",\"mcp_omit\":[],\"mcp_required\":[],\"mutually_exclusive_groups\":[],\"path\":[\"confluence\",\"bundle\"],\"program\":\"floati confluence bundle\",\"public\":true}"
+  },
+  "review": {
+    "confluence bundle": "The --schema-version choices expanded from 1, 2 to 1, 2, 3. The default and measured workload both use version 1."
+  },
+  "schema_version": 0,
+  "source_commit": "4aa55427cdd679bf042840bc5773a35b54a7ef9e"
+}

@@ -122,13 +122,45 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
 
     def invoke(self):
         payload = io.StringIO(json.dumps({"cwd": str(self.workspace), "session_id": "session"}))
-        began = time.monotonic()
         with mock.patch.object(self.bridge.os, "getcwd", return_value=str(self.workspace)),\
                 mock.patch("sys.stdin", payload), contextlib.redirect_stdout(self.output),\
                 contextlib.redirect_stderr(self.errors):
             status = self.bridge.main()
         self.assertEqual(0, status, self.errors.getvalue())
-        return time.monotonic() - began
+
+    @contextlib.contextmanager
+    def controlled_clock(self, on_tick=lambda now: None):
+        from floati import jsonl
+
+        now = 100.0
+
+        def monotonic():
+            return now
+
+        def sleep(seconds):
+            nonlocal now
+            now += seconds
+            on_tick(now)
+
+        clock = SimpleNamespace(monotonic=monotonic, sleep=sleep)
+        with mock.patch.object(self.bridge, "time", clock), mock.patch.object(jsonl, "time", clock):
+            yield clock
+
+    @contextlib.contextmanager
+    def retryable_events_contention(self):
+        from floati.jsonl import LOCK_TIMEOUT_SECONDS
+
+        release = threading.Event()
+        holder = self.held_lock("events.jsonl.lock", None, release)
+
+        def unlock_after_timeout(now):
+            if now >= unlock_at and not release.is_set():
+                release.set()
+                wait_join(holder, "bridge event lock release")
+
+        with self.controlled_clock(unlock_after_timeout) as clock:
+            unlock_at = clock.monotonic() + LOCK_TIMEOUT_SECONDS + 0.35
+            yield clock
 
     def firing(self):
         path = self.root.resolve_relative(f"state/zcode-hook/firings/{self.bridge.NODE}.jsonl")
@@ -234,9 +266,11 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
                     observed.append(failure)
                 raise
         envelope = self.send()
-        self.held_lock("events.jsonl.lock", 1.35)
-        with mock.patch.object(jsonl, "_locked_path", acquisition):
-            self.assertLess(self.invoke(), 3.15)
+        with self.retryable_events_contention() as clock,\
+                mock.patch.object(jsonl, "_locked_path", acquisition):
+            started = clock.monotonic()
+            self.invoke()
+            elapsed = clock.monotonic() - started
         lines = self.output.getvalue().splitlines()
         self.assertEqual(1, len(lines))
         self.assertIn(envelope["id"], json.loads(lines[0])["reason"])
@@ -245,56 +279,41 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual([envelope["id"]], rows[0]["item_ids"])
         self.assertGreaterEqual(len(observed), 1, "native acquisition must exceed its one-second attempt")
+        self.assertLess(elapsed, self.consent["wait_deadline_seconds"])
 
     def test_native_pre_hold_contention_cannot_restart_quiet_hold_budget(self):
-        from floati import codex_wait, jsonl
+        from floati import codex_wait
         from floati.stop_hold import StopHoldLedger
         from floati.waiter_lock_retry import current_lock_window
 
         # Time advances only in the actual contention/readiness waits. Host
         # startup and terminal reporting cannot consume this property clock.
-        now, delegated, completed, released = [100.0], [], [], []
+        delegated, completed = [], []
         # An absent event ledger returns [] without acquiring its lock.
         self.root.resolve_relative("events.jsonl").write_bytes(b"")
-        release = threading.Event()
-        holder = self.held_lock("events.jsonl.lock", None, release)
-        def clock():
-            return now[0]
-        def sleep(seconds):
-            now[0] += seconds
-            if now[0] >= 101.35 and not released:
-                release.set()
-                holder.join(5)
-                self.assertFalse(holder.is_alive(), "native scratch holder must release")
-                released.append(True)
-
         native_waiter = codex_wait.run_stop_waiter
+        budget = self.consent["wait_deadline_seconds"]
         def observe_waiter(**kwargs):
             window = kwargs["_waiter_window"]
             self.assertIs(current_lock_window(), window)
             self.assertTrue(window.contended, "pre-hold peek must encounter the real lock")
-            self.assertAlmostEqual(100, window.started)
-            self.assertAlmostEqual(103, window.deadline)
-            self.assertGreaterEqual(clock(), 101.35)
+            self.assertAlmostEqual(started, window.started)
+            self.assertAlmostEqual(started + budget, window.deadline)
+            self.assertGreaterEqual(clock.monotonic(), started + 1.35)
             self.assertGreater(window.remaining(), 0)
-            self.assertLessEqual(window.remaining(), 1.65)
+            self.assertLessEqual(window.remaining(), budget - 1.35)
             delegated.append((window.started, window.deadline, window.remaining()))
-            kwargs["wait_readable"] = scripted_readiness(sleep, interval=0.02)
+            kwargs["wait_readable"] = scripted_readiness(clock.sleep, interval=0.02)
             result = native_waiter(**kwargs)
             self.assertEqual("exhausted", kwargs["_waiter_result"]["kind"])
-            self.assertAlmostEqual(103, clock(), msg="quiet hold restarted the original budget")
+            self.assertAlmostEqual(started + budget, clock.monotonic(),
+                                   msg="quiet hold restarted the original budget")
             completed.append(True)
             return result
 
-        native_finish = self.bridge.finish_bridge
-        def slow_report(*args, **kwargs):
-            # Reporting after the native decision is outside its hold budget.
-            time.sleep(0.3)
-            return native_finish(*args, **kwargs)
-        with mock.patch.object(self.bridge, "time", SimpleNamespace(monotonic=clock, sleep=sleep)),\
-                mock.patch.object(jsonl, "time", SimpleNamespace(monotonic=clock, sleep=sleep)),\
-                mock.patch.object(codex_wait, "run_stop_waiter", observe_waiter),\
-                mock.patch.object(self.bridge, "finish_bridge", slow_report):
+        with self.retryable_events_contention() as clock,\
+                mock.patch.object(codex_wait, "run_stop_waiter", observe_waiter):
+            started = clock.monotonic()
             self.invoke()
         self.assertEqual(1, len(delegated))
         self.assertEqual([True], completed)
@@ -330,13 +349,15 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
     def test_native_malformed_consent_is_typed_failure_before_delivery(self):
         self.send()
         self.root.resolve_relative(CodexWaitConsentLedger._relative("seat")).write_bytes(b"not-json\n")
-        elapsed = self.invoke()
+        with self.controlled_clock() as clock:
+            started = clock.monotonic()
+            self.invoke()
+            self.assertEqual(started, clock.monotonic())
         row = self.firing()
         self.assertEqual("malformed_json", row.get("query_failed"))
         self.assertNotIn("injected", row)
         self.assertIn("malformed_json", self.output.getvalue())
         self.assertEqual([], self.deliveries())
-        self.assertLess(elapsed, 1)
 
     def test_native_pause_during_pre_hold_retry_cannot_deliver(self):
         from floati.wake_control import WakeController
@@ -349,10 +370,36 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
         self.assertEqual([], self.deliveries())
 
     def test_native_quiet_flow_relays_one_committed_wake_without_second_present(self):
-        self.held_lock("events.jsonl.lock", 1.35)
+        from floati import codex_wait
+
+        self.root.resolve_relative("events.jsonl").write_bytes(b"")
         sent = []
-        self.later(lambda: sent.append(self.send()), seconds=1.5)
-        self.assertLess(self.invoke(), 3.15)
+        relayed_at = []
+        native_waiter = codex_wait.run_stop_waiter
+        native_finish = self.bridge.finish_bridge
+        budget = self.consent["wait_deadline_seconds"]
+
+        def dispatch_waiter(**kwargs):
+            def tick(seconds):
+                clock.sleep(seconds)
+                if not sent:
+                    sent.append(self.send())
+
+            kwargs["wait_readable"] = scripted_readiness(tick, interval=0.02)
+            return native_waiter(**kwargs)
+
+        def slow_finish(*args, **kwargs):
+            status = native_finish(*args, **kwargs)
+            relayed_at.append(clock.monotonic())
+            # An observer can resume late even after the decision is flushed.
+            clock.sleep(budget)
+            return status
+
+        with self.retryable_events_contention() as clock,\
+                mock.patch.object(codex_wait, "run_stop_waiter", dispatch_waiter),\
+                mock.patch.object(self.bridge, "finish_bridge", slow_finish):
+            started = clock.monotonic()
+            self.invoke()
         lines = self.output.getvalue().splitlines()
         self.assertEqual(1, len(lines))
         self.assertIn(sent[0]["id"], json.loads(lines[0])["reason"])
@@ -360,19 +407,24 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual([sent[0]["id"]], rows[0]["item_ids"])
         self.assertEqual("fresh_work_relayed", self.firing()["outcome"])
+        self.assertEqual(1, len(relayed_at))
+        self.assertLess(relayed_at[0] - started, budget)
 
     def test_absent_native_consent_keeps_one_shot_timeout_with_exact_remedy(self):
+        from floati.jsonl import LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS
+
         self.root.resolve_relative(CodexWaitConsentLedger._relative("seat")).unlink()
         self.send()
         release = threading.Event()
-        self.held_lock("events.jsonl.lock", 8, release)
-        self.addCleanup(release.set)
+        self.held_lock("events.jsonl.lock", None, release)
         try:
-            with self.observed_legacy_handler() as observations:
-                elapsed = self.invoke()
+            with self.controlled_clock() as clock, self.observed_legacy_handler() as observations:
+                started = clock.monotonic()
+                self.invoke()
+                elapsed = clock.monotonic() - started
         finally:
             release.set()
-        self.assertLess(elapsed, 3.1)
+        self.assertAlmostEqual(LOCK_TIMEOUT_SECONDS, elapsed, delta=LOCK_POLL_SECONDS)
         status, evidence, _exit = observations[0]
         self.assertEqual("refused", status)
         self.assertEqual("ledger_lock_timeout", evidence["code"])
@@ -412,11 +464,13 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
 
     def test_native_malformed_events_exit_as_integrity_without_retry(self):
         self.root.resolve_relative("events.jsonl").write_bytes(b"not-json\n")
-        elapsed = self.invoke()
+        with self.controlled_clock() as clock:
+            started = clock.monotonic()
+            self.invoke()
+            self.assertEqual(started, clock.monotonic())
         self.assertEqual("malformed_json", self.firing()["query_failed"])
         self.assertIn("malformed_json", self.output.getvalue())
         self.assertEqual([], self.deliveries())
-        self.assertLess(elapsed, 1)
 
     def test_committed_native_wake_is_not_erased_by_later_corrupt_observation(self):
         from floati import codex_wait

@@ -2,7 +2,7 @@
 
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from tests import test_net_ask_1
 from tests.test_net_who_1 import _lane
@@ -179,6 +179,119 @@ class NetAddress1Tests(unittest.TestCase):
         self.assertTrue(all(row["address_preview"] == preview for row in questions))
         self.assertEqual(["blue", "green"], artifact["evidence"]["recipients"])
         self.assertEqual(2, len(artifact["evidence"]["results"]))
+
+    def assign_reviewers(self):
+        fixture = self.fleet
+        completed, artifact = fixture.invoke_in_process(
+            "node", "add", "--root", str(fixture.fleet), "--node", "green",
+            "--harness", "Claude", "--lifetime", "permanent",
+        )
+        self.assertEqual(0, completed.returncode, artifact)
+        for node in ("blue", "green"):
+            completed, artifact = fixture.invoke_in_process(
+                "node", "role", "--root", str(fixture.fleet), "--node", node,
+                "--template", "reviewer", "--answer", "repo=floati", "--answer",
+                "never_touch=other", "--answer", "reports_to=red",
+            )
+            self.assertEqual(0, completed.returncode, artifact)
+
+    def test_role_ask_records_the_unique_fresh_quota_winner(self):
+        self.assign_reviewers()
+        now = datetime.now(timezone.utc)
+        measured_at = (now - timedelta(seconds=10)).isoformat()
+        expires_at = (now + timedelta(minutes=5)).isoformat()
+        snapshot = self.fleet.base / "puddle-quota-v1.json"
+        readings = {
+            harness: {"status": "MEASURED", "remaining_bps": remaining,
+                      "measured_at": measured_at, "expires_at": expires_at,
+                      "reading_id": reading_id}
+            for harness, remaining, reading_id in (
+                ("codex", 2300, "sample-a"), ("claude", 6700, "sample-b"),
+            )
+        }
+
+        def publish():
+            snapshot.write_text(json.dumps({"schema_version": 1, "readings": readings}),
+                                encoding="utf-8")
+
+        publish()
+        arguments = self.arguments("role:reviewer", "ask") + [
+            "--puddle-quota-snapshot", str(snapshot),
+        ]
+        completed, artifact = self.fleet.invoke_in_process(*arguments, "--preview")
+        self.assertEqual(0, completed.returncode, artifact)
+        preview = artifact["evidence"]
+        self.assertEqual(["green"], preview["recipients"])
+        route = preview["route"]
+        self.assertEqual(readings["claude"], route["readings"]["claude"])
+        age = datetime.fromisoformat(route["evaluated_at"]) - datetime.fromisoformat(measured_at)
+        self.assertEqual(int(age.total_seconds()), route["age_seconds"])
+        self.assertEqual([], self.fleet.events())
+
+        path = self.fleet.base / "preview.json"
+        path.write_text(json.dumps(artifact), encoding="utf-8")
+        readings["codex"]["remaining_bps"] = 9000
+        publish()
+        send = [*arguments, "--recipient-preview", str(path)]
+        completed, artifact = self.fleet.invoke_in_process(*send)
+        self.assertEqual(20, completed.returncode, artifact)
+        self.assertEqual("address_preview_changed", artifact["evidence"]["code"])
+        self.assertEqual([], self.fleet.events())
+
+        snapshot.unlink()
+        completed, artifact = self.fleet.invoke_in_process(*send)
+        self.assertEqual(35, completed.returncode, artifact)
+        self.assertEqual("UNKNOWN", artifact["evidence"]["outcome"])
+        self.assertEqual("quota_snapshot_missing", artifact["evidence"]["code"])
+        self.assertEqual([], self.fleet.events())
+
+        readings["codex"]["remaining_bps"] = 2300
+        publish()
+        completed, artifact = self.fleet.invoke_in_process(*send)
+        self.assertEqual(34, completed.returncode, artifact)
+        question_id = artifact["evidence"]["results"][0]["question_id"]
+        snapshot.unlink()
+        completed, artifact = self.fleet.invoke_in_process(*send)
+        self.assertEqual(34, completed.returncode, artifact)
+        self.assertEqual(question_id, artifact["evidence"]["results"][0]["question_id"])
+        questions = [row for row in self.fleet.events() if row["kind"] == "ask_question"]
+        self.assertEqual(["green"], [row["recipient"] for row in questions])
+        self.assertEqual(preview, questions[0]["address_preview"])
+
+    def test_role_ask_without_fresh_comparable_quota_leaves_the_choice_to_sender(self):
+        self.assign_reviewers()
+        arguments = self.arguments("role:reviewer", "ask") + ["--preview"]
+        snapshot = self.fleet.base / "puddle-quota-v1.json"
+        now = datetime.now(timezone.utc)
+        sample = {"status": "MEASURED", "remaining_bps": 6000, "reading_id": "sample-a",
+                  "measured_at": (now - timedelta(minutes=2)).isoformat(),
+                  "expires_at": (now + timedelta(minutes=5)).isoformat()}
+        for name, payload, reason in (
+            ("no opt-in", None, "quota_snapshot_not_selected"),
+            ("missing", None, "quota_snapshot_missing"),
+            ("wrong version", {"schema_version": 2, "readings": {}}, "quota_snapshot_invalid"),
+            ("missing harness", {"schema_version": 1, "readings": {"codex": sample}},
+             "quota_reading_missing"),
+            ("stale", {"schema_version": 1, "readings": {"codex": sample, "claude": dict(
+                sample, expires_at=(now - timedelta(minutes=1)).isoformat())}}, "quota_reading_stale"),
+            ("tied", {"schema_version": 1, "readings": {"codex": sample, "claude": sample}},
+             "quota_headroom_tied"),
+        ):
+            with self.subTest(name=name):
+                if payload is not None:
+                    snapshot.write_text(json.dumps(payload), encoding="utf-8")
+                opt_in = [] if name == "no opt-in" else ["--puddle-quota-snapshot", str(snapshot)]
+                completed, artifact = self.fleet.invoke_in_process(*arguments, *opt_in)
+                self.assertEqual(35, completed.returncode, artifact)
+                evidence = artifact["evidence"]
+                self.assertEqual("UNKNOWN", evidence["outcome"])
+                self.assertEqual(reason, evidence["code"])
+                self.assertEqual(["blue", "green"], evidence["candidates"])
+        self.assertEqual([], self.fleet.events())
+        completed, artifact = self.fleet.invoke_in_process(*self.arguments("blue", "ask"))
+        self.assertEqual(34, completed.returncode, artifact)
+        questions = [row for row in self.fleet.events() if row["kind"] == "ask_question"]
+        self.assertEqual(["blue"], [row["recipient"] for row in questions])
 
     def test_retiring_the_last_recipient_invalidates_the_preview(self):
         """A vanished group must refuse as changed rather than reuse stale recipients."""

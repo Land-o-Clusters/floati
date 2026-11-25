@@ -552,23 +552,40 @@ def _require_authored_note(note: object) -> None:
         )
 
 
-def _ask(args: argparse.Namespace, *, timing=None) -> HandlerResult:
+def _ask(args: argparse.Namespace, *, timing=None, exact_recipient=False, stop_waiting=None) -> HandlerResult:
     """Send one local question and wait, or record one reversed reply."""
 
-    from .ask import perform_ask, perform_reply
+    from .ask import perform_ask, perform_reply, present_question
     from .addressing import is_group, recipient_preview
     from .bus_epoch import epoch_guard
+    from .role_addressing import is_role_address, role_recipient_preview
 
     root = _root(args.root)
     require_declared_coordinate(Path.cwd(), args.sender, root)
-    group = is_group(args.recipient)
-    if args.reply_to is not None and (group or getattr(args, "preview", False) or getattr(args, "recipient_preview", None) is not None):
+    role = not exact_recipient and is_role_address(args.recipient)
+    group = role or (not exact_recipient and is_group(args.recipient))
+    snapshot = getattr(args, "puddle_quota_snapshot", None)
+    preview_path = getattr(args, "recipient_preview", None)
+    preview_requested = getattr(args, "preview", False)
+    if snapshot is not None and not role:
+        raise ProtocolRefusal("address_invalid", "A quota snapshot requires a role address.",
+                              "Use --to role:NAME with --puddle-quota-snapshot.")
+    if args.reply_to is not None and (group or preview_requested or preview_path is not None):
         raise ProtocolRefusal("address_reply_invalid", "a reply requires one exact node and no group preview",
                               "reply to the original asker using its exact node id")
-    if not group and (getattr(args, "preview", False) or getattr(args, "recipient_preview", None) is not None):
+    if not group and (preview_requested or preview_path is not None):
         raise ProtocolRefusal("address_invalid", "recipient preview options require a group address",
                               "use everyone or repo:NAME with recipient preview options")
-    if group and getattr(args, "preview", False):
+    if role and (preview_requested or preview_path is None):
+        with epoch_guard(root, exclusive=True):
+            evidence = role_recipient_preview(root, args.sender, args.recipient, snapshot)
+        if evidence.get("outcome") == "UNKNOWN":
+            return "degraded", evidence, DEGRADED
+        if preview_requested:
+            return "ok", evidence, OK
+        raise ProtocolRefusal("address_preview_required", "A measured role ask requires its saved preview.",
+                              "Use --preview, review the recipient, then pass --recipient-preview PATH.")
+    if group and preview_requested:
         with epoch_guard(root, exclusive=True):
             return "ok", recipient_preview(root, args.sender, args.recipient), OK
     if args.reply_to is not None:
@@ -578,11 +595,11 @@ def _ask(args: argparse.Namespace, *, timing=None) -> HandlerResult:
                 "DRAFT - reply mode does not accept --wait-seconds",
                 "DRAFT - omit --wait-seconds when recording a reply",
             )
-        if args.disposition not in {"answer", "decline"}:
+        if args.disposition not in {"present", "answer", "decline"}:
             raise ProtocolRefusal(
                 "arguments_invalid",
-                "DRAFT - a reply requires --disposition answer or decline",
-                "DRAFT - pass --disposition answer or --disposition decline",
+                "DRAFT - choose a disposition for the question",
+                "DRAFT - pass --disposition present, answer, or decline",
             )
         if not isinstance(args.session, str) or not args.session.strip():
             raise ProtocolRefusal(
@@ -596,6 +613,17 @@ def _ask(args: argparse.Namespace, *, timing=None) -> HandlerResult:
                 "DRAFT - a reply requires --idempotency-key",
                 "DRAFT - pass one idempotency key of 1 to 128 characters",
             )
+        if args.disposition == "present":
+            if any(getattr(args, name, None) is not None
+                   for name in ("repo", "sha", "repository", "doc", "note", "reason")):
+                raise ProtocolRefusal(
+                    "arguments_invalid", "Presentation uses the Git coordinates and note on the question.",
+                    "Omit --repo, --sha, --repository, --doc, --note, and --reason.",
+                )
+            return "ok", present_question(
+                root, sender=args.sender, recipient=args.recipient, question_id=args.reply_to,
+                session=args.session, idempotency_key=args.idempotency_key,
+            ), OK
         if args.disposition == "answer":
             _require_authored_note(args.note)
             for name in ("repo", "sha", "doc"):
@@ -670,6 +698,7 @@ def _ask(args: argparse.Namespace, *, timing=None) -> HandlerResult:
         idempotency_key=args.idempotency_key,
         wait_seconds=args.wait_seconds,
         timing=timing,
+        stop_waiting=stop_waiting,
     )
     state = result["state"]
     evidence = result["evidence"]
@@ -845,13 +874,19 @@ def _sent(args: argparse.Namespace) -> HandlerResult:
 
 def _replay(args: argparse.Namespace) -> HandlerResult:
     root = _root(args.root)
+    repository = getattr(args, "repository", None)
     if args.question is not None:
         from .ask_replay import replay_ask
 
-        evidence = replay_ask(root, args.question)
+        evidence = replay_ask(root, args.question, repository=repository)
     else:
         from .work_replay import replay_work
 
+        if repository is not None:
+            raise ProtocolRefusal(
+                "arguments_invalid", "Replay accepts --repository with --question.",
+                "Omit --repository when replaying a work item.",
+            )
         evidence = replay_work(root, args.work_item)
     if "code" in evidence:
         return "no_result", evidence, NO_RESULT
@@ -937,6 +972,17 @@ def _status(args: argparse.Namespace) -> HandlerResult:
     if args.json:
         snapshot["status_schema_version"] = 1
     return "ok", snapshot, OK
+
+
+def _who(args: argparse.Namespace) -> HandlerResult:
+    from .bus_epoch import epoch_guard
+    from .roster import project_roster
+
+    root = _root(args.root)
+    observed_at = _current_time()
+    with epoch_guard(root):
+        roster = project_roster(root, observed_at)
+    return "ok", {"roster": roster}, OK
 
 
 def _snapshot_bundle(args: argparse.Namespace) -> HandlerResult:
@@ -2112,6 +2158,7 @@ def _add_update_action_arguments(
 def _board(args: argparse.Namespace) -> int:
     from pathlib import Path
     from .demo import demo_model_loader, seed_demo
+    from .ids import uuid7_hex
     from .tui import acknowledge_visible, model_from_root, run_board
 
     if args.demo:
@@ -2135,10 +2182,26 @@ def _board(args: argparse.Namespace) -> int:
             )
         acknowledge_visible(root, action, acting_session_id=args.session)
 
+    def ask_selected(recipient, fields, stop_waiting):
+        # Use the command's authoring checks, including the workspace and bank fences.
+        question = argparse.Namespace(
+            **{**fields, "wait_seconds": int(fields["wait_seconds"])},
+            root=str(root.path),
+            recipient=recipient,
+            session=args.session,
+            idempotency_key=uuid7_hex(),
+            reply_to=None,
+            disposition=None,
+            reason=None,
+        )
+        _, evidence, _ = _ask(question, exact_recipient=True, stop_waiting=stop_waiting)
+        return evidence
+
     return run_board(
         model_loader=lambda: model_from_root(root),
         model_root=root.tenant_home,
         ack_callback=acknowledge_live,
+        ask_callback=ask_selected if args.session and args.session.strip() else None,
         no_animation=args.no_animation,
     )
 
@@ -2531,7 +2594,7 @@ def _parser() -> _ArtifactParser:
     confluence_bundle.add_argument("--root", required=True)
     confluence_bundle.add_argument("--consumer", required=True)
     confluence_bundle.add_argument("--out", required=True, metavar='PATH')
-    confluence_bundle.add_argument("--schema-version", type=int, choices=(1, 2), default=1)
+    confluence_bundle.add_argument("--schema-version", type=int, choices=(1, 2, 3), default=1)
     confluence_bundle.set_defaults(handler=_confluence_bundle)
 
     confluence_adopt = confluence_commands.add_parser("adopt")
@@ -2625,13 +2688,20 @@ def _parser() -> _ArtifactParser:
     signature_verify.add_argument("--json", action="store_true")
     signature_verify.set_defaults(handler=_signature_verify)
 
-    ask = commands.add_parser("ask", floati_mcp_exposure="never")
+    ask = commands.add_parser(
+        "ask",
+        floati_mcp_exposure="governed",
+        floati_mcp_required=("idempotency_key",),
+        floati_mcp_omit=("repository", "preview", "recipient_preview", "puddle_quota_snapshot"),
+    )
     ask.add_argument("--root", required=True)
     ask.add_argument("--from", dest="sender", required=True, metavar="NODE")
     ask.add_argument("--to", dest="recipient", required=True, metavar="ADDRESS")
     ask_preview = ask.add_mutually_exclusive_group()
     ask_preview.add_argument("--preview", action="store_true")
     ask_preview.add_argument("--recipient-preview", metavar="PATH")
+    ask.add_argument("--puddle-quota-snapshot", metavar="PATH",
+                     help="read one explicitly selected local Puddle quota export for a role ask")
     ask.add_argument("--repo")
     ask.add_argument("--sha")
     ask.add_argument("--repository", metavar="PATH")
@@ -2641,7 +2711,7 @@ def _parser() -> _ArtifactParser:
     ask.add_argument("--idempotency-key", metavar="KEY")
     ask.add_argument("--wait-seconds", type=int, metavar="N")
     ask.add_argument("--reply-to", metavar="ID")
-    ask.add_argument("--disposition", choices=("answer", "decline"))
+    ask.add_argument("--disposition", choices=("answer", "decline", "present"))
     ask.add_argument("--reason")
     ask.set_defaults(handler=_ask)
 
@@ -2650,6 +2720,7 @@ def _parser() -> _ArtifactParser:
     replay_target = replay.add_mutually_exclusive_group(required=True)
     replay_target.add_argument("--question", metavar="ID")
     replay_target.add_argument("--work-item", metavar="ID")
+    replay.add_argument("--repository", metavar="PATH")
     replay.set_defaults(handler=_replay)
 
     send = commands.add_parser(
@@ -2744,6 +2815,10 @@ def _parser() -> _ArtifactParser:
     status.add_argument("--destination")
     status.add_argument("--json", action="store_true")
     status.set_defaults(handler=_status)
+
+    who = commands.add_parser("who", floati_mcp_exposure="read")
+    who.add_argument("--root", required=True)
+    who.set_defaults(handler=_who)
 
     snapshot_bundle = commands.add_parser("snapshot")
     snapshot_bundle.add_argument("--root", required=True)
@@ -3198,6 +3273,8 @@ def _parser() -> _ArtifactParser:
     register_epoch(commands)
     register_grant(commands)
     register_admin_commands(commands)
+    from .fleet_design import register_route_commands
+    register_route_commands(commands)
     from .context import register_cli as register_context
     from .purge import register_cli as register_purge
 

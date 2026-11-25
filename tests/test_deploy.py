@@ -233,6 +233,52 @@ class DeploymentWriterTests(unittest.TestCase):
         self.assertEqual("HEAD", result["ref"])
         self.assertEqual("installed", result["status"])
 
+    def test_fresh_install_decodes_at_most_one_journal_pass(self) -> None:
+        destination = self.base / "destination"
+        decoded_bytes = 0
+        loads = json.loads
+
+        def count_journal_bytes(raw, *args, **kwargs):
+            nonlocal decoded_bytes
+            result = loads(raw, *args, **kwargs)
+            if isinstance(result, dict) and {"prevHash", "entryHash"} <= result.keys():
+                decoded_bytes += len(raw.encode("utf-8") if isinstance(raw, str) else raw)
+            return result
+
+        with patch.object(json, "loads", side_effect=count_journal_bytes):
+            result = self._writer(destination, committed_tree=True).run()
+
+        journal = Path(result["wiring_journal"])
+        self.assertEqual(
+            len(result["managed_paths"]) + 1,
+            len(deploy.wiring_journal.read_entries(journal)),
+        )
+        self.assertLessEqual(decoded_bytes, journal.stat().st_size)
+
+    def test_install_chains_after_an_intervening_journal_append(self) -> None:
+        destination = self.base / "destination"
+        intervening = []
+
+        def interleave(event: str) -> None:
+            if event == "after_file_journal" and not intervening:
+                intervening.append(deploy.wiring_journal.append_entry(destination, {
+                    "v": 1, "action": "register", "kind": "bus_root", "op": "create",
+                    "path": str(self.base / "preserved"), "preserved": True,
+                }))
+
+        result = self._writer(
+            destination, committed_tree=True, fault_hook=interleave
+        ).run()
+
+        journal = Path(result["wiring_journal"])
+        entries = deploy.wiring_journal.read_entries(journal)
+        self.assertEqual(len(result["managed_paths"]) + 2, len(entries))
+        self.assertEqual(intervening, [entry for entry in entries if entry.preserved])
+        offset = 0
+        for entry, line in zip(entries, journal.read_bytes().splitlines(keepends=True)):
+            self.assertEqual(offset, entry.byte_offset)
+            offset += len(line)
+
     def test_deterministic_join_id_stamps_every_writer_journal_entry(self) -> None:
         """Catches governed shared installs whose journal cannot be joined to one run."""
 

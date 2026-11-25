@@ -165,7 +165,7 @@ def population():
 def _population_template():
     scope = workloads.scope_contract(_parser())
     observations = {}
-    # These are functional admission samples for all 70 required cases, not
+    # These are functional admission samples for all 71 required cases, not
     # assertions that unrelated commands ran or that these metrics were measured.
     for case, contract in scope["cases"].items():
         code, status, kind = workloads._NATIVE[case]
@@ -207,7 +207,7 @@ class AttentionProofAdmissionTests(unittest.TestCase):
             matrix[family] = [{"order": order, "observations": clone_fixture(rows)}
                               for order in ([1, 10], [10, 1])]
         result = coordinator.validate_matrix(scope, matrix, first_pass=True)
-        self.assertEqual(4 * 70, len(result["comparisons"]))
+        self.assertEqual(4 * 71, len(result["comparisons"]))
         self.assertEqual([], result["ambiguous_observations"])
 
     def test_missing_target_proof_is_not_satisfied_by_the_other_attention_case(self):

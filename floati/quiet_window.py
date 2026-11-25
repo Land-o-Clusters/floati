@@ -35,6 +35,7 @@ import re
 import select
 import shlex
 import signal
+import stat
 import struct
 import subprocess
 import sys
@@ -45,7 +46,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .errors import ProtocolRefusal
+from .errors import IntegrityFailure, ProtocolRefusal
 from .framing import FrameError, decode_frames
 from .ids import uuid7_hex
 from .jsonl import (MAX_LEDGER_BYTES, MAX_LEDGER_RECORDS, MAX_RECORD_BYTES,
@@ -549,6 +550,16 @@ class NativeHost:
                 return False
         raise OSError(errno.ESTALE, "the recorded process identity cannot be authenticated")
 
+    def is_stopped(self, pid: int, token: str) -> bool:
+        if sys.platform.startswith("linux"):
+            scope = _linux_scope()
+            current = _linux_status(pid, scope) if _linux_in_scope(token, scope) else None
+        elif sys.platform == "darwin":
+            current = _darwin_status(pid)
+        else:
+            raise OSError(errno.ENOTSUP, "process state is unavailable")
+        return current is not None and current[0] == token and current[1] in _STOPPED_STATES
+
     def signal(self, pid: int, token: str, number: int) -> bool:
         if pid <= 0:
             raise OSError(errno.EINVAL, "invalid process coordinate")
@@ -899,6 +910,69 @@ def _command_answer(command: Optional[str], active: Optional[bool]) -> Optional[
     return {"covered": covered, "waits": bool(active) and covered}
 
 
+def _window_times(window):
+    settling = _phase_rows(window, "settling")
+    opened = _phase_rows(window, "opened")
+    parameters = settling[0].get("facts", {}).get("parameters") or {} if settling else {}
+    opened_at = opened[0].get("facts", {}).get("opened_at") if opened else None
+    cap_at = None
+    if opened_at is not None and isinstance(parameters.get("cap_seconds"), (int, float)):
+        try:
+            moment = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+            cap_at = _now_text(moment.timestamp() + float(parameters["cap_seconds"]))
+        except (ValueError, OverflowError):
+            cap_at = None
+    return opened_at, cap_at
+
+
+def _ledger_signature(path):
+    try:
+        info = path.stat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode):
+        raise OSError(errno.EINVAL, "quiet history is not an ordinary file")
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
+def observe_build_hold(root: FloatiRoot) -> Optional[Tuple[bool, datetime, Optional[datetime]]]:
+    """Return the effective hold, observation time, and known cap, if attestable."""
+    from .records import validate_record
+
+    host = NativeHost()
+    try:
+        path = _ledger_path(root)
+        signature = _ledger_signature(path)
+        rows, partial = _read(root)
+        if partial:
+            return None
+        for row in rows:
+            validate_record(row, root.tenant_id, QUIET_KINDS, integrity=True)
+        live = [(window, state) for window in _windows(rows).values()
+                if (state := _state(window, host)) not in TERMINAL_PHASES]
+        cap = None
+        if live:
+            if len(live) != 1 or live[0][1] != "open":
+                return None
+            window, _ = live[0]
+            confirmed, ambiguous = _outstanding(window)
+            if ambiguous or not any(host.is_stopped(pause["pid"], pause["start_token"]) for pause in confirmed):
+                return None
+            opened_at, cap_at = _window_times(window)
+            opened = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+            cap = datetime.fromisoformat(cap_at.replace("Z", "+00:00"))
+        if _ledger_signature(path) != signature:
+            return None
+        observed = datetime.fromtimestamp(host.wall(), timezone.utc)
+        if cap is not None and not opened <= observed < cap:
+            return None
+    except (IntegrityFailure, ProtocolRefusal, OSError, ValueError, OverflowError,
+            KeyError, TypeError, AttributeError, RecursionError):
+        # A broken or unreadable quiet history leaves this optional testimony absent.
+        return None
+    return bool(live), observed, cap
+
+
 def quiet_status(root: FloatiRoot, *, host=None, command: Optional[str] = None) -> dict:
     """The pull read any agent can make before heavy work, with no hook.
 
@@ -925,14 +999,7 @@ def quiet_status(root: FloatiRoot, *, host=None, command: Optional[str] = None) 
     settling = _phase_rows(window, "settling")
     opened = _phase_rows(window, "opened")
     parameters = settling[0].get("facts", {}).get("parameters") or {} if settling else {}
-    opened_at = opened[0].get("facts", {}).get("opened_at") if opened else None
-    cap_at = None
-    if opened_at is not None and isinstance(parameters.get("cap_seconds"), (int, float)):
-        try:
-            moment = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
-            cap_at = _now_text(moment.timestamp() + float(parameters["cap_seconds"]))
-        except (ValueError, OverflowError):
-            cap_at = None
+    opened_at, cap_at = _window_times(window)
     seats = opened[0].get("facts", {}).get("seats", {}) if opened else {}
     quiet = {
         "active": True, "state": state, "window_id": window_id,

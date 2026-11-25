@@ -138,7 +138,7 @@ class RuledNativeRefusalContinuationTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         output = Path(temporary.name).resolve()
         boundaries = RuledRefusalBoundaries(self, mutation)
-        self.assertEqual(70, len(boundaries.scope["cases"]), "real d66 parser population must be restored first")
+        self.assertEqual(71, len(boundaries.scope["cases"]), "real d66 parser population must be restored first")
         initial = source_hashes()
         code = failure = None
         with mock.patch.object(bus_scale_seeds, "make_seed_pair", boundaries.seed_pair),\
@@ -178,7 +178,7 @@ class RuledNativeRefusalContinuationTests(unittest.TestCase):
         self.assertIsNone(failure, "ruled collected refusal must remain terminal functional RED and continue")
         self.assertEqual(0, code)
         self.assertEqual("first_pass_complete_with_functional_reds", record["status"])
-        self.assertEqual(1120, len(boundaries.calls), "four families, two balanced pairs, seventy cases, both scales")
+        self.assertEqual(1136, len(boundaries.calls), "four families, two balanced pairs, 71 cases, both scales")
         teardown = [call for call in boundaries.calls if call["case"] == "seat-teardown"]
         for family in ("events", "registry", "wait-exhaustion", "deliveries"):
             calls = [call for call in teardown if call["family"] == family]
@@ -208,7 +208,7 @@ class RuledNativeRefusalContinuationTests(unittest.TestCase):
         coordinates = {(row["family"], row["case"]) for row in comparisons}
         expected = {(family, case) for family in ("events", "registry", "wait-exhaustion", "deliveries")
                     for case in boundaries.scope["cases"]} - {("events", "seat-teardown")}
-        self.assertEqual(279, len(comparisons))
+        self.assertEqual(283, len(comparisons))
         self.assertEqual(expected, coordinates, "normal cells must all be classified; failed pair has no synthetic ratio")
         for row in comparisons:
             if row["case"] == "seat-teardown":

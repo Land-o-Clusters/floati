@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 import re
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .bus_epoch import shared_epoch_operation
 from .epoch_rotation import automatic_epoch_operation
@@ -51,6 +51,7 @@ EVENT_KINDS = frozenset(
         LAUNCHER_KIND,
         "seat_execution",
         "ask_question",
+        "ask_presentation",
         "ask_answer",
         "ask_decline",
         "ask_timeout",
@@ -120,7 +121,7 @@ def _validate_ask_event(
     questions: Dict[str, Dict[str, object]],
     resolved: set,
 ) -> None:
-    """Require a question before its answer, decline, or timeout."""
+    """Require a question before any of its dependent receipts."""
 
     kind = record["kind"]
     if kind == "ask_question":
@@ -130,7 +131,7 @@ def _validate_ask_event(
     if question is None:
         raise IntegrityFailure(
             "ask_correlation_invalid",
-            "ask terminal evidence must follow its question",
+            "ask evidence must follow its question",
         )
     if kind == "ask_timeout":
         if record.get("observer") != question["sender"]:
@@ -142,8 +143,15 @@ def _validate_ask_event(
     if question["sender"] != record.get("recipient") or question["recipient"] != record.get("sender"):
         raise IntegrityFailure(
             "ask_correlation_invalid",
-            "ask terminal evidence must reverse the question parties",
+            "ask evidence must reverse the question parties",
         )
+    if kind == "ask_presentation":
+        if str(record.get("reply_to")) in resolved:
+            raise IntegrityFailure(
+                "ask_already_resolved",
+                "ask presentation must precede the answer or decline",
+            )
+        return
     if str(record.get("reply_to")) in resolved:
         raise IntegrityFailure(
             "ask_already_resolved",
@@ -1228,6 +1236,7 @@ class EventLog:
         worker_session_id: Optional[str] = None,
         _bridge_publication: object = None,
         _acting_session_id: Optional[str] = None,
+        _before_append: Optional[Callable[[], None]] = None,
     ) -> Optional[Dict[str, object]]:
         require_presentable(self.root, recipient, messages)
         from .bridge_publication import BridgePublication, deferred_delivery
@@ -1279,7 +1288,7 @@ class EventLog:
 
         from .cursor_prefix import transact_delivery
         return transact_delivery(self.root, recipient, [message["id"] for message in messages], decide,
-            worker_session_id=worker_session_id)
+            worker_session_id=worker_session_id, _before_append=_before_append)
 
     def stale_send_projection(self) -> List[Dict[str, object]]:
         """Project dead-holder sends from evidence only; this method never renews a lease."""

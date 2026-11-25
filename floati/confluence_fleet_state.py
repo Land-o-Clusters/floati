@@ -1,4 +1,4 @@
-"""Read-only, root-local archive and waiter testimony for Confluence v2."""
+"""Read-only, root-local archive, waiter and load-hold testimony for Confluence v2."""
 
 from __future__ import annotations
 
@@ -114,15 +114,35 @@ def _last_wake(root, node, now):
             "receipt_id": row["id"]}
 
 
-def project_fleet_state(root: FloatiRoot, now: datetime):
-    """No discovery, probes, writes, or CPU estimates; unknowns name causes."""
+def project_fleet_state(root: FloatiRoot, now: datetime | None = None):
+    """Project bounded native evidence at one observation instant."""
+    from .quiet_window import observe_build_hold
     from .waiter_state import project_waiter_mode
 
+    observation = observe_build_hold(root)
+    if now is None:
+        now = observation[1] if observation is not None else datetime.now(timezone.utc)
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("fleet observation time must be aware")
     now = now.astimezone(timezone.utc)
-    return {"observed_at": _stamp(now), "archive_retention": _archives(root, now),
-            "waiters": [{"node_id": node, "mode": project_waiter_mode(root, node, now),
-                         "last_wake": _last_wake(root, node, now),
-                         "idle_cpu": _unknown("idle_cpu_not_measured")}
-                        for node in Registry(root).active_node_ids()]}
+    # Use the exported precision for every age and deadline derived from it.
+    now = now.replace(microsecond=now.microsecond // 1000 * 1000)
+    state = {"observed_at": _stamp(now), "archive_retention": _archives(root, now),
+             "waiters": [{"node_id": node, "mode": project_waiter_mode(root, node, now),
+                          "last_wake": _last_wake(root, node, now),
+                          "idle_cpu": _unknown("idle_cpu_not_measured")}
+                         for node in Registry(root).active_node_ids()]}
+    # An unreadable or ambiguous quiet history leaves this optional field absent.
+    if observation is not None:
+        active, _, cap_at = observation
+        valid_until = now + timedelta(seconds=120)
+        if cap_at is not None:
+            valid_until = min(valid_until, cap_at)
+        if valid_until > now:
+            state["load_hold"] = {
+                "schema_version": 1,
+                "state": "active" if active else "none",
+                "observed_at": state["observed_at"],
+                "valid_until": _stamp(valid_until),
+            }
+    return state

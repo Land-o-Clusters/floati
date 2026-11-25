@@ -140,15 +140,7 @@ def _unique_object(pairs):
     return result
 
 
-def bound_preview(root, sender, address, path):
-    """Caller holds the epoch barrier until all publications are finished."""
-    if address.startswith("person:"):
-        validate_identifier(address[7:], "person")
-    if path is None:
-        # Resolve first so a person address names its missing recorded source.
-        resolve_recipients(root, sender, address)
-        _refuse("address_preview_required", "a group send requires --recipient-preview PATH",
-                "run with --preview, review and save the artifact, then pass --recipient-preview PATH")
+def load_recipient_preview(path, *, commands=frozenset({"send", "ask"})):
     try:
         source = Path(path)
         if source.is_symlink() or not source.is_file() or source.stat().st_size > 1024 * 1024:
@@ -160,11 +152,23 @@ def bound_preview(root, sender, address, path):
         if (not isinstance(artifact, dict) or type(artifact.get("artifact_version")) is not int
                 or artifact.get("artifact_version") != 0 or artifact.get("status") != "ok"
                 or not isinstance(artifact.get("command"), str)
-                or artifact.get("command") not in {"send", "ask"}):
+                or artifact.get("command") not in commands):
             raise ValueError("not a preview artifact")
-        saved = artifact.get("evidence")
-    except (OSError, ValueError, UnicodeError):
+        return artifact.get("evidence")
+    except (OSError, ValueError, UnicodeError, RecursionError):
         _refuse("address_preview_invalid", "recipient preview must be a saved JSON preview artifact")
+
+
+def bound_preview(root, sender, address, path):
+    """Caller holds the epoch barrier until all publications are finished."""
+    if address.startswith("person:"):
+        validate_identifier(address[7:], "person")
+    if path is None:
+        # Resolve first so a person address names its missing recorded source.
+        resolve_recipients(root, sender, address)
+        _refuse("address_preview_required", "a group send requires --recipient-preview PATH",
+                "run with --preview, review and save the artifact, then pass --recipient-preview PATH")
+    saved = load_recipient_preview(path)
     validate_preview(saved, _refuse)
     if (saved["tenant_id"], saved["sender"], saved["address"]) != (root.tenant_id, sender, address):
         _refuse("address_preview_invalid", "recipient preview names a different fleet, sender, or address")

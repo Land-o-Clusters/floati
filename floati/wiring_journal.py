@@ -12,12 +12,13 @@ is visible, never silently truncated.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, TextIO
 
 JOURNAL_SCHEMA_VERSION = 1
 JOURNAL_NAME = "wiring-journal.v1.jsonl"
@@ -104,72 +105,79 @@ def replay_durability(destination: Path) -> List[JournalEntry]:
     return read_entries(path)
 
 
+def _revision(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
+class JournalAppender:
+    """Carry the verified tip between durable appends by one deployment."""
+
+    def __init__(self, destination: Path) -> None:
+        self.path = journal_path(destination)
+        self._revision: Optional[tuple[int, int, int, int, int]] = None
+        self._previous_hash: Optional[str] = None
+        self._ordinal = 0
+
+    def append(self, payload: Dict[str, Any]) -> JournalEntry:
+        """Durably append one intent before performing its wiring action."""
+        if payload.get("v") != JOURNAL_SCHEMA_VERSION:
+            raise ValueError("wiring journal entry requires v == 1")
+        if payload.get("kind") not in CLOSED_KINDS:
+            raise ValueError(f"unknown wiring kind: {payload.get('kind')!r}")
+        if payload.get("action") not in CLOSED_ACTIONS:
+            raise ValueError(f"unknown wiring action: {payload.get('action')!r}")
+        if payload.get("op") not in CLOSED_OPS:
+            raise ValueError(f"unknown wiring op: {payload.get('op')!r}")
+        if not isinstance(payload.get("path"), str) or not payload["path"]:
+            raise ValueError("wiring entry requires a non-empty path")
+
+        path = self.path
+        parent_existed = path.parent.exists()
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+
+        with open(path, "a+", encoding="utf-8") as handle:
+            descriptor = handle.fileno()
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            info = os.fstat(descriptor)
+            if not os.path.samestat(info, path.stat()):
+                raise WiringJournalCorrupt(0, "journal was replaced while opening for append")
+            offset = info.st_size
+            previous_hash, ordinal = self._previous_hash, self._ordinal
+            if _revision(info) != self._revision:
+                # Reopen and an intervening writer both require full validation.
+                handle.seek(0)
+                entries = _read_entries(handle, require_terminated=True)
+                previous_hash = entries[-1].payload["entryHash"] if entries else None
+                ordinal = len(entries)
+
+            stamped = dict(payload)
+            stamped["prevHash"] = previous_hash
+            # The previous hash participates in the digest. The entry's own
+            # hash is derived here even if the caller supplied that field.
+            stamped.pop("entryHash", None)
+            stamped["entryHash"] = hashlib.sha256(canonical_entry_bytes(stamped)).hexdigest()
+            line = canonical_entry_bytes(stamped) + b"\n"
+            handle.write(line.decode("utf-8"))
+            handle.flush()
+            os.fsync(descriptor)
+            # Persist the journal link and a newly created metadata directory.
+            _fsync_directory(path.parent)
+            if not parent_existed:
+                _fsync_directory(path.parent.parent)
+
+            # Only carry a tip that belongs to this completed durable append.
+            written = os.fstat(descriptor)
+            if written.st_size == offset + len(line):
+                self._revision = _revision(written)
+                self._previous_hash = stamped["entryHash"]
+                self._ordinal = ordinal + 1
+
+        return JournalEntry(ordinal=ordinal + 1, byte_offset=offset, payload=stamped)
+
+
 def append_entry(destination: Path, payload: Dict[str, Any]) -> JournalEntry:
-    """Append one entry. MANIFEST-BEFORE-MEANING: callers MUST call this
-    BEFORE performing the wiring action the entry records.
-
-    Validates the closed vocabularies and chains the entry to its
-    predecessor; a missing journal creates it (first wiring action).
-    """
-    if payload.get("v") != JOURNAL_SCHEMA_VERSION:
-        raise ValueError("wiring journal entry requires v == 1")
-    if payload.get("kind") not in CLOSED_KINDS:
-        raise ValueError(f"unknown wiring kind: {payload.get('kind')!r}")
-    if payload.get("action") not in CLOSED_ACTIONS:
-        raise ValueError(f"unknown wiring action: {payload.get('action')!r}")
-    if payload.get("op") not in CLOSED_OPS:
-        raise ValueError(f"unknown wiring op: {payload.get('op')!r}")
-    if not isinstance(payload.get("path"), str) or not payload["path"]:
-        raise ValueError("wiring entry requires a non-empty path")
-
-    path = journal_path(destination)
-    parent_existed = path.parent.exists()
-    path.parent.mkdir(mode=0o700, exist_ok=True)
-
-    previous_hash, ordinal = _tail(path)
-    stamped = dict(payload)
-    stamped["prevHash"] = previous_hash
-    # The chain field participates in the entry hash: hash covers
-    # everything EXCEPT entryHash itself (prevHash included) — identical
-    # to the reader's recomputation.
-    body = canonical_entry_bytes(stamped)
-    stamped["entryHash"] = hashlib.sha256(body).hexdigest()
-
-    line = json.dumps(stamped, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")) + "\n"
-    offset = path.stat().st_size if path.exists() else 0
-    with open(path, "a", encoding="utf-8") as handle:
-        handle.write(line)
-        handle.flush()
-        os.fsync(handle.fileno())
-    # A file fsync alone does not durably link a newly created journal.  The
-    # containing metadata directory is always replayed, and a newly created
-    # metadata directory is linked durably from the deployment destination.
-    _fsync_directory(path.parent)
-    if not parent_existed:
-        _fsync_directory(path.parent.parent)
-    return JournalEntry(ordinal=ordinal + 1, byte_offset=offset,
-                        payload=stamped)
-
-
-def _tail(path: Path) -> Tuple[Optional[str], int]:
-    """Return (prevHash, ordinal) of the last valid entry; (None, 0) if absent."""
-    if not path.exists():
-        return None, 0
-    last_hash: Optional[str] = None
-    ordinal = 0
-    with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise WiringJournalCorrupt(ordinal, f"unparseable line: {exc}") from exc
-            last_hash = payload.get("entryHash")
-            ordinal += 1
-    return last_hash, ordinal
+    """Append one durable intent before performing the action it records."""
+    return JournalAppender(destination).append(payload)
 
 
 def read_entries(path: Path) -> List[JournalEntry]:
@@ -177,48 +185,56 @@ def read_entries(path: Path) -> List[JournalEntry]:
     validate, or verify against the prevHash chain; the exception carries
     the byte offset so a half-broken journal is visible, never truncated.
     """
-    entries: List[JournalEntry] = []
     if not path.exists():
-        return entries
+        return []
+    with open(path, "r", encoding="utf-8") as handle:
+        return _read_entries(handle)
+
+
+def _read_entries(
+    handle: TextIO, *, require_terminated: bool = False
+) -> List[JournalEntry]:
+    entries: List[JournalEntry] = []
     previous_hash: Optional[str] = None
     offset = 0
     ordinal = 0
-    with open(path, "r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            line_offset = offset
-            offset += len(raw_line.encode("utf-8"))
-            stripped = raw_line.strip()
-            if not stripped:
-                continue
-            try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise WiringJournalCorrupt(
-                    line_offset, f"unparseable line: {exc}") from exc
-            if not isinstance(payload, dict):
-                raise WiringJournalCorrupt(line_offset, "line is not an object")
-            if payload.get("v") != JOURNAL_SCHEMA_VERSION:
-                raise WiringJournalCorrupt(line_offset, "schema version mismatch")
-            if payload.get("kind") not in CLOSED_KINDS:
-                raise WiringJournalCorrupt(
-                    line_offset, f"unknown wiring kind: {payload.get('kind')!r}")
-            claimed_prev = payload.get("prevHash")
-            if claimed_prev != previous_hash:
-                raise WiringJournalCorrupt(
-                    line_offset,
-                    f"prevHash chain break: expected {previous_hash}, found {claimed_prev}",
-                )
-            body = {
-                k: v for k, v in payload.items() if k != "entryHash"
-            }
-            expected_entry_hash = hashlib.sha256(
-                canonical_entry_bytes(body)).hexdigest()
-            if payload.get("entryHash") != expected_entry_hash:
-                raise WiringJournalCorrupt(
-                    line_offset, "entryHash mismatch (entry was altered)")
-            ordinal += 1
-            entries.append(JournalEntry(ordinal=ordinal,
-                                        byte_offset=line_offset,
-                                        payload=payload))
-            previous_hash = payload.get("entryHash")
+    for raw_line in handle:
+        line_offset = offset
+        offset += len(raw_line.encode("utf-8"))
+        if require_terminated and not raw_line.endswith("\n"):
+            raise WiringJournalCorrupt(line_offset, "unterminated journal line")
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise WiringJournalCorrupt(
+                line_offset, f"unparseable line: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise WiringJournalCorrupt(line_offset, "line is not an object")
+        if payload.get("v") != JOURNAL_SCHEMA_VERSION:
+            raise WiringJournalCorrupt(line_offset, "schema version mismatch")
+        if payload.get("kind") not in CLOSED_KINDS:
+            raise WiringJournalCorrupt(
+                line_offset, f"unknown wiring kind: {payload.get('kind')!r}")
+        claimed_prev = payload.get("prevHash")
+        if claimed_prev != previous_hash:
+            raise WiringJournalCorrupt(
+                line_offset,
+                f"prevHash chain break: expected {previous_hash}, found {claimed_prev}",
+            )
+        body = {
+            k: v for k, v in payload.items() if k != "entryHash"
+        }
+        expected_entry_hash = hashlib.sha256(
+            canonical_entry_bytes(body)).hexdigest()
+        if payload.get("entryHash") != expected_entry_hash:
+            raise WiringJournalCorrupt(
+                line_offset, "entryHash mismatch (entry was altered)")
+        ordinal += 1
+        entries.append(JournalEntry(ordinal=ordinal,
+                                    byte_offset=line_offset,
+                                    payload=payload))
+        previous_hash = payload.get("entryHash")
     return entries

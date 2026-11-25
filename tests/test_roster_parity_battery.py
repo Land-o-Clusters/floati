@@ -26,7 +26,9 @@ from pathlib import Path
 from unittest import mock
 
 from floati.adapters.cline import ClineAdapter
+from floati.adapters.copilot import CopilotAdapter
 from floati.adapters.cursor import CursorAgentAdapter
+from floati.adapters.gemini import GeminiAdapter
 from floati.adapters.grok_build import GrokBuildAdapter
 from floati.adapters.headless_template import (
     EVIDENCE_DIRECTORY,
@@ -48,6 +50,8 @@ ROSTER = [
     ("cline", ClineAdapter),
     ("pi-observation", PiObservationAdapter),
     ("zcode", ZcodeAdapter),
+    ("gemini", GeminiAdapter),
+    ("copilot", CopilotAdapter),
 ]
 
 

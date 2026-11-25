@@ -351,12 +351,15 @@ class DoctorContractTests(unittest.TestCase):
         """BUNDLE-1: a doctor artifact must not expose its operator-home prefix."""
 
         fake_home = self.base / "home" / "operator"
-        destination = fake_home / "floati-work" / "work-01a00000000070008000000000000000"
+        destination = fake_home / "tmp" / "floati-work" / "work-01a00000000070008000000000000000"
         entrypoint = destination / "scripts" / "floati"
         entrypoint.parent.mkdir(parents=True)
         entrypoint.write_bytes(b"installed\n")
+        other_interpreter = self.base / "home" / "operator-tools" / "python3"
 
-        with mock.patch.object(Path, "home", return_value=fake_home):
+        with mock.patch.object(Path, "home", return_value=fake_home), mock.patch.dict(
+            os.environ, {LAUNCHER_INTERPRETER_SELECTION: str(other_interpreter)}
+        ):
             artifact, _return_code = Doctor(
                 self.source,
                 self.home,
@@ -381,16 +384,17 @@ class DoctorContractTests(unittest.TestCase):
             [],
             [subject for subject in path_subjects if not subject.startswith("~/")],
         )
+        subjects = [str(row["subject"]) for row in artifact["findings"]]
         encoded = json.dumps(
-            [str(row["subject"]) for row in artifact["findings"]],
+            subjects,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
         )
-        self.assertIn("~/floati-work/work-01a00000000070008000000000000000", encoded)
-        self.assertNotIn(str(fake_home), encoded)
-        self.assertNotIn("\x2fUsers/", encoded)
-        self.assertNotIn("/home/", encoded)
+        self.assertIn("~/tmp/floati-work/work-01a00000000070008000000000000000", encoded)
+        self.assertIn(str(other_interpreter), subjects)
+        self.assertNotIn(str(fake_home), subjects)
+        self.assertNotIn(str(fake_home) + "/", encoded)
 
     def test_non_home_subject_json_bytes_are_unchanged(self) -> None:
         """BUNDLE-1: redaction must not rewrite a destination outside HOME."""

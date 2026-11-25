@@ -43,11 +43,6 @@ class AU1S0Tests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
-        selected = managed_test_tools.executable(
-            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
-        )
-        self.assertIsNotNone(selected, "AU1-S0 requires a real minisign binary")
-        self.minisign = Path(selected)
         self.staging = self.base / "staging"
         self.staging.mkdir()
         self._copy_minisign_fixture(
@@ -173,7 +168,7 @@ class AU1S0Tests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
-            minisign_executable=self.minisign,
+            minisign_executable=managed_test_tools.require_minisign(self),
         )
 
         self.assertEqual("signature_verified", fact["state"])
@@ -220,7 +215,7 @@ class AU1S0Tests(unittest.TestCase):
             "--through-seq",
             "7",
             "--minisign-executable",
-            str(self.minisign),
+            str(managed_test_tools.require_minisign(self)),
         ]
         environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         plain = subprocess.run(

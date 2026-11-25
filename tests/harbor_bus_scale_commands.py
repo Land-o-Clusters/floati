@@ -26,11 +26,11 @@ except ModuleNotFoundError as exc:
 # to exempt another command. Their argument contracts also remain bound.
 _ADMINISTRATION_PATHS = frozenset({
     "init", "setup", "register", "retire", "node add", "node spawn", "node retire",
-    "node switch", "node role", "node person set", "node person clear", "seat add", "seat remove", "seat migrate", "seat retire",
+    "node switch", "node role", "node role-clear", "node person set", "node person clear", "seat add", "seat remove", "seat migrate", "seat retire",
     "hook install", "hook uninstall", "backup", "wake daemon consent", "wake daemon bind",
     "wake daemon install", "wake daemon start", "wake daemon stop",
     "wake daemon remove", "wake daemon revoke", "sequencer serve",
-    "sequencer direct", "grant", "grant revoke", "epoch roll", "journal checkpoint", "journal verify",
+    "net route add", "net route remove", "sequencer direct", "grant", "grant revoke", "epoch roll", "journal checkpoint", "journal verify",
     "repair quarantine", "signature sign", "signature verify", "install",
     "update", "update consent", "update revoke", "update status",
     "update check", "update apply", "update rollback", "update fleet preview",
@@ -161,7 +161,7 @@ class BusScaleCommandCoverageTests(unittest.TestCase):
         classified = _commands.classify_contract(self.rows)
         routine = classified["routine"]
         administration = classified["administration"]
-        self.assertEqual(59, len(_ADMINISTRATION_PATHS))  # BUS-SCALE-CENSUS-1 merged parser
+        self.assertEqual(62, len(_ADMINISTRATION_PATHS))  # BUS-SCALE-CENSUS-1 merged parser
         self.assertEqual(_ADMINISTRATION_PATHS, set(administration))
         self.assertEqual([], classified["unknown"])
         self.assertEqual(len(routine), len(set(routine)))

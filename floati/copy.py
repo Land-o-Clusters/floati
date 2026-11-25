@@ -398,6 +398,7 @@ def copy_ledger_markdown() -> str:
     from . import registry  # noqa: F401 - import registers retirement refusal copy
     from . import doctor  # noqa: F401 - import registers doctor profile copy
     from . import replay_render  # noqa: F401 - import registers replay labels
+    from . import tui_ask  # noqa: F401 - import registers live board ask copy
     from . import tui_doors  # noqa: F401 - import registers TUI door copy consumers
     from . import tui_doctor  # noqa: F401 - import registers doctor TTY copy
     from . import tui_render  # noqa: F401 - import registers TUI labels

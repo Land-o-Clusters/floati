@@ -45,6 +45,10 @@ _TRAIN_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-7d0c404e.js
 _TRAIN_SOURCE_SHA = "7d0c404e7ac5e588505ff2392f93dcd4c677c53b"
 _QUIET_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-d6263c86.json")
 _QUIET_SOURCE_SHA = "d6263c86db08b6c88428eceb91ca6230217d30d6"
+_ASK_REPLAY_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-7faae5cd.json")
+_ASK_REPLAY_SOURCE_SHA = "7faae5cd1f6d8897c21531aec2b8c216f8485847"
+_FLEET_DESIGN_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-4aa55427.json")
+_FLEET_DESIGN_SOURCE_SHA = "4aa55427cdd679bf042840bc5773a35b54a7ef9e"
 _ROW_FIELDS = frozenset({
     "path", "program", "executable", "public", "mcp_exposure", "mcp_required",
     "mcp_omit", "artifact_schema_version", "arguments",
@@ -63,6 +67,7 @@ _ADMINISTRATION = {
     "node retire": "Node membership retirement.",
     "node switch": "Provider assignment administration.",
     "node role": "Role assignment administration.",
+    "node role-clear": "Role removal is registry administration, outside routine seat operation.",
     "node person set": "Explicit person membership assignment is registry administration, outside routine seat operation.",
     "node person clear": "Explicit person membership removal is registry administration, outside routine seat operation.",
     "seat add": "Owned seat provisioning and configuration.",
@@ -80,6 +85,8 @@ _ADMINISTRATION = {
     "wake daemon remove": "LaunchAgent removal.",
     "wake daemon revoke": "Daemon activation consent revocation.",
     "sequencer serve": "Managed writer process lifecycle administration.",
+    "net route add": "Declared-route administration, outside routine seat operation.",
+    "net route remove": "Declared-route administration, outside routine seat operation.",
     "sequencer direct": "Managed writer mode administration.",
     "grant": "Work-authority grant administration.",
     "grant revoke": "Work-authority revocation administration.",
@@ -205,17 +212,25 @@ def _baseline_state() -> tuple[dict[str, dict], dict[str, str]]:
     quiet = _QUIET_AMENDMENT.read_bytes()
     if hashlib.sha256(quiet).hexdigest() != expected_fixture_sha256(_QUIET_AMENDMENT):
         raise ValueError("quiet release command amendment digest changed")
+    ask_replay = _ASK_REPLAY_AMENDMENT.read_bytes()
+    if hashlib.sha256(ask_replay).hexdigest() != expected_fixture_sha256(_ASK_REPLAY_AMENDMENT):
+        raise ValueError("ask and replay command amendment digest changed")
+    fleet_design = _FLEET_DESIGN_AMENDMENT.read_bytes()
+    if hashlib.sha256(fleet_design).hexdigest() != expected_fixture_sha256(_FLEET_DESIGN_AMENDMENT):
+        raise ValueError("fleet design command amendment digest changed")
     rows, signatures = _baseline_template(
-        data, amendment, prepare, train, quiet, str(worker_workspace_root().parent)
+        data, amendment, prepare, train, quiet, ask_replay, fleet_design,
+        str(worker_workspace_root().parent),
     )
-    if len(_ADMINISTRATION) != 59 or not set(_ADMINISTRATION) <= set(rows):
+    if len(_ADMINISTRATION) != 62 or not set(_ADMINISTRATION) <= set(rows):
         raise ValueError("reviewed administration exceptions do not bind the fixture")
     return rows, signatures
 
 
 @lru_cache(maxsize=4)
 def _baseline_template(
-    data: bytes, amendment: bytes, prepare: bytes, train: bytes, quiet: bytes, temporary_parent: str
+    data: bytes, amendment: bytes, prepare: bytes, train: bytes, quiet: bytes, ask_replay: bytes,
+    fleet_design: bytes, temporary_parent: str,
 ) -> tuple[dict, dict]:
     """Private templates are never returned through the mutable public API."""
     fixture = json.loads(data)
@@ -257,16 +272,7 @@ def _baseline_template(
         raise ValueError("quiet release command amendment scope changed")
     rows.update(quiet_rows)
 
-    # The captured Darwin fixture contains only these two exact native example
-    # tokens. Substitute in the expected examples, never in supplied rows,
-    # defaults, user values, arbitrary descendants or any other contract field.
     temporary_parent = Path(temporary_parent)
-    tokens = {
-        "\x2fprivate/tmp/floati-contract": str(temporary_parent / "floati-contract"),
-        "\x2fprivate/tmp/floati-contract.json": str(temporary_parent / "floati-contract.json"),
-    }
-    for row in rows.values():
-        row["example_argv"] = [tokens.get(value, value) for value in row["example_argv"]]
     rows["setup"] = _setup_contract(temporary_parent)
     # NET-REPLAY adds one exact audit command to the historical parser capture.
     # Bind its selector options using the captured ask root grammar.
@@ -288,9 +294,57 @@ def _baseline_template(
                  required=False, mutually_exclusive_group=0),
         ],
         "mutually_exclusive_groups": [{"required": True, "arguments": ["question", "work_item"]}],
-        "example_argv": ["replay", "--root", str(temporary_parent / "floati-contract"),
-                         "--question", "value"],
+        "example_argv": ["replay", "--root", "\x2fprivate/tmp/floati-contract", "--question", "value"],
     }
+    # NET-MCP-ASK updates only the exposure of ask and adds one roster read.
+    rows["ask"].update(mcp_exposure="governed", mcp_required=["idempotency_key"],
+                       mcp_omit=["repository", "preview", "recipient_preview"])
+    rows["who"] = {
+        "path": ["who"],
+        "program": "floati who",
+        "executable": True,
+        "public": True,
+        "mcp_exposure": "read",
+        "mcp_required": [],
+        "mcp_omit": [],
+        "artifact_schema_version": None,
+        "arguments": [dict(root)],
+        "mutually_exclusive_groups": [],
+        "example_argv": ["who", "--root", str(temporary_parent / "floati-contract")],
+    }
+
+    ask_replay_document = json.loads(ask_replay)
+    ask_replay_rows = _from_commands(ask_replay_document["commands"])
+    if (ask_replay_document.get("schema_version") != 0
+            or ask_replay_document.get("source_commit") != _ASK_REPLAY_SOURCE_SHA
+            or set(ask_replay_rows) != {"ask", "replay"}
+            or ask_replay_document.get("predecessors") != {
+                path: _signature(rows[path]) for path in ask_replay_rows
+            }):
+        raise ValueError("ask and replay command amendment scope changed")
+    rows.update(ask_replay_rows)
+
+    fleet_design_document = json.loads(fleet_design)
+    fleet_design_rows = _from_commands(fleet_design_document["commands"])
+    bundle_path = "confluence bundle"
+    if (fleet_design_document.get("schema_version") != 0
+            or fleet_design_document.get("source_commit") != _FLEET_DESIGN_SOURCE_SHA
+            or set(fleet_design_rows) != {
+                bundle_path, "net route add", "net route list", "net route remove", "node role-clear",
+            }
+            or fleet_design_document.get("predecessors") != {bundle_path: _signature(rows[bundle_path])}
+            or set(fleet_design_rows) & set(rows) != {bundle_path}):
+        raise ValueError("fleet design command amendment scope changed")
+    rows.update(fleet_design_rows)
+
+    # Compare predecessors in the captured grammar, then substitute the two
+    # exact example tokens for the native platform. All other fields stay exact.
+    tokens = {
+        "\x2fprivate/tmp/floati-contract": str(temporary_parent / "floati-contract"),
+        "\x2fprivate/tmp/floati-contract.json": str(temporary_parent / "floati-contract.json"),
+    }
+    for row in rows.values():
+        row["example_argv"] = [tokens.get(value, value) for value in row["example_argv"]]
     return rows, {path: _signature(row) for path, row in rows.items()}
 
 

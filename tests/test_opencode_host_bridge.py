@@ -6,13 +6,13 @@ these properties. Ledger authentication is covered by the desktop observer tests
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
 
+from tests.managed_test_tools import require_node
 
 BRIDGE = Path(__file__).resolve().parents[1] / "scripts/floati-opencode-observer.mjs"
 
@@ -46,8 +46,7 @@ class OpenCodeHostBridgeTests(unittest.TestCase):
 
     def run_bridge(self, events, *, root=None, observer=None, context=None, concurrent=False, dispose=False):
         self.assertTrue(BRIDGE.is_file(), "repository-owned OpenCode event bridge is absent")
-        node = shutil.which("node")
-        self.assertIsNotNone(node, "opencode_bridge_runtime_absent: Node is required for transport proof")
+        node = require_node(self)
         config = {"root": str(self.root) if root is None else root,
             "observerPath": str(self.observer) if observer is None else observer}
         context = context or {"directory": str(self.workspace), "worktree": str(self.workspace)}

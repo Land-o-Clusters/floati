@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from .errors import FloatiError
 from .jsonl import read_records_snapshot
-from .registry import Registry
+from .registry import Registry, read_registry_compatible
 from .root import FloatiRoot
 
 
@@ -243,7 +243,9 @@ def _harness(entry: Dict[str, object], now: datetime) -> Dict[str, object]:
         return unknown_cell()
 
 
-def project_roster(root: FloatiRoot, now: datetime) -> List[Dict[str, object]]:
+def project_roster(
+    root: FloatiRoot, now: datetime, *, include_roles: bool = False
+) -> List[Dict[str, object]]:
     """One row per active node. Owner comes only from operator testimony."""
 
     from .persons import person_records
@@ -251,8 +253,24 @@ def project_roster(root: FloatiRoot, now: datetime) -> List[Dict[str, object]]:
     current = _utc(now)
     persons = person_records(root)
     rows = []
-    for node_id in Registry(root).active_node_ids():
-        entry = Registry(root).require_active(node_id)
+    registry = Registry(root)
+    roles = {}
+    if include_roles:
+        records, _unknown, _versions = read_registry_compatible(root)
+        registrations = {}
+        for record in records:
+            if record["kind"] == "registry_entry":
+                registrations[record["node_id"]] = record
+            elif record["kind"] == "registry_role_record":
+                roles[record["node_id"]] = (
+                    record["template_role"] if record["state"] == "active" else None
+                )
+        entries = (registrations[node] for node in sorted(registrations)
+                   if registrations[node]["state"] == "active")
+    else:
+        entries = (registry.require_active(node) for node in registry.active_node_ids())
+    for entry in entries:
+        node_id = entry["node_id"]
         person = persons.get(node_id)
         owner = unknown_cell()
         if person is not None and person["person"] is not None:
@@ -272,4 +290,6 @@ def project_roster(root: FloatiRoot, now: datetime) -> List[Dict[str, object]]:
                 "liveness": liveness,
             }
         )
+        if include_roles:
+            rows[-1]["role"] = roles.get(node_id)
     return rows

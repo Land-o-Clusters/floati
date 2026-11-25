@@ -62,6 +62,24 @@ class WaiterLockRetryTests(unittest.TestCase):
         with mock.patch.object(jsonl, "time", SimpleNamespace(monotonic=clock, sleep=sleep)):
             yield SimpleNamespace(clock=clock, sleep=sleep, sleeps=sleeps)
 
+    @contextmanager
+    def release_on_retry(self, relative):
+        from floati.waiter_lock_retry import WaiterLockWindow
+
+        unlocked = threading.Event()
+        release = self.held_lock(relative, unlocked=unlocked)
+        native_retry = WaiterLockWindow.retry
+
+        def unlock_on_retry(window, failure, *args, **kwargs):
+            release.set()
+            wait_event(unlocked, "native receipt lock released after acquisition timeout")
+            return native_retry(window, failure, *args, **kwargs)
+
+        with self.lock_clock() as timing, mock.patch.object(
+                WaiterLockWindow, "retry", unlock_on_retry):
+            yield timing
+        self.assertTrue(unlocked.is_set())
+
     def assert_lock_held(self, relative):
         with self.root.resolve_relative(relative).open("rb") as handle:
             with self.assertRaises(BlockingIOError, msg="native fixture lock must remain held"):
@@ -292,8 +310,8 @@ class WaiterLockRetryTests(unittest.TestCase):
                     path = self.root.resolve_relative("receipts/acks/seat.jsonl")
                     path.parent.mkdir(parents=True)
                     path.write_bytes(b"")
-                self.held_lock(relative, 1.35)
-                self.assertEqual(0, self.invoke())
+                with self.release_on_retry(relative) as timing:
+                    self.assertEqual(0, self.invoke(monotonic=timing.clock, sleep=timing.sleep))
                 self.assertIn(envelope["id"], json.loads(self.output.getvalue())["reason"])
                 holds = StopHoldLedger(self.root).read("seat")
                 self.assertEqual(["start", "exit"], [row["phase"] for row in holds])
@@ -301,6 +319,40 @@ class WaiterLockRetryTests(unittest.TestCase):
                                                     allowed_kinds=set(WAKE_HOLD_KINDS))
                 self.assertEqual(1, len(deliveries))
                 self.assertEqual([envelope["id"]], deliveries[0]["item_ids"])
+
+    def test_native_delivery_recovers_when_writer_is_busy_after_selection(self):
+        from floati import fleet_presence
+
+        envelope = EventLog(self.root).send("sender", "seat", "repo", "a" * 40,
+                                            "docs/proof.md", "waiting mail")
+        relative = "receipts/deliveries/seat.jsonl.lock"
+        unlocked = threading.Event()
+        release = None
+        native_presence = fleet_presence.presence_status
+
+        def contend_after_selection(root):
+            nonlocal release
+            if release is None:
+                release = self.held_lock(relative, unlocked=unlocked)
+            return native_presence(root)
+
+        def unlock_on_wait(_now, _seconds):
+            if release is not None:
+                release.set()
+                wait_event(unlocked, "native delivery writer unlocked")
+
+        with self.lock_clock(unlock_on_wait) as timing, mock.patch.object(
+                fleet_presence, "presence_status", contend_after_selection):
+            self.assertEqual(0, self.invoke(monotonic=timing.clock, sleep=timing.sleep))
+        lines = self.output.getvalue().splitlines()
+        self.assertEqual(1, len(lines), self.errors.getvalue())
+        self.assertIn(envelope["id"], json.loads(lines[0])["reason"])
+        self.assertTrue(unlocked.is_set())
+        deliveries = read_records_snapshot(self.root, "receipts/deliveries/seat.jsonl",
+                                            allowed_kinds=set(WAKE_HOLD_KINDS))
+        self.assertEqual([[envelope["id"]]], [row["item_ids"] for row in deliveries])
+        holds = StopHoldLedger(self.root).read("seat")
+        self.assertEqual(["start", "exit"], [row["phase"] for row in holds])
 
     def test_native_malformed_events_still_emit_integrity_diagnostic(self):
         self.root.resolve_relative("events.jsonl").write_bytes(b"not-json\n")
@@ -452,9 +504,11 @@ class WaiterLockRetryTests(unittest.TestCase):
                 envelope = EventLog(self.root).send("sender", "cursor-seat", "repo", "a" * 40,
                     "docs/proof.md", "one publication")
                 calls = []
+                bodies = []
                 class Output:
                     def write(self, value):
                         calls.append("write")
+                        bodies.append(json.loads(value))
                         if phase == "write" and calls.count("write") == 1:
                             raise OSError("first write fails; a second would succeed")
                         return len(value)
@@ -464,10 +518,11 @@ class WaiterLockRetryTests(unittest.TestCase):
                             raise OSError("first flush fails; a second would succeed")
                 output = self.output
                 self.output = Output()
-                with self.assertRaisesRegex(OSError, "first"):
-                    self.invoke_cursor(workspace)
+                with self.assertRaisesRegex(OSError, "first"), self.lock_clock() as timing:
+                    self.invoke_cursor(workspace, clock=timing.clock, sleep=timing.sleep)
                 self.output = output
                 self.assertEqual(["write"] if phase == "write" else ["write", "flush"], calls)
+                self.assertIn(envelope["id"], bodies[0].get("followup_message", ""), bodies[0])
                 self.assertFalse((self.root.path / "state/cursor-wait/cursor-seat/journal.jsonl").exists())
                 deliveries = read_records_snapshot(self.root, "receipts/deliveries/cursor-seat.jsonl",
                     allowed_kinds=set(WAKE_HOLD_KINDS))
@@ -588,53 +643,55 @@ class WaiterLockRetryTests(unittest.TestCase):
                                                   allowed_kinds=set(WAKE_HOLD_KINDS)))
 
     def test_cursor_mid_loop_recovers_mail_without_another_mtime_change(self):
-        from floati.cursor_wait import run_cursor_stop_wait
-        Registry(self.root).register("cursor-seat", "Cursor")
-        self.workspace = self.base / "cursor-workspace"
-        self.workspace.mkdir()
-        arm_waiter_consent(self.root.path, self.workspace, "cursor-seat", "Cursor", 10, 3)
-        sent = []
-        def sleep(seconds):
-            if not sent:
-                sent.append(EventLog(self.root).send("sender", "cursor-seat", "repo", "a" * 40,
-                                                     "docs/proof.md", "mid-loop mail"))
-                self.held_lock("events.jsonl.lock", 1.35)
-            time.sleep(seconds)
-        self.assertEqual(0, self.cursor_at(root=self.root.path, node="cursor-seat", runtime=Path.cwd(),
-            deadline_seconds=3, poll_seconds=0.02, hook_timeout_seconds=10,
-            payload={"status": "completed", "conversation_id": "cursor-session", "cwd": str(self.workspace)},
-            stdout=self.output, stderr=self.errors, sleep=sleep,
-            ledger_mtime=lambda: self.root.resolve_relative("events.jsonl").stat().st_size
-                if self.root.resolve_relative("events.jsonl").exists() else 0))
-        self.assertIn("inbox", json.loads(self.output.getvalue())["followup_message"])
-        deliveries = read_records_snapshot(self.root, "receipts/deliveries/cursor-seat.jsonl",
-                                            allowed_kinds=set(WAKE_HOLD_KINDS))
-        self.assertEqual(1, len(deliveries))
-        self.assertEqual([sent[0]["id"]], deliveries[0]["item_ids"])
+        workspace, _ = self.cursor_native_fixture()
+        events = self.root.resolve_relative("events.jsonl")
+
+        def ledger_size():
+            return events.stat().st_size if events.exists() else 0
+
+        self._assert_cursor_mid_loop_delivery(workspace, ledger_mtime=ledger_size)
 
     def test_cursor_nested_workspace_retry_preserves_resolved_binding(self):
-        from floati.cursor_wait import run_cursor_stop_wait
-        Registry(self.root).register("cursor-seat", "Cursor")
-        workspace = self.base / "cursor-workspace"
+        workspace, _ = self.cursor_native_fixture()
         nested = workspace / "nested"
-        nested.mkdir(parents=True)
-        arm_waiter_consent(self.root.path, workspace, "cursor-seat", "Cursor", 10, 3)
+        nested.mkdir()
+        self._assert_cursor_mid_loop_delivery(nested)
+
+    def _assert_cursor_mid_loop_delivery(self, cwd, *, ledger_mtime=None):
+        from floati.waiter_lock_retry import WaiterLockWindow
+
+        unlocked = threading.Event()
+        release = None
         sent = []
-        def sleep(seconds):
+
+        def send_during_hold(_now, _seconds):
+            nonlocal release
             if not sent:
                 sent.append(EventLog(self.root).send("sender", "cursor-seat", "repo", "a" * 40,
-                    "docs/proof.md", "nested mail"))
-                self.held_lock("events.jsonl.lock", 1.35)
-            time.sleep(seconds)
-        self.assertEqual(0, self.cursor_at(root=self.root.path, node="cursor-seat", runtime=Path.cwd(),
-            deadline_seconds=3, poll_seconds=0.02, hook_timeout_seconds=10,
-            payload={"status": "completed", "conversation_id": "cursor-session", "cwd": str(nested)},
-            stdout=self.output, stderr=self.errors, sleep=sleep))
-        self.assertIn("followup_message", json.loads(self.output.getvalue()))
-        self.assertIn("inbox", json.loads(self.output.getvalue())["followup_message"])
+                    "docs/proof.md", "mid-loop mail"))
+                release = self.held_lock("events.jsonl.lock", unlocked=unlocked)
+
+        native_retry = WaiterLockWindow.retry
+
+        def release_after_timeout(window, failure, *args, **kwargs):
+            if release is not None and failure.code == "ledger_lock_timeout":
+                release.set()
+                wait_event(unlocked, "Cursor event lock released after acquisition timeout")
+            return native_retry(window, failure, *args, **kwargs)
+
+        # The first contended read must time out. Once it unwinds, let the
+        # holder unlock before advancing the same clock through retry backoff.
+        with self.lock_clock(send_during_hold) as timing,\
+                mock.patch.object(WaiterLockWindow, "retry", release_after_timeout):
+            self.assertEqual(0, self.invoke_cursor(cwd, clock=timing.clock, sleep=timing.sleep,
+                ledger_mtime=ledger_mtime))
         deliveries = read_records_snapshot(self.root, "receipts/deliveries/cursor-seat.jsonl",
             allowed_kinds=set(WAKE_HOLD_KINDS))
-        self.assertEqual([sent[0]["id"]], deliveries[0]["item_ids"])
+        self.assertTrue(sent, "mail must be sent during the wait")
+        self.assertEqual([[sent[0]["id"]]], [row["item_ids"] for row in deliveries],
+                         self.output.getvalue())
+        self.assertTrue(unlocked.is_set(), "fixture must release the event lock on retry")
+        self.assertIn(sent[0]["id"], json.loads(self.output.getvalue())["followup_message"])
 
     def test_cursor_quiet_start_contention_observes_withdrawn_consent(self):
         from types import SimpleNamespace
@@ -735,7 +792,6 @@ class WaiterLockRetryTests(unittest.TestCase):
         envelope = EventLog(self.root).send("sender", "seat", "repo", "a" * 40,
             "docs/proof.md", "published mail")
         participant = resolve_participant(self.root.path, self.workspace)
-        self.held_lock("events.jsonl.lock", 1.35)
         owner = self
         class Output(io.StringIO):
             changed = False
@@ -750,7 +806,9 @@ class WaiterLockRetryTests(unittest.TestCase):
         self.output = Output()
         outcome = {}
         try:
-            self.assertEqual(0, self.invoke(_waiter_result=outcome))
+            with self.release_on_retry("events.jsonl.lock") as timing:
+                self.assertEqual(0, self.invoke(monotonic=timing.clock, sleep=timing.sleep,
+                                               _waiter_result=outcome))
         except Exception as failure:
             self.fail("completed publication raised " + repr(failure))
         self.assertEqual(1, len(self.output.getvalue().splitlines()))

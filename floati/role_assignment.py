@@ -206,7 +206,7 @@ class RoleStepWizard:
         else:
             from .doctor import _legacy_role_binding
 
-            if (
+            if latest.get("state") != "retired" and (
                 latest.get("template_role") != template.role
                 or _legacy_role_binding(template, latest) is None
             ):

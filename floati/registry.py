@@ -27,7 +27,7 @@ from .seat_declaration import FleetGovernance
 
 REGISTRY_KINDS = {
     "registry_entry", "node_lease", "provider_switch_receipt",
-    "registry_role_record", "registry_role_transfer",
+    "registry_role_record", "registry_role_transfer", "declared_route_receipt",
     "lane_spawn_receipt", "lane_teardown_receipt",
 }
 

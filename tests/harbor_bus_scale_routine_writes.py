@@ -348,7 +348,13 @@ class RoutineWriteTests(StableSourceFixture, unittest.TestCase):
                 self.assertEqual("MEASURED", row["harness"]["stamp"])
                 row["harness"]["age_seconds"] = "<native-roster-age>"
             expected["fleet_state"]["observed_at"] = "<native-fleet-observation-time>"
+            self.assertEqual("none", raw["fleet_state"]["load_hold"]["state"])
+            expected["snapshot_at"] = "<native-hold-snapshot-time>"
+            hold = expected["fleet_state"]["load_hold"]
+            hold["observed_at"] = "<native-hold-observation-time>"
+            hold["valid_until"] = "<native-hold-freshness-deadline>"
             self.assertEqual(expected, actual)
+            self.assertEqual(expected["snapshot_at"], normalized["artifact"]["evidence"]["snapshot_at"])
             audits = [row["pointer"] for row in normalized["normalizations"] if "/roster/" in row["pointer"]]
             self.assertEqual(2, len(audits))
             self.assertTrue(all(pointer.endswith("/harness/age_seconds") for pointer in audits))
@@ -361,9 +367,11 @@ class RoutineWriteTests(StableSourceFixture, unittest.TestCase):
             raw = publication.read_bytes()
             original = json.loads(raw)
             for poison in ("missing", "owner", "age", "unknown_age", "extra",
-                           "fleet_clock", "archive_policy", "waiter_mode"):
+                           "fleet_clock", "archive_policy", "waiter_mode", "hold_state",
+                           "hold_expiry", "snapshot", "stdout_snapshot"):
                 with self.subTest(poison=poison):
                     document = copy.deepcopy(original)
+                    stdout_artifact = artifact
                     if poison == "missing":
                         document.pop("roster")
                     elif poison == "owner":
@@ -379,12 +387,21 @@ class RoutineWriteTests(StableSourceFixture, unittest.TestCase):
                     elif poison == "archive_policy":
                         policy = document["fleet_state"]["archive_retention"]
                         policy["keep_forever"] = not policy["keep_forever"]
-                    else:
+                    elif poison == "waiter_mode":
                         document["fleet_state"]["waiters"][0]["mode"]["reason"] = "invented"
+                    elif poison == "hold_state":
+                        document["fleet_state"]["load_hold"]["state"] = "active"
+                    elif poison == "hold_expiry":
+                        document["fleet_state"]["load_hold"]["valid_until"] = document["snapshot_at"]
+                    elif poison == "snapshot":
+                        document["snapshot_at"] = "2000-01-01T00:00:00.000Z"
+                    else:
+                        stdout_artifact = copy.deepcopy(artifact)
+                        stdout_artifact["evidence"]["snapshot_at"] = "2000-01-01T00:00:00.000Z"
                     publication.write_text(json.dumps(document) + "\n")
                     try:
                         with self.assertRaises(ValueError):
-                            helper.normalize("confluence-bundle", changes, artifact, context,
+                            helper.normalize("confluence-bundle", changes, stdout_artifact, context,
                                 wall_begin=begin, wall_end=end, child_pid=os.getpid(),
                                 home=self.home, workspace=self.workspace, **bounds)
                     finally:

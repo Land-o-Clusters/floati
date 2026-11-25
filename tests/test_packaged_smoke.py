@@ -21,12 +21,66 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
+
+from floati.wiring_journal import journal_path
+from scripts.fixture_finalizer import owned_child
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.time_bounds import derived_watch_liveness_bound_seconds
 
 REPOSITORY_ROOT = Path(__file__).parents[1]
 LAUNCHER = "scripts/floati"
+
+
+def _readme_install(
+    arguments: list[str], *, source: Path, environment: dict,
+    destination: Path, managed_files: int,
+) -> subprocess.CompletedProcess:
+    """Bound a stalled first install using its observed journal progress."""
+    # The initial window measures CLI startup, as the watch test does.
+    # After startup the relevant cost is the install's own journal cadence.
+    startup_budget = derived_watch_liveness_bound_seconds()
+    budget = startup_budget
+    journal = journal_path(destination)
+    # One manifest-before-meaning entry per managed file, then metadata.
+    entry_limit = managed_files + 1
+    previous_entries = 0
+    started = time.monotonic()
+    start_load = os.getloadavg()
+    with owned_child(
+        arguments, cwd=source, env=environment, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    ) as process:
+        window_started = started
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=budget)
+                return subprocess.CompletedProcess(
+                    arguments, process.returncode, stdout, stderr,
+                )
+            except subprocess.TimeoutExpired as error:
+                try:
+                    entries = journal.read_bytes().count(b"\n")
+                except FileNotFoundError:
+                    entries = 0
+                now = time.monotonic()
+                if not previous_entries < entries <= entry_limit:
+                    process.kill()
+                    process.communicate()
+                    raise AssertionError(
+                        f"README install watchdog expired with {entries}/{entry_limit} "
+                        f"journal entries (previous sample {previous_entries}). "
+                        f"Window={budget:.2f}s, elapsed={now - started:.2f}s, "
+                        f"loadavg at start={start_load}, at timeout={os.getloadavg()}"
+                    ) from error
+                seconds_per_entry = (now - window_started) / (entries - previous_entries)
+                # Give the next entry room for slower journal scans and disk
+                # commits. Bound each stall window even when the sample is sparse.
+                budget = min(4 * startup_budget, max(startup_budget, 16 * seconds_per_entry))
+                previous_entries = entries
+                window_started = now
 
 
 class PackagedSmokeBattery(unittest.TestCase):
@@ -224,11 +278,7 @@ class PackagedSmokeBattery(unittest.TestCase):
             "PYTHONDONTWRITEBYTECODE": "1",
         }
 
-        def run_artifact(arguments: list[str], cwd: Path) -> tuple[int, dict]:
-            completed = subprocess.run(
-                arguments, cwd=str(cwd), env=environment, capture_output=True,
-                text=True, check=False, timeout=120,
-            )
+        def read_artifact(completed: subprocess.CompletedProcess) -> tuple[int, dict]:
             stream = completed.stdout or completed.stderr
             try:
                 artifact = json.loads(stream)
@@ -239,22 +289,39 @@ class PackagedSmokeBattery(unittest.TestCase):
                 )
             return completed.returncode, artifact
 
-        install_rc, install = run_artifact([
+        def run_artifact(step: str, arguments: list[str], cwd: Path) -> tuple[int, dict]:
+            started = time.monotonic()
+            start_load = os.getloadavg()
+            try:
+                completed = subprocess.run(
+                    arguments, cwd=str(cwd), env=environment, capture_output=True,
+                    text=True, check=False, timeout=120,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail(
+                    f"README {step} timed out: bound=120s, "
+                    f"elapsed={time.monotonic() - started:.2f}s, "
+                    f"loadavg at start={start_load}, at timeout={os.getloadavg()}"
+                )
+            return read_artifact(completed)
+
+        install_rc, install = read_artifact(_readme_install([
             str(python), "-m", "floati", "install", "--source", str(source),
             "--destination", str(destination),
-        ], source)
+        ], source=source, environment=environment, destination=destination,
+            managed_files=len(manifest["files"])))
         self.assertEqual(0, install_rc, install)
         self.assertEqual("ok", install["status"], install)
         environment["PATH"] = os.pathsep.join((
             str(destination / "scripts"), "/usr/bin", "/bin", "/usr/sbin", "/sbin",
         ))
         command = str(destination / "scripts" / "floati")
-        init_rc, initialized = run_artifact([
+        init_rc, initialized = run_artifact("init", [
             command, "init", "--root", str(fleet), "--solo", "me", "--harness", "Codex",
         ], source)
         self.assertEqual(0, init_rc, initialized)
         self.assertEqual("ok", initialized["status"], initialized)
-        doctor_rc, doctor = run_artifact([
+        doctor_rc, doctor = run_artifact("doctor", [
             command, "doctor", "--root", str(fleet), "--source", str(source),
             "--destination", str(destination),
         ], source)

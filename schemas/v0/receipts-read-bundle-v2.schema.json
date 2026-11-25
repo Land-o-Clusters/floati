@@ -117,6 +117,17 @@
       "required": ["observed_at", "archive_retention", "waiters"],
       "properties": {
         "observed_at": {"type": "string", "format": "date-time"},
+        "load_hold": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "state", "observed_at", "valid_until"],
+          "properties": {
+            "schema_version": {"type": "integer", "const": 1},
+            "state": {"enum": ["active", "none"]},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "valid_until": {"type": "string", "format": "date-time"}
+          }
+        },
         "archive_retention": {
           "type": "object",
           "additionalProperties": false,
