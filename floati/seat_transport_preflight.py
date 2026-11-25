@@ -14,6 +14,9 @@ import stat
 from pathlib import Path, PurePosixPath
 
 from .errors import ProtocolRefusal
+from .install_limits import (
+    MAX_INSTALL_FILES, MAX_INSTALL_FILE_BYTES, MAX_INSTALL_TOTAL_BYTES, MAX_MANIFEST_BYTES,
+)
 
 
 TRANSPORT_FIELDS = {"kind", "install_root", "manifest_path", "manifest_sha256", "source_sha",
@@ -21,7 +24,6 @@ TRANSPORT_FIELDS = {"kind", "install_root", "manifest_path", "manifest_sha256", 
 MANIFEST_FIELDS = {"schema_version", "source_ref", "source_sha", "files"}
 FIXED_CLIENT_FILES = frozenset({"floati/__init__.py", "floati/__main__.py", "floati/cli.py",
                                "floati/codex_hook_install.py", "floati/codex_wait.py"})
-MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
 def _refuse(detail):
@@ -114,8 +116,9 @@ def _preflight(transport):
     for field, length in (("source_sha", 40), ("manifest_sha256", 64)):
         if not isinstance(transport[field], str) or re.fullmatch("[0-9a-f]{" + str(length) + "}", transport[field]) is None:
             _refuse("selected transport pin is invalid: " + field)
-    for field, ceiling in (("max_files", 4096), ("max_file_bytes", 64 * 1024 * 1024),
-                           ("max_total_bytes", 256 * 1024 * 1024)):
+    for field, ceiling in (("max_files", MAX_INSTALL_FILES),
+                           ("max_file_bytes", MAX_INSTALL_FILE_BYTES),
+                           ("max_total_bytes", MAX_INSTALL_TOTAL_BYTES)):
         if type(transport[field]) is not int or not 1 <= transport[field] <= ceiling:
             _refuse("selected transport bound is invalid: " + field)
     if transport["max_file_bytes"] > transport["max_total_bytes"]:

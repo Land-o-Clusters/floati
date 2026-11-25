@@ -1262,6 +1262,7 @@ def render_frame(
     animation_progress: float = 1.0,
     detail_open: bool = False,
     activity_by_node: Mapping[str, Sequence[int]] | None = None,
+    hints: str | None = None,
 ) -> str:
     viewport_width = max(20, int(width))
     viewport_height = max(4, int(height))
@@ -1274,7 +1275,7 @@ def render_frame(
         activity_by_node,
     )
     content = content[: max(0, viewport_height - 1)]
-    content.append(_clip(HINT_BAR, viewport_width))
+    content.append(_clip(HINT_BAR if hints is None else hints, viewport_width))
     if color:
         palette = _PALETTE_16 if color_tier == "16" else _PALETTE_256
         health = _work_health(model)

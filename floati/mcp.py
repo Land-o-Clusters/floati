@@ -6,7 +6,9 @@ import argparse
 import io
 import json
 import sys
+import time
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, TextIO
 
 from . import __version__
@@ -14,8 +16,10 @@ from . import cli
 from .command_contract import project_mcp_surface
 from .errors import ProtocolRefusal
 from .mcp_pin import validate_mcp_observation
-from .registry import Registry
+from .registry import Registry, utc_now
 from .root import FloatiRoot, validate_identifier
+from .seat_declaration import require_declared_coordinate
+from .timings import outcome_for_status, record_timing_receipt, refusal_code_for
 from .wake_control import validate_session_id
 
 
@@ -23,8 +27,10 @@ _ERROR_STATUSES = frozenset({
     "refused",
     "cannot_speak",
     "malformed_evidence",
+    "orchestration_deadline",
     "degraded",
 })
+_RECEIPTED_TOOLS = frozenset({"ask", "send", "who"})
 LATEST_PROTOCOL_VERSION = "2025-11-25"
 LEGACY_PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = frozenset({
@@ -74,6 +80,15 @@ def _tool_result(artifact: Dict[str, object]) -> Dict[str, object]:
     if artifact.get("status") in _ERROR_STATUSES:
         result["isError"] = True
     return result
+
+
+def _refusal_artifact(command: str, exc: ProtocolRefusal) -> Dict[str, object]:
+    return {
+        "artifact_version": 0,
+        "command": command,
+        "status": "refused",
+        "evidence": cli._protocol_refusal_evidence(exc),
+    }
 
 
 def _compact(value: object) -> str:
@@ -179,9 +194,14 @@ def _append_action(argv: List[str], action: argparse.Action, value: object) -> N
         return
     values = value if isinstance(action, argparse._AppendAction) else [value]
     for item in values:
+        token = str(item)
+        # Keep option values literal even when they resemble CLI flags.
+        if option is not None and token.startswith("-"):
+            argv.append(f"{option}={token}")
+            continue
         if option is not None:
             argv.append(option)
-        argv.append(str(item))
+        argv.append(token)
 
 
 class McpServer:
@@ -266,13 +286,7 @@ class McpServer:
             exc.detail,
             remedy="run node add for this node and keep it active",
         )
-        artifact = {
-            "artifact_version": 0,
-            "command": "mcp",
-            "status": "refused",
-            "evidence": cli._protocol_refusal_evidence(refusal),
-        }
-        return _tool_result(artifact)
+        return _tool_result(_refusal_artifact("mcp", refusal))
 
     def has_tool(self, name: str) -> bool:
         return isinstance(name, str) and name in self._catalog
@@ -448,6 +462,43 @@ class McpServer:
         name: str,
         arguments: Dict[str, object],
     ) -> Dict[str, object]:
+        if name not in _RECEIPTED_TOOLS:
+            return self._call_tool(name, arguments)
+        try:
+            require_declared_coordinate(Path.cwd(), self.node, self.root)
+        except ProtocolRefusal as exc:
+            return _tool_result(_refusal_artifact(name, exc))
+
+        started_at = utc_now()
+        wall_start = time.monotonic()
+        cpu_start = time.process_time()
+        # The receipt retains a digest of the exact request and bound session.
+        request = json.dumps(arguments, sort_keys=True, separators=(",", ":"))
+        outcome, evidence = "error", {}
+        try:
+            result = self._call_tool(name, arguments)
+            artifact = result["structuredContent"]
+            outcome = outcome_for_status(artifact["status"])
+            evidence = artifact["evidence"]
+            return result
+        finally:
+            record_timing_receipt(
+                self.root,
+                command=f"mcp {name}",
+                arguments=[name, self.session, request],
+                node_id=self.node,
+                started_at=started_at,
+                wall_seconds=time.monotonic() - wall_start,
+                cpu_seconds=time.process_time() - cpu_start,
+                outcome=outcome,
+                refusal_code=refusal_code_for(outcome, evidence),
+            )
+
+    def _call_tool(
+        self,
+        name: str,
+        arguments: Dict[str, object],
+    ) -> Dict[str, object]:
         tool = self._catalog.get(name)
         if tool is None:
             return self._unknown_tool_result(name)
@@ -461,6 +512,13 @@ class McpServer:
         argv = self._argv(tool, arguments)
         if argv is None:
             return self._invalid_arguments(tool, arguments, path)
+        if name == "ask":
+            # The standalone ask handler checks registration, while MCP also
+            # binds a live launch authority across a long-running connection.
+            try:
+                Registry(self.root).require_protocol_lease(self.node, act="ask")
+            except ProtocolRefusal as exc:
+                return _tool_result(self._reshape_refusal(_refusal_artifact(name, exc), path))
         _, artifact = run_cli_artifact(argv)
         if isinstance(artifact, dict) and artifact.get("status") == "refused":
             return _tool_result(self._reshape_refusal(artifact, path))

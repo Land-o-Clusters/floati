@@ -18,9 +18,11 @@ _fixture_proof_bootstrap.bind()
 
 import copy
 import base64
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
+import io
 import json
 import math
 import os
@@ -34,7 +36,7 @@ import uuid
 CASES = frozenset({
     "describe", "verify", "overlap-report", "sweep", "sent", "effects", "effect-show",
     "graph", "supervise", "presence-show", "sequencer-status", "work-show",
-    "role-list", "role-show", "role-validate", "quota-show", "chart",
+    "net-route-list", "role-list", "role-show", "role-validate", "quota-show", "chart",
     "chart-timings", "context-status", "context-turnover", "context-policy-show",
     "wake-status", "wake-daemon-status", "watch",
 })
@@ -46,6 +48,7 @@ EFFECT_KINDS = {
     "effects": "effects_returned", "effect-show": "effect_returned", "graph": "graph_returned",
     "supervise": "supervision_returned", "presence-show": "presence_reports_returned",
     "sequencer-status": "sequencer_status_returned", "work-show": "work_items_returned",
+    "net-route-list": "declared_routes_returned",
     "role-list": "roles_returned", "role-show": "role_returned", "role-validate": "role_validated",
     "quota-show": "quota_testimony_returned", "chart": "declared_chart_returned",
     "chart-timings": "chart_timings_returned", "context-status": "context_status_returned",
@@ -370,6 +373,17 @@ def prepare(case, home, workspace, bank):
                     now=_time(context["canonical_time"]))
     if case == "verify":
         _verify_prepare(root, workspace, context)
+    elif case == "net-route-list":
+        from floati.cli import main
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = main(["net", "route", "add", "--root", str(home),
+                           "--from", "scale-worker", "--to", "architect",
+                           "--idempotency-key", "routine-read-declared-route"])
+        artifact = json.loads(output.getvalue())
+        if status != 0 or artifact["status"] != "ok":
+            raise UnresolvedRead("native declared route fixture could not be prepared")
+        context["route"] = artifact["evidence"]["receipt"]
     elif case in {"effects", "effect-show"}:
         context["operation_id"] = _effect_fixture(root, bank)
     elif case == "work-show":
@@ -444,7 +458,6 @@ def prepare(case, home, workspace, bank):
     elif case == "chart-timings":
         # A real local read creates the native timing receipt. No simulated
         # duration is authored and no provider or waiter is launched.
-        from contextlib import redirect_stdout, redirect_stderr
         from io import StringIO
         from floati import cli
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
@@ -494,6 +507,7 @@ def arguments(case, home, workspace, context):
         return (["role", "list", *common] if case == "role-list" else
                 ["role", "show", *common, "builder"] if case == "role-show" else
                 ["role", "validate", *common, "--from", context["role_path"]])
+    if case == "net-route-list": return ["net", "route", "list", *common]
     if case == "quota-show": return ["quota", "show", *common, "--provider", "openai_codex"]
     if case == "chart": return ["chart", "--declared-roots", str(home / context["declared_roots_relative"]), "--json"]
     if case == "chart-timings": return ["chart", "timings", *common, "--command", "inbox"]
@@ -533,6 +547,8 @@ def _evidence(case, root, context, now):
         if case == "role-list": return dict(roles=sorted(library.templates()))
         template = library.validate_file(Path(context["role_path"])) if case == "role-validate" else library.templates()["builder"]
         return dict(template=template.record, sha256=template.digest)
+    if case == "net-route-list":
+        return {"routes": [context["route"]]}
     if case == "quota-show":
         from floati.quota import QuotaLedger
         record, receipt = QuotaLedger(root).latest_record("openai_codex")

@@ -79,6 +79,12 @@ PINNED_SKIP_REASONS = {
     # MK-D1 repeatability adds two native capture controls; AST census: 10 sites.
     "Pillow is not installed": {"sites": 10, "kind": HOST_CAPABILITY},
     "macOS descriptor surface": {"sites": 3, "kind": HOST_CAPABILITY},
+    "test_tool_absent: minisign": {"sites": 1, "kind": HOST_CAPABILITY},
+    "test_tool_absent: node": {"sites": 1, "kind": HOST_CAPABILITY},
+    "native_ancestor_executable_unreadable: managed host attribution requires readable process ancestry": {
+        "sites": 1,
+        "kind": HOST_CAPABILITY,
+    },
     "Claude reference adapter is unavailable": {
         "sites": 1,
         "kind": HOST_CAPABILITY,

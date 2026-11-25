@@ -18,7 +18,9 @@ from typing import Any, Callable, Dict, FrozenSet, Iterator, List, NamedTuple, O
 from .bus_epoch import LOCK_ORDER_LEDGER, epoch_guard, lock_order_guard
 from .errors import DurabilityFailure, IntegrityFailure, ProtocolRefusal
 from .framing import FrameError, decode_frames, encode_frame
-from .records import is_known_record_kind, validate_record, validate_unknown_record
+from .records import (
+    is_known_record_kind, is_newer_record_version, validate_record, validate_unknown_record,
+)
 from .root import FloatiRoot, TenantObservation
 from .wake_hints import publish_ledger_hints
 
@@ -348,6 +350,23 @@ def _decode_bounded_frames(path, data, *, max_bytes=MAX_RECORD_BYTES):
     return framed
 
 
+def _refuse_unsupported_record(
+    raw_record: Any, kind: object, tenant: str, allowed_kinds: FrozenSet[str],
+) -> None:
+    if is_known_record_kind(kind):
+        if kind not in allowed_kinds or not is_newer_record_version(
+            kind, raw_record.get("schema_version")
+        ):
+            return
+
+    from .installed_reader import installed_reader_identity, refuse_older_reader
+
+    identity = installed_reader_identity()
+    if identity is not None:
+        validate_unknown_record(raw_record, tenant)
+        refuse_older_reader(str(kind), identity)
+
+
 def _decode_path_records(
     path: Path,
     tenant: str,
@@ -372,13 +391,7 @@ def _decode_path_records(
                     "one bus epoch roll receipt is permitted only as physical record one",
                 )
             try:
-                if not is_known_record_kind(kind):
-                    from .installed_reader import installed_reader_identity, refuse_older_reader
-
-                    identity = installed_reader_identity()
-                    if identity is not None:
-                        validate_unknown_record(raw_record, tenant)
-                        refuse_older_reader(str(kind), identity)
+                _refuse_unsupported_record(raw_record, kind, tenant, allowed_kinds)
                 if unrecognized is not None and not is_known_record_kind(kind):
                     record = validate_unknown_record(raw_record, tenant)
                     summary = unrecognized.setdefault(
@@ -2161,13 +2174,7 @@ class VerifiedLedgerCursor:
                     continue
                 digest_indices.append(index)
                 try:
-                    if not is_known_record_kind(kind):
-                        from .installed_reader import installed_reader_identity, refuse_older_reader
-
-                        identity = installed_reader_identity()
-                        if identity is not None:
-                            validate_unknown_record(raw_record, tenant)
-                            refuse_older_reader(str(kind), identity)
+                    _refuse_unsupported_record(raw_record, kind, tenant, kinds)
                     record = validate_record(raw_record, tenant, kinds, integrity=True)
                 except IntegrityFailure as exc:
                     raise IntegrityFailure(

@@ -130,7 +130,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `confluence grant` | `floati confluence grant --root ROOT --consumer CONSUMER --idempotency-key KEY` | record one explicit read grant |
 | `confluence revoke` | `floati confluence revoke --root ROOT --consumer CONSUMER --idempotency-key KEY` | sever one explicit read grant |
 | `confluence status` | `floati confluence status --root ROOT` | list recorded read grants |
-| `confluence bundle` | `floati confluence bundle --root ROOT --consumer CONSUMER --out PATH [--schema-version {1,2}]` | materialize the receipts-read bundle |
+| `confluence bundle` | `floati confluence bundle --root ROOT --consumer CONSUMER --out PATH [--schema-version {1,2,3}]` | materialize the receipts-read bundle |
 | `confluence adopt` | `floati confluence adopt --root ROOT --consumer CONSUMER --session SESSION --manager NODE --authority-subject SUBJECT --authority-epoch N --authority-expires-at TIMESTAMP` | adopt one session into managed mode |
 | `confluence release` | `floati confluence release --root ROOT --consumer CONSUMER --session SESSION --manager NODE --authority-epoch N` | release one adopted session |
 | `register` | `floati register [--root ROOT] NODE --harness HARNESS [--create-workspace]` | register one named node |
@@ -143,8 +143,8 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `signature` | `floati signature {sign&#124;verify}` | Minisign artifact testimony |
 | `signature sign` | `floati signature sign --root ROOT --artifact ARTIFACT --signature SIGNATURE --secret-key PATH --version VERSION [--journal-id ID] [--through-seq N] [--minisign-executable EXE] [--json]` | sign one explicit artifact |
 | `signature verify` | `floati signature verify --root ROOT --artifact ARTIFACT --signature SIGNATURE --public-key PATH --version VERSION [--journal-id ID] [--through-seq N] [--minisign-executable EXE] [--json]` | verify one explicit artifact |
-| `ask` | `floati ask --root ROOT --from NODE --to ADDRESS [--preview &#124; --recipient-preview PATH] [--repo REPO] [--sha SHA] [--repository PATH] [--doc DOC] [--note NOTE] [--session SESSION] [--idempotency-key KEY] [--wait-seconds N] [--reply-to ID] [--disposition {answer,decline}] [--reason REASON]` | DRAFT - ask one node and wait for its correlated reply |
-| `replay` | `floati replay --root ROOT (--question ID &#124; --work-item ID)` | read an ask or work receipt chain |
+| `ask` | `floati ask --root ROOT --from NODE --to ADDRESS [--preview &#124; --recipient-preview PATH] [--puddle-quota-snapshot PATH] [--repo REPO] [--sha SHA] [--repository PATH] [--doc DOC] [--note NOTE] [--session SESSION] [--idempotency-key KEY] [--wait-seconds N] [--reply-to ID] [--disposition {answer,decline,present}] [--reason REASON]` | ask a peer and wait for its reply, or answer a question |
+| `replay` | `floati replay --root ROOT (--question ID &#124; --work-item ID) [--repository PATH]` | read an ask or work receipt chain |
 | `send` | `floati send [--root ROOT] --from NODE --to ADDRESS [--preview &#124; --recipient-preview PATH] --repo REPO --sha SHA [--repository PATH] --doc DOC --note NOTE [--reply-to ID] [--message-class {normal,fyi}] [--idempotency-key KEY] [--claim PATH]` | append a Git notification |
 | `verify` | `floati verify --root ROOT --as NODE --claim PATH [--json]` | reproduce a typed delivery claim |
 | `inbox` | `floati inbox [--root ROOT] --as NODE [--session SESSION] [--peek]` | drain pending mail |
@@ -152,6 +152,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `sent` | `floati sent [--root ROOT] --as NODE` | project sender receipt state |
 | `log` | `floati log [--root ROOT] [--replay] [--speed SPEED] [--plain]` | read mail or replay orchestration evidence |
 | `status` | `floati status [--root ROOT] [--destination DESTINATION] [--json]` | summarize the fleet |
+| `who` | `floati who --root ROOT` | show who is on the fleet |
 | `snapshot` | `floati snapshot --root ROOT --out PATH [--lines N] [--yes]` | build one consented maintainer support bundle |
 | `effects` | `floati effects [--root ROOT] [--run ID] [--attempt ID]` | list projected effect status |
 | `effect` | `floati effect {show&#124;reconcile&#124;compensate}` | inspect or operate one effect |
@@ -224,7 +225,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `epoch roll` | `floati epoch roll --root ROOT --as NODE --idempotency-key KEY` | archive and replace one bus epoch |
 | `grant` | `floati grant [--root ROOT] [--as NODE] [--holder NODE] [--subject SUBJECT] [--epoch N] [{revoke}]` | append exact work authority |
 | `grant revoke` | `floati grant [--root ROOT] [--as NODE] [--holder NODE] [--subject SUBJECT] [--epoch N] revoke [--root ROOT] --as NODE --holder NODE --subject SUBJECT --epoch N` | revoke exact work authority |
-| `node` | `floati node {person&#124;add&#124;spawn&#124;retire&#124;drain&#124;switch&#124;role&#124;boot&#124;teardown&#124;explain&#124;prep-clear&#124;state-flush&#124;prompts}` | node administration |
+| `node` | `floati node {person&#124;add&#124;spawn&#124;retire&#124;drain&#124;switch&#124;role&#124;role-clear&#124;boot&#124;teardown&#124;explain&#124;prep-clear&#124;state-flush&#124;prompts}` | node administration |
 | `node person` | `floati node person {set&#124;clear}` | record explicit person membership |
 | `node person set` | `floati node person set --root ROOT --node NODE --person PERSON` | record one node person |
 | `node person clear` | `floati node person clear --root ROOT --node NODE` | clear one node person |
@@ -234,6 +235,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `node drain` | `floati node drain --root ROOT --node NODE --session SESSION` | empty one node's inbox without retiring it |
 | `node switch` | `floati node switch --root ROOT --node NODE --harness HARNESS --model MODEL` | switch provider assignment |
 | `node role` | `floati node role --root ROOT --node NODE [--template TEMPLATE] [--answer ANSWERS] [--expected-predecessor EXPECTED_PREDECESSOR]` | assign a shipped role |
+| `node role-clear` | `floati node role-clear --root ROOT --node NODE --idempotency-key KEY` | clear a node role |
 | `node boot` | `floati node boot [--root ROOT] [--node NODE] [--declared-roots FILE] [--managed-executable EXE] [--profile PROFILE] [--json] [--session SESSION] [--runtime RUNTIME] [--hooks HOOKS] [--destination DESTINATION] [--acknowledge-stop-hook-change ACKNOWLEDGE_STOP_HOOK_CHANGE]` | board and hold the current declared seat |
 | `node teardown` | `floati node teardown [--root ROOT] [--node NODE] [--declared-roots FILE] [--managed-executable EXE] [--profile PROFILE] [--json] [--session SESSION] [--repo REPO] [--doc DOC]` | end one declared seat session |
 | `node explain` | `floati node explain --root ROOT --node NODE --declared-roots FILE --managed-executable EXE --profile PROFILE [--json]` | explain one live node |
@@ -282,6 +284,11 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `wake daemon remove` | `floati wake daemon remove --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode}` | remove the exact LaunchAgent |
 | `wake daemon revoke` | `floati wake daemon revoke --root ROOT --as NODE --harness {codex,cursor,grok-build,zcode}` | revoke exact daemon consent |
 | `uninstall` | `floati uninstall --destination DESTINATION [--dry-run] [--receipt-dir DIR] [--json]` | remove exact owned tool bytes |
+| `net` | `floati net {route}` | manage local fleet topology declarations |
+| `net route` | `floati net route {add&#124;remove&#124;list}` | manage declared routes |
+| `net route add` | `floati net route add --root ROOT --from NODE --to NODE --idempotency-key KEY` | declare a route |
+| `net route remove` | `floati net route remove --root ROOT --from NODE --to NODE --idempotency-key KEY` | remove a declared route |
+| `net route list` | `floati net route list --root ROOT` | list declared routes |
 | `context` | `floati context {status&#124;turnover&#124;policy&#124;reading}` | inspect context evidence and manage Tide signals |
 | `context status` | `floati context status --root ROOT --as NODE [--json]` | report harness evidence |
 | `context turnover` | `floati context turnover --root ROOT --as NODE [--json]` | project the turnover ritual |

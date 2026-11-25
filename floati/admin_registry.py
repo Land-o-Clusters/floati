@@ -436,7 +436,11 @@ class RegistryAdminBackend:
                 "the current architect's latest role record is not the architect role",
             )
         target_latest = self._latest("registry_role_record", target_node)
-        to_role_before = None if target_latest is None else str(target_latest["template_role"])
+        to_role_before = (
+            str(target_latest["template_role"])
+            if target_latest is not None and target_latest["state"] == "active"
+            else None
+        )
         vacated_next = self._role_after_vacating(
             vacated_role, target_node=target_node, declared_templates=declared_templates
         )
@@ -586,7 +590,7 @@ class RegistryAdminBackend:
                 and str(record.get("template_role", "")).casefold() != "architect"
                 and record.get("id") != vacated_role["id"]
             ):
-                prior = record
+                prior = record if record["state"] == "active" else None
         if prior is not None:
             declared = declared_templates.get(str(prior["template_role"]))
             if declared is None:

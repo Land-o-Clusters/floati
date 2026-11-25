@@ -1729,26 +1729,31 @@ class EffectReconciliationExecTests(unittest.TestCase):
     def test_exec_foreign_process_group_identity_is_never_signaled(self) -> None:
         """Catches cleanup signaling a reused or foreign process-group number."""
         launcher = self.exec_module()
-        pid = os.posix_spawn(
-            sys.executable,
+        # The cleanup contract needs a real session leader. Popen can create
+        # one even when this interpreter's posix_spawn lacks setsid support.
+        with subprocess.Popen(
             [
                 sys.executable, "-I", "-S", "-B", "-c",
-                "import time; time.sleep(20)",
+                "import sys; sys.stdin.buffer.read()",
             ],
-            {},
-            setsid=True,
-        )
-        process = launcher.SpawnedReconciliationObserver(pid)
-        with mock.patch.object(
-            launcher, "_owned_observer_process_group", return_value=None,
-        ), mock.patch.object(
-            launcher.os, "killpg",
-            side_effect=AssertionError("foreign process group was signaled"),
-        ) as kill_group:
-            self.assertFalse(process.terminate_and_reap())
-        kill_group.assert_not_called()
-        with self.assertRaises(ChildProcessError):
-            os.waitpid(pid, os.WNOHANG)
+            env={},
+            stdin=subprocess.PIPE,
+            start_new_session=True,
+        ) as child:
+            pid = child.pid
+            self.assertEqual(pid, os.getsid(pid))
+            self.assertEqual(pid, os.getpgid(pid))
+            process = launcher.SpawnedReconciliationObserver(pid)
+            with mock.patch.object(
+                launcher, "_owned_observer_process_group", return_value=None,
+            ), mock.patch.object(
+                launcher.os, "killpg",
+                side_effect=AssertionError("foreign process group was signaled"),
+            ) as kill_group:
+                self.assertFalse(process.terminate_and_reap())
+            kill_group.assert_not_called()
+            with self.assertRaises(ChildProcessError):
+                os.waitpid(pid, os.WNOHANG)
 
     def test_exec_result_binding_cannot_be_substituted_between_children(self) -> None:
         """Catches a returned PID naming a different child than the channel peer."""

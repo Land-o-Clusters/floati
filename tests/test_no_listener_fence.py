@@ -837,7 +837,8 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             # window two local process probes (ps, sysctl); run 56 -> 61.
             # NEEDS-YOU-OBSERVED-1: floati/needs_observed.py starts the explicitly
             # configured orchestrator CLI for one bounded read; Popen 16 -> 17.
-            {"Popen": 18, "os-family": 3, "run": 60, "run_child": 1},
+            # Ask replay adds one fixed local Git inspection with transports disabled.
+            {"Popen": 18, "os-family": 3, "run": 61, "run_child": 1},
             dict(kinds),
             "the subprocess-family population moved; re-measure and re-pin",
         )
@@ -869,7 +870,8 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             # records, checkout liveness and the quiet window add one mixed
             # each (49); the quiet window's other argv is one literal list.
             # NEEDS-YOU-OBSERVED-1: the configured orchestrator argv is dynamic (32).
-            {"all-literal-list": 1, "dynamic": 32, "mixed": 49},
+            # The ask replay site uses argv returned by fixed_git_command.
+            {"all-literal-list": 1, "dynamic": 33, "mixed": 49},
             dict(argv_classes),
             "the argv-shape distribution moved; re-measure and re-pin",
         )
@@ -1206,7 +1208,9 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             "contextlib",
             "io",
             "json",
+            "pathlib",
             "sys",
+            "time",
             "typing",
         }
         absolute_imports: set[str] = set()

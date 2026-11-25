@@ -35,6 +35,7 @@ PREPARATION = "tests/fixtures/ledger-contract-preparation.json"
 CURRENT = "bundle/ledger-contract-current.json"
 VERSION = re.compile(r"c7\.(0|[1-9][0-9]*)\Z")
 SOURCE_PIN = "python-contract-slice-owner-neutral-v2"
+SCHEMA_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 ANNOTATIONS = {"title", "description", "$comment", "examples", "default"}
 LOWER_BOUNDS = {"minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties"}
 UPPER_BOUNDS = {"maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties"}
@@ -797,6 +798,85 @@ def preparation_notes(root):
     return []
 
 
+def archive_schema_path(relative):
+    """Recognize physical schema payloads that ship in historical or indexed cuts."""
+    parts = PurePosixPath(relative).parts
+    if (len(parts) < 4 or parts[0] != "bundle" or not VERSION.fullmatch(parts[1])
+            or "/".join(parts) != relative or ".." in parts or not parts[-1].endswith(".json")):
+        return None
+    if parts[2] == "schemas":
+        return parts[1], "snapshot"
+    if (parts[2] == "blobs" and len(parts) == 4
+            and SCHEMA_DIGEST.fullmatch(parts[3][:-5])):
+        return parts[1], "blob"
+    return None
+
+
+def archived_schemas(root, cut_versions):
+    """Map digests to existing payloads in stable, oldest-cut-first order."""
+    archive = {}
+    for version in cut_versions:
+        for folder in ("schemas", "blobs"):
+            directory = f"bundle/{version}/{folder}"
+            if not (root / directory).exists() and not (root / directory).is_symlink():
+                continue
+            for relative in files_below(root, directory, ".json"):
+                coordinate = archive_schema_path(relative)
+                if coordinate is None:
+                    refuse("bundle_invalid", relative)
+                digest = sha(ordinary(root, relative).read_bytes())
+                if coordinate[1] == "blob" and not relative.endswith("/" + digest + ".json"):
+                    refuse("bundle_invalid", relative)
+                archive.setdefault(digest, relative)
+    return archive
+
+
+def store_schema(stage, version, archive, digest, data):
+    if digest not in archive:
+        relative = f"blobs/{digest}.json"
+        target = stage / relative
+        target.parent.mkdir(exist_ok=True)
+        target.write_bytes(data)
+        archive[digest] = f"bundle/{version}/{relative}"
+    return {"kind": "schema", "sha256": digest, "storage": archive[digest]}
+
+
+def read_cut_schema(root, document, name, *, stage=None):
+    """Read exact pinned schema bytes while retaining the logical schema name."""
+    version = document["version"]
+    digest = document["members"]["schemas"][name]
+    if not isinstance(digest, str) or SCHEMA_DIGEST.fullmatch(digest) is None:
+        refuse("bundle_invalid", name)
+    indexed = document["format_version"] == 2
+    if indexed:
+        row = document["schema_index"].get(name)
+        if (not isinstance(row, dict) or set(row) != {"kind", "sha256", "storage"}
+                or row["kind"] != "schema" or row["sha256"] != digest
+                or not isinstance(row["storage"], str)):
+            refuse("bundle_invalid", name)
+        relative = row["storage"]
+        coordinate = archive_schema_path(relative)
+        if coordinate is None:
+            refuse("bundle_invalid", name)
+        owner, layout = coordinate
+        owner_number = int(owner.split(".")[1])
+        version_number = int(version.split(".")[1])
+        if (owner_number > version_number
+                or (layout == "snapshot" and owner == version)
+                or (layout == "blob" and not relative.endswith("/" + digest + ".json"))):
+            refuse("bundle_invalid", name)
+    else:
+        owner = version
+        relative = f"bundle/{version}/{name}"
+    if stage is not None and owner == version:
+        payload = ordinary(stage, relative.split("/", 2)[2]).read_bytes()
+    else:
+        payload = ordinary(root, relative).read_bytes()
+    if sha(payload) != digest:
+        refuse("bundle_invalid", name)
+    return payload
+
+
 def cut(root, version, pins):
     root = Path(root).resolve()
     with mutation_lock(root):
@@ -825,17 +905,17 @@ def _cut(root, version, pins):
         refuse("version_exists", version)
     stage = Path(tempfile.mkdtemp(prefix=".ledger-cut-", dir=root / "bundle"))
     try:
+        archive = archived_schemas(root, existing)
+        index = {}
         for relative, digest in pins["schemas"].items():
             data = ordinary(root, relative).read_bytes()
             if sha(data) != digest:
                 refuse("unpinned_member", relative, drift=schema_drift(pins, relative, data))
-            target = stage / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-        document = {"format_version": 1, "kind": "ledger_contract", "version": version,
+            index[relative] = store_schema(stage, version, archive, digest, data)
+        document = {"format_version": 2, "kind": "ledger_contract", "version": version,
                     "predecessor": existing[-1], "source_pin": SOURCE_PIN,
                     "predecessor_contract_sha256": sha((root / "bundle" / previous_cut / "ledger-contract.json").read_bytes()) if previous_cut else None,
-                    "members": pins, "ratifications": []}
+                    "members": pins, "ratifications": [], "schema_index": index}
         if notes:
             document["ratification_notes"] = notes
         save_contract(stage, document)
@@ -845,6 +925,8 @@ def _cut(root, version, pins):
                    drift=member_diff(pins, observed))
         if preparation_notes(root) != notes:
             refuse("unpinned_member", "ratification notes changed during the cut")
+        for name in index:
+            read_cut_schema(root, document, name, stage=stage)
         publish(root, version, stage)
     finally:
         if stage.exists():
@@ -852,16 +934,24 @@ def _cut(root, version, pins):
     return {"classification": "cut", "version": version, "counts": counts(pins)}
 
 
-def load_contract(root, version):
+def load_contract(root, version, *, stage=None, expected_digest=None):
     if not VERSION.fullmatch(version):
         refuse("version_invalid", version)
     relative = "bundle/" + version
-    path = ordinary(root, relative + "/ledger-contract.json")
-    digest = ordinary(root, relative + "/ledger-contract.sha256").read_text().strip()
-    if sha(path.read_bytes()) != digest:
+    index_root, index_prefix = (root, relative + "/") if stage is None else (stage, "")
+    path = ordinary(index_root, index_prefix + "ledger-contract.json")
+    digest = ordinary(index_root, index_prefix + "ledger-contract.sha256").read_text().strip()
+    data = path.read_bytes()
+    if sha(data) != digest:
         refuse("bundle_invalid", "ledger-contract digest does not match")
-    document = read_json(path)
-    if (not isinstance(document, dict) or document.get("format_version") != 1
+    if expected_digest is not None and digest != expected_digest:
+        refuse("bundle_invalid", "predecessor contract changed")
+    try:
+        document = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        refuse("document_invalid", f"{path.name}: {exc}")
+    if (not isinstance(document, dict) or type(document.get("format_version")) is not int
+            or document["format_version"] not in (1, 2)
             or document.get("kind") != "ledger_contract" or document.get("version") != version
             or not isinstance(document.get("members"), dict)
             or set(document["members"]) != {"sources", "schemas", "kinds"}
@@ -874,25 +964,27 @@ def load_contract(root, version):
     reviewed_notes(document.get("ratification_notes", []))
     predecessor_pin = document.get("predecessor_contract_sha256")
     if predecessor_pin is not None:
-        previous_index = ordinary(root, "bundle/" + document["predecessor"] + "/ledger-contract.json")
-        if sha(previous_index.read_bytes()) != predecessor_pin:
-            refuse("bundle_invalid", "predecessor contract changed")
-        load_contract(root, document["predecessor"])
+        load_contract(root, document["predecessor"], expected_digest=predecessor_pin)
     members = document["members"]
+    if document["format_version"] == 2:
+        index = document.get("schema_index")
+        if not isinstance(index, dict) or not isinstance(members["schemas"], dict) or index.keys() != members["schemas"].keys():
+            refuse("bundle_invalid", "invalid schema index membership")
+    elif "schema_index" in document:
+        refuse("bundle_invalid", "invalid schema index membership")
     for section in ("sources", "schemas"):
         if not isinstance(members[section], dict) or not members[section]:
             refuse("bundle_invalid", section)
         for name, pin in members[section].items():
-            if not isinstance(pin, str) or re.fullmatch(r"[0-9a-f]{64}", pin) is None:
+            if not isinstance(pin, str) or SCHEMA_DIGEST.fullmatch(pin) is None:
                 refuse("bundle_invalid", str(name))
             # Validate source names too, even though sources are pinned, not copied.
-            prefix = "floati/" if section == "sources" else "schemas/"
-            if not name.startswith(prefix) or ".." in PurePosixPath(name).parts:
+            name_prefix = "floati/" if section == "sources" else "schemas/"
+            path = PurePosixPath(name)
+            if not name.startswith(name_prefix) or path.as_posix() != name or ".." in path.parts:
                 refuse("bundle_invalid", name)
             if section == "schemas":
-                snapshot = ordinary(root, relative + "/" + name)
-                if sha(snapshot.read_bytes()) != pin:
-                    refuse("bundle_invalid", name)
+                read_cut_schema(root, document, name, stage=stage)
     if not isinstance(members["kinds"], dict) or any(
         not isinstance(paths, list) or not paths or any(path not in members["sources"] for path in paths)
         for paths in members["kinds"].values()
@@ -905,14 +997,15 @@ def load_contract(root, version):
         event = document["ratifications"][ordinal - 1]
         if not isinstance(event, dict) or event.get("audit") != f"ratifications/{ordinal}":
             refuse("bundle_invalid", "ratification audit path invalid")
-        audit = relative + "/" + event["audit"]
-        previous = read_json(ordinary(root, audit + "/before.json"))
-        fixture_bytes = ordinary(root, audit + "/fixtures.json").read_bytes()
+        audit = index_prefix + event["audit"]
+        previous = read_json(ordinary(index_root, audit + "/before.json"))
+        fixture_bytes = ordinary(index_root, audit + "/fixtures.json").read_bytes()
         if (not isinstance(previous, dict)
                 or sha(canonical(previous)) != event.get("before_contract_sha256")
                 or sha(fixture_bytes) != event.get("fixtures_sha256")
                 or previous.get("ratifications") != document["ratifications"][:ordinal - 1]
                 or previous.get("version") != version
+                or previous.get("format_version") != document["format_version"]
                 or not isinstance(previous.get("members"), dict)):
             refuse("bundle_invalid", "ratification history digest invalid")
         previous_members = previous["members"]
@@ -926,9 +1019,15 @@ def load_contract(root, version):
         if not changed or event.get("changed_schemas") != changed:
             refuse("bundle_invalid", "ratification changed-schema census invalid")
         for name in changed:
-            before_schema = ordinary(root, audit + "/" + name).read_bytes()
-            if sha(before_schema) != previous_members["schemas"][name]:
-                refuse("bundle_invalid", name)
+            if document["format_version"] == 2:
+                if (not isinstance(previous.get("schema_index"), dict)
+                        or previous["schema_index"].keys() != previous_members["schemas"].keys()):
+                    refuse("bundle_invalid", "invalid schema index membership")
+                read_cut_schema(root, previous, name, stage=stage)
+            else:
+                before_schema = ordinary(index_root, audit + "/" + name).read_bytes()
+                if sha(before_schema) != previous_members["schemas"][name]:
+                    refuse("bundle_invalid", name)
         following = previous
     return document
 
@@ -1007,10 +1106,10 @@ def assess(root, version, fixtures, snapshots=None):
     # Validate immutable captured bytes, not a sequence of live schema reads.
     with tempfile.TemporaryDirectory(prefix="ledger-assessment-") as temporary:
         base = Path(temporary).resolve()
-        for label, source, members in (("before", root / "bundle" / version, before),
-                                       ("after", root, after)):
+        for label, members in (("before", before), ("after", after)):
             for name, digest in members["schemas"].items():
-                data = ordinary(source, name).read_bytes()
+                data = (read_cut_schema(root, contract, name) if label == "before"
+                        else ordinary(root, name).read_bytes())
                 if sha(data) != digest:
                     refuse("unpinned_member", name, drift=schema_drift(members, name, data))
                 target = base / label / name
@@ -1114,15 +1213,24 @@ def _ratify(root, version, fixtures):
         audit.mkdir(parents=True)
         write_json(audit / "before.json", document)
         write_json(audit / "fixtures.json", fixtures)
+        indexed = document["format_version"] == 2
+        if indexed:
+            cuts = versions(root)
+            archive = archived_schemas(root, cuts[:cuts.index(version) + 1])
         for name in result["changed_schemas"]:
-            target = stage / name
-            previous = audit / name
-            previous.parent.mkdir(parents=True, exist_ok=True)
-            previous.write_bytes(target.read_bytes())
             data = ordinary(root, name).read_bytes()
             if sha(data) != current["schemas"][name]:
                 refuse("unpinned_member", name, drift=schema_drift(current, name, data))
-            target.write_bytes(data)
+            if indexed:
+                document["schema_index"][name] = store_schema(
+                    stage, version, archive, current["schemas"][name], data,
+                )
+            else:
+                target = stage / name
+                previous = audit / name
+                previous.parent.mkdir(parents=True, exist_ok=True)
+                previous.write_bytes(target.read_bytes())
+                target.write_bytes(data)
         document["ratifications"].append({
             "audit": audit.relative_to(stage).as_posix(),
             "before_contract_sha256": result["baseline_sha256"],
@@ -1131,17 +1239,8 @@ def _ratify(root, version, fixtures):
         })
         document["members"] = current
         save_contract(stage, document)
-        # Validate the staged schema/audit pins using the same reader. Retain
-        # the immutable predecessor chain in this isolated validation tree.
-        staged_root = Path(temporary) / "validation"
-        (staged_root / "bundle").mkdir(parents=True)
-        shutil.copytree(stage, staged_root / "bundle" / version)
-        predecessor = document
-        while predecessor.get("predecessor_contract_sha256") is not None:
-            previous_version = predecessor["predecessor"]
-            shutil.copytree(root / "bundle" / previous_version, staged_root / "bundle" / previous_version)
-            predecessor = load_contract(root, previous_version)
-        load_contract(staged_root, version)
+        # Use staged bytes for the current cut and published bytes for predecessors.
+        load_contract(root, version, stage=stage)
         observed, baseline = inventory(root), load_contract(root, version)
         if (observed != current or sha(canonical(baseline)) != result["baseline_sha256"]):
             refuse("unpinned_member", "contract changed before ratification publication",

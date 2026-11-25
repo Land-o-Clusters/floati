@@ -1769,6 +1769,22 @@ class CursorPresentationLedger:
         return EventLog(self.root)._write_delivery_receipt(prepared["node_id"], selection["fresh_messages"],
             _acting_session_id=prepared["acting_session_id"])
 
+    def _prepare_and_deliver(self, selection, body, *, begin_publication):
+        """Reserve the body once the native delivery writer owns its lock."""
+        prepared = None
+
+        def reserve():
+            nonlocal prepared
+            begin_publication()
+            prepared = self.prepare(selection, body)
+
+        delivery = EventLog(self.root)._write_delivery_receipt(
+            selection["_binding"].node_id, selection["fresh_messages"],
+            _acting_session_id=selection["_classification"].calling_session_id,
+            _before_append=reserve,
+        )
+        return prepared, delivery
+
     def flushed(self, prepared, delivery):
         from .registry import utc_now
         selection = self._prepared_selection

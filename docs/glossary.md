@@ -495,6 +495,13 @@ Poll for fleet deltas on an interval.
 - Nearest standard term: watch mode
 - Where it differs: it reads the ledger and prints deltas as artifacts; like `status`, a completed query exits 0 even with incomplete nested observations.
 
+### who
+
+List active fleet nodes and the observations recorded for each one.
+
+- Nearest standard term: fleet roster
+- Where it differs: each measured value carries its observation time and age. Missing or conflicting evidence appears as `UNKNOWN`.
+
 ### work
 
 The orchestration log: work items added, claimed and completed on the bus.

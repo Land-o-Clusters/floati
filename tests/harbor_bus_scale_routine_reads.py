@@ -30,7 +30,7 @@ QUOTA_PROJECTION_SHA256 = "a391ffe65265dd6f4028a26c8c54c3cff255641f103f37f04f70b
 CASES = frozenset({
     "describe", "verify", "overlap-report", "sweep", "sent", "effects", "effect-show",
     "graph", "supervise", "presence-show", "sequencer-status", "work-show",
-    "role-list", "role-show", "role-validate", "quota-show", "chart",
+    "net-route-list", "role-list", "role-show", "role-validate", "quota-show", "chart",
     "chart-timings", "context-status", "context-turnover", "context-policy-show",
     "wake-status", "wake-daemon-status", "watch",
 })
@@ -38,7 +38,7 @@ CASES = frozenset({
 
 def _default_cases():
     from tests.bus_scale_execution_paths import representative_cases
-    return representative_cases(CASES)
+    return sorted(set(representative_cases(CASES)) | {"net-route-list"})
 
 
 def _fixture_identity(base):
@@ -111,6 +111,20 @@ class RoutineReadWorkloadTests(StableSourceFixture, unittest.TestCase):
                 cache.pop(key, None)
                 entry[0].cleanup()
 
+    def assert_preparation_ledgers(self, case, context, protected, prepared):
+        if case == "verify":
+            self.assertTrue(prepared["events.jsonl"].startswith(protected["events.jsonl"]),
+                            "native claim preface must preserve the existing history prefix")
+            self.assertEqual(protected["registry/entries.jsonl"], prepared["registry/entries.jsonl"])
+        elif case == "net-route-list":
+            self.assertEqual(protected["events.jsonl"], prepared["events.jsonl"])
+            previous = protected["registry/entries.jsonl"]
+            registry = prepared["registry/entries.jsonl"]
+            self.assertTrue(registry.startswith(previous))
+            self.assertEqual([context["route"]], [json.loads(line) for line in registry[len(previous):].splitlines()])
+        else:
+            self.assertEqual(protected, prepared, "preparation must preserve the scaled ledgers")
+
     @stable_fixture_sources()
     def _make_completed_pair(self, base, case):
         from floati import cli
@@ -125,12 +139,7 @@ class RoutineReadWorkloadTests(StableSourceFixture, unittest.TestCase):
                      ("events.jsonl", "registry/entries.jsonl")}
         context = helper.prepare(case, seed, workspace, bank)
         prepared = {name: (seed / name).read_bytes() for name in protected}
-        if case == "verify":
-            self.assertTrue(prepared["events.jsonl"].startswith(protected["events.jsonl"]),
-                            "native claim preface must preserve the existing history prefix")
-            self.assertEqual(protected["registry/entries.jsonl"], prepared["registry/entries.jsonl"])
-        else:
-            self.assertEqual(protected, prepared, "preparation must preserve the scaled ledgers")
+        self.assert_preparation_ledgers(case, context, protected, prepared)
         self.assertEqual(context, json.loads(json.dumps(context)))
         observations = []
         for mode in ("cpu", "diagnostic"):
@@ -549,15 +558,9 @@ class RoutineReadWorkloadTests(StableSourceFixture, unittest.TestCase):
                     protected = {name: (home / name).read_bytes() for name in
                                  ("events.jsonl", "registry/entries.jsonl")}
                     context = helper.prepare(case, home, workspace, bank)
-                    if case == "verify":
-                        self.assertTrue((home / "events.jsonl").read_bytes().startswith(protected["events.jsonl"]),
-                                        "native claim preface must preserve the existing history prefix")
-                        self.assertEqual(protected["registry/entries.jsonl"],
-                                         (home / "registry/entries.jsonl").read_bytes())
-                        protected = {name: (home / name).read_bytes() for name in protected}
-                    else:
-                        self.assertEqual(protected, {name: (home / name).read_bytes() for name in protected},
-                                         "preparation must preserve the scaled ledgers")
+                    prepared = {name: (home / name).read_bytes() for name in protected}
+                    self.assert_preparation_ledgers(case, context, protected, prepared)
+                    protected = prepared
                     self.assertEqual(context, json.loads(json.dumps(context)))
                     before_files = {path.relative_to(home).as_posix(): path.read_bytes()
                                     for path in home.rglob("*") if path.is_file()}

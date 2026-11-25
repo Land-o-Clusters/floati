@@ -1112,7 +1112,7 @@ class ExpandedObservationTests(StableSourceFixture, unittest.TestCase):
         from tests.bus_scale_workloads import scope_contract,_require_arm
         adapter=self.adapter()
         expected=set(scope_contract(_parser())["cases"])-set(adapter.OLD_CASES)
-        self.assertEqual(61,len(expected),"every expanded case, including verify and teardown, must qualify")
+        self.assertEqual(62,len(expected),"every expanded case, including verify and teardown, must qualify")
         if not full_scale_enabled():
             return self._bounded_all_expanded_cases(expected)
         # Vector 5 restores every command at both original scales with genuine

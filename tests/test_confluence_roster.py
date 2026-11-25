@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -42,6 +44,82 @@ class ConfluenceRosterTests(unittest.TestCase):
         materialize_bundle(self.root, consumer="puddle", out=output, version=version)
         return json.loads(output.read_text(encoding="utf-8"))
 
+    def cli(self, *arguments, expected_code=0):
+        from floati.cli import main
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main([*arguments, "--root", str(self.root.path)])
+        artifact = json.loads(output.getvalue())
+        self.assertEqual(expected_code, code, artifact)
+        return artifact["evidence"]
+
+    def assign_builder_role(self):
+        return self.cli("node", "role", "--node", "builder-a", "--template", "builder",
+                        "--answer", "repo=floati", "--answer", "never_touch=foreign-bus",
+                        "--answer", "reports_to=builder-b")["records"][0]
+
+    def test_v3_publishes_recorded_roles_and_explicit_absence(self):
+        self.assign_builder_role()
+        document = self.bundle(version=3)
+        rows = {row["node_id"]: row for row in document["roster"]}
+        self.assertEqual("builder", rows["builder-a"]["role"])
+        self.assertEqual("Codex", rows["builder-a"]["harness"]["value"])
+        self.assertIsNone(rows["builder-b"]["role"])
+        validate_json_schema(document, ROOT / "schemas/v3/receipts-read-bundle.schema.json")
+        self.assertTrue(all("role" not in row for row in self.bundle()["roster"]))
+
+    def test_clear_role_receipt_replays_and_roster_reflects_reassignment(self):
+        assigned = self.assign_builder_role()
+        clear = ("node", "role-clear", "--node", "builder-a", "--idempotency-key", "clear-builder")
+        receipt = self.cli(*clear)["receipt"]
+        self.assertEqual(assigned["id"], receipt["predecessor_role_record_id"])
+        self.assertIsNone(self.bundle(version=3)["roster"][0]["role"])
+        refused = self.cli("node", "role-clear", "--node", "builder-a",
+                           "--idempotency-key", "already-clear", expected_code=20)
+        self.assertEqual("role_assignment_missing", refused["code"])
+        reassigned = self.assign_builder_role()
+        self.assertEqual(receipt["id"], reassigned["predecessor_role_record_id"])
+        self.assertEqual(receipt, self.cli(*clear)["receipt"])
+        refused = self.cli("node", "role-clear", "--node", "builder-b",
+                           "--idempotency-key", "clear-builder", expected_code=20)
+        self.assertEqual("idempotency_conflict", refused["code"])
+        self.assertEqual("builder", self.bundle(version=3)["roster"][0]["role"])
+        validate_json_schema(receipt, ROOT / "schemas/v1/registry-role-record.schema.json")
+
+    def test_declared_routes_add_remove_and_replay_as_local_receipts(self):
+        for flag, code in (("--from", "from_node_invalid"), ("--to", "to_node_invalid")):
+            with self.subTest(flag=flag):
+                endpoints = {"--from": "builder-a", "--to": "builder-b"}
+                endpoints[flag] = "invalid node"
+                refused = self.cli("net", "route", "add",
+                                   "--from", endpoints["--from"], "--to", endpoints["--to"],
+                                   "--idempotency-key", "invalid-endpoint", expected_code=20)
+                self.assertEqual(code, refused["code"])
+        endpoints = ("--from", "builder-a", "--to", "builder-b")
+        add = ("net", "route", "add", *endpoints, "--idempotency-key", "add-route")
+        remove = ("net", "route", "remove", *endpoints, "--idempotency-key", "remove-route")
+        added = self.cli(*add)["receipt"]
+        self.assertEqual([added], self.cli("net", "route", "list")["routes"])
+        refused = self.cli("net", "route", "remove", *endpoints,
+                           "--idempotency-key", "add-route", expected_code=20)
+        self.assertEqual("idempotency_conflict", refused["code"])
+        removed = self.cli(*remove)["receipt"]
+        self.assertNotEqual(added["id"], removed["id"])
+        self.assertEqual([], self.cli("net", "route", "list")["routes"])
+        self.assertEqual(added, self.cli(*add)["receipt"])
+        self.assertEqual([], self.cli("net", "route", "list")["routes"])
+        for receipt in (added, removed):
+            validate_json_schema(receipt, ROOT / "schemas/v1/declared-route-receipt.schema.json")
+        refused = self.cli("net", "route", "add", "--from", "builder-a",
+                           "--to", "retired-builder", "--idempotency-key", "retired-route",
+                           expected_code=20)
+        self.assertEqual("unknown_node", refused["code"])
+        self.cli("net", "route", "add", "--from", "builder-b", "--to", "builder-a",
+                 "--idempotency-key", "reverse-route")
+        Registry(self.root).retire("builder-b")
+        self.assertEqual([], self.cli("net", "route", "list")["routes"])
+
     def test_bundle_exports_active_roster_cells_with_stamps_and_ages(self):
         document = self.bundle()
         rows = document["roster"]
@@ -74,7 +152,7 @@ class ConfluenceRosterTests(unittest.TestCase):
         self.assertEqual("UNKNOWN", document["roster"][1]["liveness"]["stamp"])
         validate_json_schema(document, SCHEMA)
 
-    def test_legacy_fixture_still_validates_and_old_fields_are_byte_identical(self):
+    def test_legacy_fixture_still_validates_and_old_receipt_fields_are_byte_identical(self):
         legacy = json.loads((FIXTURES / "legacy-v2.json").read_text(encoding="utf-8"))
         self.assertNotIn("roster", legacy)
         validate_json_schema(legacy, SCHEMA)
@@ -84,8 +162,13 @@ class ConfluenceRosterTests(unittest.TestCase):
         legacy.update(tenant_id=self.root.tenant_id, grant_id=grant["id"], snapshot_at=grant["timestamp"])
         expected_bytes = (json.dumps(legacy, indent=2) + "\n").encode()
         current = self.bundle()
+        hold = current["fleet_state"].pop("load_hold")
+        validate_json_schema(current, SCHEMA)
         self.assertEqual([], current.pop("roster"))
         current.pop("fleet_state")
+        self.assertEqual("none", hold["state"])
+        self.assertEqual(current["snapshot_at"], hold["observed_at"])
+        current["snapshot_at"] = grant["timestamp"]
         self.assertEqual(expected_bytes, (json.dumps(current, indent=2) + "\n").encode())
 
     def test_schema_change_only_adds_an_optional_roster(self):
@@ -111,9 +194,13 @@ class ConfluenceRosterTests(unittest.TestCase):
                     validate_json_schema(invalid, SCHEMA)
 
     def test_fleet_state_names_absent_waiter_evidence_without_inventing_cpu(self):
+        from floati.confluence_fleet_state import project_fleet_state
+
         document = self.bundle()
         self.assertIn("fleet_state", document)
         state = document["fleet_state"]
+        observed_at = datetime.fromisoformat(state["observed_at"].replace("Z", "+00:00"))
+        self.assertEqual(state, project_fleet_state(self.root, observed_at))
         self.assertEqual([], state["archive_retention"]["epochs"])
         self.assertFalse(state["archive_retention"]["keep_forever"])
         self.assertIsNone(state["archive_retention"]["last_removal_receipt"])

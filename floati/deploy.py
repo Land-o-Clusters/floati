@@ -1215,7 +1215,7 @@ class DeploymentWriter:
         # append and write leaves an honest extra entry whose target is
         # absent — uninstall replay reports that as already-done, never as
         # an untracked artifact.
-        journal = wiring_journal.journal_path(destination)
+        journal = wiring_journal.JournalAppender(destination)
         for index, entry in enumerate(entries):
             relative = entry["path"]
             source_path = source.joinpath(*PurePosixPath(relative).parts)
@@ -1236,7 +1236,7 @@ class DeploymentWriter:
                 journal_payload["join_id"] = self.join_id
             already_journaled = index < len(joined_prefix)
             if not already_journaled:
-                wiring_journal.append_entry(destination, journal_payload)
+                journal.append(journal_payload)
                 self._fault("after_file_journal")
             if target.exists() and target.is_symlink():
                 raise ProtocolRefusal("deployment_foreign_collision", f"managed path is a symlink: {relative}")
@@ -1280,7 +1280,7 @@ class DeploymentWriter:
             }
             if self.join_id is not None:
                 metadata_journal_payload["join_id"] = self.join_id
-            wiring_journal.append_entry(destination, metadata_journal_payload)
+            journal.append(metadata_journal_payload)
             self._fault("after_metadata_journal")
             if not metadata_post:
                 self._atomic_write_bytes(
@@ -1309,7 +1309,7 @@ class DeploymentWriter:
             "source_sha": source_sha,
             "managed_paths": managed_paths,
             "foreign_preserved": sorted(set(preserved)),
-            "wiring_journal": str(journal),
+            "wiring_journal": str(journal.path),
             "wiring_join_id": self.join_id,
             "status": "installed" if self.operation == "install" else "updated",
             "installer_shadow": installer_shadow,

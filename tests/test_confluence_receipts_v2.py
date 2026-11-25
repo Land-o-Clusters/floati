@@ -124,12 +124,13 @@ class ReceiptsReadV2Tests(unittest.TestCase):
 
     def test_complete_v2_bundle_reads_release_ledger_lock_but_preserve_epoch_and_bytes(self) -> None:
         self._seed_message(hold=True, ack=True)
-        baseline = materialize_bundle(self.root, consumer="puddle", out=self.base / "baseline.json", version=2).read_bytes()
-        with observe_bundle_ledger_byte_reads(self.root) as reads:
-            output = materialize_bundle(self.root, consumer="puddle", out=self.base / "observed.json", version=2)
+        with mock.patch("floati.quiet_window.NativeHost.wall", return_value=1_800_000_000.0):
+            baseline = materialize_bundle(
+                self.root, consumer="puddle", out=self.base / "baseline.json", version=2).read_bytes()
+            with observe_bundle_ledger_byte_reads(self.root) as reads:
+                output = materialize_bundle(self.root, consumer="puddle", out=self.base / "observed.json", version=2)
         prior, current = json.loads(baseline), json.loads(output.read_bytes())
-        # The optional fleet projection has an export observation clock;
-        # the pre-existing durable fields retain their exact bytes.
+        # The archive and waiter observation clock remains independent.
         for document in (prior, current):
             document["fleet_state"].pop("observed_at")
         self.assertEqual(json.dumps(prior).encode(), json.dumps(current).encode(),

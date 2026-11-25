@@ -471,10 +471,15 @@ class ReadinessJournalTests(unittest.TestCase):
         self.assertEqual(before, self.event_bytes())
 
     def test_confluence_v2_excludes_a_native_observation_and_keeps_its_cut_shape(self) -> None:
+        from floati.quiet_window import LEDGER_RELATIVE
+
         result = self.send()
         self.assert_observation(result)
         grant = ConfluenceGrantLedger(self.root).grant("consumer", "f2-readiness-grant")
         output = self.base / "bundle-v2.json"
+        quiet_history = self.root.resolve_relative(LEDGER_RELATIVE)
+        quiet_history.parent.mkdir(parents=True, exist_ok=True)
+        quiet_history.write_bytes(b"partial frame")
         before = self.event_bytes()
         materialize_bundle(self.root, consumer="consumer", out=output, version=2)
         document = json.loads(output.read_bytes())
@@ -487,6 +492,7 @@ class ReadinessJournalTests(unittest.TestCase):
         self.assertEqual(["message_envelope"],
                          [entry["record"]["kind"] for entry in document["entries"]])
         self.assertEqual(result["message"], document["entries"][0]["record"])
+        self.assertNotIn("load_hold", document["fleet_state"])
         validate_json_schema(document, REPOSITORY_ROOT / "schemas/v0/receipts-read-bundle-v2.schema.json")
         # A legacy reader keeps the original field order and nonempty entry
         # bytes, including the receipt-derived snapshot rather than roster age.

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 
-from .ask import project_ask_cost
+from .ask_cost import project_ask_cost
+from .ask_git import compare_ask_commits
 from .bus_epoch import epoch_guard
 from .errors import IntegrityFailure, ProtocolRefusal
 from .events import validate_event_records
@@ -15,7 +16,7 @@ from .replay_history import event_epochs, project_asked
 _QUESTION_ID = re.compile("ask-question-" + _UUID7)
 
 
-def replay_ask(root, question_id: str) -> dict:
+def replay_ask(root, question_id: str, *, repository: str | None = None) -> dict:
     if not _QUESTION_ID.fullmatch(question_id):
         raise ProtocolRefusal(
             "ask_question_id_invalid",
@@ -29,6 +30,18 @@ def replay_ask(root, question_id: str) -> dict:
         return {"question_id": question_id, "code": "ask_question_unknown", **history}
     question = chain[0]
     asked = project_asked(question)
+    presentation = next((row for row in chain if row["kind"] == "ask_presentation"), None)
+    presented = (
+        {"status": "missing", "reason": "ask_presentation_receipt_absent"}
+        if presentation is None else {
+            "status": "recorded",
+            "receipt_id": presentation["id"],
+            "question_id": question_id,
+            "node": presentation["sender"],
+            "session": presentation["acting_session_id"],
+            "timestamp": presentation["timestamp"],
+        }
+    )
     terminal = next((row for row in chain if row["kind"] in {"ask_answer", "ask_decline"}), None)
     answer = terminal if terminal is not None and terminal["kind"] == "ask_answer" else None
 
@@ -51,10 +64,12 @@ def replay_ask(root, question_id: str) -> dict:
         "recipient": question["recipient"],
         "outcome": outcome,
         "receipts": [_receipt_entry(row) for row in chain],
-        "presented": {"status": "missing", "reason": "ask_presentation_receipt_absent"},
+        "presented": presented,
         "acted": acted,
-        "cost": project_ask_cost(asked["node"], answered=answer is not None),
-        "git_change": _git_change(question, answer),
+        "cost": project_ask_cost(
+            root.tenant_id, question_id, asked["node"], answer["id"] if answer else None,
+        ),
+        "git_change": _git_change(question, answer, repository),
         **history,
     }
 
@@ -97,7 +112,7 @@ def _receipt_entry(row: dict) -> dict:
     return entry
 
 
-def _git_change(question: dict, answer: dict | None) -> dict:
+def _git_change(question: dict, answer: dict | None, repository: str | None) -> dict:
     def reference(row):
         return {**{key: row[key] for key in ("repo", "sha", "doc")}, "receipt_id": row["id"]}
 
@@ -111,4 +126,7 @@ def _git_change(question: dict, answer: dict | None) -> dict:
         status = "same_commit_reference"
     else:
         status = "different_commit_references"
-    return {"status": status, "question": before, "answer": after}
+    return {
+        "status": status, "question": before, "answer": after,
+        "comparison": compare_ask_commits(repository, before, after),
+    }

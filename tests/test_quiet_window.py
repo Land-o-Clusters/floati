@@ -44,6 +44,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from floati import fixture_ids as public_ids
@@ -195,6 +196,9 @@ class _FakeHost:
     def matches(self, pid, token):
         return self.identity(pid) == token
 
+    def is_stopped(self, pid, token):
+        return self.identity(pid) == token and self.stopped.get(pid) == token
+
     def signal(self, pid, expected, number):
         if not self.matches(pid, expected):
             return False
@@ -208,6 +212,89 @@ class _FakeHost:
 
 
 class QuietWindowSettleTests(_Fleet):
+    def test_v2_export_replaces_hold_testimony_after_release(self):
+        from unittest.mock import patch
+        from floati.confluence import ConfluenceGrantLedger, materialize_bundle
+        from tests.schema_validation import validate_json_schema
+
+        module = _quiet_api()
+        host = _FakeHost(module, self._heavy)
+        window = self._window(host, cap_seconds=30)
+        grant = ConfluenceGrantLedger(self.root).grant("puddle", "hold-grant")
+        output = self.base / "bundle.json"
+        ledger = self.home / module.LEDGER_RELATIVE
+        schema = REPOSITORY_ROOT / "schemas/v0/receipts-read-bundle-v2.schema.json"
+        opened = host.wall()
+        exports = {}
+
+        def bundle():
+            with patch.object(module, "NativeHost", return_value=host):
+                self.assertEqual(materialize_bundle(self.root, consumer="puddle", out=output, version=2), output)
+            return json.loads(output.read_text())
+
+        def during_hold(seconds):
+            if not exports:
+                # The observation clock advances while the driver is checked.
+                matches = host.matches
+
+                def delayed_probe(pid, token):
+                    if pid == host.DRIVER:
+                        host.clock += 1
+                    return matches(pid, token)
+
+                with patch.object(host, "matches", side_effect=delayed_probe):
+                    exports["active"] = bundle()
+                exports["active_at"] = host.wall()
+                with patch.object(host, "matches", return_value=False):
+                    exports["orphaned"] = bundle()
+                with patch.object(host, "is_stopped", return_value=False):
+                    exports["unconfirmed"] = bundle()
+                prefix = ledger.read_bytes()
+                try:
+                    ledger.write_bytes(prefix + b"partial frame")
+                    exports["partial"] = bundle()
+                    ledger.write_bytes(prefix + b"[" * 2000 + b"0" + b"]" * 2000 + b"\n")
+                    exports["unreadable"] = bundle()
+                finally:
+                    ledger.write_bytes(prefix)
+                with patch.object(host, "wall", return_value=opened + 31):
+                    exports["past_cap"] = bundle()
+            return wait(seconds)
+
+        wait = host.wait
+        host.wait = during_hold
+        self.assertEqual(window.run()["state"], "released")
+        exports["released"] = bundle()
+
+        def parse(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+        for case, state, observed, expiry in (
+            ("active", "active", exports["active_at"], opened + 30),
+            ("orphaned", None, None, None),
+            ("unconfirmed", None, None, None),
+            ("partial", None, None, None),
+            ("unreadable", None, None, None),
+            ("past_cap", None, None, None),
+            ("released", "none", host.wall(), host.wall() + 120),
+        ):
+            with self.subTest(case=case):
+                document = exports[case]
+                self.assertEqual((document["tenant_id"], document["grant_id"]),
+                                 (self.root.tenant_id, grant["id"]))
+                fleet_state = document["fleet_state"]
+                if state is None:
+                    self.assertNotIn("load_hold", fleet_state)
+                else:
+                    self.assertIn("load_hold", fleet_state)
+                    hold = fleet_state["load_hold"]
+                    self.assertEqual(set(hold), {"schema_version", "state", "observed_at", "valid_until"})
+                    self.assertEqual((hold["schema_version"], hold["state"]), (1, state))
+                    self.assertEqual(parse(hold["observed_at"]), datetime.fromtimestamp(observed, timezone.utc))
+                    self.assertEqual(parse(hold["valid_until"]), datetime.fromtimestamp(expiry, timezone.utc))
+                    self.assertLessEqual(parse(hold["observed_at"]), parse(document["snapshot_at"]))
+                validate_json_schema(document, schema)
+
     def test_an_exited_target_has_a_resolution_receipt_and_receives_no_continue(self):
         module = _quiet_api()
         host = _FakeHost(module, lambda clock: self._heavy(clock) if clock < 10 else [
@@ -650,6 +737,9 @@ class QuietWindowLiveTests(_Fleet):
         self.assertEqual(row.start_token, host.identity(child.pid))
         self.assertTrue(host.signal(child.pid, row.start_token, signal.SIGSTOP))
         _wait_until(lambda: _process_state(child.pid) == "T", 2.0, "the selected child paused")
+        self.assertTrue(host.is_stopped(child.pid, row.start_token))
+        scope, identity = row.start_token.rsplit(":", 1)
+        self.assertFalse(host.is_stopped(child.pid, f"{scope}:{int(identity) + 1}"))
         self.assertTrue(host.signal(child.pid, row.start_token, signal.SIGCONT))
 
     def _driver(self, release_file: Path, key: str):

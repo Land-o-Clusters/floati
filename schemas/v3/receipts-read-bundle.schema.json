@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v3/receipts-read-bundle.schema.json",
+  "title": "Floati Receipts Read Bundle v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "tenant_id",
+    "snapshot_at",
+    "grant_id",
+    "excluded_wake_hold_receipt_count",
+    "entries",
+    "roster"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 3
+    },
+    "kind": {
+      "const": "receipts_read_bundle"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "snapshot_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "source",
+          "source_ordinal",
+          "record"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(?:events\\.jsonl|work/items\\.jsonl|receipts/(?:workers|worker-refusals|denials)\\.jsonl|receipts/(?:deliveries|acks)/[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?\\.jsonl)$"
+          },
+          "source_ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "record": {
+            "oneOf": [
+              {"$ref": "../v0/message-envelope.schema.json"},
+              {"$ref": "../v0/message-retracted-record.schema.json"},
+              {
+                "$ref": "../v0/work-item-record.schema.json"
+              },
+              {
+                "$ref": "../v0/work-transition-record.schema.json"
+              },
+              {
+                "$ref": "../v0/delivery-receipt.schema.json"
+              },
+              {
+                "$ref": "../v0/ack-receipt.schema.json"
+              },
+              {"$ref": "../v1/ack-receipt.schema.json"},
+              {
+                "$ref": "../v0/denial-receipt.schema.json"
+              },
+              {
+                "$ref": "../v0/worker-receipt-record.schema.json"
+              },
+              {
+                "$ref": "../v0/worker-refusal-record.schema.json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "grant_id": {
+      "type": "string",
+      "pattern": "^confluence-grant-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "roster": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_id", "owner", "harness", "repository_branch", "activity", "current_action", "liveness", "role"],
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+          },
+          "owner": {"$ref": "#/$defs/roster_cell"},
+          "harness": {"$ref": "#/$defs/roster_cell"},
+          "repository_branch": {"$ref": "#/$defs/roster_cell"},
+          "activity": {"$ref": "#/$defs/roster_cell"},
+          "current_action": {"$ref": "#/$defs/roster_cell"},
+          "liveness": {"$ref": "#/$defs/roster_cell"},
+          "role": {
+            "type": ["string", "null"],
+            "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$",
+            "description": "Recorded role template name, or null when no role is assigned."
+          }
+        }
+      }
+    },
+    "fleet_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at", "archive_retention", "waiters"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "load_hold": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_version", "state", "observed_at", "valid_until"],
+          "properties": {
+            "schema_version": {"type": "integer", "const": 1},
+            "state": {"enum": ["active", "none"]},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "valid_until": {"type": "string", "format": "date-time"}
+          }
+        },
+        "archive_retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["keep_forever", "epochs", "last_removal_receipt"],
+          "properties": {
+            "keep_forever": {"type": "boolean"},
+            "last_removal_receipt": {
+              "oneOf": [
+                {"type": "null"},
+                {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["schema_version", "kind", "id", "tenant_id", "timestamp", "actor", "trigger", "epoch_id", "archive_path", "archive_sha256", "object_sha256"],
+                  "properties": {
+                    "schema_version": {"const": 0},
+                    "kind": {"const": "epoch_archive_removal"},
+                    "id": {"type": "string", "minLength": 1},
+                    "tenant_id": {"type": "string", "minLength": 1},
+                    "timestamp": {"type": "string", "format": "date-time"},
+                    "actor": {"type": "string", "minLength": 1},
+                    "trigger": {"type": "string", "minLength": 1},
+                    "epoch_id": {"type": "string", "minLength": 1},
+                    "archive_path": {"type": "string", "minLength": 1},
+                    "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                    "object_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                  }
+                }
+              ]
+            },
+            "epochs": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["epoch_id", "archive_path", "rolled_at", "size_bytes", "size_reason", "expires_at", "expired", "removed"],
+                "properties": {
+                  "epoch_id": {"type": "string", "minLength": 1},
+                  "archive_path": {"type": "string", "minLength": 1},
+                  "rolled_at": {"type": ["string", "null"], "format": "date-time"},
+                  "size_bytes": {"type": ["integer", "null"], "minimum": 0},
+                  "size_reason": {"type": ["string", "null"]},
+                  "expires_at": {"type": ["string", "null"], "format": "date-time"},
+                  "expired": {"type": "boolean"},
+                  "removed": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
+        "waiters": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["node_id", "mode", "last_wake", "idle_cpu"],
+            "properties": {
+              "node_id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"},
+              "mode": {"$ref": "#/$defs/fleet_cell"},
+              "last_wake": {"$ref": "#/$defs/fleet_cell"},
+              "idle_cpu": {"$ref": "#/$defs/fleet_cell"}
+            }
+          }
+        }
+      }
+    },
+    "excluded_wake_hold_receipt_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "fleet_cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stamp", "value", "observed_at", "age_seconds"],
+      "properties": {
+        "stamp": {"enum": ["MEASURED", "UNKNOWN"]},
+        "value": {"type": ["string", "number", "null"]},
+        "observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "age_seconds": {"type": ["integer", "null"], "minimum": 0},
+        "reason": {"type": ["string", "null"], "minLength": 1},
+        "valid_until": {"type": ["string", "null"], "format": "date-time"},
+        "receipt_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "roster_cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stamp", "value", "observed_at", "age_seconds"],
+      "properties": {
+        "stamp": {"enum": ["MEASURED", "DERIVED", "ESTIMATE", "UNKNOWN"]},
+        "value": {"type": ["string", "null"]},
+        "observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "age_seconds": {"type": ["integer", "null"], "minimum": 0},
+        "named_time": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

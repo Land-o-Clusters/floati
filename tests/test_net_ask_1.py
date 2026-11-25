@@ -14,11 +14,14 @@ from tests.readiness import READY_SECONDS, Readiness
 import json
 import os
 import signal
+import socket
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -32,7 +35,6 @@ from floati.jsonl import read_records
 from floati.planes import AuthorityGrantStore
 from floati.registry import utc_now
 from floati.root import resolve_command_root
-from floati import wake_timeout_forensics
 from tests.banked_sha_fixture import banked_send_repository
 from tests.temp_roots import REAL_TEMP_ROOT
 
@@ -218,6 +220,134 @@ class NetAsk1Tests(unittest.TestCase):
         self.assertEqual("red", question["sender"])
         self.assertEqual("blue", question["recipient"])
 
+    def test_live_board_shows_the_selected_nodes_answer_and_receipt(self) -> None:
+        """The board must send to the selected row and display its real reply."""
+        from floati.ask import perform_reply, wait_for_question
+        from floati.tui import _read_terminal_input, run_board
+
+        class Terminal(io.StringIO):
+            def isatty(self):
+                return True
+
+            def fileno(self):
+                return input_stream.fileno()
+
+            def write(self, value):
+                if result_markers and any(marker in value for marker in result_markers):
+                    result_markers.clear()
+                    keyboard.write(b"\rq")
+                return super().write(value)
+
+        note = "How deep is the harbor?"
+        answer = "twelve fathoms"
+        previous_cwd = Path.cwd()
+
+        def run_fixture_board(**kwargs):
+            self.assertEqual(["red", "blue", "everyone"], [row["node_id"] for row in kwargs["model_loader"]().nodes])
+            return run_board(
+                **kwargs, input_stream=Terminal(), output_stream=screen,
+                terminal_response=b"\x1b[?1;2c",
+            )
+
+        added, artifact = self.invoke_in_process(
+            "node", "add", "--root", str(self.fleet), "--node", "everyone",
+            "--harness", "Codex", "--lifetime", "permanent",
+        )
+        self.assertEqual(0, added.returncode, artifact)
+        records_before = self.events()
+
+        for outcome in ("cancel", "pasted_newlines", "overflow", "refused", "timeout", "declined", "answered", "exact_node"):
+            with self.subTest(outcome=outcome):
+                screen = Terminal()
+                recipient = "everyone" if outcome == "exact_node" else "blue"
+                sha = "0" * 40 if outcome == "refused" else self.sha
+                wait = "5" if outcome in {"answered", "declined"} else "0"
+                authored = "x" * 1025 if outcome == "overflow" else note
+                fields = f"red\rfloati\r{sha}\rnote.md\r{wait}\r{authored}\r"
+                if outcome in {"cancel", "pasted_newlines", "overflow"}:
+                    extra = {"cancel": "", "pasted_newlines": fields + "\r", "overflow": fields + "\r\x04"}[outcome]
+                    keys = "j?" + extra + "\x07q"
+                    result_markers = []
+                else:
+                    keys = ("jj" if recipient == "everyone" else "j") + "?" + fields + "\r\x04"
+                    result_markers = ["sha_absent", "address_preview_required", "ask_timeout", "ask-decline-", "ask-answer-"]
+
+                question_published = threading.Event()
+                input_requested = threading.Event()
+                readiness = Readiness("board terminal progress", timeout=3)
+
+                def read_terminal(stream, timeout, *args, **kwargs):
+                    if question_published.is_set():
+                        input_requested.set()
+                    try:
+                        remaining = readiness.remaining()
+                    except AssertionError as exc:
+                        self.fail(f"{exc}\nLast screen: {screen.getvalue()[-1800:]}")
+                    return _read_terminal_input(stream, min(timeout, remaining) if timeout is not None else remaining, *args, **kwargs)
+
+                def answer_request(root, question, seconds, **kwargs):
+                    if outcome == "answered":
+                        question_published.set()
+                        keyboard.write(b" ")
+                        Readiness("board reads keys while awaiting the reply", timeout=2).event(input_requested)
+                        perform_reply(
+                            root, sender="blue", recipient="red", question_id=question["id"],
+                            disposition="answer", session="sess-blue", idempotency_key="board-answer",
+                            note=answer, repo="floati", sha=self.sha, doc="note.md",
+                        )
+                    if outcome == "declined":
+                        perform_reply(
+                            root, sender="blue", recipient="red", question_id=question["id"],
+                            disposition="decline", session="sess-blue", idempotency_key="board-decline",
+                            reason="survey unavailable",
+                        )
+                    return wait_for_question(root, question, seconds, **kwargs)
+
+                read_fd, write_fd = os.pipe()
+                with (
+                    os.fdopen(read_fd, "r") as input_stream,
+                    os.fdopen(write_fd, "wb", buffering=0) as keyboard,
+                    mock.patch.dict(os.environ, {**self.environment(), "TERM": "xterm", "NO_COLOR": "1"}, clear=True),
+                    mock.patch("floati.tui.run_board", side_effect=run_fixture_board),
+                    mock.patch("floati.tui._read_terminal_input", side_effect=read_terminal),
+                    mock.patch("floati.tui.termios.tcgetattr", return_value=[]),
+                    mock.patch("floati.tui.termios.tcsetattr"),
+                    mock.patch("floati.tui.tty.setcbreak"),
+                    mock.patch("floati.tui.shutil.get_terminal_size", return_value=os.terminal_size((80, 30))),
+                    mock.patch("floati.ask.wait_for_question", side_effect=answer_request),
+                ):
+                    keyboard.write(keys.encode())
+                    try:
+                        os.chdir(self.repository)
+                        status = main(["board", "--root", str(self.fleet), "--session", "sess-red"])
+                    finally:
+                        os.chdir(previous_cwd)
+
+                self.assertEqual(0, status)
+                records = self.events()
+                new_rows = records[len(records_before):]
+                records_before = records
+                if outcome in {"cancel", "pasted_newlines", "overflow", "refused"}:
+                    self.assertFalse(new_rows, new_rows)
+                    if outcome == "refused":
+                        self.assertIn("sha_absent", screen.getvalue())
+                    continue
+                questions = [row for row in new_rows if row["kind"] == "ask_question"]
+                self.assertTrue(questions, "submitting from the live board wrote no question receipt")
+                question, = questions
+                self.assertEqual(("red", recipient, "sess-red", note), tuple(
+                    question[key] for key in ("sender", "recipient", "acting_session_id", "note")
+                ))
+                kind, shown = {
+                    "timeout": ("ask_timeout", "ask_timeout"),
+                    "exact_node": ("ask_timeout", "ask_timeout"),
+                    "declined": ("ask_decline", "survey unavailable"),
+                    "answered": ("ask_answer", answer),
+                }[outcome]
+                receipt, = [row for row in new_rows if row["kind"] == kind]
+                self.assertIn(receipt["id"], screen.getvalue())
+                self.assertIn(shown, screen.getvalue())
+
     def test_timeout_is_unknown_and_links_a_timeout_record(self) -> None:
         """No terminal in the final snapshot is UNKNOWN, never answered."""
 
@@ -250,10 +380,132 @@ class NetAsk1Tests(unittest.TestCase):
             "status": "unmeasured",
             "reason": "puddle_measured_cost_seam_unavailable",
             "attributed_to": "red",
+            "outcome": "UNKNOWN",
         }
         for artifact in (answer, answer_seen):
             with self.subTest(evidence=artifact["evidence"]):
                 self.assertEqual(expected, artifact["evidence"].get("cost"))
+
+    def test_measured_cost_joins_the_exact_pair_for_both_parties_and_replay(self):
+        question_argv = self.question_argv(note="check costs", key="measured", wait=0)
+        _, timed_out = self.invoke_in_process(*question_argv)
+        question_id = timed_out["evidence"]["question_id"]
+        reply_argv = self.reply_argv(
+            question_id, disposition="answer", key="measured-reply", note="checked",
+        )
+        rc, answer = self.invoke_in_process(*reply_argv)
+        self.assertEqual(0, rc.returncode, answer)
+        answer_id = answer["evidence"]["answer_id"]
+        tenant = resolve_command_root(str(self.fleet)).tenant_id
+        row = {
+            "tenant_id": tenant, "question_id": question_id, "answer_id": answer_id,
+            "basis": "MEASURED", "total_tokens": 73, "measurement_id": "sample-1",
+            "observed_at": "2026-11-24T00:00:00Z",
+        }
+        export = self.base / "ask-cost-v1.json"
+        export.touch(mode=0o600)
+        replay_argv = ("replay", "--root", str(self.fleet), "--question", question_id)
+        expected = {
+            "status": "measured", "attributed_to": "red", "total_tokens": 73,
+            "measurement_id": "sample-1", "observed_at": row["observed_at"],
+        }
+        with mock.patch.dict(os.environ, {"FLOATI_PUDDLE_ASK_COST_EXPORT": str(export)}):
+            export.write_text(json.dumps({"schema_version": 1, "records": [
+                dict(row, tenant_id="foreign"), row,
+            ]}), encoding="utf-8")
+            for argv in (reply_argv, question_argv, replay_argv):
+                with self.subTest(command=argv):
+                    result, artifact = self.invoke_in_process(*argv)
+                    self.assertEqual(0, result.returncode, artifact)
+                    self.assertEqual(expected, artifact["evidence"]["cost"])
+            for records, reason in (
+                ([dict(row, answer_id=question_id)], "puddle_ask_cost_not_found"),
+                ([dict(row, basis="ESTIMATED")], "puddle_ask_cost_not_measured"),
+                ([dict(row, total_tokens=True)], "puddle_ask_cost_invalid"),
+                ([row, dict(row, total_tokens=74)], "puddle_ask_cost_ambiguous"),
+            ):
+                with self.subTest(reason=reason):
+                    export.write_text(json.dumps({"schema_version": 1, "records": records}),
+                                      encoding="utf-8")
+                    result, artifact = self.invoke_in_process(*replay_argv)
+                    self.assertEqual(0, result.returncode, artifact)
+                    self.assertEqual(
+                        {"status": "unmeasured", "reason": reason, "attributed_to": "red",
+                         "outcome": "UNKNOWN"},
+                        artifact["evidence"]["cost"],
+                    )
+            export.write_text(json.dumps({"schema_version": 1, "records": [
+                dict(row, total_tokens=0),
+            ]}), encoding="utf-8")
+            _, zero = self.invoke_in_process(*replay_argv)
+            self.assertEqual(dict(expected, total_tokens=0), zero["evidence"]["cost"])
+            export.unlink()
+            _, missing = self.invoke_in_process(*replay_argv)
+            self.assertEqual(
+                {"status": "unmeasured", "reason": "puddle_measured_cost_seam_unavailable",
+                 "attributed_to": "red", "outcome": "UNKNOWN"},
+                missing["evidence"]["cost"],
+            )
+
+    def test_recipient_can_present_an_ask_and_replay_the_durable_receipt(self):
+        _, timed_out = self.invoke_in_process(*self.question_argv(
+            note="read the banked note", key="presentation", wait=0,
+        ))
+        question_id = timed_out["evidence"]["question_id"]
+        present_argv = (
+            "ask", "--root", str(self.fleet), "--from", "blue", "--to", "red",
+            "--reply-to", question_id, "--disposition", "present", "--session",
+            "sess-blue", "--idempotency-key", "present-question",
+        )
+        wrong, _ = self.invoke_in_process(
+            *("red" if arg == "blue" else "blue" if arg == "red" else arg for arg in present_argv)
+        )
+        self.assertEqual(20, wrong.returncode)
+        result, artifact = self.invoke_in_process(*present_argv)
+        self.assertEqual(0, result.returncode, artifact)
+        self.assertEqual("read the banked note", artifact["evidence"]["question"]["note"])
+        presentation_id = artifact["evidence"]["presentation_id"]
+        again, repeated = self.invoke_in_process(*present_argv)
+        self.assertEqual(0, again.returncode, repeated)
+        self.assertEqual(presentation_id, repeated["evidence"]["presentation_id"])
+
+        root = resolve_command_root(str(self.fleet))
+        AuthorityGrantStore(root).grant_exact("bus-epoch-roll", "red", 1, datetime.now(timezone.utc))
+        self.roll_with_pending_asks(root)
+        repeated_result, repeated = self.invoke_in_process(*present_argv)
+        self.assertEqual(0, repeated_result.returncode, repeated)
+        self.assertEqual(presentation_id, repeated["evidence"]["presentation_id"])
+        result, answer = self.invoke_in_process(*self.reply_argv(
+            question_id, disposition="answer", key="after-presentation", note="done",
+        ))
+        self.assertEqual(0, result.returncode, answer)
+        answer_id = answer["evidence"]["answer_id"]
+        roll_bus_epoch(root, actor="red", idempotency_key="archive-presentation")
+        replayed, replay = self.invoke_in_process(
+            "replay", "--root", str(self.fleet), "--question", question_id,
+        )
+        self.assertEqual(0, replayed.returncode, replay)
+        evidence = replay["evidence"]
+        self.assertEqual(presentation_id, evidence["presented"]["receipt_id"])
+        self.assertEqual("blue", evidence["presented"]["node"])
+        self.assertEqual(question_id, evidence["presented"]["question_id"])
+        self.assertEqual(answer_id, evidence["acted"]["receipt_id"])
+        self.assertEqual(answer["evidence"]["cost"], evidence["cost"])
+        self.assertEqual([question_id, timed_out["evidence"]["timeout_id"], presentation_id, answer_id], [
+            entry["receipt_id"] for entry in evidence["receipts"]
+        ])
+
+    def roll_with_pending_asks(self, root):
+        def carry_pending_question(fleet, old):
+            plan = build_carry_plan(fleet, old)
+            return plan.live_payloads, {
+                "trigger": "ack",
+                "policy": {"max_bytes": 1, "max_age_days": 7, "source": "operator_declared"},
+                "observed_bytes": len(next(raw for path, _plane, raw in old if path == "events.jsonl")),
+                "observed_at": utc_now(), "epoch_started_at": None, "due_reasons": ["bytes"],
+            }
+
+        roll_automatic_epoch(root, actor="red", planner=carry_pending_question)
 
     def test_replay_keeps_receipt_order_and_citations_after_epoch_roll(self) -> None:
         _, timed_out = self.invoke_in_process(*self.question_argv(
@@ -273,16 +525,7 @@ class NetAsk1Tests(unittest.TestCase):
         root = resolve_command_root(str(self.fleet))
         AuthorityGrantStore(root).grant_exact("bus-epoch-roll", "red", 1, datetime.now(timezone.utc))
 
-        def carry_pending_question(fleet, old):
-            plan = build_carry_plan(fleet, old)
-            return plan.live_payloads, {
-                "trigger": "ack",
-                "policy": {"max_bytes": 1, "max_age_days": 7, "source": "operator_declared"},
-                "observed_bytes": len(next(raw for path, _plane, raw in old if path == "events.jsonl")),
-                "observed_at": utc_now(), "epoch_started_at": None, "due_reasons": ["bytes"],
-            }
-
-        roll_automatic_epoch(root, actor="red", planner=carry_pending_question)
+        self.roll_with_pending_asks(root)
         self.assertIn(question_id, [row["id"] for row in self.events()])
 
         (self.repository / "note.md").write_text("the channel was checked\n", encoding="utf-8")
@@ -330,6 +573,28 @@ class NetAsk1Tests(unittest.TestCase):
         archived, archived_replay = self.invoke_in_process(*replay_argv)
         self.assertEqual(0, archived.returncode, archived_replay)
         self.assertEqual(evidence, archived_replay["evidence"])
+        verified, git_replay = self.invoke_in_process(
+            *replay_argv, "--repository", str(self.repository),
+        )
+        self.assertEqual(0, verified.returncode, git_replay)
+        change = git_replay["evidence"]["git_change"]["comparison"]
+        self.assertEqual("tree_changed", change["status"])
+        for side, sha in (("question", self.sha), ("answer", answer_sha)):
+            with self.subTest(side=side):
+                tree, blob = subprocess.check_output(
+                    ["/usr/bin/git", "rev-parse", sha + "^{tree}", sha + ":note.md"],
+                    cwd=self.repository, text=True,
+                ).splitlines()
+                self.assertEqual({"tree": tree, "document_object": blob}, change[side])
+        self.assertEqual("modified", change["document_change"])
+        missing, missing_git = self.invoke_in_process(
+            *replay_argv, "--repository", str(self.base / "missing"),
+        )
+        self.assertEqual(0, missing.returncode, missing_git)
+        self.assertEqual(
+            {"status": "missing", "reason": "ask_git_objects_unavailable"},
+            missing_git["evidence"]["git_change"]["comparison"],
+        )
 
     def test_live_question_replays_after_native_archive_expiry(self):
         from floati.archive_retention import REMOVAL_KIND, REMOVAL_LEDGER
@@ -435,23 +700,33 @@ class NetAsk1Tests(unittest.TestCase):
         self.assertEqual("ask_answer_absent", replay["evidence"]["cost"]["reason"])
 
     def test_ask_opens_no_listener_and_sends_nothing(self) -> None:
-        """While the command waits, its process has no TCP listener or connection."""
+        """The local command can publish and wait without opening a socket."""
+        from floati import ask
 
-        lsof = wake_timeout_forensics._lsof_executable()
-        self.assertTrue(lsof, "lsof unavailable: none of the product candidates exists")
-        process = self.spawn(*self.question_argv(
-            note="hold this watch locally", key="question-local", wait=2,
-        ))
-        self.wait_for_question(process)
-        listed = subprocess.run(
-            [lsof, "-nP", "-a", "-p", str(process.pid), "-iTCP"],
-            check=False, capture_output=True, text=True,
-        )
-        self.finish(process, timeout=5)
-        self.assertIn(listed.returncode, (0, 1), listed.stderr)
-        self.assertEqual("", listed.stderr)
-        self.assertNotIn("LISTEN", listed.stdout)
-        self.assertNotIn("ESTABLISHED", listed.stdout)
+        elapsed = 0.0
+
+        def advance(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        def forbid_socket(*args, **kwargs):
+            self.fail("Local ask opened a socket")
+
+        clock = SimpleNamespace(monotonic=lambda: elapsed, sleep=advance)
+        with mock.patch.object(ask, "time", clock),\
+                mock.patch.object(socket, "socket", forbid_socket),\
+                mock.patch.object(socket, "create_connection", forbid_socket),\
+                mock.patch.object(socket, "getaddrinfo", forbid_socket):
+            completed, artifact = self.invoke_in_process(*self.question_argv(
+                note="hold this watch locally", key="question-local", wait=2,
+            ))
+        self.assertEqual(34, completed.returncode, artifact)
+        self.assertEqual("ask_timeout", artifact["evidence"]["code"])
+        records = self.events()
+        question, = (row for row in records if row["kind"] == "ask_question")
+        timeout, = (row for row in records if row["kind"] == "ask_timeout")
+        self.assertEqual(question["id"], timeout["reply_to"])
+        self.assertFalse(any(row["kind"] == "message_envelope" for row in records))
 
 
 class NetAsk1PureTests(unittest.TestCase):

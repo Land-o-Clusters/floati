@@ -356,6 +356,9 @@ class MessageConsumptionCommandTests(unittest.TestCase):
         roster_clock = mock.patch("floati.roster.project_roster", side_effect=scheduled_roster)
         roster_clock.start()
         self.addCleanup(roster_clock.stop)
+        quiet_clock = mock.patch("floati.quiet_window.NativeHost.wall", return_value=roster_now.timestamp())
+        quiet_clock.start()
+        self.addCleanup(quiet_clock.stop)
         before = {}
         for version in (1, 2):
             output = self.base / f"native-before-{version}.json"

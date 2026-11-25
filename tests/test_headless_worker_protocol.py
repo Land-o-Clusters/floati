@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 import pkgutil
 import shutil
 import subprocess
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -26,6 +28,7 @@ from tests.temp_roots import REAL_TEMP_ROOT
 
 
 NOW = datetime(2026, 10, 25, tzinfo=timezone.utc)
+NET_HEADLESS_FIXTURES = Path(__file__).parent / "fixtures" / "net-headless"
 
 
 def headless_adapter_types():
@@ -43,7 +46,7 @@ def headless_adapter_types():
 
 
 class HeadlessWorkerProtocolTests(unittest.TestCase):
-    def assert_completes(self, adapter_cls):
+    def assert_completes(self, adapter_cls, replay=None):
         with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
             directory = Path(temporary)
             # The shell carries bytes produced by Python; it does not quote JSON.
@@ -58,6 +61,17 @@ class HeadlessWorkerProtocolTests(unittest.TestCase):
                 name=adapter_cls.name,
                 command=("/usr/bin/python3", "-B", str(harness)),
             )
+            if replay is not None:
+                harness.write_text(
+                    "from pathlib import Path\nimport sys\n"
+                    f"if sys.argv[1:] != {replay['argv']!r}:\n"
+                    "    sys.exit(2)\n"
+                    "Path('answer.txt').write_bytes(b'worker answer\\n')\n"
+                    f"sys.stdout.buffer.write({replay['stdout'].encode()!r})\n"
+                    f"sys.stderr.buffer.write({replay['stderr'].encode()!r})\n"
+                    f"sys.exit({replay['exit_code']!r})\n"
+                )
+                profile = replace(adapter_cls._default_profile(), command=profile.command)
             root = FloatiRoot.open_direct_home(directory / "fleet", create=True)
             node = fixture_ids.builder("a")
             Registry(root).register(node, "Codex")
@@ -69,6 +83,14 @@ class HeadlessWorkerProtocolTests(unittest.TestCase):
             runner = WorkerRunner(root, {adapter_cls.name: adapter_cls(profile)})
 
             result = runner.run(node, adapter_cls.name, now=NOW)
+
+            if replay is not None and replay["exit_code"] != 0:
+                self.assertEqual("degrade", result["transition"])
+                self.assertEqual("adapter_error", result["outcome_code"])
+                self.assertNotEqual("completed", work.show(item["id"])[0]["state"])
+                self.assertFalse(result.get("artifact_bindings"))
+                self.assertEqual([], runner.last_process_audit["alive_after_cleanup"])
+                return
 
             self.assertEqual("complete", result["transition"], result)
             self.assertIsNone(result["outcome_code"])
@@ -94,6 +116,18 @@ class HeadlessWorkerProtocolTests(unittest.TestCase):
             )
             self.assertEqual(bindings, receipts[-2]["artifact_bindings"])
             self.assertEqual([], runner.last_process_audit["alive_after_cleanup"])
+
+    def test_recorded_headless_turns_preserve_worker_receipt_outcomes(self):
+        adapters = {cls.name: cls for cls in headless_adapter_types()}
+        for name in ("gemini", "copilot"):
+            with self.subTest(adapter=name):
+                self.assertIn(name, adapters)
+                adapter_cls = adapters[name]
+                self.assertFalse(adapter_cls.availability()["surface_verified"])
+                replays = json.loads((NET_HEADLESS_FIXTURES / f"{name}.json").read_text())
+                for replay in replays:
+                    with self.subTest(source=replay["source"]):
+                        self.assert_completes(adapter_cls, replay)
 
     def test_every_derived_adapter_completes_and_binds_its_artifact(self):
         population = headless_adapter_types()

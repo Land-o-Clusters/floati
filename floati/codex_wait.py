@@ -1054,13 +1054,13 @@ def _run_stop_waiter(
         with epoch_guard(participant.root):
             if _epoch_transition_pending(participant.root):
                 return "\n[floati] epoch recovery pending; presentation history quarantined."
-            if last_presentation_context is not None and _has_rolled_wake_history(participant.root):
+            if last_presentation_context is None:
+                return ""
+            plane, binding, original_consent, original_classification = last_presentation_context
+            if not plane._cold_source_has_no_roll() and _has_rolled_wake_history(participant.root):
                 # The deadline has passed. Let the next invocation project a
                 # new rolled cut instead of reading history in the final guard.
                 return "\n[floati] presentation_state_unverified; preserve native inbox and ACK recovery."
-        if last_presentation_context is None:
-            return ""
-        plane, binding, original_consent, original_classification = last_presentation_context
         selection = plane._select_waiter_empty(binding, original_consent, original_classification, harness="codex")
         if selection is None:
             selection = plane._select_waiter(binding, original_consent, original_classification, harness="codex")
@@ -1630,12 +1630,9 @@ def _run_stop_waiter(
                 if _waiter_result is not None:
                     _waiter_result["sealed_read"] = sorted(set(_waiter_result.get("sealed_read", ()))
                         | set(selection["sealed_read"]))
-                # Epoch maintenance does not create another Stop boundary.
-                at_stop = False
                 last_presentation_context = artifact["_plane"], participant.binding, consent, classification
             state = artifact.get("state")
             if state == "fresh_work" and artifact.get("wake_required"):
-                finished = True
                 messages = artifact.get("fresh_messages")
                 if not isinstance(messages, list):
                     return
@@ -1679,12 +1676,14 @@ def _run_stop_waiter(
                     # Detect an older installed reader before the hook block.
                     # Ordinary receipt observation remains best effort.
                     raise_reader_failure(exc)
-                # Publication is still inside the evaluator's physical node
-                # guard. Close through its private seam before Output.write
-                # can attempt the public, non-reentrant guard again.
-                retry_window.finish()
-                prepared = plane.prepare(selection, decision)
-                receipt = plane.deliver(prepared, selection)
+                # A busy delivery writer can retry the guarded selection
+                # until the original deadline. Once its lock is held, freeze
+                # retries before writing the durable presentation reservation.
+                prepared, receipt = plane._prepare_and_deliver(
+                    selection, decision, begin_publication=retry_window.finish)
+                finished = True
+                # Close inside the evaluator's node guard before Output.write
+                # can attempt to acquire the same non-reentrant guard again.
                 hold.close(already_guarded=True, require_proof=True)
                 try:
                     publication_started = True
@@ -1703,6 +1702,9 @@ def _run_stop_waiter(
                     return
                 published_items, published_receipt = item_ids, terminal
                 return
+            if selection is not None:
+                # Epoch maintenance does not create another Stop boundary.
+                at_stop = False
             now = monotonic()
             if now >= deadline:
                 finished = True

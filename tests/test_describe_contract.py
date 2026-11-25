@@ -117,9 +117,11 @@ class DescribeContractTests(unittest.TestCase):
         # Upgrade preparation adds the public update/prepare command.
         # Inbound mail holds add a command group and its start and show leaves.
         # NEEDS-YOU-OBSERVED-1 adds the public needs observe verb.
-        self.assertEqual(215, contract["command_count"])
+        # NET-MCP-ASK-1 adds the shared roster read.
+        # Fleet topology adds role-clear and the net route command family.
+        self.assertEqual(222, contract["command_count"])
         self.assertEqual(len(described), contract["command_count"])
-        self.assertEqual(204, len(public))
+        self.assertEqual(211, len(public))
         self.assertEqual({
             ("hook", "relay"),
             ("wake-evaluate",),

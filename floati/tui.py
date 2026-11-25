@@ -37,6 +37,7 @@ from .tui_protocol import (
 )
 from .tui_capabilities import probe_terminal_capabilities
 from .tui_activity import board_activity
+from .tui_ask import ASK_HINTS, AskCallback, BoardAskPanel, BoardAskTask
 from .tui_graphics import kitty_delete_images, plan_activity_overlays
 from .consumption import ConsumptionLedger
 from .copy import (
@@ -44,7 +45,7 @@ from .copy import (
     BOARD_EVENT_SOURCE_UNSUPPORTED_DETAIL,
     BOARD_EVENT_WATCH_UNAVAILABLE_DETAIL,
 )
-from .errors import ProtocolRefusal, SnapshotRefusal
+from .errors import FloatiError, ProtocolRefusal, SnapshotRefusal
 from .jsonl import read_records_snapshot
 from .cursor import SparseCursor
 from .projection import EffectStatusProjection, FleetProjection
@@ -75,6 +76,9 @@ class BoardResizeEvent:
 @dataclass(frozen=True)
 class BoardFilesystemEvent:
     """A durable-root change delivered by the host filesystem notifier."""
+
+
+_ASK_READY = object()
 
 
 class _BoardResizeWakeup:
@@ -851,7 +855,7 @@ def _board_from_snapshot(
                 if record.get("kind") in {
                     "delivery_claim", "ledger_repair_receipt", "send_readiness_observation",
                     "seat_teardown_epoch_verification",
-                    "ask_question", "ask_answer", "ask_decline", "ask_timeout",
+                    "ask_question", "ask_presentation", "ask_answer", "ask_decline", "ask_timeout",
                 }:
                     continue
                 if record.get("kind") != "message_envelope":
@@ -980,6 +984,8 @@ def _read_terminal_input(
     pending: list[TerminalInput],
     resize_descriptor: Optional[int] = None,
     model_descriptor: Optional[int] = None,
+    ask_descriptor: Optional[int] = None,
+    prefer_input: bool = False,
 ) -> object:
     if pending:
         return pending.pop(0)
@@ -989,16 +995,20 @@ def _read_terminal_input(
         descriptors.append(resize_descriptor)
     if model_descriptor is not None:
         descriptors.append(model_descriptor)
+    if ask_descriptor is not None:
+        descriptors.append(ask_descriptor)
     readable, _, _ = select.select(descriptors, [], [], timeout)
     if not readable:
         return ""
+    if ask_descriptor in readable:
+        return _ASK_READY
     if resize_descriptor is not None and resize_descriptor in readable:
         try:
             os.read(resize_descriptor, 4096)
         except BlockingIOError:
             pass
         return BoardResizeEvent()
-    if model_descriptor is not None and model_descriptor in readable:
+    if model_descriptor in readable and (not prefer_input or descriptor not in readable):
         return BoardFilesystemEvent()
     pending.extend(decoder.feed(os.read(descriptor, 64)))
     return "" if not pending else pending.pop(0)
@@ -1029,6 +1039,7 @@ def run_board(
     input_stream: TextIO = sys.stdin,
     output_stream: TextIO = sys.stdout,
     ack_callback: Optional[Callable[[BoardAction], None]] = None,
+    ask_callback: Optional[AskCallback] = None,
     capability_receipt_sink: Optional[
         Callable[[Mapping[str, object]], None]
     ] = None,
@@ -1053,6 +1064,8 @@ def run_board(
     descriptor = input_stream.fileno()
     prior_termios = termios.tcgetattr(descriptor)
     controller = BoardController(model)
+    ask_panel: Optional[BoardAskPanel] = None
+    ask_task: Optional[BoardAskTask] = None
     color_tier = _color_tier()
     previous_frame: Optional[str] = None
     previous_signature = state_signature(model)
@@ -1114,10 +1127,13 @@ def run_board(
                     animation_progress=1.0,
                     detail_open=controller.detail_open,
                     activity_by_node=activity,
+                    hints=ASK_HINTS if ask_callback is not None and model.nodes else None,
                 )
+                if ask_panel is not None:
+                    frame = ask_panel.render(frame, size.columns, size.lines)
                 overlay_plan = plan_activity_overlays(
                     activity_by_target=activity,
-                    visible_positions=node_activity_positions(
+                    visible_positions={} if ask_panel is not None else node_activity_positions(
                         model,
                         size.columns,
                         size.lines,
@@ -1143,19 +1159,40 @@ def run_board(
                     activity_overlays = overlay_plan.overlays
                     previous_frame = frame
                 needs_render = False
+            if ask_panel is not None and ask_panel.submitted and ask_panel.result is None and ask_task is None:
+                assert ask_callback is not None
+                ask_task = BoardAskTask(ask_callback, ask_panel.recipient, ask_panel.fields)
             timeout = _seat_attention_timeout(model, datetime.now(timezone.utc))
-            event = (
-                read_event(timeout)
-                if read_event is not None
-                else _read_terminal_input(
+            if ask_task is not None and ask_task.future.done():
+                event = _ASK_READY
+            elif read_event is not None:
+                event = read_event(timeout)
+            else:
+                event = _read_terminal_input(
                     input_stream,
                     timeout,
                     decoder,
                     pending_inputs,
                     None if resize_wakeup is None else resize_wakeup.read_descriptor,
                     None if model_wakeup is None else model_wakeup.fileno(),
+                    None if ask_task is None else ask_task.descriptor,
+                    ask_panel is not None,
                 )
-            )
+            if event is _ASK_READY:
+                assert ask_task is not None and ask_panel is not None
+                try:
+                    ask_panel.result = ask_task.future.result()
+                except FloatiError as exc:
+                    ask_panel.result = {
+                        "outcome": "refused" if isinstance(exc, ProtocolRefusal) else "UNKNOWN",
+                        "code": exc.code,
+                        "detail": exc.detail,
+                    }
+                finally:
+                    finished, ask_task = ask_task, None
+                    finished.close()
+                needs_render = True
+                continue
             if event == "" and timeout is not None:
                 event = BoardModelEvent(model_loader())
             if isinstance(event, BoardFilesystemEvent):
@@ -1173,6 +1210,23 @@ def run_board(
                     needs_render = True
                 continue
             if isinstance(event, BoardResizeEvent):
+                needs_render = True
+                continue
+            if ask_panel is not None:
+                if ask_task is not None and event == "q":
+                    controller.handle_key("q")
+                    continue
+                if isinstance(event, str):
+                    action = ask_panel.handle_key(event)
+                    if action == "close":
+                        ask_panel = None
+                        if ask_task is not None:
+                            stopped, ask_task = ask_task, None
+                            stopped.close()
+                    needs_render = action != "none"
+                continue
+            if event == "?" and ask_callback is not None and model.nodes:
+                ask_panel = BoardAskPanel(str(model.nodes[controller.selected]["node_id"]))
                 needs_render = True
                 continue
             if isinstance(event, MouseEvent):
@@ -1203,6 +1257,12 @@ def run_board(
         cleanup_error: Optional[BaseException] = None
         resize_error: Optional[BaseException] = None
         model_wakeup_error: Optional[BaseException] = None
+        ask_task_error: Optional[BaseException] = None
+        if ask_task is not None:
+            try:
+                ask_task.close()
+            except BaseException as exc:
+                ask_task_error = exc
         if resize_wakeup is not None:
             try:
                 resize_wakeup.close()
@@ -1241,5 +1301,7 @@ def run_board(
                 raise resize_error
             if model_wakeup_error is not None:
                 raise model_wakeup_error
+            if ask_task_error is not None:
+                raise ask_task_error
             if cleanup_error is not None:
                 raise cleanup_error

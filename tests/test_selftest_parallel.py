@@ -9,12 +9,15 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import floati.selftest as selftest
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -29,6 +32,42 @@ _RUNNER_SCRIPTS = (
     "parallel_profile.py",
     "fixture_finalizer.py",
 )
+
+
+class SerialSelftestTests(unittest.TestCase):
+    def test_serial_discovery_pins_test_environment_before_module_imports(self):
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            root = Path(temporary)
+            suite = root / "tests"
+            suite.mkdir()
+            (suite / "test_first.py").write_text(
+                "import os\n"
+                "import unittest\n"
+                "from floati.cli import main\n"
+                "host_temp_at_import = os.environ.get('FLOATI_HOST_TEMP_ROOT')\n"
+                "home_at_import = os.environ['HOME']\n"
+                "import tests\n"
+                "class FirstDiscoveredTest(unittest.TestCase):\n"
+                "    def test_import_environment(self):\n"
+                "        self.assertEqual(tests.HOST_TEMP_ROOT, host_temp_at_import)\n"
+                "        self.assertEqual(tests.HOME_PIN_ROOT, home_at_import)\n",
+                encoding="utf-8",
+            )
+            home = root / "home"
+            home.mkdir()
+            environment = dict(os.environ, HOME=str(home), TMPDIR=str(root),
+                               PYTHONPATH=str(selftest.repository_root()))
+            for name in ("FLOATI_HOST_TEMP_ROOT", "FLOATI_TEST_TEMP_ROOT", selftest.WORKERS_ENV):
+                environment.pop(name, None)
+            # The fixture exercises discovery without installing a second bundle.
+            run = subprocess.run(
+                [sys.executable, "-B", "-c",
+                 "from floati import selftest; "
+                 "selftest.finish = lambda success, root: selftest.outcome_for(success, []); "
+                 "raise SystemExit(selftest.main([]))"],
+                cwd=root, env=environment, capture_output=True, text=True, timeout=5,
+            )
+            self.assertEqual(0, run.returncode, run.stderr)
 
 
 class ParallelSelftestTests(unittest.TestCase):
@@ -204,6 +243,42 @@ class ParallelSelftestTests(unittest.TestCase):
         self.assertNotIn("test_quiet", text)
         self.assertLess(text.find("case_cap.Cap.test_199"), text.find("+1 more"))
         self.assertLess(text.find("+1 more"), text.find("201 non-success"))
+
+    def test_parallel_selftest_reports_a_missing_tool_on_a_successful_run(self) -> None:
+        from tests import managed_test_tools, test_opencode_host_bridge
+
+        case_type = test_opencode_host_bridge.OpenCodeHostBridgeTests
+        method = "test_unrelated_events_never_launch_observer"
+        case = case_type(method)
+        with mock.patch.dict(os.environ), mock.patch.object(
+            managed_test_tools.shutil, "which", return_value=None
+        ):
+            os.environ.pop("FLOATI_TEST_NODE_EXECUTABLE", None)
+            result = case.run()
+            self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+            self.assertEqual([(case, "test_tool_absent: node")], result.skipped)
+            with mock.patch.object(
+                test_opencode_host_bridge, "BRIDGE", self.bank / "missing.mjs"
+            ):
+                missing_bridge = case_type(method).run()
+            self.assertFalse(missing_bridge.wasSuccessful())
+            self.assertEqual([], missing_bridge.skipped)
+
+        output = self.bank / "missing-tool"
+        output.mkdir()
+        minisign_test = "test_signing.SigningTests.test_real_signature"
+        (output / "final.json").write_text(
+            json.dumps({"aggregate": {"events": [
+                {"kind": "skip", "test_id": minisign_test, "reason": "test_tool_absent: minisign"},
+                {"kind": "skip", "test_id": case.id(), "reason": result.skipped[0][1]},
+            ]}}),
+            encoding="utf-8",
+        )
+        stdout = io.StringIO()
+        selftest.emit_parallel_nonsuccess(output, stream=stdout)
+        self.assertIn(f"skip {minisign_test} test_tool_absent: minisign", stdout.getvalue())
+        self.assertIn(f"skip {case.id()} test_tool_absent: node", stdout.getvalue())
+        self.assertNotIn("non-success", stdout.getvalue())
 
     def test_parallel_nonsuccess_report_keeps_the_retained_line_and_fixture_errors(self) -> None:
         emit = selftest.emit_parallel_nonsuccess

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib import import_module
 import json
 import os
 import re
@@ -36,6 +37,7 @@ _REPORTED_KINDS = frozenset({
     "unexpected_success",
     "fixture_error",
 })
+_TOOL_ABSENCE_REASONS = ("test_tool_absent: minisign", "test_tool_absent: node")
 
 
 def outcome_for(tests_successful: bool, manifest_errors: list) -> int:
@@ -241,13 +243,9 @@ def _parallel_nonsuccess_lines(output: Path) -> list[str]:
     events = aggregate.get("events") if isinstance(aggregate, dict) else None
     if not isinstance(events, list):
         return []
-    chosen = [
-        event for event in events
-        if isinstance(event, dict) and _reported_kind(event.get("kind"))
-    ]
-    if not chosen:
-        return []
-    retained = _retained_tails(Path(output))
+    records = [event for event in events if isinstance(event, dict)]
+    chosen = [event for event in records if _reported_kind(event.get("kind"))]
+    retained = _retained_tails(Path(output)) if chosen else {}
     rendered = []
     for event in chosen:
         identity = _identity(event)
@@ -266,12 +264,18 @@ def _parallel_nonsuccess_lines(output: Path) -> list[str]:
     lines = list(shown)
     if hidden:
         lines.append(f"+{hidden} more")
-    lines.append(f"{len(rendered)} non-success")
+    if rendered:
+        lines.append(f"{len(rendered)} non-success")
+    lines.extend(
+        f"skip {_identity(event)} {event['reason']}"
+        for event in records
+        if event.get("kind") == "skip" and event.get("reason") in _TOOL_ABSENCE_REASONS
+    )
     return lines
 
 
 def emit_parallel_nonsuccess(output: Path, stream=None) -> None:
-    """Print non-success aggregate outcomes. One line each, then a count."""
+    """Print failures and named tool absences from the aggregate receipt."""
 
     if stream is None:
         stream = sys.stdout
@@ -328,6 +332,9 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     workers, output = parse_invocation(argv, os.environ)
     if workers is None:
+        # Discovery imports test modules as top-level modules. Establish the
+        # suite's scratch HOME and host roots before any of those imports.
+        import_module("tests")
         suite = unittest.defaultTestLoader.discover("tests", pattern="test_*.py")
         # Discovery is executable code. Refuse if an import reintroduced a
         # native coordinate, before starting any test from that population.

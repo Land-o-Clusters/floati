@@ -1,0 +1,419 @@
+{
+  "commands": [
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "sender",
+          "nargs": null,
+          "option_strings": [
+            "--from"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ADDRESS",
+          "mutually_exclusive_group": null,
+          "name": "recipient",
+          "nargs": null,
+          "option_strings": [
+            "--to"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": false,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": 0,
+          "name": "preview",
+          "nargs": 0,
+          "option_strings": [
+            "--preview"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "PATH",
+          "mutually_exclusive_group": 0,
+          "name": "recipient_preview",
+          "nargs": null,
+          "option_strings": [
+            "--recipient-preview"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "PATH",
+          "mutually_exclusive_group": null,
+          "name": "puddle_quota_snapshot",
+          "nargs": null,
+          "option_strings": [
+            "--puddle-quota-snapshot"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "repo",
+          "nargs": null,
+          "option_strings": [
+            "--repo"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "sha",
+          "nargs": null,
+          "option_strings": [
+            "--sha"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "PATH",
+          "mutually_exclusive_group": null,
+          "name": "repository",
+          "nargs": null,
+          "option_strings": [
+            "--repository"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "doc",
+          "nargs": null,
+          "option_strings": [
+            "--doc"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "note",
+          "nargs": null,
+          "option_strings": [
+            "--note"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "session",
+          "nargs": null,
+          "option_strings": [
+            "--session"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "KEY",
+          "mutually_exclusive_group": null,
+          "name": "idempotency_key",
+          "nargs": null,
+          "option_strings": [
+            "--idempotency-key"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "integer",
+          "metavar": "N",
+          "mutually_exclusive_group": null,
+          "name": "wait_seconds",
+          "nargs": null,
+          "option_strings": [
+            "--wait-seconds"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "integer"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ID",
+          "mutually_exclusive_group": null,
+          "name": "reply_to",
+          "nargs": null,
+          "option_strings": [
+            "--reply-to"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [
+            "answer",
+            "decline",
+            "present"
+          ],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "disposition",
+          "nargs": null,
+          "option_strings": [
+            "--disposition"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "reason",
+          "nargs": null,
+          "option_strings": [
+            "--reason"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "ask",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--from",
+        "value",
+        "--to",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "governed",
+      "mcp_omit": [
+        "repository",
+        "preview",
+        "recipient_preview",
+        "puddle_quota_snapshot"
+      ],
+      "mcp_required": [
+        "idempotency_key"
+      ],
+      "mutually_exclusive_groups": [
+        {
+          "arguments": [
+            "preview",
+            "recipient_preview"
+          ],
+          "required": false
+        }
+      ],
+      "path": [
+        "ask"
+      ],
+      "program": "floati ask",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ID",
+          "mutually_exclusive_group": 0,
+          "name": "question",
+          "nargs": null,
+          "option_strings": [
+            "--question"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ID",
+          "mutually_exclusive_group": 0,
+          "name": "work_item",
+          "nargs": null,
+          "option_strings": [
+            "--work-item"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "PATH",
+          "mutually_exclusive_group": null,
+          "name": "repository",
+          "nargs": null,
+          "option_strings": [
+            "--repository"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "replay",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--question",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [
+        {
+          "arguments": [
+            "question",
+            "work_item"
+          ],
+          "required": true
+        }
+      ],
+      "path": [
+        "replay"
+      ],
+      "program": "floati replay",
+      "public": true
+    }
+  ],
+  "predecessors": {
+    "ask": "{\"arguments\":[{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"root\",\"nargs\":null,\"option_strings\":[\"--root\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"NODE\",\"mutually_exclusive_group\":null,\"name\":\"sender\",\"nargs\":null,\"option_strings\":[\"--from\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ADDRESS\",\"mutually_exclusive_group\":null,\"name\":\"recipient\",\"nargs\":null,\"option_strings\":[\"--to\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":false,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":0,\"name\":\"preview\",\"nargs\":0,\"option_strings\":[\"--preview\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"boolean\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"PATH\",\"mutually_exclusive_group\":0,\"name\":\"recipient_preview\",\"nargs\":null,\"option_strings\":[\"--recipient-preview\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"repo\",\"nargs\":null,\"option_strings\":[\"--repo\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"sha\",\"nargs\":null,\"option_strings\":[\"--sha\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"PATH\",\"mutually_exclusive_group\":null,\"name\":\"repository\",\"nargs\":null,\"option_strings\":[\"--repository\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"doc\",\"nargs\":null,\"option_strings\":[\"--doc\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"note\",\"nargs\":null,\"option_strings\":[\"--note\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"session\",\"nargs\":null,\"option_strings\":[\"--session\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"KEY\",\"mutually_exclusive_group\":null,\"name\":\"idempotency_key\",\"nargs\":null,\"option_strings\":[\"--idempotency-key\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"integer\",\"metavar\":\"N\",\"mutually_exclusive_group\":null,\"name\":\"wait_seconds\",\"nargs\":null,\"option_strings\":[\"--wait-seconds\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"integer\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ID\",\"mutually_exclusive_group\":null,\"name\":\"reply_to\",\"nargs\":null,\"option_strings\":[\"--reply-to\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[\"answer\",\"decline\"],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"disposition\",\"nargs\":null,\"option_strings\":[\"--disposition\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"reason\",\"nargs\":null,\"option_strings\":[\"--reason\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"}],\"artifact_schema_version\":null,\"example_argv\":[\"ask\",\"--root\",\"\u002fprivate/tmp/floati-contract\",\"--from\",\"value\",\"--to\",\"value\"],\"executable\":true,\"mcp_exposure\":\"governed\",\"mcp_omit\":[\"repository\",\"preview\",\"recipient_preview\"],\"mcp_required\":[\"idempotency_key\"],\"mutually_exclusive_groups\":[{\"arguments\":[\"preview\",\"recipient_preview\"],\"required\":false}],\"path\":[\"ask\"],\"program\":\"floati ask\",\"public\":true}",
+    "replay": "{\"arguments\":[{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"root\",\"nargs\":null,\"option_strings\":[\"--root\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ID\",\"mutually_exclusive_group\":0,\"name\":\"question\",\"nargs\":null,\"option_strings\":[\"--question\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"ID\",\"mutually_exclusive_group\":0,\"name\":\"work_item\",\"nargs\":null,\"option_strings\":[\"--work-item\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"}],\"artifact_schema_version\":null,\"example_argv\":[\"replay\",\"--root\",\"\u002fprivate/tmp/floati-contract\",\"--question\",\"value\"],\"executable\":true,\"mcp_exposure\":\"never\",\"mcp_omit\":[],\"mcp_required\":[],\"mutually_exclusive_groups\":[{\"arguments\":[\"question\",\"work_item\"],\"required\":true}],\"path\":[\"replay\"],\"program\":\"floati replay\",\"public\":true}"
+  },
+  "schema_version": 0,
+  "source_commit": "7faae5cd1f6d8897c21531aec2b8c216f8485847"
+}

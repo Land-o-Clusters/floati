@@ -1,0 +1,9 @@
+[
+  {
+    "source": "https://github.com/google-gemini/gemini-cli/issues/11184",
+    "argv": ["--output-format", "json", "--prompt", "write answer"],
+    "stdout": "{\"response\":\"\u0060\u0060\u0060json\\n{\\\"question\\\": \\\"What is machine learning?\\\"}\\n\u0060\u0060\u0060\",\"stats\":{}}\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+]

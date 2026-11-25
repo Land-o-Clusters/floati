@@ -76,6 +76,7 @@ _CASES = {
     "node-prep-clear": {"command":"node prep-clear","history_output":False,"family":"events"},
     "node-state-flush": {"command":"node state-flush","history_output":False,"family":"events"},
     "node-prompts": {"command":"node prompts","history_output":False,"family":"registry"},
+    "net-route-list": {"command":"net route list","history_output":False,"family":"events"},
     "role-list": {"command":"role list","history_output":False,"family":"registry"},
     "role-show": {"command":"role show","history_output":False,"family":"registry"},
     "role-validate": {"command":"role validate","history_output":False,"family":"registry"},
@@ -148,6 +149,7 @@ _NATIVE = {
     "node-prep-clear": (0, "ok", "prep_clear_receipted"),
     "node-state-flush": (0, "ok", "state_flush_receipted"),
     "node-prompts": (0, "ok", "lifecycle_prompts_written"),
+    "net-route-list": (0, "ok", "declared_routes_returned"),
     "role-list": (0, "ok", "roles_returned"),
     "role-show": (0, "ok", "role_returned"),
     "role-validate": (0, "ok", "role_validated"),
@@ -186,10 +188,6 @@ _NATIVE = {
 _NONROUTINE = {
     "work notify": "Sender-authorized notification replay is a write: it may append mail envelopes and work-notification sent receipts. It requires a preauthored notification intent/artifact and the matching sender lease; the existing unnotified work-add/complete workloads do not supply or qualify that transaction.",
     "hook relay": "Claude context-hook relay requires a native hook payload and a proved context flush before presentation; ordinary CLI inbox workloads do not qualify that harness transaction.",
-    # BUS-SCALE-CENSUS-1: main adds a peer-correlated question/wait protocol;
-    # the historical notice workloads do not supply its second-party terminal.
-    "ask": "A synchronous question requires a correlated peer answer, decline or timeout; notice send/inbox/ack workloads supply no question terminal and cannot qualify this protocol.",
-    "replay": "An audit reads a selected ask or work item and correlates its receipts across retained epochs. Routine workloads lack those audit fixtures.",
     "confluence adopt": "Observer-session managed-mode adoption requires manager authority; this is consumer onboarding, not routine seat operation.",
     "confluence release": "Observer-session managed-mode release ends external consumer management; ordinary seats do not administer consumer sessions.",
     "effect reconcile": "Recovery of an orchestrator-owned external effect requires its operation/fence authority; ordinary seats do not run recovery transactions.",
@@ -217,6 +215,7 @@ _NONROUTINE = {
 # These reviewed parser paths still need native workloads. Each disposition
 # names the fixture or operation that a new workload would have to exercise.
 _PENDING_WORKLOADS = {
+    "ask": "Needs a correlated peer question with a presentation receipt and an answer, decline or timeout, plus a role ask preview and confirmation using a local quota snapshot.",
     "checkout-liveness": "Needs a checkout with a known host process or worktree liveness witness.",
     "dispatch brief": "Needs an authenticated dispatch with a specific recorded brief revision.",
     "dispatch close": "Needs an open dispatch and authority to close it.",
@@ -238,10 +237,12 @@ _PENDING_WORKLOADS = {
     "quiet run": "Needs a controlled host load or pressure fixture and enrolled seats.",
     "quiet show": "Needs quiet-window history with seat exposure receipts.",
     "quiet status": "Needs an active quiet window and an enrolled command to evaluate.",
+    "replay": "Needs question and work histories across retained epochs, including a question replay that compares the cited Git objects in an explicit repository.",
     "territory declare": "Needs a scoped workspace and actor that can lease paths.",
     "territory preview": "Needs active territory leases and a prospective dispatch edit set.",
     "territory release": "Needs an active territory lease with a selected owner and ID.",
     "territory show": "Needs a mix of active and expired territory claims.",
+    "who": "Needs a roster with measured and unknown evidence cells.",
     "work handoff record": "Needs exact Git source evidence and a work item to bind it to.",
     "work handoff show": "Needs a recorded work handoff whose source evidence can be revalidated.",
 }
@@ -258,8 +259,8 @@ def _fields(value: object, expected: set[str], label: str) -> dict:
 def _native_closure(rows: object) -> dict:
     """Reuse the full frozen grammar validator, never an exclusion prefix."""
     classified = bus_scale_commands._require_closed_contract(rows)
-    if len(rows) != 179:
-        raise ValueError("workload scope requires the reviewed 179 executable rows")
+    if len(rows) != 184:
+        raise ValueError("workload scope requires the reviewed 184 executable rows")
     return classified
 
 
@@ -269,7 +270,7 @@ def _exclusions(rows: dict, classified: dict) -> dict[str, str]:
         if not case["command"].startswith("seam:")
     }
     measured.update(_SEAM_NATIVE_COMMANDS.values())
-    if len(measured) != 67 or not measured <= set(rows):
+    if len(measured) != 68 or not measured <= set(rows):
         raise ValueError("workload native bindings do not match the frozen inventory")
     administration = classified["administration"]
     remaining = set(rows) - measured

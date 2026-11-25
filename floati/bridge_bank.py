@@ -13,6 +13,9 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 
+from .install_limits import (
+    MAX_INSTALL_FILES, MAX_INSTALL_FILE_BYTES, MAX_INSTALL_TOTAL_BYTES, MAX_MANIFEST_BYTES,
+)
 
 STABLE_LAUNCHER_SHA256 = "6d15802045f974366789df5b1c9b94c488787af21325a36aef78c21de58dacde"
 BANK_LAUNCHER_SHA256 = "4b271127e891a622bd5225337317189c8d4b417385317a2e78ebfd72f6cdcd0a"
@@ -31,8 +34,6 @@ BRIDGE_PROVIDER_GENERATIONS = frozenset({
 })
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
-_MAX_FILE = 64 * 1024 * 1024
-_MAX_TOTAL = 256 * 1024 * 1024
 
 
 class BridgeBankUnavailable(ValueError):
@@ -70,7 +71,7 @@ def _ordinary(path, *, directory=False, private_file=True):
     return item
 
 
-def _read(path, maximum=_MAX_FILE, *, private_file=True):
+def _read(path, maximum=MAX_INSTALL_FILE_BYTES, *, private_file=True):
     item = _ordinary(path, private_file=private_file)
     if item.st_size > maximum:
         raise BridgeBankUnavailable(f"bridge coordinate exceeds byte bound: {path}")
@@ -95,7 +96,7 @@ def _digest(payload):
     return hashlib.sha256(payload).hexdigest()
 
 
-def _checked(path, expected, maximum=_MAX_FILE):
+def _checked(path, expected, maximum=MAX_INSTALL_FILE_BYTES):
     payload = _read(path, maximum)
     observed = _digest(payload)
     if observed != expected:
@@ -157,10 +158,11 @@ def _installed_manifest(home, source_sha):
             or _DIGEST.fullmatch(transport["manifest_sha256"]) is None
             or transport["source_sha"] != source_sha
             or any(type(transport[name]) is not int or not 1 <= transport[name] <= bound
-                   for name, bound in (("max_files", 4096), ("max_file_bytes", _MAX_FILE),
-                                       ("max_total_bytes", _MAX_TOTAL)))):
+                   for name, bound in (("max_files", MAX_INSTALL_FILES),
+                                       ("max_file_bytes", MAX_INSTALL_FILE_BYTES),
+                                       ("max_total_bytes", MAX_INSTALL_TOTAL_BYTES)))):
         raise BridgeBankUnavailable(f"installed transport identity or bounds changed: {registry_path}: floati-installed-v0")
-    raw = _checked(path, transport["manifest_sha256"], 4 * 1024 * 1024)
+    raw = _checked(path, transport["manifest_sha256"], MAX_MANIFEST_BYTES)
     metadata = _json(raw, path)
     if (not isinstance(metadata, dict) or metadata.get("source_sha") != source_sha
             or not isinstance(metadata.get("files"), list)
@@ -216,7 +218,7 @@ def _verify_store(home, *, prior_identity=None, selector_payload=None):
             raise BridgeBankUnavailable(f"unsafe bridge bank entry: {manifest_path}: {row['path']}")
         payloads[row["path"]] = _checked(bank / row["path"], row["sha256"])
         total += len(payloads[row["path"]])
-        if total > _MAX_TOTAL:
+        if total > MAX_INSTALL_TOTAL_BYTES:
             raise BridgeBankUnavailable(f"bridge bank exceeds total byte bound: {bank}")
     actual = set()
     for path in bank.rglob("*"):
@@ -245,7 +247,7 @@ def _verify_store(home, *, prior_identity=None, selector_payload=None):
                 or prior_identity["bank_sha256"] != bank.name):
             raise BridgeBankUnavailable(f"receipted prior bank identity changed: {bank}")
         trusted = payloads[metadata_name]
-        transport = {"max_file_bytes": _MAX_FILE, "max_total_bytes": _MAX_TOTAL}
+        transport = {"max_file_bytes": MAX_INSTALL_FILE_BYTES, "max_total_bytes": MAX_INSTALL_TOTAL_BYTES}
     if payloads[metadata_name] != trusted:
         raise BridgeBankUnavailable(f"digest changed: {bank / metadata_name} expected={_digest(trusted)} observed={_digest(payloads[metadata_name])}")
     metadata = _json(payloads[metadata_name], bank / metadata_name)

@@ -228,6 +228,9 @@ _ADVISORY_LOCK_SITES = {
         "the release half of the daemon pidfile lease",
     ("floati/wake_control.py", "_lock"):
         "wake control file, outside every ledger plane",
+    ("floati/wiring_journal.py", "append"):
+        "deployment journal inode held from prefix validation through durable append; "
+        "the journal itself binds the lock to the bytes being chained, without a bus-ledger sidecar",
     ("floati/seat_declaration.py", "__init__"):
         "seat declaration lease taken in a constructor, released on close",
     ("floati/waiter_invocation.py", "__init__"):

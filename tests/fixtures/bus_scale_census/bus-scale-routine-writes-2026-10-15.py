@@ -32,9 +32,9 @@ from urllib.parse import urlsplit
 from floati.errors import FloatiError
 from floati.framing import decode_frames, encode_frame
 from floati.jsonl import MAX_LEDGER_BYTES
+from floati.public_export_policy import POLICY_RELATIVE
 from floati.records import validate_record
 from floati.root import FloatiRoot
-from tests.public_projection import HARBOR_POLICY_RELATIVE
 
 CASES = frozenset({"consume", "hold-start", "hold-release", "presence-report",
     "work-add", "work-claim", "work-complete", "inbox", "ack", "node-drain",
@@ -83,7 +83,7 @@ def _json(value):
 
 
 def github_fixture():
-    if (SOURCE / HARBOR_POLICY_RELATIVE).is_file():
+    if (SOURCE / POLICY_RELATIVE).is_file():
         path = SOURCE / "tests/fixtures/bus-scale-census/native-gh-issue-harbor-3-2026-10-15.json"
         digest = "cac0ada053d0745b82afcd00358105d1c7d1071f37f25a1afe722a6bef95b70f"
     else:
@@ -648,6 +648,8 @@ def _bundle(root, context, *, wall_begin=None, wall_end=None):
         raise ValueError("bundle roster ages do not share one native invocation instant")
     expected["roster"] = project_roster(root, lower)
     expected["fleet_state"] = project_fleet_state(root, lower)
+    if "load_hold" in expected["fleet_state"] and published > _time(expected["snapshot_at"]):
+        expected["snapshot_at"] = expected["fleet_state"]["observed_at"]
     _equal(document, expected, "every published bundle source/ordinal/record")
     return document
 
@@ -660,6 +662,14 @@ def bundle_clock_leaves(document):
                 yield ["roster", ordinal, name, "age_seconds"], cell["age_seconds"], "<native-roster-age>"
     fleet_state = document["fleet_state"]
     yield ["fleet_state", "observed_at"], fleet_state["observed_at"], "<native-fleet-observation-time>"
+    if "load_hold" in fleet_state:
+        hold = fleet_state["load_hold"]
+        uses_freshness_deadline = _time(hold["valid_until"]) - _time(hold["observed_at"]) == timedelta(seconds=120)
+        if document["snapshot_at"] == hold["observed_at"]:
+            yield ["snapshot_at"], document["snapshot_at"], "<native-hold-snapshot-time>"
+        yield ["fleet_state", "load_hold", "observed_at"], hold["observed_at"], "<native-hold-observation-time>"
+        if uses_freshness_deadline:
+            yield ["fleet_state", "load_hold", "valid_until"], hold["valid_until"], "<native-hold-freshness-deadline>"
     for ordinal, row in enumerate(fleet_state["waiters"]):
         for name in ("mode", "last_wake"):
             cell = row[name]
@@ -855,6 +865,8 @@ def normalize(case, delta, artifact, context, *, wall_begin, wall_end, child_pid
             leaf(["artifact", "evidence", "out"], str(root.path.parent / context["publication_name"]), "<routine-publication>/bundle.json")
             publication = result["delta"]["@publication/routine-bundle.json"]["value"]
             for parts, expected, replacement in bundle_clock_leaves(publication):
+                if parts == ["snapshot_at"]:
+                    leaf(["artifact", "evidence", "snapshot_at"], expected, replacement)
                 leaf(["delta", "@publication/routine-bundle.json", "value", *parts], expected, replacement)
         for path, change in result["delta"].items():
             if path.startswith(".floati-snapshots/") and change["operation"] == "replace":

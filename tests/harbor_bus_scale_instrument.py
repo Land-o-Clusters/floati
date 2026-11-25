@@ -655,7 +655,7 @@ class NativeSendCensusTests(StableSourceFixture, unittest.TestCase):
                             for row in result["comparison"]["metrics"].values()))
         self.assertEqual(["send"], result["measured"])
         self.assertEqual(set(subject.population(_parser())["cases"]) - {"send"}, set(result["pending"]))
-        self.assertEqual(69, len(result["pending"]))
+        self.assertEqual(70, len(result["pending"]))
         self.assertTrue(result["source_unchanged"])
         self.assertTrue(result["scratch_removed"])
         self.assertEqual("incomplete", result["status"], "a send-only pass cannot close the census")
@@ -737,7 +737,7 @@ class CensusContinuationTests(StableSourceFixture, unittest.TestCase):
     def test_setup_failures_leave_all_remaining_cases_pending_and_do_not_abort(self):
         subject = CensusInstrumentTests().subject()
         remaining = set(subject.population(_parser())["cases"]) - {"send"}
-        self.assertEqual(69, len(remaining))
+        self.assertEqual(70, len(remaining))
         continuation = getattr(subject, "remaining_census", None)
         self.assertTrue(callable(continuation), "strict remaining-case census is missing")
         visited = []
@@ -752,7 +752,7 @@ class CensusContinuationTests(StableSourceFixture, unittest.TestCase):
 
             result = continuation(bank, case_runner=failed_setup)
             self.assertEqual("incomplete", result["status"])
-            self.assertEqual(69, len(visited))
+            self.assertEqual(70, len(visited))
             self.assertEqual(remaining, set(visited))
             self.assertEqual(visited, result["attempted"])
             self.assertEqual([], result["measured"])
@@ -784,8 +784,8 @@ class CensusContinuationTests(StableSourceFixture, unittest.TestCase):
                                          dir=REAL_TEMP_ROOT) as temporary:
             result = subject.remaining_census(Path(temporary).resolve(), case_runner=one_history_case)
         self.assertEqual(["log-history"], result["measured"])
-        self.assertEqual(68, len(result["pending"]))
-        self.assertEqual(68, len(result["errors"]))
+        self.assertEqual(69, len(result["pending"]))
+        self.assertEqual(69, len(result["errors"]))
         self.assertEqual({"cpu_seconds", "read_bytes", "ledger_hold_seconds"},
                          {row["metric"] for row in result["findings"]})
         self.assertTrue(all(row["classification"] == "red" for row in result["findings"]))
@@ -1635,6 +1635,8 @@ class CensusNativeWaitTests(StableSourceFixture, unittest.TestCase):
         from tests.bus_scale_io import IOProbe
         from tests.waiter_timing import scripted_readiness
         import io
+        import traceback
+        from unittest.mock import patch
 
         with tempfile.TemporaryDirectory(prefix="bus-scale-wait-prefix-", dir=REAL_TEMP_ROOT) as temporary:
             base = Path(temporary).resolve()
@@ -1663,7 +1665,17 @@ class CensusNativeWaitTests(StableSourceFixture, unittest.TestCase):
             def advance(seconds):
                 clock[0] += seconds
             output, error = io.StringIO(), io.StringIO()
-            with IOProbe(home) as probe:
+            probe = IOProbe(home)
+            event_reads = []
+            count_read = probe._count
+
+            def count_with_origin(entry, length):
+                if entry is not None and entry["path"] == "events.jsonl" and length:
+                    callers = [frame.name for frame in traceback.extract_stack(limit=16)[:-1]]
+                    event_reads.append((length, " > ".join(callers)))
+                return count_read(entry, length)
+
+            with probe, patch.object(probe, "_count", side_effect=count_with_origin):
                 code = run_stop_waiter(bus_home=home,
                     hook_payload={"cwd": str(workspace), "session_id": "wait-prefix-session"},
                     stdout=output, stderr=error, monotonic=lambda: clock[0], sleep=advance,
@@ -1673,7 +1685,7 @@ class CensusNativeWaitTests(StableSourceFixture, unittest.TestCase):
             self.assertEqual(0, code, error.getvalue())
             self.assertIn("deadline exhausted", json.loads(output.getvalue())["reason"])
             self.assertLessEqual(probe.read_bytes_by_path.get("events.jsonl", 0), len(age_anchor),
-                "a fresh empty-mail waiter replayed certified unrelated event history")
+                f"a fresh empty-mail waiter exceeded its anchor-read bound: {event_reads}")
 
     def _cold_waiter_fixture(self):
         from floati.codex_wait_contract import (CodexWaitConsentLedger,

@@ -65,6 +65,7 @@ _COMMANDS = {
     "node-prep-clear": "node prep-clear",
     "node-state-flush": "node state-flush",
     "node-prompts": "node prompts",
+    "net-route-list": "net route list",
     "role-list": "role list",
     "role-show": "role show",
     "role-validate": "role validate",
@@ -288,6 +289,11 @@ _NATIVE = {
         0,
         "ok",
         "lifecycle_prompts_written"
+    ],
+    "net-route-list": [
+        0,
+        "ok",
+        "declared_routes_returned"
     ],
     "role-list": [
         0,
@@ -555,7 +561,7 @@ class BusScaleWorkloadTests(unittest.TestCase):
             for row in describe_parser(self.parser)["commands"]
             if row["executable"]
         }
-        self.assertEqual(179, len(expected))
+        self.assertEqual(184, len(expected))
         self.assertEqual(expected, self.scope["inventory"])
         self.assertIn("wake daemon serve", self.scope["inventory"])
         self.assertFalse(self.scope["inventory"]["wake daemon serve"]["public"])
@@ -577,9 +583,10 @@ class BusScaleWorkloadTests(unittest.TestCase):
         excluded = self.scope["excluded"]
         self.assertFalse(measured & set(excluded))
         self.assertEqual(set(self.scope["inventory"]), measured | set(excluded))
-        self.assertEqual(112, len(excluded))
+        self.assertEqual(116, len(excluded))
         self.assertIn("setup", excluded)
         self.assertIn("replay", excluded)
+        self.assertIn("who", excluded)
         for path, reason in excluded.items():
             with self.subTest(path=path):
                 self.assertIsInstance(reason, str)

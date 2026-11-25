@@ -7,8 +7,10 @@ from pathlib import Path
 
 from floati.adapters.antigravity import AntigravityAdapter
 from floati.adapters.cline import ClineAdapter
+from floati.adapters.copilot import CopilotAdapter
 from floati.adapters.cursor import CursorAgentAdapter
 from floati.adapters.devin import DevinAdapter
+from floati.adapters.gemini import GeminiAdapter
 from floati.adapters.grok_build import GrokBuildAdapter
 from floati.adapters.headless_template import (
     HeadlessProfileAdapter,
@@ -51,6 +53,8 @@ ROSTER = [
     ("devin", DevinAdapter),
     ("antigravity", AntigravityAdapter),
     ("zcode", ZcodeAdapter),
+    ("gemini", GeminiAdapter),
+    ("copilot", CopilotAdapter),
 ]
 
 

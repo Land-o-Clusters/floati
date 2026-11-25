@@ -437,6 +437,7 @@ class PrepClearLooseningTests(unittest.TestCase):
                 "hook_burn_record",
                 "role_template_write_receipt",
                 "registry_role_transfer",
+                "declared_route_receipt",
                 "lane_workspace_record",
                 "timing_receipt",
                 "stop_hold_receipt",
@@ -460,8 +461,9 @@ class PrepClearLooseningTests(unittest.TestCase):
                 "adhoc_dispatch_record",
                 "adhoc_native_thread_opened_record",
                 "adhoc_lifecycle_record",
-                # NET-ASK-1: local question, answer, decline, and timeout records.
+                # Local ask receipts.
                 "ask_question",
+                "ask_presentation",
                 "ask_answer",
                 "ask_decline",
                 "ask_timeout",

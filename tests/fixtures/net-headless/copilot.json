@@ -1,0 +1,16 @@
+[
+  {
+    "source": "https://github.com/github/copilot-cli/issues/3544",
+    "argv": ["--output-format=json", "--prompt", "write answer"],
+    "stdout": "{\"type\":\"assistant.message\",\"data\":{\"content\":\"2\"}}\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "source": "https://github.com/github/copilot-cli/issues/2012",
+    "argv": ["--output-format=json", "--prompt", "write answer"],
+    "stdout": "",
+    "stderr": "",
+    "exit_code": 1
+  }
+]

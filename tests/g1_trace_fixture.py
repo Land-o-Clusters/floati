@@ -63,6 +63,7 @@ def detached_witness(rows):
     """Return genuine completed detachment testimony or refuse with ValueError.
 
     Modern Git detaches maintenance; 2.43 instead detaches its GC child.
+    Recent maintenance can delegate the repack to a synchronous GC child.
     Both native POSIX paths retain the successful fork-parent setup.c exit.
     Line numbers are reported, not pinned to unpatched upstream sources.
     """
@@ -98,7 +99,15 @@ def detached_witness(rows):
                 if len(enter) != 1 or len(leave) != 1 or not isinstance(enter[0].get("nesting"), int)\
                         or enter[0]["nesting"] != leave[0].get("nesting"):
                     continue
-            repacks = [sid for sid, _ in _edge(rows, fork, "repack")
+            repack_parents = [fork]
+            if mode == "maintenance":
+                for gc, gc_launch in _edge(rows, fork, "gc"):
+                    flags = {"--auto", "--no-detach", "--skip-foreground-tasks"}
+                    gc_terminals = _terminals(rows, gc)
+                    if (flags.issubset(gc_launch["argv"]) and len(gc_terminals) == 1
+                            and gc_terminals[0].get("code") == 0):
+                        repack_parents.append(gc)
+            repacks = [sid for parent in repack_parents for sid, _ in _edge(rows, parent, "repack")
                        if len(_terminals(rows, sid)) == 1
                        and _terminals(rows, sid)[0].get("code") == 0]
             if not repacks:
@@ -144,7 +153,10 @@ def run_positive_fixture():
         subprocess.run(["/usr/bin/git", *gate.FORCE_KNOBS, "add", "trigger.txt"],
                        cwd=projection, env=environment, check=True, capture_output=True)
         environment["GIT_TRACE2_EVENT"] = str(trace)
-        result = subprocess.run(["/usr/bin/git", *gate.FORCE_KNOBS, "commit", "-q", "-m", "gate trigger"],
+        # Select the GC path this control measures. Git can otherwise default
+        # to geometric maintenance, which has a separate auto threshold.
+        result = subprocess.run(["/usr/bin/git", *gate.FORCE_KNOBS, "-c", "maintenance.strategy=gc",
+                                 "commit", "-q", "-m", "gate trigger"],
                                 cwd=projection, env=environment, check=True, capture_output=True)
         return_offset = trace.stat().st_size
         warning = (b"git: warning: confstr() failed with code 5: couldn't get path of "

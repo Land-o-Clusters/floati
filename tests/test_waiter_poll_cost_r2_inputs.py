@@ -11,10 +11,12 @@ import os
 from pathlib import Path
 import stat
 import threading
+import time
 import unittest
 from unittest import mock
 
 from floati import bus_epoch, codex_wait, snapshot, tui
+from floati.codex_wait_contract import CodexWaitConsentLedger
 from floati.errors import IntegrityFailure
 from floati.events import EventLog
 from floati.planes import AuthorityGrantStore
@@ -458,7 +460,21 @@ class WaiterPollCostR2InputTests(unittest.TestCase):
         fixture.exercise_watch_paths(self, self.ordinary_flock)
 
     def test_native_nested_caller_ancestry_alias_invalidates(self):
-        fixture.exercise_watch_paths(self, self.caller_ancestry, alias=(True, False))
+        run_waiter = codex_wait.run_stop_waiter
+
+        def run_after_host_delay(**arguments):
+            # Model descheduling just after the invocation captures its start.
+            # An explicitly scripted waiter clock is independent of this gap.
+            if arguments.get("monotonic", time.monotonic) is time.monotonic:
+                consent = CodexWaitConsentLedger(self.f.root).require_armed(
+                    self.f.participant.binding)
+                after_deadline = consent["wait_deadline_seconds"] + 1.0
+                host_samples = iter((0.0,))
+                arguments["monotonic"] = lambda: next(host_samples, after_deadline)
+            return run_waiter(**arguments)
+
+        with mock.patch.object(codex_wait, "run_stop_waiter", new=run_after_host_delay):
+            fixture.exercise_watch_paths(self, self.caller_ancestry, alias=(True, False))
 
     def test_native_failed_archive_inventory_never_certifies_clean(self):
         fixture.exercise_watch_paths(self, self.failed_inventory, budget=(False, True))

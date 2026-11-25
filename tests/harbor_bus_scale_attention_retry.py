@@ -144,7 +144,7 @@ class BusScaleAttentionRetryTests(unittest.TestCase):
         # JSON sorts the scope dictionary keys; comparison list order is not
         # an admission fact. Preserve every complete row at its unique key.
         for rows in (recomputed,archived):
-            self.assertEqual(280,len(rows),"complete four-family/70-case comparison population")
+            self.assertEqual(284,len(rows),"complete four-family/71-case comparison population")
         recomputed_by_key={(row["family"],row["case"]):row for row in recomputed}
         archived_by_key={(row["family"],row["case"]):row for row in archived}
         self.assertEqual(len(recomputed),len(recomputed_by_key),"duplicate recomputed comparison coordinate")

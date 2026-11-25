@@ -489,10 +489,15 @@ class LifecyclePromptTests(unittest.TestCase):
         # Upgrade preparation reserves prepare and update-prepare.
         # Inbound mail holds reserve inbound, hold-inbound, hold-inbound-start and hold-inbound-show.
         # NEEDS-YOU-OBSERVED-1 reserves needs-observe; observe was already reserved.
-        self.assertEqual(len(reserved), 296, sorted(reserved))
+        # NET-MCP-ASK-1 reserves the top-level who verb.
+        # Fleet topology reserves role-clear and the net route command family.
+        self.assertEqual(len(reserved), 305, sorted(reserved))
+        self.assertTrue({"node-role-clear", "net-route-add", "net-route-remove",
+                         "net-route-list"} <= reserved)
         self.assertIn("checkout-liveness", reserved)
         self.assertIn("setup", reserved)
         self.assertIn("replay", reserved)
+        self.assertIn("who", reserved)
         self.assertIn("notify", reserved)
         self.assertIn("work-notify", reserved)
         self.assertIn("relay", reserved)

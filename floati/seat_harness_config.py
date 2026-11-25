@@ -15,6 +15,7 @@ import secrets
 import stat
 
 from .errors import ProtocolRefusal
+from .install_limits import MAX_INSTALL_FILES, MAX_INSTALL_FILE_BYTES, MAX_INSTALL_TOTAL_BYTES
 
 MAX_BYTES = 1024 * 1024
 IDENTIFIER = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
@@ -124,8 +125,9 @@ def _gateway(content):
             value = transport[field]
             if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{" + str(length) + "}", value):
                 _refuse("Gateway transport digest is invalid: " + name + " " + field)
-        for field, ceiling in (("max_files", 4096), ("max_file_bytes", 64 * 1024 * 1024),
-                               ("max_total_bytes", 256 * 1024 * 1024)):
+        for field, ceiling in (("max_files", MAX_INSTALL_FILES),
+                               ("max_file_bytes", MAX_INSTALL_FILE_BYTES),
+                               ("max_total_bytes", MAX_INSTALL_TOTAL_BYTES)):
             value = transport[field]
             if type(value) is not int or not 1 <= value <= ceiling:
                 _refuse("Gateway transport bound is invalid: " + name + " " + field)

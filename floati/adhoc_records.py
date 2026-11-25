@@ -39,6 +39,8 @@ ADHOC_SPECS = {
     "adhoc_lifecycle_record": ("adhoc-lifecycle-", frozenset(OPENED_FIELDS)),
 }
 ADHOC_KINDS = frozenset(ADHOC_SPECS)
+ADHOC_RECORD_VERSIONS = dict.fromkeys(ADHOC_KINDS, (1,))
+ADHOC_RECORD_VERSIONS["adhoc_dispatch_record"] = (1, 2)
 DISPATCH_FIELDS = {"schema_version", "profile_id", "profile_digest", "node_id",
     "node_lease_id", "lane_opening_id", "work_item_id", "authority_subject",
     "authority_epoch", "operation", "permission", "requested_duration", "result_document", "result_recipient"}
@@ -453,8 +455,7 @@ def validate_adhoc_record(record, tenant, error=refuse):
     prefix, fields = ADHOC_SPECS[kind]
     _keys(record, fields, error, kind)
     version = record["schema_version"]
-    supported = (1, 2) if kind == "adhoc_dispatch_record" else (1,)
-    if type(version) is not int or version not in supported:
+    if type(version) is not int or version not in ADHOC_RECORD_VERSIONS[kind]:
         error("schema_version_invalid", "unsupported ad-hoc record version")
     if record["tenant_id"] != tenant:
         error("tenant_mismatch", "ad-hoc metadata belongs to another tenant")

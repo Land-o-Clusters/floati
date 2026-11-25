@@ -27,11 +27,11 @@ ROLE_VERB_FILES = frozenset(
     }
 )
 
-PINNED_PROTOCOL_COUNT = 1413
+PINNED_PROTOCOL_COUNT = 1417
 
 PINNED_KIND_NONE_COUNT = 1060
 
-PINNED_BOUND_COUNT = 353
+PINNED_BOUND_COUNT = 357
 
 PINNED_UNBOUND_COUNT = 1033
 
@@ -100,7 +100,7 @@ PINNED_ROLE_INVALID_OUTSIDE = frozenset({
 
 PINNED_OTHER_COUNT = 1014
 
-PINNED_PROTOCOL_DIGEST = '52205aad8a8c942470536dd71ade3825bb737203fb09a0848f3a91d8766c1c96'
+PINNED_PROTOCOL_DIGEST = '048b951afafd8f97f90617a0ea20b0dd9aa6e392d9fd8a70b67699d66a451a21'
 
 PINNED_KIND_NONE_DIGEST = '014e262450b973e69388768659bfce762ba47f2d8b8b5164807e0b8389409c87'
 
@@ -113,6 +113,7 @@ PINNED_DURABILITY_DIGEST = '5d1d00bd7e1fd344a6edf1c51fd2f32483f7fe6b7a94cb555212
 PINNED_BOUND = frozenset({
     'ack_item_unknown',
     'address_invalid',
+    'address_preview_required',
     'address_reply_invalid',
     'adhoc_dispatch_busy',
     'adhoc_result_unbanked',
@@ -332,6 +333,9 @@ PINNED_BOUND = frozenset({
     'role_template_write_pending',
     'rollback_host_artifacts_differ',
     'rollback_host_photograph_invalid',
+    'route_already_declared',
+    'route_endpoints_invalid',
+    'route_not_declared',
     'run_id_invalid',
     'seat_board_claim_contested',
     'seat_board_drain_unknown',

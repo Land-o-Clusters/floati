@@ -167,7 +167,7 @@ def _bundle_sources(root: FloatiRoot, version: int) -> List[tuple[str, frozenset
     from the root's own declared receipts directories (own-root structure,
     never discovery beyond it)."""
     sources: List[tuple[str, frozenset[str]]] = []
-    if version == 2:
+    if version in (2, 3):
         from .events import EVENT_KINDS
 
         sources.append(("events.jsonl", EVENT_KINDS))
@@ -180,7 +180,7 @@ def _bundle_sources(root: FloatiRoot, version: int) -> List[tuple[str, frozenset
         for path in sorted(absolute.glob("*.jsonl")):
             relative = path.relative_to(root.path).as_posix()
             kinds = (frozenset({"delivery_receipt", "delivered_unpresented", "wake_hold_receipt"})
-                     if version == 2 and "deliveries" in directory
+                     if version in (2, 3) and "deliveries" in directory
                      else frozenset({"delivery_receipt", "delivered_unpresented"})
                      if "deliveries" in directory else frozenset({"ack_receipt"}))
             sources.append((relative, kinds))
@@ -251,7 +251,7 @@ def materialize_bundle(
             raise ProtocolRefusal(
                 "confluence_out_invalid",
                 "the bundle output must be one explicit absolute path")
-        publish_launches = version == 2 and out.name == _DIRECTORY_BUNDLE_BASENAME
+        publish_launches = version in (2, 3) and out.name == _DIRECTORY_BUNDLE_BASENAME
         out = out.resolve()
         if out == root.path or root.path in out.parents:
             raise ProtocolRefusal(
@@ -263,7 +263,6 @@ def materialize_bundle(
             from .confluence_codex_launches import codex_launch_projection_bytes
 
             launches = codex_launch_projection_bytes(root)
-
     from .confluence_codex_launches import publish_bundle_files
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -278,8 +277,8 @@ def _bundle_document(root, consumer, version):
     # its ordinary transaction/read behavior on the default ledger instance.
     ledger = ConfluenceGrantLedger(root, _sealed_snapshot_reads=True)
     grant = ledger.require_active(consumer)
-    if version not in (1, 2) or isinstance(version, bool):
-        raise ProtocolRefusal("confluence_bundle_version_invalid", "bundle version must be 1 or 2")
+    if type(version) is not int or version not in (1, 2, 3):
+        raise ProtocolRefusal("confluence_bundle_version_invalid", "choose bundle version 1, 2, or 3")
 
     staged: List[Dict[str, object]] = []
     excluded_wake_hold_receipt_count = 0
@@ -333,14 +332,22 @@ def _bundle_document(root, consumer, version):
         "grant_id": str(grant["id"]),
         "entries": entries,
     }
-    if version == 2:
-        from datetime import datetime, timezone
+    if version in (2, 3):
+        from datetime import datetime
 
         from .roster import project_roster
         from .confluence_fleet_state import project_fleet_state
 
         document["excluded_wake_hold_receipt_count"] = excluded_wake_hold_receipt_count
-        observed_at = datetime.now(timezone.utc)
-        document["roster"] = project_roster(root, observed_at)
-        document["fleet_state"] = project_fleet_state(root, observed_at)
+        fleet_state = project_fleet_state(root)
+        observed_at = datetime.fromisoformat(fleet_state["observed_at"].replace("Z", "+00:00"))
+        document["roster"] = (
+            project_roster(root, observed_at, include_roles=True)
+            if version == 3 else project_roster(root, observed_at)
+        )
+        document["fleet_state"] = fleet_state
+        if "load_hold" in fleet_state:
+            receipt_at = datetime.fromisoformat(snapshot_at.replace("Z", "+00:00"))
+            if observed_at > receipt_at:
+                document["snapshot_at"] = fleet_state["observed_at"]
     return document

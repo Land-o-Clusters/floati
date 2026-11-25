@@ -11,8 +11,10 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from threading import Event
 from typing import Dict, Mapping, Optional, Sequence
 
+from .ask_cost import project_ask_cost
 from .errors import IntegrityFailure, ProtocolRefusal
 from .events import EVENT_KINDS, validate_event_records
 from .framing import FrameError, decode_frames, encode_frame
@@ -26,15 +28,6 @@ _TERMINALS = frozenset({"ask_answer", "ask_decline"})
 _ANSWER_ID = re.compile("ask-answer-" + _UUID7)
 _DECLINE_ID = re.compile("ask-decline-" + _UUID7)
 _POLL_SECONDS = 0.05
-
-
-def project_ask_cost(asker: str, *, answered: bool) -> Dict[str, str]:
-    """Attribute the pair to the asker even when measured tokens are unavailable."""
-    return {
-        "status": "unmeasured",
-        "reason": "puddle_measured_cost_seam_unavailable" if answered else "ask_answer_absent",
-        "attributed_to": asker,
-    }
 
 
 def project_terminal(terminal: object) -> Dict[str, object]:
@@ -75,6 +68,7 @@ def perform_ask(
     idempotency_key: str,
     wait_seconds: int,
     timing: Optional[Dict[str, int]] = None,
+    stop_waiting: Optional[Event] = None,
 ) -> Dict[str, object]:
     """Append one question and wait for its correlated terminal.
 
@@ -96,17 +90,26 @@ def perform_ask(
     )
     if timing is not None:
         timing["question_sent_ns"] = time.monotonic_ns()
-    result = wait_for_question(root, question, wait_seconds)
+    result = wait_for_question(root, question, wait_seconds, stop_waiting=stop_waiting)
     if timing is not None and result["state"] == "answered":
         timing["answer_received_ns"] = time.monotonic_ns()
     return result
 
 
-def wait_for_question(root, question, wait_seconds):
+def wait_for_question(root, question, wait_seconds, *, stop_waiting: Optional[Event] = None):
     """Wait without holding the membership barrier needed by reply writers."""
     started = time.monotonic()
     deadline = started + wait_seconds
     while True:
+        if stop_waiting is not None and stop_waiting.is_set():
+            return {
+                "state": "cancelled",
+                "evidence": {
+                    "outcome": "UNKNOWN",
+                    "code": "ask_wait_cancelled",
+                    "question_id": question["id"],
+                },
+            }
         seen = _observe(root, str(question["id"]))
         if seen["state"] == "torn":
             if time.monotonic() >= deadline:
@@ -118,26 +121,35 @@ def wait_for_question(root, question, wait_seconds):
             return _finish_observation(seen, question)
         elif time.monotonic() >= deadline:
             break
-        time.sleep(min(_POLL_SECONDS, max(0.0, deadline - time.monotonic())))
+        pause = min(_POLL_SECONDS, max(0.0, deadline - time.monotonic()))
+        if stop_waiting is None:
+            time.sleep(pause)
+        else:
+            stop_waiting.wait(pause)
     return _publish_timeout(root, question, started)
 
 
 def perform_group_ask(root, args):
     """Publish a frozen audience together, then wait within one shared budget."""
     from .addressing import bound_preview, group_key, group_write_guard
+    from .role_addressing import confirm_role_preview, is_role_address, load_role_preview
 
     with group_write_guard(root):
-        preview = bound_preview(root, args.sender, args.recipient, getattr(args, "recipient_preview", None))
+        path = getattr(args, "recipient_preview", None)
+        role = is_role_address(args.recipient)
+        preview = (load_role_preview(root, args.sender, args.recipient, path) if role else
+                   bound_preview(root, args.sender, args.recipient, path))
         candidates = [
             _question_record(
                 root, sender=args.sender, recipient=node, repo=args.repo,
                 sha=args.sha, doc=args.doc, note=args.note, session=args.session,
-                idempotency_key=group_key(args.idempotency_key, node),
+                idempotency_key=args.idempotency_key if role else group_key(args.idempotency_key, node),
                 address_preview=preview,
             ) for node in preview["recipients"]
         ]
         for candidate in candidates:
-            _parties(root, args.sender, candidate["recipient"])
+            if not role:
+                _parties(root, args.sender, candidate["recipient"])
             validate_record(candidate, root.tenant_id, frozenset({"ask_question"}), integrity=False)
 
         def decide(records):
@@ -152,12 +164,18 @@ def perform_group_ask(root, args):
                                               "reuse the key with the same question or choose a new key")
                     questions.append(saved)
                 else:
+                    if role:
+                        unknown = confirm_role_preview(root, preview, getattr(args, "puddle_quota_snapshot", None))
+                        if unknown is not None:
+                            return ([], unknown), []
                     questions.append(candidate)
                     tail.append(candidate)
             validate_event_records([*records, *tail])
-            return questions, tail
+            return (questions, None), tail
 
-        questions = transact_records(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
+        questions, unknown = transact_records(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
+    if unknown is not None:
+        return "degraded", unknown, 35
     deadline = time.monotonic() + args.wait_seconds
     results = []
     for question in questions:
@@ -203,19 +221,53 @@ def perform_reply(
         sha=sha,
         doc=doc,
     )
-    projected = project_terminal(record)
-    evidence = {
-        "outcome": projected["outcome"],
-        "question_id": question_id,
+    return {**_from_terminal(question_id, record), "record": record}
+
+
+def present_question(root, *, sender, recipient, question_id, session, idempotency_key):
+    """Return the addressed question through a recipient-bound presentation receipt."""
+    sender, recipient = _parties(root, sender, recipient)
+    candidate = {
+        "schema_version": 1,
+        "id": "ask-presentation-" + uuid7_hex(),
+        "tenant_id": root.tenant_id,
+        "timestamp": _stamp(),
+        "kind": "ask_presentation",
+        "sender": sender,
+        "recipient": recipient,
+        "reply_to": question_id,
+        "idempotency_key": idempotency_key,
+        "acting_session_id": session,
     }
-    if projected["outcome"] == "answered":
-        evidence["answer_id"] = projected["answer_id"]
-        evidence["answer_note"] = record["note"]
-        evidence["cost"] = project_ask_cost(record["recipient"], answered=True)
-    elif projected["outcome"] == "declined":
-        evidence["decline_id"] = projected["decline_id"]
-        evidence["reason"] = record["reason"]
-    return {"state": projected["outcome"], "evidence": evidence, "record": record}
+    validate_record(candidate, root.tenant_id, frozenset({"ask_presentation"}), integrity=False)
+
+    def decide(records):
+        validate_event_records(records)
+        question = _question_for_reply(records, question_id, sender, recipient)
+        for saved in records:
+            if saved["kind"] != "ask_presentation" or saved["sender"] != sender:
+                continue
+            if saved["idempotency_key"] != idempotency_key:
+                continue
+            if saved == dict(candidate, id=saved["id"], timestamp=saved["timestamp"]):
+                return (question, saved), None
+            raise ProtocolRefusal(
+                "idempotency_conflict", "This presentation key names a different request.",
+                "Use a new key for a different question or session.",
+            )
+        if any(row["kind"] in _TERMINALS and row["reply_to"] == question_id for row in records):
+            raise ProtocolRefusal(
+                "ask_already_resolved", "This question already has an answer or decline.",
+                "Use replay to inspect the recorded question history.",
+            )
+        validate_event_records([*records, candidate])
+        return (question, candidate), candidate
+
+    question, receipt = transact(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
+    return {
+        "outcome": "presented", "question_id": question_id, "presentation_id": receipt["id"],
+        "question": {key: question[key] for key in ("sender", "recipient", "repo", "sha", "doc", "note")},
+    }
 
 
 def _parties(root, sender: str, recipient: str) -> tuple:
@@ -298,6 +350,24 @@ def _publish_question(root, **fields) -> Dict[str, object]:
     return transact(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
 
 
+def _question_for_reply(records, question_id, sender, recipient):
+    question = next((row for row in records if row["kind"] == "ask_question"
+                     and row["id"] == question_id), None)
+    if question is None:
+        raise ProtocolRefusal(
+            "ask_question_unknown",
+            "DRAFT - reply names no question on this ledger",
+            "DRAFT - reply to a question id this ledger already holds",
+        )
+    if question["sender"] != recipient or question["recipient"] != sender:
+        raise ProtocolRefusal(
+            "ask_parties_mismatch",
+            "DRAFT - a reply must reverse the question parties",
+            "DRAFT - send the reply from the question recipient back to its sender",
+        )
+    return question
+
+
 def _publish_reply(root, **fields) -> Dict[str, object]:
     kind = "ask_answer" if fields["disposition"] == "answer" else "ask_decline"
     prefix = "ask-answer-" if kind == "ask_answer" else "ask-decline-"
@@ -325,22 +395,7 @@ def _publish_reply(root, **fields) -> Dict[str, object]:
 
     def decide(records):
         validate_event_records(records)
-        question = next((
-            row for row in records
-            if row.get("kind") == "ask_question" and row.get("id") == fields["question_id"]
-        ), None)
-        if question is None:
-            raise ProtocolRefusal(
-                "ask_question_unknown",
-                "DRAFT - reply names no question on this ledger",
-                "DRAFT - reply to a question id this ledger already holds",
-            )
-        if question["sender"] != fields["recipient"] or question["recipient"] != fields["sender"]:
-            raise ProtocolRefusal(
-                "ask_parties_mismatch",
-                "DRAFT - a reply must reverse the question parties",
-                "DRAFT - send the reply from the question recipient back to its sender",
-            )
+        _question_for_reply(records, fields["question_id"], fields["sender"], fields["recipient"])
         for saved in records:
             if saved.get("kind") not in _TERMINALS or saved.get("idempotency_key") != fields["idempotency_key"]:
                 continue
@@ -473,7 +528,9 @@ def _from_terminal(question_id: str, terminal: Mapping[str, object]) -> Dict[str
     if projected["outcome"] == "answered":
         evidence["answer_id"] = projected["answer_id"]
         evidence["answer_note"] = terminal["note"]
-        evidence["cost"] = project_ask_cost(terminal["recipient"], answered=True)
+        evidence["cost"] = project_ask_cost(
+            terminal["tenant_id"], question_id, terminal["recipient"], terminal["id"],
+        )
         return {"state": "answered", "evidence": evidence}
     evidence["decline_id"] = projected["decline_id"]
     evidence["reason"] = terminal["reason"]

@@ -108,8 +108,18 @@ class WaiterPollCostR2Tests(unittest.TestCase):
     def held(self):
         old = self.f.send("r2-held-original")
         output, errors = io.StringIO(), io.StringIO()
+        now = 0.0
+
+        def advance_wait(seconds):
+            nonlocal now
+            now += seconds
+
+        # The old message is already available. Charge only logical waiting
+        # to the fixture's budget while the native waiter publishes it.
         self.assertEqual(0, codex_wait.run_stop_waiter(bus_home=self.f.bus_home,
-            hook_payload=self.payload, stdout=output, stderr=errors))
+            hook_payload=self.payload, stdout=output, stderr=errors,
+            monotonic=lambda: now, sleep=advance_wait,
+            wait_readable=scripted_readiness(advance_wait)))
         self.assertIn(old["id"], json.loads(output.getvalue())["reason"], errors.getvalue())
         self.assertEqual(["prepared", "flushed"], [row["phase"] for row in self.plane.read(self.node)])
 

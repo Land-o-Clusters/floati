@@ -93,11 +93,6 @@ class AU1S1Tests(unittest.TestCase):
         self.destination.mkdir()
         self.entrypoint = self._write_standalone_install(self.destination)
         self.channel = "https://updates.example.invalid/release-index.v0"
-        selected = managed_test_tools.executable(
-            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
-        )
-        self.assertIsNotNone(selected, "AU1-S1 requires a real minisign binary")
-        self.minisign = Path(selected)
         self.index = {
             "schema_version": 0,
             "channel_id": "stable-fixture",
@@ -209,6 +204,7 @@ class AU1S1Tests(unittest.TestCase):
 
     def _signed_index(
         self,
+        minisign: Path,
         *,
         index: dict[str, object] | None = None,
         signed_version: str | None = None,
@@ -230,7 +226,7 @@ class AU1S1Tests(unittest.TestCase):
             signature,
             secret_key=(MINISIGN_FIXTURES / "fixture.key").resolve(),
             version=signed_version or str((index or self.index)["index_version"]),
-            minisign_executable=self.minisign,
+            minisign_executable=minisign,
         )
         return payload, root.resolve_relative(signature).read_bytes()
 
@@ -315,7 +311,7 @@ class AU1S1Tests(unittest.TestCase):
                 "--idempotency-key",
                 "check-without-consent",
                 "--minisign-executable",
-                str(self.minisign),
+                str(self.base / "absent-minisign"),
                 "--json",
             ],
             cwd=REPOSITORY_ROOT,
@@ -493,24 +489,25 @@ class AU1S1Tests(unittest.TestCase):
             verify_release_index,
             "S1 must verify exact index bytes with the installed pinned key",
         )
-        index, signature = self._signed_index()
+        minisign = managed_test_tools.require_minisign(self)
+        index, signature = self._signed_index(minisign)
         tampered = index.replace(b'"bundle_size":123', b'"bundle_size":124')
         with self.assertRaises(ProtocolRefusal) as caught:
             verify_release_index(
                 self.destination,
                 tampered,
                 signature,
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
         self.assertEqual("signature_invalid", caught.exception.code)
 
-        index, wrong_binding = self._signed_index(signed_version="8")
+        index, wrong_binding = self._signed_index(minisign, signed_version="8")
         with self.assertRaises(ProtocolRefusal) as caught:
             verify_release_index(
                 self.destination,
                 index,
                 wrong_binding,
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
         self.assertEqual("signature_binding_mismatch", caught.exception.code)
 
@@ -521,7 +518,10 @@ class AU1S1Tests(unittest.TestCase):
             verify_release_index,
             "S1 must turn V2 tool absence into an update refusal",
         )
-        index, signature = self._signed_index()
+        # The verifier must refuse the undeclared tool before checking a
+        # signature. Reuse detached fixture bytes without signing the index.
+        index = json.dumps(self.index).encode("ascii")
+        signature = (MINISIGN_FIXTURES / "checkpoint.json.minisig").read_bytes()
         with self.assertRaises(ProtocolRefusal) as caught:
             verify_release_index(self.destination, index, signature)
 
@@ -535,7 +535,8 @@ class AU1S1Tests(unittest.TestCase):
 
         self._require_check()
         self._consent()
-        index, signature = self._signed_index()
+        minisign = managed_test_tools.require_minisign(self)
+        index, signature = self._signed_index(minisign)
         envelope = self._envelope(index, signature)
         transport = self._transport()
 
@@ -547,14 +548,14 @@ class AU1S1Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-replay",
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
             second = check_for_updates(
                 destination=self.destination,
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-replay",
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
 
         self.assertEqual(first, second)
@@ -637,7 +638,8 @@ class AU1S1Tests(unittest.TestCase):
 
         self._require_check()
         self._consent()
-        index, signature = self._signed_index()
+        minisign = managed_test_tools.require_minisign(self)
+        index, signature = self._signed_index(minisign)
         envelope = self._envelope(index, signature)
         escape = self.base / "retention-escape"
         escape.mkdir()
@@ -654,7 +656,7 @@ class AU1S1Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="check-symlinked-retention",
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
 
         self.assertEqual("update_index_storage_invalid", caught.exception.code)

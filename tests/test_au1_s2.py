@@ -47,11 +47,6 @@ class AU1S2Tests(unittest.TestCase):
         self.git = shutil.which("git")
         self.assertIsNotNone(self.git)
         self.git_directory = Path(str(self.git)).resolve().parent
-        selected = managed_test_tools.executable(
-            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
-        )
-        self.assertIsNotNone(selected, "AU1-S2 requires a real minisign binary")
-        self.minisign = Path(selected)
         self._git("init", "--quiet", "--initial-branch=lane/hm0")
         self._git("config", "user.name", "Floati AU-1 Fixture")
         self._git("config", "user.email", "floati-au1@example.invalid")
@@ -235,7 +230,7 @@ class AU1S2Tests(unittest.TestCase):
         )
         return ledger
 
-    def _signed_envelope(self, index: dict[str, object]) -> bytes:
+    def _signed_envelope(self, index: dict[str, object], minisign: Path) -> bytes:
         payload = json.dumps(
             index,
             ensure_ascii=True,
@@ -253,7 +248,7 @@ class AU1S2Tests(unittest.TestCase):
             signature,
             secret_key=(MINISIGN_FIXTURES / "fixture.key").resolve(),
             version=str(index["index_version"]),
-            minisign_executable=self.minisign,
+            minisign_executable=minisign,
         )
         signature_bytes = root.resolve_relative(signature).read_bytes()
         return json.dumps(
@@ -270,9 +265,10 @@ class AU1S2Tests(unittest.TestCase):
         ).encode("ascii")
 
     def _observe(self, index: dict[str, object] | None = None) -> dict[str, object]:
+        minisign = managed_test_tools.require_minisign(self)
         self._consent()
         selected = index or self.index
-        envelope = self._signed_envelope(selected)
+        envelope = self._signed_envelope(selected, minisign)
         transport = importlib.import_module("floati.update_transport")
         with mock.patch.object(transport, "fetch_one_https", return_value=envelope):
             return check_for_updates(
@@ -280,7 +276,7 @@ class AU1S2Tests(unittest.TestCase):
                 channel=self.channel,
                 entrypoint=self.entrypoint,
                 idempotency_key="s2-check-one",
-                minisign_executable=self.minisign,
+                minisign_executable=minisign,
             )
 
     def _run_apply(

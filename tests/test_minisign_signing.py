@@ -37,13 +37,6 @@ class MinisignSigningTests(unittest.TestCase):
         self._copy_fixture("checkpoint.json", self.artifact)
         self._copy_fixture("checkpoint.json.minisig", self.signature)
         self._copy_fixture("fixture.pub", self.public_key)
-        selected = managed_test_tools.executable(
-            "FLOATI_TEST_MINISIGN_EXECUTABLE", "minisign"
-        )
-        self.assertIsNotNone(
-            selected, "the S2 constants must execute against a real minisign binary"
-        )
-        self.minisign = Path(selected)
 
     def _copy_fixture(self, name: str, relative: Path) -> Path:
         target = self.root.resolve_relative(relative)
@@ -63,7 +56,7 @@ class MinisignSigningTests(unittest.TestCase):
     ):
         self._require_api()
         if minisign_executable is None:
-            minisign_executable = self.minisign
+            minisign_executable = managed_test_tools.require_minisign(self)
         return verify_minisign(
             self.root,
             self.artifact,
@@ -92,6 +85,7 @@ class MinisignSigningTests(unittest.TestCase):
 
     def test_s2_real_minisign_binary_signs_without_generating_a_key(self) -> None:
         self._require_api()
+        minisign = managed_test_tools.require_minisign(self)
         output = Path("signed/checkpoint.json.minisig")
 
         signed = sign_minisign(
@@ -102,7 +96,7 @@ class MinisignSigningTests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
-            minisign_executable=self.minisign,
+            minisign_executable=minisign,
         )
         verified = verify_minisign(
             self.root,
@@ -112,7 +106,7 @@ class MinisignSigningTests(unittest.TestCase):
             version="2.0.0-fixture",
             journal_id="fixture-journal",
             through_seq=7,
-            minisign_executable=self.minisign,
+            minisign_executable=minisign,
         )
 
         self.assertEqual("signature_signed", signed["state"])
@@ -163,7 +157,7 @@ class MinisignSigningTests(unittest.TestCase):
                 "--version", "2.0.0-fixture",
                 "--journal-id", "fixture-journal",
                 "--through-seq", "7",
-                "--minisign-executable", str(self.minisign),
+                "--minisign-executable", str(managed_test_tools.require_minisign(self)),
                 "--json",
             ],
             cwd=REPOSITORY_ROOT,
@@ -191,7 +185,7 @@ class MinisignSigningTests(unittest.TestCase):
                 "--version", "2.0.0-fixture",
                 "--journal-id", "fixture-journal",
                 "--through-seq", "7",
-                "--minisign-executable", str(self.minisign),
+                "--minisign-executable", str(managed_test_tools.require_minisign(self)),
                 "--json",
             ],
             cwd=REPOSITORY_ROOT,

@@ -6,7 +6,7 @@ All notable changes to Floati are recorded here, by hand. The format follows
 
 ## [Unreleased]
 
-Ledger contract: `c7.20`.
+Ledger contract: `c7.24`.
 
 ## [0.1.2] — 2026-09-12
 

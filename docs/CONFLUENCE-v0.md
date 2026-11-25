@@ -80,8 +80,7 @@ The v2 bundle also exports an optional `roster` array, projected by
 `liveness` cells. Every cell has a `stamp` (`MEASURED`, `DERIVED`, `ESTIMATE`,
 or `UNKNOWN`), `value`, `observed_at`, and `age_seconds`. Missing evidence
 remains UNKNOWN with null value, observation time, and age; owner currently
-has no measured source. Ages use the export observation clock, independently
-of the receipt-derived `snapshot_at`. Expired presence carries
+has no measured source. Ages use the roster's own observation clock. Expired presence carries
 `value: no_report_since` and its expiry as `named_time`; it never implies
 idle activity. Consumers must retain the stamps and ages when displaying cells.
 
@@ -110,8 +109,23 @@ Other waiter implementations have no backend observation yet and remain
 UNKNOWN. `last_wake` uses only a `woke` native wake-attempt receipt, retaining
 its timestamp and receipt id; queued/refused attempts do not prove a wake.
 `idle_cpu` is UNKNOWN with `reason: idle_cpu_not_measured`; cycle counters and
-backend choice do not measure idle CPU. This read seam performs no process
-probe, network operation, watcher installation, or root mutation.
+backend choice do not measure idle CPU.
+
+The optional `fleet_state.load_hold` reports whether Floati can confirm an
+effective build or test hold in the granted fleet. It contains
+`schema_version: 1`, `state` (`active` or `none`), and the RFC 3339 times
+`observed_at` and `valid_until`. Floati checks the live quiet-window driver
+and the recorded identity and stopped state of a paused process before
+reporting `active`. It reports `none` after a complete quiet-state read
+confirms the absence of a hold. Partial history and indeterminate recovery
+leave the field absent.
+
+Validity ends at the quiet-window cap or 120 seconds after observation,
+whichever comes first. When the export includes hold testimony, v2
+`snapshot_at` also covers the quiet-state observation time. Rerun
+`confluence bundle` against the same output path to publish a fresh
+observation, including after release. Consumers can read earlier v2
+exports without the field.
 
 `fleet_state` is optional: every previous v2 schema constraint remains intact,
 and old bundles without the block still validate. The branch supplies the
