@@ -13731,7 +13731,7 @@
     },
     {
       "path": "floati/__init__.py",
-      "sha256": "f54b46e1b2391eeed2cba2105bcddd6b9c7886b0e2cf1a8c0d71c4f4eba439b8"
+      "sha256": "0b22753633739252edcd1dd0bdb554af272d0cc8b0c215af69632a254e7f1523"
     },
     {
       "path": "floati/__main__.py",
@@ -14679,7 +14679,7 @@
     },
     {
       "path": "floati/release.py",
-      "sha256": "3209b5deaf96c4ec99f8694956869f7ffe8a84a505b03d297a55df477c0b6683"
+      "sha256": "dda2ee6aa645b9448a45c88903d1fdf52c5234d4b99b55282104a4874e6d05d3"
     },
     {
       "path": "floati/replay.py",

@@ -23,6 +23,7 @@ from floati.events import EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.waiter_consent import arm_waiter_consent
+from tests.readiness import wait_event, wait_until
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -156,7 +157,7 @@ class ClaudeInboxTests(unittest.TestCase):
         self.capture(server)
         output = []
         def flush():
-            self.assertTrue(server.received.wait(5), "scratch doorbell not received")
+            wait_event(server.received, "scratch doorbell is received")
             output.append(self.present())
         result = self.notify(message, flush)
         self.assertEqual("confirmed", result["status"], result)
@@ -291,7 +292,9 @@ class ClaudeInboxTests(unittest.TestCase):
         def after_append(root, message):
             def presentation():
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    self.assertIn(message["id"], executor.submit(self.present).result(timeout=5))
+                    pending = executor.submit(self.present)
+                    wait_until(pending.done, "native prompt receipt is flushed after send")
+                    self.assertIn(message["id"], pending.result())
             return notify(root, message, clock=lambda: self.clock[0],
                 wait=lambda seconds: (self.clock.__setitem__(0, self.clock[0] + seconds), presentation()))
         with mock.patch.object(implementation, "notify_send", side_effect=after_append):

@@ -22,6 +22,7 @@ except ImportError:
     measurement = None
 from floati.codex_wait_contract import CodexWaitConsentLedger, resolve_participant
 from floati.root import FloatiRoot
+from tests.readiness import wait_event, wait_until
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -299,10 +300,11 @@ class CodexIssue15Tests(unittest.TestCase):
                     mock.patch.object(measurement, "run_stop_waiter", side_effect=waiter),\
                     redirect_stdout(output), ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(measurement.hook, bank)
-                self.assertTrue(entered.wait(5), "scratch hook did not enter its waiter")
                 try:
+                    wait_event(entered, "scratch hook enters its waiter")
                     self.assertTrue(settle(metadata)["owned_hooks_quiescent"])
-                    self.assertEqual(0, future.result(timeout=5))
+                    wait_until(future.done, "scratch hook returns after observer shutdown")
+                    self.assertEqual(0, future.result())
                 finally:
                     # Keep a failing regression from parking a test worker.
                     from floati.wake_control import WakeController

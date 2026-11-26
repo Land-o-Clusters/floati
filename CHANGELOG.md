@@ -4,9 +4,52 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
-## [Unreleased]
+## [0.2.0] — 2026-11-26
 
 Ledger contract: `c7.24`.
+
+<!-- DRAFT-OPUS 2026-11-26 -->
+
+**One seat can ask another, and the answer has a receipt.**
+
+The first release since 0.1.3 (2026-10-09). The ledger contract is `c7.24`.
+
+### What changed
+
+- **Ask another seat on the same machine.** `floati who` shows the roster. `floati ask` sends one question and waits for an answer, a decline or a timeout, each linked to its own record. Ask from the CLI, from a selected node on the live board with `?`, or over MCP. Replay the thread afterwards. [Ask and replay](tests/test_net_ask_1.py) · [Roster](tests/test_net_who_1.py) · [MCP](tests/test_mcp_tools.py)
+- **Set up a seat with a plan you can read first.** `floati setup` prints what it will write, waits for you to confirm, and keeps a receipt for teardown. [Tests](tests/test_net_setup.py)
+- **Hold inbound work and call a quiet window.** [Holds](tests/test_net_hold_inbound_1.py) · [quiet windows](tests/test_quiet_window.py)
+- **Long-lived ledgers rotate.** Epoch rotation carries live records forward and keeps verifiable archives under your policy. [Tests](tests/test_epoch_rotation.py)
+- **More harnesses, with their limits stated.** OpenCode completed governed work across a lease expiry with a free model, and a fresh claim on an expired lease was refused. Claude has an idle doorbell that checks its version and falls back to Stop. [OpenCode](docs/evidence/conformance/C3-opencode-issue16-2026-10-25.md) · [Claude](docs/evidence/claude-inbox-idle-public-2026-10-29.md)
+- **Codex workspace skills for seat setup.** The seat command installer writes the boot and teardown skills into the workspace. [Lifecycle prompt tests](tests/test_lifecycle_prompts.py)
+- **An update remedy for older installed readers.** A reader gives an update remedy for a newer record version. Corruption at a supported version still fails the integrity check. [Reader tests](tests/test_installed_reader.py)
+- **Banked results for ad hoc work.** A completed result is available to replay after its exact commit has been banked. [Ad hoc worker tests](tests/test_adhoc_threads.py)
+- **Roster and fleet state in Confluence.** The bundle can show the active roster and available fleet-state receipts. [Confluence tests](tests/test_confluence_roster.py)
+
+### What we did not measure
+
+- **Idle cost with several waiters at once.** [0.1.3 measured one quiet waiter](#013--2026-10-09). Several together are not qualified, and we are not claiming a number.
+- **The cost of the first send on a large ledger** against the build before the new send index.
+- **Ask latency.** [The instrument exists](tests/test_net_latency_1.py). No figures yet.
+- **Across machines.** `ask` is one machine only.
+- **Gemini CLI and Copilot CLI.** Their [headless profiles pass fixtures](tests/test_headless_worker_protocol.py). Neither has been run live, and neither is selected or woken in production paths.
+- **Worker teardown.** The [README's worker teardown column](README.md#worker-teardown) still says NOT_YET_MEASURED for every Stop-hook harness.
+- **Linux.** The suite runs in CI. The platform is not supported.
+
+### Release receipt
+
+<!-- Filled from the qualified run: tag and peeled commit, public bundle manifest SHA-256, harbor source, suite count and duration on each platform, skips. If the whole suite is not green, say so in the first line, as 0.1.3 did. -->
+
+## [0.1.3] — 2026-10-09
+
+### Fixed
+
+- **An idle Codex waiter no longer re-reads the whole ledger on every poll.**
+  `floati wake wait --harness codex` now replays the ledger only when the
+  ledger or one of the seat's own records changes. On one
+  8 MB ledger an idle waiter fell from 37.9 % of a core to 0.55 %, and found
+  the ledger lock busy 0 times in 601 probes instead of 21. A ledger that has
+  rolled into archives keeps 0.1.2's polling. Measured on macOS, one waiter.
 
 ## [0.1.2] — 2026-09-12
 

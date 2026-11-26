@@ -4,9 +4,8 @@ The deciding questions, constructed by the gate from the relayed contract:
 
 G1 (pre-fix mechanism): with auto-maintenance forced on, native Trace2
     testimony proves a detached maintenance/GC fork and completed repack
-    in the exact fixture lineage. This durable positive control survives
-    missed process samples. It does not assert an instantaneous sighting
-    after Python returns; G2 retains that independent negative instrument.
+    in the exact fixture lineage. The detached fork finishes after the
+    trigger commit returns. The proof survives missed process samples.
 G2 (gated tip): the shipped knob shape (gc.auto=0, gc.autoDetach=false)
     makes the maintenance run synchronous, so no git child exists after the
     commit returns (the repack, when it happens, happened INSIDE the run)
@@ -35,6 +34,7 @@ import time
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.parallel_processes import ProcessQuery
 
@@ -126,7 +126,8 @@ def _write_gate_objects(base: Path, projection: Path, environment: dict) -> None
 
 
 def _projection_repository(
-    base: Path, knobs: tuple[str, ...] = (), home: str | None = None
+    base: Path, knobs: tuple[str, ...] = (), home: str | None = None,
+    *, environment: dict | None = None,
 ) -> Path:
     """One small real repository holding many loose objects: real work for
     auto-maintenance, the state the FL-1 receipt measured (1359 objects).
@@ -136,7 +137,8 @@ def _projection_repository(
 
     projection = base / "projection"
     projection.mkdir(parents=True)
-    environment = _git_environment(home, projection)
+    if environment is None:
+        environment = _git_environment(home, projection)
 
     def git(*arguments: str) -> None:
         subprocess.run(
@@ -355,6 +357,21 @@ class GateForcedMaintenanceLeavesADetachedChild(unittest.TestCase):
         from tests.g1_trace_fixture import run_positive_fixture
 
         witness = run_positive_fixture()
+        self.assertTrue(witness["completed_repack_sids"], witness)
+
+    def test_g1_reserves_loose_objects_for_the_trigger(self) -> None:
+        from tests.g1_trace_fixture import run_positive_fixture
+
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "git"
+            config.mkdir()
+            (config / "config").write_text(
+                "[maintenance]\nstrategy = gc\n"
+                "[gc]\nauto = 1\nautoDetach = false\npruneExpire = now\n",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": temporary}):
+                witness = run_positive_fixture()
         self.assertTrue(witness["completed_repack_sids"], witness)
 
 

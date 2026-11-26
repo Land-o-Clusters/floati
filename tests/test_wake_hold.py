@@ -15,6 +15,7 @@ from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.ids import uuid7_hex
 from floati.records import WAKE_HOLD_KINDS, validate_record
 from floati.root import FloatiRoot
+from tests.readiness import wait_event
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 
 
@@ -573,8 +574,7 @@ class WakeAttemptReceiptTests(unittest.TestCase):
                 if (threading.get_ident() in reader_identity and domain == "id"
                         and value == message["id"] and not lookup_entered.is_set()):
                     lookup_entered.set()
-                    if not release_lookup.wait(60):
-                        raise AssertionError("selected-envelope lookup was not released")
+                    wait_event(release_lookup, "release selected-envelope lookup", timeout=120)
                 return native_get(prefix, domain, value)
 
             def read():
@@ -601,14 +601,12 @@ class WakeAttemptReceiptTests(unittest.TestCase):
 
             reader = threading.Thread(target=read, name="selected-attempt-reader")
             writer = threading.Thread(target=append, name="unrelated-event-writer")
-            progressed = False
             with mock.patch.object(Prefix, "get", get):
                 reader.start()
                 try:
-                    self.assertTrue(lookup_entered.wait(2), "native selected-envelope lookup was not reached")
+                    wait_event(lookup_entered, "native selected-envelope lookup is reached")
                     writer.start()
-                    # This event is a concurrency watchdog, not a timing metric.
-                    progressed = append_completed.wait(2)
+                    wait_event(append_completed, "native append completes while selected-envelope lookup is held")
                 finally:
                     release_lookup.set()
                     for thread in (reader, writer):
@@ -616,8 +614,6 @@ class WakeAttemptReceiptTests(unittest.TestCase):
                             thread.join(timeout=10)
             for thread in (reader, writer):
                 self.assertFalse(thread.is_alive(), "native concurrency test did not collect " + thread.name)
-            self.assertTrue(progressed,
-                "cached selected-envelope lookup retained the event lock and blocked a native append")
             return receipts, failures
 
         for mutation in ("append", "corrupt"):

@@ -266,6 +266,56 @@ class ReleaseSpellingCheckTests(unittest.TestCase):
         root = self._tree(version="0.1.0", heading="## [0.1.0] — 2026-08-31")
         self.assertEqual(check_release(root, tag="v0.1.0"), [])
 
+    def test_dated_candidate_qualifies_on_the_ordinary_path(self) -> None:
+        root = self._tree(version="0.2.0", heading="## [0.2.0] — 2026-11-26")
+        self.assertEqual([], check_release(root, tag="v0.2.0"))
+        self.assertEqual([], check_release(root))
+
+    def test_ordinary_dated_candidate_still_checks_each_release_gate(self) -> None:
+        for relative, content, error_prefix in (
+            ("pyproject.toml", '[project]\nversion = "0.1.0"\n', "spelling_mismatch:"),
+            ("README.md", "42 workers [receipt](missing.md).\n",
+             "readme_claim_receipt_missing:missing.md"),
+            ("floati/records.py", "def validate(row):\n    return False\n",
+             "ledger_contract_recut_required:"),
+            ("CHANGELOG.md", "# Changelog\n\n## [0.2.0] — soon\n\nLedger contract: `c7.3`.\n",
+             "changelog_date_malformed:soon"),
+        ):
+            with self.subTest(relative=relative):
+                root = self._tree(version="0.2.0", heading="## [0.2.0] — 2026-11-26")
+                (root / relative).write_text(content, encoding="utf-8")
+                for tag in (None, "v0.2.0"):
+                    with self.subTest(tag=tag):
+                        errors = check_release(root, tag=tag)
+                        self.assertTrue(any(error.startswith(error_prefix) for error in errors), errors)
+
+    def test_public_release_copy_refuses_private_repository_links(self) -> None:
+        root = self._tree(version="0.2.0", heading="## [0.2.0] — 2026-11-26")
+        readme = root / "README.md"
+        changelog = root / "CHANGELOG.md"
+        dated_notes = changelog.read_text(encoding="utf-8")
+        public_link = "[Receipt](https://github.com/Land-o-Clusters/floati/issues/14)\n"
+        readme.write_text(public_link, encoding="utf-8")
+        self.assertEqual([], check_release(root))
+        for document, link in (
+            (changelog, "[Receipt](https://github.com/Land-o-Clusters/floati-harbor/blob/main/proof.md)"),
+            (readme, "[Receipt]: //github.com/land-o-clusters/floati-harbor/issues/14"),
+            (readme, '<a href="https://raw.githubusercontent.com/Land-o-Clusters/floati-harbor/main/README.md">receipt</a>'),
+            (changelog, "<https://api.github.com/repos/Land-o-Clusters/floati%2Dharbor/contents/README.md>"),
+        ):
+            with self.subTest(document=document.name, link=link):
+                original = dated_notes if document == changelog else public_link
+                document.write_text(original + link + "\n", encoding="utf-8")
+                try:
+                    for tag in (None, "v0.2.0"):
+                        errors = check_release(root, tag=tag)
+                        self.assertTrue(any(
+                            error.startswith("release_private_repository_link:" + document.name + ":")
+                            for error in errors
+                        ), errors)
+                finally:
+                    document.write_text(original, encoding="utf-8")
+
     def test_pyproject_disagreeing_refuses_without_a_tag(self) -> None:
         """The fourth spelling participates before any tag exists, too."""
 

@@ -127,12 +127,13 @@ class NetAsk1Tests(unittest.TestCase):
             process.kill()
             process.communicate()
 
-    def finish(self, process: subprocess.Popen[str], *, timeout: float) -> dict:
+    def finish(self, process: subprocess.Popen[str]) -> dict:
+        readiness = Readiness("ask command returns its terminal receipt")
         try:
-            stdout, stderr = process.communicate(timeout=timeout)
+            stdout, stderr = process.communicate(timeout=readiness.remaining())
         except subprocess.TimeoutExpired:
             self.reap(process)
-            self.fail("ask did not return before the test budget")
+            raise readiness.failure() from None
         self.assertEqual("", stderr, stderr)
         self.assertTrue(stdout.endswith("\n"), stdout)
         self.assertEqual(1, len(stdout.splitlines()), stdout)
@@ -204,7 +205,7 @@ class NetAsk1Tests(unittest.TestCase):
             note="twelve fathoms",
         ))
         self.assertEqual(0, replied.returncode, reply_artifact)
-        artifact = self.finish(process, timeout=5)
+        artifact = self.finish(process)
 
         self.assertEqual(0, process.returncode)
         self.assertEqual("ok", artifact["status"])
@@ -224,6 +225,7 @@ class NetAsk1Tests(unittest.TestCase):
         """The board must send to the selected row and display its real reply."""
         from floati.ask import perform_reply, wait_for_question
         from floati.tui import _read_terminal_input, run_board
+        from tests import readiness as readiness_clock
 
         class Terminal(io.StringIO):
             def isatty(self):
@@ -244,10 +246,16 @@ class NetAsk1Tests(unittest.TestCase):
 
         def run_fixture_board(**kwargs):
             self.assertEqual(["red", "blue", "everyone"], [row["node_id"] for row in kwargs["model_loader"]().nodes])
-            return run_board(
-                **kwargs, input_stream=Terminal(), output_stream=screen,
-                terminal_response=b"\x1b[?1;2c",
-            )
+            prior_handler = signal.signal(signal.SIGALRM, stalled_board)
+            try:
+                signal.setitimer(signal.ITIMER_REAL, readiness.remaining())
+                return run_board(
+                    **kwargs, input_stream=Terminal(), output_stream=screen,
+                    terminal_response=b"\x1b[?1;2c",
+                )
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                signal.signal(signal.SIGALRM, prior_handler)
 
         added, artifact = self.invoke_in_process(
             "node", "add", "--root", str(self.fleet), "--node", "everyone",
@@ -256,7 +264,7 @@ class NetAsk1Tests(unittest.TestCase):
         self.assertEqual(0, added.returncode, artifact)
         records_before = self.events()
 
-        for outcome in ("cancel", "pasted_newlines", "overflow", "refused", "timeout", "declined", "answered", "exact_node"):
+        for outcome in ("stalled", "cancel", "pasted_newlines", "overflow", "refused", "timeout", "declined", "answered", "exact_node"):
             with self.subTest(outcome=outcome):
                 screen = Terminal()
                 recipient = "everyone" if outcome == "exact_node" else "blue"
@@ -264,7 +272,10 @@ class NetAsk1Tests(unittest.TestCase):
                 wait = "5" if outcome in {"answered", "declined"} else "0"
                 authored = "x" * 1025 if outcome == "overflow" else note
                 fields = f"red\rfloati\r{sha}\rnote.md\r{wait}\r{authored}\r"
-                if outcome in {"cancel", "pasted_newlines", "overflow"}:
+                if outcome == "stalled":
+                    keys = "q"
+                    result_markers = []
+                elif outcome in {"cancel", "pasted_newlines", "overflow"}:
                     extra = {"cancel": "", "pasted_newlines": fields + "\r", "overflow": fields + "\r\x04"}[outcome]
                     keys = "j?" + extra + "\x07q"
                     result_markers = []
@@ -273,23 +284,33 @@ class NetAsk1Tests(unittest.TestCase):
                     result_markers = ["sha_absent", "address_preview_required", "ask_timeout", "ask-decline-", "ask-answer-"]
 
                 question_published = threading.Event()
-                input_requested = threading.Event()
-                readiness = Readiness("board terminal progress", timeout=3)
+                key_read = threading.Event()
+                delayed_by = 0.0
+                clock = SimpleNamespace(monotonic=lambda: time.monotonic() + delayed_by)
+
+                def stalled_board(_signum, _frame):
+                    self.fail(f"{readiness.failure()}\nLast screen: {screen.getvalue()[-1800:]}")
 
                 def read_terminal(stream, timeout, *args, **kwargs):
-                    if question_published.is_set():
-                        input_requested.set()
-                    try:
-                        remaining = readiness.remaining()
-                    except AssertionError as exc:
-                        self.fail(f"{exc}\nLast screen: {screen.getvalue()[-1800:]}")
-                    return _read_terminal_input(stream, min(timeout, remaining) if timeout is not None else remaining, *args, **kwargs)
+                    nonlocal delayed_by
+                    if outcome == "stalled":
+                        # Stop the terminal before it can read any queued keys.
+                        delayed_by = READY_SECONDS
+                        signal.raise_signal(signal.SIGALRM)
+                    readiness.remaining()
+                    event = _read_terminal_input(stream, timeout, *args, **kwargs)
+                    if question_published.is_set() and event == " ":
+                        key_read.set()
+                    if outcome == "overflow":
+                        # Model a descheduled terminal reader without sleeping.
+                        delayed_by = 4.0
+                    return event
 
                 def answer_request(root, question, seconds, **kwargs):
                     if outcome == "answered":
                         question_published.set()
                         keyboard.write(b" ")
-                        Readiness("board reads keys while awaiting the reply", timeout=2).event(input_requested)
+                        readiness.event(key_read)
                         perform_reply(
                             root, sender="blue", recipient="red", question_id=question["id"],
                             disposition="answer", session="sess-blue", idempotency_key="board-answer",
@@ -307,6 +328,7 @@ class NetAsk1Tests(unittest.TestCase):
                 with (
                     os.fdopen(read_fd, "r") as input_stream,
                     os.fdopen(write_fd, "wb", buffering=0) as keyboard,
+                    mock.patch.object(readiness_clock, "time", clock),
                     mock.patch.dict(os.environ, {**self.environment(), "TERM": "xterm", "NO_COLOR": "1"}, clear=True),
                     mock.patch("floati.tui.run_board", side_effect=run_fixture_board),
                     mock.patch("floati.tui._read_terminal_input", side_effect=read_terminal),
@@ -316,10 +338,20 @@ class NetAsk1Tests(unittest.TestCase):
                     mock.patch("floati.tui.shutil.get_terminal_size", return_value=os.terminal_size((80, 30))),
                     mock.patch("floati.ask.wait_for_question", side_effect=answer_request),
                 ):
+                    progress = (
+                        "board reads a key before displaying the reply"
+                        if outcome == "answered" else "board terminal progress"
+                    )
+                    readiness = Readiness(progress)
                     keyboard.write(keys.encode())
                     try:
                         os.chdir(self.repository)
-                        status = main(["board", "--root", str(self.fleet), "--session", "sess-red"])
+                        argv = ["board", "--root", str(self.fleet), "--session", "sess-red"]
+                        if outcome == "stalled":
+                            with self.assertRaisesRegex(AssertionError, "board terminal progress: readiness bound="):
+                                main(argv)
+                            continue
+                        status = main(argv)
                     finally:
                         os.chdir(previous_cwd)
 
@@ -657,7 +689,7 @@ class NetAsk1Tests(unittest.TestCase):
         })
         with root.resolve_relative("events.jsonl").open("ab") as handle:
             handle.write(frame)
-        artifact = self.finish(process, timeout=5)
+        artifact = self.finish(process)
 
         self.assertEqual(35, process.returncode)
         self.assertEqual("degraded", artifact["status"])
@@ -679,7 +711,7 @@ class NetAsk1Tests(unittest.TestCase):
             reason="off watch",
         ))
         self.assertEqual(0, declined.returncode)
-        artifact = self.finish(process, timeout=5)
+        artifact = self.finish(process)
 
         self.assertEqual(0, process.returncode)
         self.assertEqual("ok", artifact["status"])

@@ -9,12 +9,9 @@ spelling joined last: `pyproject.toml` carries `[project] version`, the
 value the packaging tools read, and the check compared the other three
 while never opening the file (RELEASE-CHECK-PYPROJECT-1).
 
-The two modes are deliberate. On a pull request there is no tag and the
-changelog heading is still `Unreleased`, so only the readable spellings
-are compared; that is the state the repository lives in between releases
-and it is not an error. Name a tag and the release rules apply: the tag
-must spell the same value with a `v`, and the heading must carry a date
-rather than a promise.
+The ordinary check accepts Unreleased notes between releases and dated
+notes on a release candidate. Naming a tag adds the tag spelling to the
+comparison and requires dated notes.
 
 Errors are typed strings in the manifest module's style — a caller prints
 them, and each one names the specific disagreement rather than "invalid".
@@ -28,8 +25,10 @@ import io
 import re
 import subprocess
 import tempfile
+from html import unescape
 from pathlib import Path
 from typing import List, Optional, Tuple
+from urllib.parse import unquote
 
 from .git_process import fixed_git_command, fixed_git_environment
 from .readme_claims import readme_claim_census, readme_claim_findings
@@ -45,6 +44,13 @@ UNRELEASED = "Unreleased"
 PYPROJECT_TABLE = re.compile(r"^\[project\][ \t]*(?:#.*)?$", re.MULTILINE)
 NEXT_TABLE = re.compile(r"^\[", re.MULTILINE)
 PYPROJECT_VERSION = re.compile(r'^version[ \t]*=[ \t]*"([^"]*)"[ \t]*$', re.MULTILINE)
+PRIVATE_REPOSITORY_LINK = re.compile(
+    r"\bfloati-harbor/blob\b|(?<![\w.-])"
+    r"(?:(?:www\.|api\.|codeload\.|raw\.)?github\.com|raw\.githubusercontent\.com)"
+    r"(?::\d+)?[:/](?:repos/)?land-o-clusters/floati-harbor(?:\.git)?"
+    r"""(?=$|[/#?\s>\)\]"'`])""",
+    re.IGNORECASE,
+)
 
 
 def module_version(repo_root) -> Optional[str]:
@@ -117,8 +123,21 @@ def readme_claim_receipt_findings(repo_root) -> List[str]:
     return readme_claim_findings(repo_root)
 
 
-def ledger_contract_findings(repo_root, *, historical_tag=None, preparing_tag=None,
-                             observations=None) -> List[str]:
+def private_repository_link_findings(repo_root) -> List[str]:
+    """Report private repository references in the two public release documents."""
+    findings = []
+    for name in ("CHANGELOG.md", "README.md"):
+        try:
+            source = (Path(repo_root) / name).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for number, line in enumerate(source.splitlines(), 1):
+            if PRIVATE_REPOSITORY_LINK.search(unquote(unescape(line))):
+                findings.append("release_private_repository_link:%s:%d" % (name, number))
+    return findings
+
+
+def ledger_contract_findings(repo_root, *, historical_tag=None, observations=None) -> List[str]:
     """Require a covering cut in preparation notes or a declared tag's notes.
 
     The contract tool ships in the public projection. Its check verifies the
@@ -161,9 +180,6 @@ def ledger_contract_findings(repo_root, *, historical_tag=None, preparing_tag=No
     if historical_absence:
         return []  # Verify an available cut without inventing a declaration.
 
-    if (historical_tag is None and preparing_tag is None
-            and heading.group(1) != UNRELEASED and heading.group(2) != UNRELEASED):
-        return ["ledger_contract_unreleased_notes_missing"]
     if len(declarations) != 1:
         return ["ledger_contract_notes_invalid"]
     declaration = re.fullmatch(
@@ -251,9 +267,8 @@ def check_release(repo_root, *, tag: Optional[str] = None, observations=None) ->
 def _check_release_tree(repo_root, *, tag=None, historical=False, observations=None) -> List[str]:
     """Return every disagreement between the four spellings, typed.
 
-    With `tag=None` there is no tag spelling; the readable spellings are
-    compared and an `Unreleased` heading is correct. With a tag named, the
-    release rules apply and an undated heading is a refusal. A spelling
+    Without a tag, compare the readable spellings for either Unreleased
+    or dated notes. A named tag requires dated notes. A spelling
     that cannot be read is typed and cited, never filled in. A README claim
     whose receipt link is not a file in this tree, or whose own unit has no
     receipt or reviewed exception, is named and refused.
@@ -282,10 +297,11 @@ def _check_release_tree(repo_root, *, tag=None, historical=False, observations=N
         else:
             tag_version = match.group(1)
 
+    errors.extend(private_repository_link_findings(repo_root))
     errors.extend(readme_claim_receipt_findings(repo_root))
     errors.extend(ledger_contract_findings(
         repo_root, historical_tag=tag if historical else None,
-        preparing_tag=tag if not historical else None, observations=observations,
+        observations=observations,
     ))
 
     if version is None or heading is None:
@@ -310,11 +326,11 @@ def _check_release_tree(repo_root, *, tag=None, historical=False, observations=N
             )
         )
 
-    if tag is not None:
-        if changelog_version == UNRELEASED or changelog_date == UNRELEASED:
+    if UNRELEASED in (changelog_version, changelog_date):
+        if tag is not None:
             errors.append("changelog_date_unreleased:%s" % changelog_version)
-        elif not ISO_DATE.match(changelog_date):
-            errors.append("changelog_date_malformed:%s" % changelog_date)
+    elif not ISO_DATE.match(changelog_date):
+        errors.append("changelog_date_malformed:%s" % changelog_date)
 
     return errors
 
@@ -330,7 +346,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--tag",
         default=None,
-        help="an existing tag to verify, or the tag being cut; omit for Unreleased notes",
+        help="an existing tag to verify, or the tag being cut",
     )
     arguments = parser.parse_args(argv)
 

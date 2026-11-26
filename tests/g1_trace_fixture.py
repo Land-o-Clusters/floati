@@ -3,16 +3,22 @@
 Trace2 SIDs are copied across POSIX daemonize's fork. A successful setup.c
 exit records the fork parent; a second successful atexit plus completed
 repack testimony records the daemon's continuation. No SID is a daemon PID.
-The positive control proves detachment, independent of sampling phase. G2
-keeps its separate, strict instantaneous process observer.
+An inherited pipe witnesses the lifetime of the detached Git processes.
+The positive control orders their completion after the trigger returns.
 """
-from tests.readiness import Readiness
+from collections import Counter
+from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
+import sys
 import tempfile
-import time
+
+from scripts.fixture_finalizer import retain_path
+from tests.readiness import wait_process, wait_readable
 
 
 def _rows_for(rows, sid):
@@ -120,12 +126,12 @@ def detached_witness(rows):
 
 
 def _read_trace(path):
-    raw = path.read_bytes() if path.exists() else b""
+    raw = path.read_bytes()
     if len(raw) > 8 * 1024 * 1024:
         raise ValueError("fixture trace exceeded its bounded size")
-    lines = raw.splitlines(keepends=True)
-    rows = [json.loads(line) for line in lines if line.endswith(b"\n")]
-    return raw, rows
+    if not raw.endswith(b"\n"):
+        raise ValueError("fixture trace ended with an incomplete frame")
+    return raw, [json.loads(line) for line in raw.splitlines()]
 
 
 def _finished(rows):
@@ -137,71 +143,116 @@ def _finished(rows):
     return sorted(starts) == sorted(exits)
 
 
+@contextmanager
+def _pipe():
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "rb") as reader, os.fdopen(write_fd, "wb") as writer:
+        yield reader, writer
+
+
 def run_positive_fixture():
     from tests import test_gate_z2_of_fl_1 as gate
     from tests.temp_roots import REAL_TEMP_ROOT
+
     scratch = tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT)
     base = Path(scratch.name)
     completed_cleanup = False
     try:
         home = base / "bare-home"
         home.mkdir()
-        projection = gate._projection_repository(base, home=str(home))
-        trace = home / "trigger-trace.jsonl"
         environment = gate._git_environment(str(home))
+        environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        setup_knobs = ("-c", "maintenance.auto=false")
+        projection = gate._projection_repository(base, setup_knobs, environment=environment)
         (projection / "trigger.txt").write_text("trigger\n")
-        subprocess.run(["/usr/bin/git", *gate.FORCE_KNOBS, "add", "trigger.txt"],
+        subprocess.run(["/usr/bin/git", *setup_knobs, "add", "trigger.txt"],
                        cwd=projection, env=environment, check=True, capture_output=True)
+
+        trace = home / "trigger-trace.jsonl"
+        stderr_path = home / "trigger-stderr"
+        native_exec_path = subprocess.check_output(["/usr/bin/git", "--exec-path"],
+                                                   cwd=projection, env=environment)
+        native_git = Path(os.fsdecode(native_exec_path.rstrip(b"\n"))) / "git"
         environment["GIT_TRACE2_EVENT"] = str(trace)
-        # Select the GC path this control measures. Git can otherwise default
-        # to geometric maintenance, which has a separate auto threshold.
-        result = subprocess.run(["/usr/bin/git", *gate.FORCE_KNOBS, "-c", "maintenance.strategy=gc",
-                                 "commit", "-q", "-m", "gate trigger"],
-                                cwd=projection, env=environment, check=True, capture_output=True)
-        return_offset = trace.stat().st_size
+        with _pipe() as (lifetime, inherited), _pipe() as (release, hold),\
+                stderr_path.open("wb") as stderr:
+            # Gate the native repack before exec. The trigger, maintenance and
+            # GC still choose and execute their own unmodified Git commands.
+            wait_for_release = shlex.join([
+                sys.executable, "-I", "-B", "-c",
+                f"import os; os.fstat({inherited.fileno()}); os.read({release.fileno()}, 1)",
+            ])
+            exec_path = base / "exec"
+            exec_path.mkdir()
+            dispatch = exec_path / "git"
+            dispatch.write_text(
+                '#!/bin/sh\nif [ "$1" = repack ]; then\n'
+                f'    {wait_for_release} || exit $?\nfi\n'
+                f'exec {shlex.quote(str(native_git))} "$@"\n', encoding="utf-8",
+            )
+            dispatch.chmod(0o700)
+            environment["GIT_EXEC_PATH"] = str(exec_path)
+            argv = ["/usr/bin/git", *gate.FORCE_KNOBS, "-c", "maintenance.strategy=gc",
+                    "commit", "-q", "-m", "gate trigger"]
+            process = subprocess.Popen(argv, cwd=projection, env=environment,
+                                       stdout=subprocess.DEVNULL, stderr=stderr,
+                                       pass_fds=(inherited.fileno(), release.fileno()))
+            inherited.close()
+            release.close()
+            try:
+                status = wait_process(process, f"trigger commit; scratch preserved: {base}")
+                return_offset = trace.stat().st_size
+            finally:
+                hold.close()
+                wait_readable(lifetime, f"Git writer exit; scratch preserved: {base}")
+                if lifetime.read(1) != b"":
+                    raise AssertionError(f"unexpected Git lifetime pipe data; scratch preserved: {base}")
+
+        stderr = stderr_path.read_bytes()
+        if status:
+            raise subprocess.CalledProcessError(status, argv, stderr=stderr)
         warning = (b"git: warning: confstr() failed with code 5: couldn't get path of "
                    b"DARWIN_USER_TEMP_DIR; using \x2ftmp instead\n")
-        if result.stderr.replace(warning, b""):
-            raise AssertionError(result.stderr)
-        readiness = Readiness('native detached maintenance trace; scratch preserved: ' + str(base))
-        last_error = "no native trace"
-        while True:
-            readiness.remaining()
-            raw, rows = _read_trace(trace)
-            try:
-                witness = detached_witness(rows)
-            except ValueError as error:
-                last_error = str(error)
-                readiness.description = last_error + "; scratch preserved: " + str(base)
-            else:
-                if _finished(rows):
-                    repositories = [row.get("worktree") for row in rows
-                                    if row.get("event") == "def_repo"
-                                    and row.get("sid") == witness["commit_sid"]]
-                    if repositories != [str(projection)]:
-                        raise ValueError("native trigger repository does not match its owned fixture; "
-                                         "scratch preserved: " + str(base))
-                    # Retain native rows in the test result before owned cleanup.
-                    witness.update({"trace_rows": rows, "trace_bytes": len(raw),
-                                    "return_trace_bytes": return_offset,
-                                    "native_stderr": result.stderr.decode()})
-                    offset = 0
-                    later = []
-                    for line in raw.splitlines(keepends=True):
-                        if offset >= return_offset and line.endswith(b"\n"):
-                            frame = json.loads(line)
-                            if frame.get("sid") == witness["fork_sid"] or frame.get("sid", "").startswith(
-                                    witness["fork_sid"] + "/"):
-                                later.append(frame)
-                        offset += len(line)
-                    witness["post_python_return_frame_count"] = len(later)
-                    completed_cleanup = True
-                    return witness
-            time.sleep(0.01)
+        if stderr.replace(warning, b""):
+            raise AssertionError(stderr)
+
+        raw, rows = _read_trace(trace)
+        witness = detached_witness(rows)
+        fork = witness["fork_sid"]
+        lifetimes = Counter(row["sid"] for row in rows if row.get("event") == "start")
+        lifetimes[fork] += 1  # Git's daemon and its launcher share a SID.
+        exits = Counter(row["sid"] for row in rows if row.get("event") == "atexit")
+        if not _finished(rows) or lifetimes != exits:
+            raise AssertionError(f"native Git lifetimes do not balance; scratch preserved: {base}")
+        repositories = [row.get("worktree") for row in rows
+                        if row.get("event") == "def_repo" and row.get("sid") == witness["commit_sid"]]
+        if repositories != [str(projection)]:
+            raise ValueError("native trigger repository does not match its owned fixture")
+
+        offset = 0
+        later = []
+        for line, frame in zip(raw.splitlines(keepends=True), rows):
+            sid = frame.get("sid", "")
+            if offset >= return_offset and (sid == fork or sid.startswith(fork + "/")):
+                later.append(frame)
+            offset += len(line)
+        if not any(frame.get("event") == "start" and frame["sid"] in witness["completed_repack_sids"]
+                   for frame in later):
+            raise AssertionError(f"native repack did not start after commit return; scratch preserved: {base}")
+        if not any(frame["sid"] == fork and frame.get("event") == "atexit" for frame in later):
+            raise AssertionError(f"native detached Git did not complete after commit return; scratch preserved: {base}")
+
+        witness.update(trace_rows=rows, trace_bytes=len(raw), return_trace_bytes=return_offset,
+                       native_stderr=stderr.decode(), post_python_return_frame_count=len(later))
+        completed_cleanup = True
     finally:
         if completed_cleanup:
             scratch.cleanup()
-            witness["scratch_removed"] = not base.exists()
         else:
-            # No process signaling or speculative deletion of a live child's tree.
+            retain_path(base)
             scratch._finalizer.detach()
+
+    if base.exists():
+        raise AssertionError(f"owned Git scratch was not removed: {base}")
+    witness["scratch_removed"] = True
+    return witness
