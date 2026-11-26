@@ -12,6 +12,7 @@ from floati.registry import Registry
 from floati.records import validate_record
 from floati.errors import ProtocolRefusal
 from pathlib import Path
+from tests.readiness import READY_SECONDS
 from tests.schema_validation import validate_json_schema
 from floati import cli
 
@@ -314,7 +315,7 @@ class NetAddress1Tests(unittest.TestCase):
     def test_group_ask_allows_answers_while_waiting(self):
         """Holding the group membership barrier during the wait would deadlock replies."""
         arguments = self.arguments(command="ask")
-        arguments[-1] = "5"
+        arguments[-1] = str(int(READY_SECONDS * 2))
         path, preview = self.preview(arguments)
         process = self.fleet.spawn(*arguments, "--recipient-preview", str(path))
         question = self.fleet.wait_for_question(process)
@@ -322,7 +323,7 @@ class NetAddress1Tests(unittest.TestCase):
             question["id"], disposition="answer", key="group-answer", note="Reviewed",
         ))
         self.assertEqual(0, completed.returncode, reply)
-        artifact = self.fleet.finish(process, timeout=5)
+        artifact = self.fleet.finish(process)
         self.assertEqual(0, process.returncode, artifact)
         self.assertEqual(preview["recipients"], artifact["evidence"]["recipients"])
         result = artifact["evidence"]["results"][0]

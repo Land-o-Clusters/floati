@@ -13,10 +13,10 @@ records.
 `pyproject.toml`, and `__version__` must be four spellings of the same
 value; the release check refuses otherwise. Versions are numbers, not names.
 
-The check is `floati/release.py`, and it has two modes because the repository
-legitimately sits at `Unreleased` between releases:
+Run the ordinary check on both Unreleased notes and dated release candidates.
+Supply a tag to verify all four version spellings.
 
-    python3 -m floati.release                    # the next release's Unreleased notes
+    python3 -m floati.release                   # Unreleased notes or a dated candidate
     python3 -m floati.release --tag v0.1.0       # the tag's tree, or a pre-cut check
 
 The first runs two ways: as `tests/test_release_check.py` inside the canonical

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from tests import probe_waiter_projection_memo as probe
+from tests.readiness import wait_until
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -53,7 +54,9 @@ class WaiterProjectionMemoTests(unittest.TestCase):
                         states = project(**kwargs)
                         if current_thread() is reader and not (contributed or refused):
                             try:
-                                contributed.append(executor.submit(write).result(timeout=3))
+                                pending = executor.submit(write)
+                                wait_until(pending.done, "same-lane write finishes during projection")
+                                contributed.append(pending.result())
                             except ProtocolRefusal as exc:
                                 refused.append(str(exc))
                         return states

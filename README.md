@@ -66,8 +66,8 @@ Clone it and let it install itself into a directory you choose:
 
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
-git -C /absolute/floati checkout v0.1.2
-python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.1.2
+git -C /absolute/floati checkout v0.2.0
+python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.0
 ```
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
@@ -161,6 +161,14 @@ change Cursor settings or stop Cursor workers for this workflow.
 recipient, tenant, repository, commit. It is validated on the way in
 and refused, with a typed code, when malformed. Delivered,
 acknowledged and consumed are three records; a refusal is a fourth.
+
+<!-- DRAFT-OPUS 2026-11-26 -->
+
+**Ask, and get an answer you can cite.** [`floati who`](AGENTS.md) shows who is on the fleet. [`floati ask`](AGENTS.md) sends one question to a node and waits. What comes back is an answer, a decline or a timeout, and each is linked to its own record. A timeout is recorded as unknown. Ask from the CLI, from a selected node on the live board with `?`, or [over MCP](tests/test_mcp_tools.py), and replay the thread afterwards. [The ask tests](tests/test_net_ask_1.py) · [the roster tests](tests/test_net_who_1.py)
+
+**Setup you can read before it runs.** [`floati setup`](AGENTS.md) prints the files it will write, waits for you to confirm that plan, and leaves a receipt that teardown uses. [The setup tests](tests/test_net_setup.py)
+
+**Hold the fleet when you need the machine.** Hold a node's inbound mail for a decision, or declare a quiet window that pauses enrolled seats' builds and tests. [Inbound holds](tests/test_net_hold_inbound_1.py) · [quiet windows](tests/test_quiet_window.py)
 
 **A board that says which thing is wrong.**
 
@@ -433,13 +441,13 @@ Every open defect we know about is an issue on this repository, filed
 by us with the measurement that found it. The ones you are most
 likely to meet:
 
-- Cursor auto-wake was [reported to stop after about 28 minutes of idle](docs/evidence/gauntlet/QUIRKS.md)
-  ([#14](https://github.com/Land-o-Clusters/floati/issues/14)). A controlled
-  soak did not reproduce it; the stop we did reproduce was the hook's own
-  wait deadline, and 0.1.2 ships a waiter that re-arms instead, measured
-  from a clean public clone
+<!-- DRAFT-OPUS 2026-11-26 -->
+
+- A Cursor seat was [reported to stop waking after about 28 minutes of idle](docs/evidence/gauntlet/QUIRKS.md).
+  A controlled soak did not reproduce that. The stop we reproduced was the hook's own wait
+  deadline, and since 0.1.2 the waiter re-arms instead
   ([receipt](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md)).
-  The issue stays open until that release is public.
+  [#14](https://github.com/Land-o-Clusters/floati/issues/14) is closed. If you see it, reopen it with your idle time.
 - The Cursor hook is scoped to the workspace it was installed in. A chat
   re-rooted to another directory leaves the hook behind; work other
   directories by absolute path.
@@ -458,6 +466,12 @@ likely to meet:
 - Linux runs the suite in CI and is not yet a supported platform. From a
   fresh clone on Ubuntu the suite needs `umask 022` and a box where no other
   user already holds `<temp>/floati-work`; [`AGENTS.md`](AGENTS.md) says why.
+
+<!-- DRAFT-OPUS 2026-11-26 -->
+
+- Idle cost with several waiters at once is not qualified. One quiet waiter is
+  [measured](CHANGELOG.md#013--2026-10-09) in [v0.1.3](https://github.com/Land-o-Clusters/floati/releases/tag/v0.1.3).
+- `ask` works between seats on one machine. Across machines it does not exist yet. See the [roadmap](docs/ROADMAP.md).
 
 What the product does not do yet, in the order we intend to build it,
 is the [roadmap](docs/ROADMAP.md): a sequence, not a promise, and an

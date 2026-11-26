@@ -411,6 +411,15 @@ Run the local managed writer for this root, as this node.
 - Nearest standard term: writer daemon
 - Where it differs: takeover is explicit (`--takeover`), and serving is observable and reversible.
 
+### setup
+
+<!-- DRAFT-OPUS 2026-11-26 -->
+
+Prepare one seat in a new local fleet and keep a receipt for teardown.
+
+- Nearest standard term: provisioning
+- Where it differs: Floati previews the files it will write and waits for confirmation. Teardown checks the receipt and the current files before removing anything.
+
 ### signature
 
 Minisign testimony over an explicit artifact: sign it, or verify it against a public key.
