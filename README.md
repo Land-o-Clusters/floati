@@ -66,8 +66,9 @@ Clone it and let it install itself into a directory you choose:
 
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
-git -C /absolute/floati checkout v0.2.0
-python3 -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.0
+git -C /absolute/floati checkout v0.2.1
+cd /absolute/floati
+python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.1
 ```
 
 `/absolute/install/scripts/floati` is the command; add that `scripts`
@@ -267,7 +268,7 @@ Orchestrators (t3, herdr) run other harnesses inside themselves. Floati reads th
 
 Surface rows are the reference machine's MEASURED installs ([C0-DELTA photograph](docs/evidence/conformance/C0-DELTA-surface-axis.md)), not the product catalog. Two absences are deliberate, not oversights: Claude.app is desktop chat, not a Claude Code seat - classified out, the same cut that separates ChatGPT Classic from Codex; and no Codex IDE extension was installed at photograph time - that row lands when the MX-1 campaign photographs one, not before.
 
-Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-03](docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md); cells marked `version_stale: true` were measured at 2.1.231 (Claude Code) at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps.
+Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-03](docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md); cells marked `version_stale: true` were measured at 2.1.231 (Claude Code) at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps. t3/cli declared current [t3 v0.1.13-nightly.20261126.5305 at 2026-11-26](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md); cells marked `version_stale: true` were measured at t3 v0.0.35 at 2026-08-27 and 2026-08-28 and 2026-08-29 and keep those receipt-bound stamps. t3/desktop declared current [T3 Code Nightly 0.1.13-nightly.20261126.5305 at 2026-11-26](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md); cells marked `version_stale: true` were measured at T3 Code Nightly 0.0.35-nightly.20260826.1195 at 2026-08-27 and 2026-08-28 and keep those receipt-bound stamps.
 
 **CLI surfaces**
 
@@ -282,7 +283,7 @@ Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-0
 | pi | [live](docs/evidence/conformance/C7-pi-conformance-live.md) | [adapter](docs/evidence/conformance/C7-pi-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-pi-cli-wake.md) ● |  |
 | zcode | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [—](docs/evidence/gauntlet/ZC1-zcode-scoping-photograph.md) | [daemon](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) ● | [daemon wake observed on arrival; hook paths returned null behind workspace trust review](docs/evidence/gauntlet/MX1-zcode-cli-wake.md) |
 | herdr | [live](docs/evidence/conformance/C8-herdr-conformance-live.md) | [—](docs/evidence/wave2-r3-herdr-loopback-client-2026-08-27.md) | [n/a](docs/evidence/gauntlet/H-wake-posture-matrix.md) | orchestrator; observation adapter live |
-| t3 | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) | [event-driven](docs/evidence/gauntlet/MX1-t3-cli-wake.md) ● | orchestrator; observed via its own surface |
+| t3 | [CLI](docs/evidence/conformance/C9-t3-compatibility-live.md) · `version_stale: true` | [—](docs/evidence/conformance/C9-t3-compatibility-live.md) · `version_stale: true` | [event-driven](docs/evidence/gauntlet/MX1-t3-cli-wake.md) · `version_stale: true` ● | [Bundled Nightly surface](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md) covers `t3 thread`, MCP access and milestones. Current Floati operation is unmeasured. |
 | devin | [CLI](docs/evidence/conformance/C11-devin-conformance-live.md) | [—](docs/evidence/conformance/C11-devin-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-devin-cli-wake.md) ● | CLI-compat tier |
 | antigravity | [CLI](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [—](docs/evidence/conformance/C12-antigravity-conformance-live.md) | [event-driven](docs/evidence/gauntlet/MX1-antigravity-cli-wake.md) ● | CLI-compat tier |
 
@@ -296,7 +297,7 @@ Version honesty: claude/cli declared current [2.1.251 (Claude Code) at 2026-09-0
 | opencode / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
 | cursor / desktop | [stop hook](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md) ○ | [Stop hook installed for the seat workspace](docs/evidence/conformance/C4b-cursor-stop-hook-public-clone-2026-09-11.md); the daemon wakes a headless twin, not the window; [re-rooting the chat leaves the hook behind](CHANGELOG.md) — work other directories by absolute path |
 | grok / desktop | [n/a](docs/evidence/gauntlet/H-wake-posture-surfaces.md) |  |
-| t3 / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ |  |
+| t3 / desktop | [event-driven](docs/evidence/gauntlet/H-wake-posture-surfaces.md) · `version_stale: true` ○ | [Nightly bundle](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md) identified. Current Floati operation is unmeasured. |
 | antigravity / desktop | [daemon](docs/evidence/gauntlet/H-wake-posture-surfaces.md) ○ | not inherited from its CLI |
 
 ● measured live · ○ classified from surfaces (the unexercised probe is named in the receipt) · — no receipt yet: we do not claim what we have not measured ([matrix methodology](docs/capability-matrix.md)).
@@ -406,10 +407,20 @@ touches your records.
 floati uninstall --destination /absolute/install --dry-run
 ```
 
-Removal is manifest-exact. Files Floati did not install are never
-touched, your ledgers and the install wiring journal
-(`.floati-install/wiring-journal.v1.jsonl`) are never part of an
-uninstall, and the receipt names every retained path.
+Remove `--dry-run` to apply the removal. Uninstall preserves your ledgers
+and files it did not install. A plain install leaves the records below in
+`.floati-install` after uninstall. The receipt lists them under
+`retained_records`.
+
+If you no longer need these records, remove them after uninstall succeeds.
+`rmdir` removes the directories only when they are empty.
+
+```bash
+rm -f /absolute/install/.floati-install/host-photograph.taken \
+  /absolute/install/.floati-install/host-wiring.v0.json \
+  /absolute/install/.floati-install/wiring-journal.v1.jsonl
+rmdir /absolute/install/.floati-install /absolute/install
+```
 
 **Composing with it.** `floati status --root /absolute/fleet --json` is
 the stable version-zero machine contract, and `floati graph --json`
@@ -471,7 +482,7 @@ likely to meet:
 
 - Idle cost with several waiters at once is not qualified. One quiet waiter is
   [measured](CHANGELOG.md#013--2026-10-09) in [v0.1.3](https://github.com/Land-o-Clusters/floati/releases/tag/v0.1.3).
-- `ask` works between seats on one machine. Across machines it does not exist yet. See the [roadmap](docs/ROADMAP.md).
+- `ask` works between seats on one machine. The cross-machine code is off by default and still needs qualification. [Cross-machine opt-in tests](tests/test_cross_optin.py)
 
 What the product does not do yet, in the order we intend to build it,
 is the [roadmap](docs/ROADMAP.md): a sequence, not a promise, and an

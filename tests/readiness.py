@@ -107,6 +107,15 @@ def communicate(process, description, timeout=READY_SECONDS, **kwargs):
         raise readiness.failure() from None
 
 
+def run_process(argv, description, **kwargs):
+    """Collect an owned command under the shared hang ceiling."""
+    readiness = Readiness(description)
+    try:
+        return subprocess.run(argv, timeout=readiness.remaining(), **kwargs)
+    except subprocess.TimeoutExpired:
+        raise readiness.failure() from None
+
+
 def wait_queue(source, description, timeout=READY_SECONDS):
     readiness = Readiness(description, timeout)
     try:

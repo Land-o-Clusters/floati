@@ -8542,6 +8542,62 @@
       "sha256": "998d7ebbef820bef8141aafc1c0c2a9a80b56668aba0deceb6813a7f6155875f"
     },
     {
+      "path": "bundle/c7.25/ledger-contract.json",
+      "sha256": "6bf68666a7a44d97c1f44a49762c769f75dd6c6d8c35d131b27b133af718ddbb"
+    },
+    {
+      "path": "bundle/c7.25/ledger-contract.sha256",
+      "sha256": "fe1865f9bfd1b40138c1b21933cfcef7a7791546e239559ba647d97173620eb9"
+    },
+    {
+      "path": "bundle/c7.26/blobs/17ec46abb2360c32fef7bd6c4d450ad5ad323e46176d1b6844ce9772ceb8f75f.json",
+      "sha256": "17ec46abb2360c32fef7bd6c4d450ad5ad323e46176d1b6844ce9772ceb8f75f"
+    },
+    {
+      "path": "bundle/c7.26/blobs/42c45ae6f402e1bfd2e1a51ef1466b790866c128c0d69dbdef5a349f0d4b0bb0.json",
+      "sha256": "42c45ae6f402e1bfd2e1a51ef1466b790866c128c0d69dbdef5a349f0d4b0bb0"
+    },
+    {
+      "path": "bundle/c7.26/blobs/bb70f553d9edd855e819dcf53e7620dcc4b0aad953026353316b90479aeb990b.json",
+      "sha256": "bb70f553d9edd855e819dcf53e7620dcc4b0aad953026353316b90479aeb990b"
+    },
+    {
+      "path": "bundle/c7.26/blobs/f2115d106d2c15a52b986d9d55ae033046e2d434bb75e3bbf066daea18f0eef3.json",
+      "sha256": "f2115d106d2c15a52b986d9d55ae033046e2d434bb75e3bbf066daea18f0eef3"
+    },
+    {
+      "path": "bundle/c7.26/blobs/fbf2807da2535a5cde6f98bf3dfe88c725324973753194bdc21aefd2b76b3950.json",
+      "sha256": "fbf2807da2535a5cde6f98bf3dfe88c725324973753194bdc21aefd2b76b3950"
+    },
+    {
+      "path": "bundle/c7.26/ledger-contract.json",
+      "sha256": "14ce7a6def6d6dedf241048e994416ad53bb878d096895d2d5fbd6de75d84d9f"
+    },
+    {
+      "path": "bundle/c7.26/ledger-contract.sha256",
+      "sha256": "c7c90b6f3569f6e4915e31ed9bdd8ec609f54668c4b506a8fce0eb3dd4f1686a"
+    },
+    {
+      "path": "bundle/c7.27/blobs/3d309ff1488a36657c248d3630acf402b130e54cbce4f89cf10a1615d43b3840.json",
+      "sha256": "3d309ff1488a36657c248d3630acf402b130e54cbce4f89cf10a1615d43b3840"
+    },
+    {
+      "path": "bundle/c7.27/ledger-contract.json",
+      "sha256": "a681b4a5283d0beedf942a1550a8a524b71f9e3900d0bb2ca21be34d844c28ef"
+    },
+    {
+      "path": "bundle/c7.27/ledger-contract.sha256",
+      "sha256": "7718a6e261858035f85fa061501c296d7ef18ae6edec1a55029a68a7bc8bbac4"
+    },
+    {
+      "path": "bundle/c7.28/ledger-contract.json",
+      "sha256": "086557760500f1fd782629cca81ab099daa2812e67293e14ad693109bf144af1"
+    },
+    {
+      "path": "bundle/c7.28/ledger-contract.sha256",
+      "sha256": "d50305d321a27cbcc63a705a5291671056f7c207e2054a0d681035ea37127ec2"
+    },
+    {
       "path": "bundle/c7.3/ledger-contract.json",
       "sha256": "dde0b78b535d63a05ba34722df1995ae0946990f37bf58be5f2354d5adf9a820"
     },
@@ -13731,11 +13787,11 @@
     },
     {
       "path": "floati/__init__.py",
-      "sha256": "0b22753633739252edcd1dd0bdb554af272d0cc8b0c215af69632a254e7f1523"
+      "sha256": "b76e4222ce1006f76230a4f131e3ad332bd061e2c15d6877d9c7d237f230296e"
     },
     {
       "path": "floati/__main__.py",
-      "sha256": "8fe553b3f8691da2c10233cbb19c0aff02059876c1b2a958f30b5aacfdd2a983"
+      "sha256": "9b5ba222748c50426f566d726f3ebf272525f90a2231472d89e07534c753fe88"
     },
     {
       "path": "floati/adapters/__init__.py",
@@ -13875,7 +13931,7 @@
     },
     {
       "path": "floati/admin_cli.py",
-      "sha256": "ecdf9a43e874e9593e6158c6cc8dcdf6f91632abc2a2e97e8fdd67f4ade37928"
+      "sha256": "d9baeea25f697a5aefdea760985717b201ca906788693f40a556f9d7413d858a"
     },
     {
       "path": "floati/admin_registry.py",
@@ -13987,11 +14043,19 @@
     },
     {
       "path": "floati/ask.py",
-      "sha256": "e04e13190e3317492fd2c4fbb3d24d67834559ad7f919a2167609ccfad4248db"
+      "sha256": "10e1a670dccfbbc2427961c4c639b0e6ef0e282d4dc41a63e9a79015c7e6e4b6"
     },
     {
       "path": "floati/ask_cost.py",
-      "sha256": "eed34f598b993dc499bd72b72cb03dd6caf0e388ad16072dd2f447e927d1c8f5"
+      "sha256": "0aecbc9737d8616315e687fede4f24574408e562a88fec42adb7dfe4b9fd97c4"
+    },
+    {
+      "path": "floati/ask_cost_v2.py",
+      "sha256": "2f8a2a410f07fb3d14f638b1231d494363344161602b2f499ea93482f5cc16cc"
+    },
+    {
+      "path": "floati/ask_execution.py",
+      "sha256": "1a8e04d7698ab8a92d19e1d787c040119bb3d440082ce133c812c7b68f97b511"
     },
     {
       "path": "floati/ask_git.py",
@@ -13999,7 +14063,7 @@
     },
     {
       "path": "floati/ask_replay.py",
-      "sha256": "6ea346ecc7c38ad11f8f97474b2c7f18fa89a303c1d925b07eac7f925bc1a849"
+      "sha256": "63f198e97967961414fbeddfa7e42d6fec884cbea5f0494f6b29796bf229ce52"
     },
     {
       "path": "floati/bound_record.py",
@@ -14071,7 +14135,7 @@
     },
     {
       "path": "floati/cli.py",
-      "sha256": "1c0779fd3749d98155d22654a8e49cfd68bfa4cb2b2cc4e7e1380ea04f591536"
+      "sha256": "fab10c3abc559b9117b9ee73116b7d364f9c49338fa9aa4344488331ac7cab45"
     },
     {
       "path": "floati/codex_binding_repair.py",
@@ -14164,6 +14228,74 @@
     {
       "path": "floati/credential_leases.py",
       "sha256": "1c7b340aa6324f43186f164f4b92cee9682e9a6189d31d0496adec96bf396743"
+    },
+    {
+      "path": "floati/cross_anchor.py",
+      "sha256": "e30774a78d024feceb3b200bff09bf06886de756f33c9d325666a99640bd0f9b"
+    },
+    {
+      "path": "floati/cross_attended.py",
+      "sha256": "6f784d08d560c9046ea7f5dc2362b57a8b22683225ca53c5cf6062556247307f"
+    },
+    {
+      "path": "floati/cross_authority.py",
+      "sha256": "cfb679e844ab8497fcd00fb845320fdd3ece4fc5acec30cca974702315633a43"
+    },
+    {
+      "path": "floati/cross_coordinates.py",
+      "sha256": "1a9b01acb2265f079cc1c717e7376865bfadf8e247b6d41dd87ad22dedd52694"
+    },
+    {
+      "path": "floati/cross_delivery.py",
+      "sha256": "1f0781b6530b122bc6174064576105ce24905a32da530894dfde6a180547bbdf"
+    },
+    {
+      "path": "floati/cross_gate.py",
+      "sha256": "37e3916fbbc2a12f70ef60cb6157e595e9cf9498c1320f7415a6c0189997bbc5"
+    },
+    {
+      "path": "floati/cross_journal.py",
+      "sha256": "4d03c08c7cde9a3e8e71b001130b89df588cc9753b6106c6be94c80124919469"
+    },
+    {
+      "path": "floati/cross_keystore.py",
+      "sha256": "2d983a24c0b2dde465601dc9d24ccb6212ca8de7d761ef20cf9d86d2f8c2f913"
+    },
+    {
+      "path": "floati/cross_lan.py",
+      "sha256": "66c63e56026138eac443efcee513dbeec8426aeb7d9c2c9861eb2bba70ea1154"
+    },
+    {
+      "path": "floati/cross_lan_tls.py",
+      "sha256": "83e48925a08c026f9ddb251d13ce1acdc53fdd2cb4dc1963120e8b253511eee4"
+    },
+    {
+      "path": "floati/cross_optin.py",
+      "sha256": "8c52d4a9d90690f944b22a01729ffc0212a15fa6949622140453ddc8988272bf"
+    },
+    {
+      "path": "floati/cross_pair.py",
+      "sha256": "9bb738ee20aea0cfdfa695294bf3577523790e4684e0a6901a816638031cb6cd"
+    },
+    {
+      "path": "floati/cross_pair_codes.py",
+      "sha256": "3f48047ff051edd0cd3f7a816dc023e2ac2a3496da96f761ff2a54a06c58d7cc"
+    },
+    {
+      "path": "floati/cross_pair_storage.py",
+      "sha256": "ec6eb0e3f18ea26fdf22df10f77b7517ce79671b57f4e617ccdf704238be18af"
+    },
+    {
+      "path": "floati/cross_panel.py",
+      "sha256": "e01058b0bad0c06dd62128beefdf06c727115a6d717e6b7fe60c0f6e9c08f4cd"
+    },
+    {
+      "path": "floati/cross_records.py",
+      "sha256": "a64e2eec0ba701969b3141672e4c0915497ce5c91b30f7cc101cf2b3e870384d"
+    },
+    {
+      "path": "floati/cross_reserve.py",
+      "sha256": "1439d3b21ceeab956548209e8c2f1f32f9683d07720b60c60c882720dc9bb81b"
     },
     {
       "path": "floati/cursor.py",
@@ -14339,7 +14471,7 @@
     },
     {
       "path": "floati/generated_help.py",
-      "sha256": "0c2ed297618e2ea008c133451de324cc8bae8d11040309e1df6fe38b7821f016"
+      "sha256": "e3eea8e94cd5bb9511c5aae8e1ee746b050f4b8cae208dfb4e8669a902cb2e53"
     },
     {
       "path": "floati/gh_process.py",
@@ -14367,7 +14499,7 @@
     },
     {
       "path": "floati/help_copy.py",
-      "sha256": "1feab289428d4e77980919d814e45e30a5b3334245be835ba80f613358ba6ddf"
+      "sha256": "9f18f4eb0fac214f52c4022c319cdfda9a9121f809646882094a66c2b5988730"
     },
     {
       "path": "floati/helptext.py",
@@ -14575,7 +14707,7 @@
     },
     {
       "path": "floati/overlap_radar.py",
-      "sha256": "d3e025e85494016919acdc557663664820aa727131f7f46777cf5fc4c0cf3c2d"
+      "sha256": "75a87c45de065288e286360fda7e077a4fd1a4951830d968076b6f7ba5aee30d"
     },
     {
       "path": "floati/persons.py",
@@ -14626,12 +14758,16 @@
       "sha256": "aa415cb4f5b78d4637794e9177a2a7fd5e6f1e3253ed68c1c3c00c72b2caa277"
     },
     {
+      "path": "floati/puddle_quota_v2.py",
+      "sha256": "6eef3e391b74eec98743ed9bdfbc1ff6d479ec425ac91cd3b357d0d9c8214767"
+    },
+    {
       "path": "floati/purge.py",
       "sha256": "8261ecb7f1fbe8c04ccca1638ab8c3b84d881190ceb4736929d89333664c2057"
     },
     {
       "path": "floati/quiet_window.py",
-      "sha256": "9de200b0eacdb7afb468975e3bc2d59dac4daf3fd50dbefd4ac1a008ffc99836"
+      "sha256": "b5074e722708d5232891a8f6fb6d7bc1b840f96ff7d693525dddd1d594518797"
     },
     {
       "path": "floati/quota.py",
@@ -14640,6 +14776,10 @@
     {
       "path": "floati/quota_adapters.py",
       "sha256": "aa4ac46c5ccef7055ccb8b2afd833bfdcf17d0a79f5b2657305c080f684ebe54"
+    },
+    {
+      "path": "floati/quota_role_route.py",
+      "sha256": "5a7d0f1020dbe385c0bdb0bb10ef6648f2c60b419d6770ce808b7ede0757fd16"
     },
     {
       "path": "floati/reader_currency.py",
@@ -14667,7 +14807,7 @@
     },
     {
       "path": "floati/records.py",
-      "sha256": "e20ce8dc9c003fcab25fb14027752b4050cab8abc4b9ae3ecac734bc8d602b33"
+      "sha256": "c539e94bcf81de0f4477b096fa873974228f9e008fa7a5393043eafe773764ad"
     },
     {
       "path": "floati/registry.py",
@@ -14679,7 +14819,7 @@
     },
     {
       "path": "floati/release.py",
-      "sha256": "dda2ee6aa645b9448a45c88903d1fdf52c5234d4b99b55282104a4874e6d05d3"
+      "sha256": "ee3964f431f243abdedb0ed80b483e266a070313da23e9d85f8b0651d1773455"
     },
     {
       "path": "floati/replay.py",
@@ -14699,7 +14839,7 @@
     },
     {
       "path": "floati/role_addressing.py",
-      "sha256": "b74607428e2a83244f09e028245c6ac20fc52ae34e90f5890f83d97f2e2db529"
+      "sha256": "5a9e2b6091fc6d2170ea15e627f6377f1c270e00cd61ee9745fb484c9b315459"
     },
     {
       "path": "floati/role_assignment.py",
@@ -14910,12 +15050,44 @@
       "sha256": "56500aa35b166a254bc514460cf2858a50e5717ce54091ee799a2caf47761802"
     },
     {
+      "path": "floati/t3_dispatch.py",
+      "sha256": "97f75e9b8203668a0ee2bf8b0ced60111ba9864dc631043112a83588ecedbd09"
+    },
+    {
+      "path": "floati/t3_dispatch_hook.py",
+      "sha256": "bb897239d8382b4b1f2277197efcc85e811be85f97ac955e04049ff96f15da81"
+    },
+    {
+      "path": "floati/t3_dispatch_post_hook.py",
+      "sha256": "bd05f66063fe20439c8463ee290e6b80b13c13b707e548f213fab3b9ac5ae4dd"
+    },
+    {
+      "path": "floati/t3_dispatch_records.py",
+      "sha256": "8dfc75b585e05c0222b85148720b40d782903285c519a5f521babd2b09c81798"
+    },
+    {
+      "path": "floati/t3_gate.py",
+      "sha256": "5d80aec758a6b9099284fe60cd89ed2247495d4685d2bf872525caa8ccdde02c"
+    },
+    {
+      "path": "floati/t3_hook_install.py",
+      "sha256": "b78239133e1d7425baabea326475c915ceb8a2a6e7aa7aa8c78a89eb28db7766"
+    },
+    {
+      "path": "floati/t3_quota_readout.py",
+      "sha256": "e8e01321bdcd2bb4df451d0f8feb2996ca8e4498cfe45ace5c04c21e15e5dd92"
+    },
+    {
+      "path": "floati/t3_shared_base.py",
+      "sha256": "7d589075e93bc22481c235c43124d959ac10553bd87d3d75a3cab1a8eff79e6a"
+    },
+    {
       "path": "floati/tenant_fence.py",
       "sha256": "d1e886942a444d995e186ebf548fe0e463233d08004a214f1a0f978aebea5c96"
     },
     {
       "path": "floati/territory.py",
-      "sha256": "1bc78b4df525df5d796aa21d2e381cc21770ccb3793caf470723cfbf4e27e2b2"
+      "sha256": "d4e530d0f8cf2c8b50bbb92606fc030c32da7181dabec35e347898540b3f0439"
     },
     {
       "path": "floati/territory_records.py",
@@ -15590,6 +15762,18 @@
       "sha256": "665c4719401d8bd0bbf95bf9370d7c857541e5780547de8a504d5d783586dd3d"
     },
     {
+      "path": "schemas/v1/ask-cost-execution-v1.schema.json",
+      "sha256": "bb70f553d9edd855e819dcf53e7620dcc4b0aad953026353316b90479aeb990b"
+    },
+    {
+      "path": "schemas/v1/ask-cost-manifest-v1.schema.json",
+      "sha256": "fbf2807da2535a5cde6f98bf3dfe88c725324973753194bdc21aefd2b76b3950"
+    },
+    {
+      "path": "schemas/v1/ask-cost-receipts-v1.schema.json",
+      "sha256": "17ec46abb2360c32fef7bd6c4d450ad5ad323e46176d1b6844ce9772ceb8f75f"
+    },
+    {
       "path": "schemas/v1/attempt-cancelled-before-start-record.schema.json",
       "sha256": "9ac7045be0718ba5f0b71b13ca4355b4e69756ff35884c0972f79927c27d5b61"
     },
@@ -15904,6 +16088,18 @@
     {
       "path": "schemas/v1/stop-hold-receipt.schema.json",
       "sha256": "d1a4c1500028a50d9fe56eabb234e1af4a42145cb8d97321518ca0543b9b5d4f"
+    },
+    {
+      "path": "schemas/v1/t3-dispatch-child-link-record.schema.json",
+      "sha256": "3d309ff1488a36657c248d3630acf402b130e54cbce4f89cf10a1615d43b3840"
+    },
+    {
+      "path": "schemas/v1/t3-dispatch-grant-record.schema.json",
+      "sha256": "42c45ae6f402e1bfd2e1a51ef1466b790866c128c0d69dbdef5a349f0d4b0bb0"
+    },
+    {
+      "path": "schemas/v1/t3-dispatch-receipt-record.schema.json",
+      "sha256": "f2115d106d2c15a52b986d9d55ae033046e2d434bb75e3bbf066daea18f0eef3"
     },
     {
       "path": "schemas/v1/thread-attachment-detached-record.schema.json",

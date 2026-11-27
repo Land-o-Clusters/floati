@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.readiness import READY_SECONDS, Readiness, wait_until
+from tests.readiness import READY_SECONDS, Readiness, wait_until, wait_join
 
 import ctypes
 import errno
@@ -442,7 +442,7 @@ class WorkerBootstrapTests(unittest.TestCase):
             os.register_at_fork(after_in_child=mark_from_os)
             positive = multiprocessing.get_context("fork").Process(target=time.monotonic)
             positive.start()
-            positive.join(2.0)
+            wait_join(positive, "ordinary fork bootstrap control exits")
             self.assertEqual(0, positive.exitcode)
             self.assertTrue(multiprocessing_proof.is_file())
             self.assertTrue(os_proof.is_file())

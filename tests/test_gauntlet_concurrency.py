@@ -256,11 +256,10 @@ def _run_effect_race(
         process.start()
     start.set()
     observed = [results.get(timeout=10) for _ in processes]
+    cleanup = _reap_native_processes(processes, "effect append race")
+    if cleanup:
+        raise AssertionError(cleanup)
     for process in processes:
-        process.join(10)
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
         if process.exitcode != 0:
             raise AssertionError(f"effect append child exited {process.exitcode}")
     return observed
@@ -1787,11 +1786,8 @@ class ThreadObservationConcurrencyTests(unittest.TestCase):
             process.start()
         start.set()
         observed = [results.get(timeout=15) for _ in processes]
+        self.assertEqual([], _reap_native_processes(processes, "thread observation race"))
         for process in processes:
-            process.join(15)
-            if process.is_alive():
-                process.terminate()
-                process.join(5)
             self.assertEqual(0, process.exitcode)
         return observed
 
@@ -1830,11 +1826,8 @@ class ThreadObservationConcurrencyTests(unittest.TestCase):
             process.start()
         start.set()
         observed = [results.get(timeout=15) for _ in processes]
+        self.assertEqual([], _reap_native_processes(processes, "thread observation race"))
         for process in processes:
-            process.join(15)
-            if process.is_alive():
-                process.terminate()
-                process.join(5)
             self.assertEqual(0, process.exitcode)
         return observed
 
@@ -2090,8 +2083,8 @@ class EffectLedgerConcurrencyTests(unittest.TestCase):
             acceptance.start()
             intent.start()
             start.set()
-            acceptance.join(20)
-            intent.join(20)
+            wait_join(acceptance, "gauntlet acceptance contender exits")
+            wait_join(intent, "gauntlet effect intent contender exits")
             self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
 
             observed = {outcomes.get(timeout=5)[0:2] for _ in range(2)}
@@ -2128,10 +2121,11 @@ class EffectLedgerConcurrencyTests(unittest.TestCase):
                 if process.pid is None:
                     continue
                 try:
-                    process.join(20)
+                    readiness = Readiness("gauntlet effect race child exits during cleanup")
+                    process.join(readiness.remaining())
                     if process.is_alive():
                         process.terminate()
-                        process.join(5)
+                        wait_join(process, "collect terminated gauntlet effect race child")
                     if process.is_alive() or process.exitcode is None:
                         raise RuntimeError("effect race child remained uncollected")
                 except Exception as error:

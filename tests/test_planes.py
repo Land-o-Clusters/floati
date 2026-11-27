@@ -11,6 +11,7 @@ from pathlib import Path
 from floati.errors import ProtocolRefusal
 from floati.jsonl import read_records
 from floati.root import FloatiRoot
+from tests.readiness import wait_join
 
 try:
     from floati.planes import LivenessPresenceStore
@@ -193,7 +194,7 @@ class AuthorityTests(PlaneTestCase):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(timeout=2)
+            wait_join(thread, "authority claim contender finishes")
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(1, len(winners))
         self.assertEqual(["authority_held"], refusals)

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Floati ask cost projection manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "generation_id",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "$ref": "#/$defs/node"
+    },
+    "generation_id": {
+      "$ref": "#/$defs/generation"
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ask-cost-execution-v1.json",
+        "ask-cost-receipts-v1.json"
+      ],
+      "properties": {
+        "ask-cost-execution-v1.json": {
+          "$ref": "#/$defs/digest"
+        },
+        "ask-cost-receipts-v1.json": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^g-[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$(?![\\s\\S])"
+    }
+  }
+}

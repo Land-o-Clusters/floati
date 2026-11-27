@@ -5,7 +5,7 @@ It exercises the real car/controller/EventLog; it cannot authenticate a live
 host launch. Host observations must not mint a fictitious running command.
 """
 from contextlib import contextmanager
-from tests.readiness import wait_poll
+from tests.readiness import wait_join, wait_poll
 from copy import deepcopy
 import gc
 import hashlib
@@ -77,13 +77,15 @@ class HostLifecycleModelTests(unittest.TestCase):
     def reap_fixture(child):
         # These tests own every Process handle they create. No host/process
         # discovery or unrelated signal is used, including on assertion failure.
-        child.join(5)
-        if child.is_alive():
+        try:
+            wait_join(child, "owned host lifecycle fixture exits")
+        except AssertionError:
             child.terminate()
-            child.join(5)
-        if child.is_alive():
-            child.kill()
-            child.join(5)
+            try:
+                wait_join(child, "collect terminated host lifecycle fixture")
+            except AssertionError:
+                child.kill()
+                wait_join(child, "collect killed host lifecycle fixture")
         child.close()
 
     def native_unclosed_running(self, item, context="fork"):

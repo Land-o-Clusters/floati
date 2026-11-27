@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "tenant_id": "fleet-sample",
+  "records": [
+    {
+      "question_id": "ask-question-019b0000000070008000000000000001",
+      "answer_id": "ask-answer-019b0000000070008000000000000003",
+      "asking_node": "red",
+      "asking_session_ref": "6b887401ce56c1f8f3a15178edd9790a77791ca16c5e3a49f8c3bdf8f7c8aade",
+      "answering_node": "blue",
+      "answering_session_ref": "eb0336c42e0ae630fa4b4430c0295b859082949daf2a17e373085c876e4ddf9f",
+      "observed_at": "2026-11-26T12:00:10Z",
+      "checked_at": "2026-11-26T12:00:10Z",
+      "expires_at": "2026-11-27T12:00:10Z",
+      "usage": {"basis": "MEASURED", "measurement_id": "m-11111111111111111111111111111111", "total_tokens": 73}
+    }
+  ]
+}

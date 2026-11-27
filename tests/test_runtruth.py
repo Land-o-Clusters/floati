@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import Readiness, wait_queue, wait_event, wait_join
 import tempfile
 import time
 import unittest
@@ -712,10 +712,11 @@ class EffectAcceptanceTests(unittest.TestCase):
             with effect_acceptance_guard(case.root):
                 pass
         finally:
-            holder.join(5)
-            if holder.is_alive():
+            try:
+                wait_join(holder, "effect acceptance guard holder exits")
+            except AssertionError:
                 holder.terminate()
-                holder.join(5)
+                wait_join(holder, "collect terminated effect acceptance guard holder")
         self.assertEqual(0, holder.exitcode)
 
     def _case(self):
@@ -1106,13 +1107,17 @@ class EffectAcceptanceTests(unittest.TestCase):
             self.assertTrue(wait_event(reader_snapshot, 'runtruth: reader_snapshot synchronization'))
             writer = threading.Thread(target=append_general_record)
             writer.start()
-            writer.join(0.2)
-            writer_blocked = writer.is_alive()
-            release_reader.set()
-            reader.join(10); writer.join(10)
+            try:
+                wait_join(writer, "general append finishes while the reader holds its snapshot")
+            finally:
+                release_reader.set()
+                try:
+                    wait_join(reader, "projection reader finishes after release")
+                finally:
+                    if writer.is_alive():
+                        wait_join(writer, "general append fixture is collected")
 
         self.assertFalse(reader.is_alive() or writer.is_alive())
-        self.assertFalse(writer_blocked, "general append waited on a read-only guard")
         self.assertEqual([], reader_errors)
         self.assertFalse(
             isinstance(writer_results[0], BaseException), repr(writer_results[0]),
@@ -1218,7 +1223,8 @@ class EffectAcceptanceTests(unittest.TestCase):
             )
             children.append(intent)
             acceptance.start(); intent.start(); start.set()
-            acceptance.join(20); intent.join(20)
+            wait_join(acceptance, "effect acceptance contender exits")
+            wait_join(intent, "effect intent contender exits")
             self.assertEqual((0, 0), (acceptance.exitcode, intent.exitcode))
             observed = {wait_queue(outcomes, 'runtruth: outcomes frame')[0:2] for _ in range(2)}
             labels = {row[0] for row in observed}
@@ -1248,10 +1254,11 @@ class EffectAcceptanceTests(unittest.TestCase):
                 if process.pid is None:
                     continue
                 try:
-                    process.join(20)
+                    readiness = Readiness("effect race child exits during cleanup")
+                    process.join(readiness.remaining())
                     if process.is_alive():
                         process.terminate()
-                        process.join(5)
+                        wait_join(process, "collect terminated effect race child")
                     if process.is_alive() or process.exitcode is None:
                         raise RuntimeError("effect race child remained uncollected")
                 except Exception as error:

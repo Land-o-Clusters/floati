@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "tenant_id": "fleet-sample",
+  "generation_id": "g-cccccccccccccccccccccccccccccccc",
+  "scopes": [
+    {
+      "scope_id": "s-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "question_id": "ask-question-019b0000000070008000000000000001",
+      "presentation_id": "ask-presentation-019b0000000070008000000000000002",
+      "answer_id": "ask-answer-019b0000000070008000000000000003",
+      "asking_node": "red",
+      "asking_session_ref": "6b887401ce56c1f8f3a15178edd9790a77791ca16c5e3a49f8c3bdf8f7c8aade",
+      "answering_node": "blue",
+      "presentation_session_ref": "11fc6b754a5d4fbd7a5bd19e74d2ad66b7454b321ff780e371face1c42ee241e",
+      "answering_session_ref": "eb0336c42e0ae630fa4b4430c0295b859082949daf2a17e373085c876e4ddf9f",
+      "harness": "codex",
+      "provider": "openai",
+      "source_lineage_id": "rollout-1",
+      "native_session_id": "native-session-1",
+      "native_turn_id": "turn-1",
+      "opened_at": "2026-11-26T12:00:00Z",
+      "closed_at": "2026-11-26T12:00:08Z",
+      "opened_sequence": 0,
+      "closed_sequence": 5,
+      "completeness": {
+        "status": "incomplete",
+        "through_sequence": 3
+      },
+      "attempts": [
+        {
+          "provider": "openai",
+          "source_lineage_id": "rollout-1",
+          "native_session_id": "native-session-1",
+          "native_turn_id": "turn-1",
+          "native_call_id": "1",
+          "parent_attempt": null,
+          "issued_sequence": 1,
+          "ended_sequence": 2,
+          "disposition": "completed",
+          "membership": "exclusive"
+        }
+      ]
+    }
+  ]
+}

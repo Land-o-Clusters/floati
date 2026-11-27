@@ -211,7 +211,7 @@ class PackagedSmokeBattery(unittest.TestCase):
         self._assert_readme_first_run_path_is_clean()
 
     def _assert_readme_first_run_path_is_clean(self) -> None:
-        """REL-1: the three printed coordinates work from one local fresh clone."""
+        """REL-1: the printed commands work from one fresh local clone."""
 
         python = Path("/usr/bin/python3")
         git = Path("/usr/bin/git")
@@ -250,6 +250,7 @@ class PackagedSmokeBattery(unittest.TestCase):
         run_git(seed, "config", "user.email", "release@example.invalid")
         run_git(seed, "add", ".")
         run_git(seed, "commit", "--quiet", "-m", "release fixture")
+        run_git(seed, "tag", "v0.2.1")
         source = Path(self.temp.name) / "readme-clone"
         run_git(Path(self.temp.name), "clone", "--quiet", "--no-local", str(seed), str(source))
 
@@ -259,7 +260,9 @@ class PackagedSmokeBattery(unittest.TestCase):
         clean_home.mkdir()
         readme = (source / "README.md").read_text(encoding="utf-8")
         self.assertIn(
-            "python3 -m floati install --source /absolute/floati --destination /absolute/install",
+            "git -C /absolute/floati checkout v0.2.1\n"
+            "cd /absolute/floati\n"
+            "python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.1",
             readme,
         )
         self.assertIn(
@@ -305,9 +308,10 @@ class PackagedSmokeBattery(unittest.TestCase):
                 )
             return read_artifact(completed)
 
+        run_git(source, "checkout", "--quiet", "v0.2.1")
         install_rc, install = read_artifact(_readme_install([
-            str(python), "-m", "floati", "install", "--source", str(source),
-            "--destination", str(destination),
+            str(python), "-B", "-m", "floati", "install", "--source", str(source),
+            "--destination", str(destination), "--ref", "v0.2.1",
         ], source=source, environment=environment, destination=destination,
             managed_files=len(manifest["files"])))
         self.assertEqual(0, install_rc, install)

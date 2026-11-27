@@ -561,7 +561,7 @@ class BusScaleWorkloadTests(unittest.TestCase):
             for row in describe_parser(self.parser)["commands"]
             if row["executable"]
         }
-        self.assertEqual(184, len(expected))
+        self.assertEqual(186, len(expected))
         self.assertEqual(expected, self.scope["inventory"])
         self.assertIn("wake daemon serve", self.scope["inventory"])
         self.assertFalse(self.scope["inventory"]["wake daemon serve"]["public"])
@@ -583,7 +583,7 @@ class BusScaleWorkloadTests(unittest.TestCase):
         excluded = self.scope["excluded"]
         self.assertFalse(measured & set(excluded))
         self.assertEqual(set(self.scope["inventory"]), measured | set(excluded))
-        self.assertEqual(116, len(excluded))
+        self.assertEqual(118, len(excluded))
         self.assertIn("setup", excluded)
         self.assertIn("replay", excluded)
         self.assertIn("who", excluded)

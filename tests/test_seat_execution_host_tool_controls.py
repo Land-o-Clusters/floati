@@ -4,13 +4,12 @@ Mixed templated/piped callbacks must deliver complete JSON promptly. The owner
 hook uses root only, without templated workspace/session overrides; a bounded
 optional read does not authenticate or infer a host event from elapsed time.
 """
-from tests.readiness import wait_event
+from tests.readiness import wait_event, wait_join
 from copy import deepcopy
 import io
 import os
 import subprocess
 import threading
-import time
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -376,7 +375,7 @@ class HostToolCallbackControls(unittest.TestCase):
         finally:
             if thread.ident is not None:
                 # Join only after the adapter has unwound its retained guards.
-                thread.join(6)
+                wait_join(thread, "native contender exits after guard release")
                 self.assertFalse(thread.is_alive(), "native contender did not finish after guard release")
         self.assertEqual([], failures)
         self.assertEqual([True], publications)
@@ -437,78 +436,70 @@ class HostToolCallbackControls(unittest.TestCase):
         self.assertIn(native.BODY, envelope["note"])
         self.assertLessEqual(len(envelope["note"]), 1024)
 
-    def test_both_options_preserve_empty_legacy_stop_and_reject_partial_open_stdin(self):
+    def read_open_pipe(self, args, content, *, delayed=False):
         from floati import cli
+        import select
 
+        reader, writer = os.pipe()
+        entered, written, finished = threading.Event(), threading.Event(), threading.Event()
+        results, failures = [], []
+        native_select = select.select
+
+        def observe_select(reads, writes, errors, timeout=None):
+            if delayed and reader in reads and not written.is_set():
+                entered.set()
+                wait_event(written, "complete hook payload is supplied to the reading pipe")
+            return native_select(reads, writes, errors, timeout)
+
+        with os.fdopen(reader, "r", encoding="utf-8") as stream:
+            def read_payload():
+                try:
+                    if not content:
+                        self.assertIsNone(cli._optional_wait_input(stream))
+                    results.append(cli._wait_payload(args))
+                except BaseException as failure:
+                    failures.append(failure)
+                finally:
+                    finished.set()
+
+            thread = threading.Thread(target=read_payload, name="host-stdin-fixture")
+            with mock.patch.object(cli.sys, "stdin", stream),\
+                    mock.patch.object(select, "select", observe_select):
+                try:
+                    if content and not delayed:
+                        os.write(writer, content)
+                    thread.start()
+                    if delayed:
+                        wait_event(entered, "native optional input starts reading the open pipe")
+                        os.write(writer, content)
+                        written.set()
+                    wait_event(finished, "native input returns before the write end closes")
+                finally:
+                    written.set()
+                    os.close(writer)
+                    if thread.ident is not None:
+                        wait_join(thread, "native input fixture thread exits")
+        if failures:
+            raise failures[0]
+        return results[0]
+
+    def test_both_options_preserve_empty_legacy_stop_and_reject_partial_open_stdin(self):
         args = SimpleNamespace(workspace=str(self.workspace), session_id=native.SESSION)
         for content in (b"", b'{"hook_event_name":"PostToolUse",'):
             with self.subTest(content=content):
-                reader, writer = os.pipe()
-                try:
-                    with os.fdopen(reader, "r", encoding="utf-8") as stream:
-                        reader = None
-                        if content:
-                            os.write(writer, content)
-                        else:
-                            # No bytes identify an event. Preserve the supported
-                            # templated Stop shape, without waiting for pipe EOF.
-                            self.assertIsNone(cli._optional_wait_input(stream))
-                        started = time.monotonic()
-                        with mock.patch.object(cli.sys, "stdin", stream):
-                            payload = cli._wait_payload(args)
-                        self.assertLess(time.monotonic() - started, 1)
-                        expected = ({"_hook_input_incomplete": True} if content else
-                            {"cwd": str(self.workspace), "session_id": native.SESSION})
-                        self.assertEqual(expected, payload)
-                finally:
-                    try:
-                        if reader is not None:
-                            os.close(reader)
-                    finally:
-                        os.close(writer)
+                payload = self.read_open_pipe(args, content)
+                expected = ({"_hook_input_incomplete": True} if content else
+                    {"cwd": str(self.workspace), "session_id": native.SESSION})
+                self.assertEqual(expected, payload)
 
     def test_both_options_preserve_delayed_complete_input_without_waiting_for_eof(self):
-        from floati import cli
         import json
 
         expected = self.payload()
         encoded = json.dumps(expected).encode("utf-8")
         args = SimpleNamespace(workspace=str(self.workspace), session_id=native.SESSION)
-        reader, writer = os.pipe()
-        release = threading.Event()
-        failures = []
+        self.assertEqual(expected, self.read_open_pipe(args, encoded, delayed=True))
 
-        def write_later():
-            try:
-                release.wait()
-                time.sleep(0.03)
-                os.write(writer, encoded)
-            except Exception as exc:
-                failures.append(exc)
-
-        thread = threading.Thread(target=write_later, name="host-delayed-stdin-fixture")
-        try:
-            with os.fdopen(reader, "r", encoding="utf-8") as stream:
-                reader = None
-                thread.start()
-                started = time.monotonic()
-                release.set()
-                with mock.patch.object(cli.sys, "stdin", stream):
-                    payload = cli._wait_payload(args)
-                elapsed = time.monotonic() - started
-                self.assertEqual(expected, payload)
-                self.assertLess(elapsed, 0.2)
-        finally:
-            release.set()
-            if thread.ident is not None:
-                thread.join(1)
-                self.assertFalse(thread.is_alive())
-            try:
-                if reader is not None:
-                    os.close(reader)
-            finally:
-                os.close(writer)
-        self.assertEqual([], failures)
 
 
 if __name__ == "__main__":

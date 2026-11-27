@@ -23,8 +23,7 @@ class WaiterPollCostTests(unittest.TestCase):
         for index in range(3):
             self.f.send("cost-held-" + str(index))
         output, error = io.StringIO(), io.StringIO()
-        codex_wait.run_stop_waiter(bus_home=self.f.bus_home, hook_payload=self.payload,
-                                   stdout=output, stderr=error)
+        self.assertEqual(0, self.f.publish_seeded_mail(self.payload, output, error))
         self.assertIn("3 new message(s)", output.getvalue(), error.getvalue())
 
     def run_idle(self, change=None):
@@ -45,7 +44,17 @@ class WaiterPollCostTests(unittest.TestCase):
 
     def test_unchanged_hold_does_not_reproject_history_on_each_poll(self):
         """Removing the change gate restores repeated semantic replay cost."""
-        self.hold()
+        run_stop_waiter = codex_wait.run_stop_waiter
+        host_ticks = iter((0.0, 3.0))
+
+        def run_under_startup_contention(**arguments):
+            # Model the host consuming the two-second budget after the
+            # waiter's initial clock read. Its durable reads remain real.
+            arguments.setdefault("monotonic", lambda: next(host_ticks, 3.0))
+            return run_stop_waiter(**arguments)
+
+        with mock.patch.object(codex_wait, "run_stop_waiter", run_under_startup_contention):
+            self.hold()
         with mock.patch.object(cursor_presentations, "project_wake_items",
                                wraps=cursor_presentations.project_wake_items) as projection:
             decision, error, polls = self.run_idle()

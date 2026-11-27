@@ -20,7 +20,7 @@ from .events import EVENT_KINDS, validate_event_records
 from .framing import FrameError, decode_frames, encode_frame
 from .ids import uuid7_hex
 from .jsonl import transact, transact_records
-from .records import _UUID7, validate_record
+from .records import ASK_RECORD_KINDS, _UUID7, validate_record
 from .registry import Registry, utc_now
 
 _EVENTS = "events.jsonl"
@@ -207,7 +207,7 @@ def perform_reply(
     """Append the one terminal answer or decline for an existing question."""
 
     sender_id, recipient_id = _parties(root, sender, recipient)
-    record = _publish_reply(
+    question, record = _publish_reply(
         root,
         sender=sender_id,
         recipient=recipient_id,
@@ -221,7 +221,7 @@ def perform_reply(
         sha=sha,
         doc=doc,
     )
-    return {**_from_terminal(question_id, record), "record": record}
+    return {**_from_terminal(question, record), "record": record}
 
 
 def present_question(root, *, sender, recipient, question_id, session, idempotency_key):
@@ -368,7 +368,7 @@ def _question_for_reply(records, question_id, sender, recipient):
     return question
 
 
-def _publish_reply(root, **fields) -> Dict[str, object]:
+def _publish_reply(root, *, prepare=None, **fields):
     kind = "ask_answer" if fields["disposition"] == "answer" else "ask_decline"
     prefix = "ask-answer-" if kind == "ask_answer" else "ask-decline-"
     record: Dict[str, object] = {
@@ -395,13 +395,13 @@ def _publish_reply(root, **fields) -> Dict[str, object]:
 
     def decide(records):
         validate_event_records(records)
-        _question_for_reply(records, fields["question_id"], fields["sender"], fields["recipient"])
+        question = _question_for_reply(records, fields["question_id"], fields["sender"], fields["recipient"])
         for saved in records:
             if saved.get("kind") not in _TERMINALS or saved.get("idempotency_key") != fields["idempotency_key"]:
                 continue
             replay = dict(record, id=saved["id"], timestamp=saved["timestamp"])
             if all(saved.get(name) == replay.get(name) for name in replay):
-                return saved, None
+                return (question, saved), None
             raise ProtocolRefusal(
                 "idempotency_conflict",
                 "DRAFT - idempotency key has different reply content",
@@ -418,7 +418,9 @@ def _publish_reply(root, **fields) -> Dict[str, object]:
             )
         validate_record(record, root.tenant_id, frozenset({kind}), integrity=False)
         validate_event_records([*records, record])
-        return record, record
+        if prepare is not None:
+            prepare(record)
+        return (question, record), record
 
     return transact(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
 
@@ -438,60 +440,52 @@ def _classify(
 ) -> Dict[str, object]:
     question = None
     terminal = None
+    chain = {}
     unreadable = False
     for frame in frames:
         if not isinstance(frame, Mapping):
             continue
-        if frame.get("kind") == "ask_question" and frame.get("id") == question_id:
-            try:
-                question = validate_record(
-                    dict(frame), tenant, frozenset({"ask_question"}), integrity=False,
-                )
-            except (ProtocolRefusal, IntegrityFailure):
+        kind = frame.get("kind")
+        if not isinstance(kind, str) or kind not in ASK_RECORD_KINDS:
+            continue
+        reference = "id" if kind == "ask_question" else "reply_to"
+        if frame.get(reference) != question_id:
+            continue
+        try:
+            if type(frame.get("schema_version")) is not int or frame["schema_version"] != 1:
+                raise ValueError("unsupported ask record version")
+            accepted = validate_record(dict(frame), tenant, frozenset({kind}), integrity=False)
+        except (ProtocolRefusal, IntegrityFailure, KeyError, TypeError, ValueError):
+            if kind == "ask_question":
                 return {"state": "absent"}
-            continue
-        if frame.get("kind") not in _TERMINALS or frame.get("reply_to") != question_id:
-            continue
-        accepted = _accept_terminal(frame, tenant)
-        if accepted is None:
             unreadable = True
             continue
-        if terminal is None:
+        if accepted["id"] in chain:
+            unreadable = True
+            continue
+        chain[accepted["id"]] = accepted
+        if kind == "ask_question":
+            question = accepted
+        elif kind in _TERMINALS:
             terminal = accepted
     if question is None:
         return {"state": "absent"}
-    if unreadable or (
-        terminal is not None and (
-            terminal["sender"] != question["recipient"]
-            or terminal["recipient"] != question["sender"]
-        )
-    ):
+    try:
+        validate_event_records(list(chain.values()))
+    except IntegrityFailure:
+        unreadable = True
+    if unreadable:
         return {"state": "unreadable", "question": question}
     if terminal is not None:
-        projected = project_terminal(terminal)
-        if projected["outcome"] == "UNKNOWN":
-            return {"state": "unreadable", "question": question}
         return {"state": "terminal", "question": question, "terminal": terminal}
     return {"state": "open", "question": question}
-
-
-def _accept_terminal(frame: Mapping[str, object], tenant: str) -> Optional[Dict[str, object]]:
-    if frame.get("schema_version") != 1 or not isinstance(frame.get("schema_version"), int):
-        return None
-    kind = frame.get("kind")
-    if kind not in _TERMINALS:
-        return None
-    try:
-        return validate_record(dict(frame), tenant, frozenset({str(kind)}), integrity=False)
-    except (ProtocolRefusal, IntegrityFailure, KeyError, TypeError):
-        return None
 
 
 def _finish_observation(seen: Mapping[str, object], question: Mapping[str, object]) -> Dict[str, object]:
     state = seen["state"]
     question_id = str(question["id"])
     if state == "terminal":
-        return _from_terminal(question_id, seen["terminal"])
+        return _from_terminal(seen["question"], seen["terminal"])
     if state == "unreadable":
         return {
             "state": "unreadable",
@@ -513,7 +507,8 @@ def _finish_observation(seen: Mapping[str, object], question: Mapping[str, objec
     return {"state": "open", "question": question}
 
 
-def _from_terminal(question_id: str, terminal: Mapping[str, object]) -> Dict[str, object]:
+def _from_terminal(question: Mapping[str, object], terminal: Mapping[str, object]) -> Dict[str, object]:
+    question_id = question["id"]
     projected = project_terminal(terminal)
     if projected["outcome"] == "UNKNOWN":
         return {
@@ -528,9 +523,7 @@ def _from_terminal(question_id: str, terminal: Mapping[str, object]) -> Dict[str
     if projected["outcome"] == "answered":
         evidence["answer_id"] = projected["answer_id"]
         evidence["answer_note"] = terminal["note"]
-        evidence["cost"] = project_ask_cost(
-            terminal["tenant_id"], question_id, terminal["recipient"], terminal["id"],
-        )
+        evidence["cost"] = project_ask_cost(question, terminal)
         return {"state": "answered", "evidence": evidence}
     evidence["decline_id"] = projected["decline_id"]
     evidence["reason"] = terminal["reason"]
@@ -569,7 +562,7 @@ def _publish_timeout(root, question: Mapping[str, object], started: float) -> Di
 
     result = transact(root, _EVENTS, decide, allowed_kinds=set(EVENT_KINDS))
     if result["state"] == "terminal":
-        return _from_terminal(question_id, result["terminal"])
+        return _from_terminal(result["question"], result["terminal"])
     if result["state"] == "unreadable":
         return _finish_observation(result, question)
     if result["state"] == "absent":

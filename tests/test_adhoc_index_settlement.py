@@ -1,5 +1,5 @@
 """Only exact remote banking permits a receipted row-index settlement."""
-import subprocess
+from tests.readiness import run_process
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -58,10 +58,10 @@ class AdhocIndexSettlementTests(ControllerFixture, unittest.TestCase):
 
         def competing_branch_update(source, destination, *args, **kwargs):
             if source == "index.lock" and destination == "index":
-                changed = subprocess.run(["/usr/bin/git", "-C", str(self.workspace), "-c",
+                changed = run_process(["/usr/bin/git", "-C", str(self.workspace), "-c",
                     "core.filesRefLockTimeout=0", "update-ref",
                     "refs/heads/" + self.case.profile_record["branch"], self.case.base_sha, sha],
-                    capture_output=True, timeout=5)
+                    "competing ref update exits", capture_output=True)
                 attempted.append(changed.returncode)
             return replace(source, destination, *args, **kwargs)
 

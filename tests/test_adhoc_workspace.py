@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import unittest
+from tests.readiness import wait_join
 import shutil
 from pathlib import Path
 import os
@@ -314,8 +315,7 @@ class BorrowedWorkspaceTests(AdhocFixture, unittest.TestCase):
         process.start()
         writer.close()
         try:
-            process.join(12)
-            self.assertFalse(process.is_alive(), "FIFO finalization exceeded owned child bound")
+            wait_join(process, "FIFO result fixture exits after finalization")
             self.assertEqual(0, process.exitcode, "FIFO finalization hit the child deadline")
             self.assertTrue(reader.poll(0))
             entered = reader.recv()
@@ -325,13 +325,16 @@ class BorrowedWorkspaceTests(AdhocFixture, unittest.TestCase):
             self.assertTrue(reader.poll(0))
             self.assertEqual({"phase": "refused", "code": "adhoc_result_disposition_invalid"}, reader.recv())
         finally:
-            if process.is_alive():
-                process.terminate()
-                process.join(2)
-            if process.is_alive():
-                process.kill()
-                process.join(2)
-            reader.close()
+            try:
+                if process.is_alive():
+                    process.terminate()
+                    try:
+                        wait_join(process, "collect terminated FIFO result fixture")
+                    except AssertionError:
+                        process.kill()
+                        wait_join(process, "collect killed FIFO result fixture")
+            finally:
+                reader.close()
             process.close()
         self.assertEqual(before, self.saved_git(profile))
         self.assertEqual(common_before, self.tree_bytes(Path(profile["git_common_dir"])))

@@ -259,8 +259,8 @@ def _fields(value: object, expected: set[str], label: str) -> dict:
 def _native_closure(rows: object) -> dict:
     """Reuse the full frozen grammar validator, never an exclusion prefix."""
     classified = bus_scale_commands._require_closed_contract(rows)
-    if len(rows) != 184:
-        raise ValueError("workload scope requires the reviewed 184 executable rows")
+    if len(rows) != 186:
+        raise ValueError("workload scope requires the reviewed 186 executable rows")
     return classified
 
 

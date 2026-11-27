@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FLOATI_SCHEMA_ORIGIN = "https://landoclusters.com/floati/schemas/"
 INTENTIONALLY_UNIDENTIFIED_SCHEMAS = frozenset(
     {
+        "schemas/v1/ask-cost-execution-v1.schema.json",
+        "schemas/v1/ask-cost-manifest-v1.schema.json",
+        "schemas/v1/ask-cost-receipts-v1.schema.json",
         "schemas/v1/compensation-executed-record.schema.json",
         "schemas/v1/compensation-proposed-record.schema.json",
         "schemas/v1/effect-failed-record.schema.json",

@@ -518,7 +518,8 @@ def observe_repository(repository: str, base_ref: str) -> Dict[str, object]:
     return facts
 
 
-def _observe(repository: str, base_ref: str, canonicalizer: Optional[_Canonicalizer]):
+def _observe(repository: str, base_ref: str, canonicalizer: Optional[_Canonicalizer],
+             *, selected_worktrees=None):
     """What each registered worktree changed against its merge base with
     `base_ref`, committed or not, and every pair that changed one path. A
     branch that has landed has no changes left, so its overlap expires."""
@@ -538,6 +539,8 @@ def _observe(repository: str, base_ref: str, canonicalizer: Optional[_Canonicali
         if entry.get("bare") is True or not isinstance(entry.get("worktree"), str):
             continue
         path = _on_disk(os.path.realpath(str(entry["worktree"])))[0]
+        if selected_worktrees is not None and path not in selected_worktrees:
+            continue
         row: Dict[str, object] = {"worktree": path, "branch": entry.get("branch"),
                                   "head": entry.get("HEAD")}
         if not os.path.isdir(path):

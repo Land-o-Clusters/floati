@@ -9,7 +9,7 @@ BUSY line, never the host-wide suite-process total.
 
 from __future__ import annotations
 
-from tests.readiness import Readiness
+from tests.readiness import Readiness, wait_process
 
 import os
 import re
@@ -70,7 +70,7 @@ class LeaseCheckFq11Tests(unittest.TestCase):
         def _stop_sleeper() -> None:
             if child.poll() is None:
                 child.kill()
-            child.wait(timeout=5)
+            wait_process(child, "collect the lease-check process fixture")
 
         self.addCleanup(_stop_sleeper)
 

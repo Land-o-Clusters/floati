@@ -16,6 +16,7 @@ from floati.errors import ProtocolRefusal
 from floati.events import EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.readiness import wait_join
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -107,7 +108,7 @@ class ArchiveMaintenanceAuthorityTests(unittest.TestCase):
                     errors.append(exc)
             worker = threading.Thread(target=inspect_token)
             worker.start()
-            worker.join(timeout=5)
+            wait_join(worker, "foreign admission check finishes")
             self.assertFalse(worker.is_alive())
             self.assertEqual(1, len(errors))
             self.assertIsInstance(errors[0], ProtocolRefusal)

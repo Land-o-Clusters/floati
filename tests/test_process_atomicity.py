@@ -17,6 +17,7 @@ from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.work import WorkLog
 from floati.ids import uuid7_hex
+from tests.readiness import wait_join
 from tests.fixtures.epoch_hint_capture import capture_epoch_hint_failure
 
 
@@ -119,7 +120,7 @@ class ProcessAtomicityTests(unittest.TestCase):
             process.start()
         start.set()
         for process in processes:
-            process.join(5)
+            wait_join(process, "transaction contender exits")
             self.assertEqual(0, process.exitcode)
         return [results.get(timeout=1) for _ in processes]
 
@@ -199,7 +200,8 @@ class ProcessAtomicityTests(unittest.TestCase):
         for process in processes: process.start()
         start.set()
         for process in processes:
-            process.join(5); self.assertEqual(0, process.exitcode)
+            wait_join(process, "run creation contender exits")
+            self.assertEqual(0, process.exitcode)
         outcomes = [results.get(timeout=1) for _ in processes]
         self.assertEqual({"ok"}, {status for status, _ in outcomes})
         self.assertTrue(all(value == record for _, value in outcomes))

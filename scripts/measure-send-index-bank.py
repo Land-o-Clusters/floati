@@ -32,7 +32,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--records", type=int, choices=(10000, 100000), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--pre-bank-baseline", action="store_true",
+                        help="measure the original witness in the pre-index source archive")
     args = parser.parse_args()
+    if args.pre_bank_baseline and ((SOURCE / "floati/send_prefix.py").exists()
+                                   or args.records != 100000):
+        parser.error("the pre-bank baseline requires the full original witness and no send index")
     scratch = args.output.parent
     try:
         metadata = scratch.stat()
@@ -56,29 +61,32 @@ def main():
     except OSError:
         parser.error("output must name a new summary file in the private scratch directory")
     with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-        return _measure(args.records, output)
+        return _measure(args.records, output, require_bank=not args.pre_bank_baseline)
 
 
-def _measure(records, output):
+def _measure(records, output, *, require_bank=True):
     from tests.test_seat_teardown_scale import SeatTeardownNativeScaleTests
-    phases, fixtures, files = [], [], []
+    phases, fixtures, files, banks = [], [], [], []
+    SeatTeardownNativeScaleTests.cold_send_index = require_bank
 
     def timed(label, original):
         def wrapped(case, *positional, **keywords):
             before, started = cpu(), time.perf_counter()
             try:
                 value = original(case, *positional, **keywords)
-                if label == "setUp":
-                    fixtures.append(str(case.f.base))
-                if label == "perform" and not files:
-                    home = case.root.tenant_home / ".send-prefix"
-                    files.append(sum(path.is_file() for path in home.rglob("*")))
-                return value
             finally:
                 row = {"phase": label, "wall_seconds": time.perf_counter() - started,
                     "cpu_seconds": cpu() - before}
                 phases.append(row)
                 print(json.dumps(row), flush=True)
+            if label == "setUp":
+                fixtures.append(str(case.f.base))
+            if label == "perform" and not files:
+                home = case.root.tenant_home / ".send-prefix"
+                bank = home / "bank.bin"
+                banks.append(bank.stat().st_size if bank.is_file() else 0)
+                files.append(sum(path.is_file() for path in home.rglob("*")))
+            return value
         return wrapped
 
     for name in ("setUp", "seed_history", "perform", "doCleanups"):
@@ -99,11 +107,16 @@ def _measure(records, output):
                 case.tearDown()
                 case.doCleanups()
             code = 0
+        if code == 0 and require_bank and not any(banks):
+            print("The first native perform did not publish a cold send index bank.", file=sys.stderr)
+            code = 1
     finally:
         summary = {"records": records, "test": TEST, "exit": code,
             "wall_seconds": time.perf_counter() - started, "cpu_seconds": cpu() - before,
             "load_start": load_start, "load_end": os.getloadavg(), "phases": phases,
             "fixture_directories": fixtures, "cache_files_after_first_perform": files,
+            "bank_bytes_after_first_perform": banks,
+            "require_bank": require_bank,
             "test_sha256": hashlib.sha256((SOURCE / "tests/test_seat_teardown_scale.py").read_bytes()).hexdigest()}
         if result is not None:
             summary.update(tests=result.testsRun, failures=len(result.failures), errors=len(result.errors),

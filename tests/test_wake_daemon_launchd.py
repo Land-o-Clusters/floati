@@ -17,6 +17,7 @@ from floati.wake_daemon_contract import (
     DaemonConsentLedger,
     DaemonCoordinate,
 )
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -183,12 +184,12 @@ class WakeDaemonLaunchAgentTests(unittest.TestCase):
     def test_program_arguments_execute_installed_shell_launcher_directly(self) -> None:
         preview = self.manager().preview()
 
-        completed = subprocess.run(
+        completed = run_process(
             preview["plist"]["ProgramArguments"],
+            "launchd fixture launcher exits",
             capture_output=True,
             text=True,
             check=False,
-            timeout=5,
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)

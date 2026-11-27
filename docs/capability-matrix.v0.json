@@ -11,6 +11,16 @@
       "version": "2.1.251 (Claude Code)",
       "measured_at": "2026-09-03",
       "receipt_path": "docs/evidence/conformance/C2-claude-cli-version-2026-09-03.md"
+    },
+    "t3/cli": {
+      "version": "t3 v0.1.13-nightly.20261126.5305",
+      "measured_at": "2026-11-26",
+      "receipt_path": "docs/evidence/conformance/t3-nightly-surface-2026-11-26.md"
+    },
+    "t3/desktop": {
+      "version": "T3 Code Nightly 0.1.13-nightly.20261126.5305",
+      "measured_at": "2026-11-26",
+      "receipt_path": "docs/evidence/conformance/t3-nightly-surface-2026-11-26.md"
     }
   },
   "columns": [
@@ -1790,7 +1800,7 @@
       "versions": {
         "cli": "t3 v0.0.35"
       },
-      "text": "Composed through Grok; no native OpenRouter driver."
+      "text": "August observation at t3 v0.0.35 (stale for the bundled Nightly CLI). The route used Grok. Native OpenRouter wiring on Nightly is unmeasured."
     },
     {
       "harness": "herdr",
@@ -1848,7 +1858,8 @@
     "opencode/cli": "Worker completes across expiry; fresh expired claim refused; governed resume unmeasured",
     "grok/cli": "via installed grok binary",
     "herdr/cli": "orchestrator; observation adapter live",
-    "t3/cli": "orchestrator; observed via its own surface",
+    "t3/cli": "[Bundled Nightly surface](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md) covers `t3 thread`, MCP access and milestones. Current Floati operation is unmeasured.",
+    "t3/desktop": "[Nightly bundle](docs/evidence/conformance/t3-nightly-surface-2026-11-26.md) identified. Current Floati operation is unmeasured.",
     "devin/cli": "CLI-compat tier",
     "antigravity/cli": "CLI-compat tier",
     "codex/desktop": "ChatGPT.app",

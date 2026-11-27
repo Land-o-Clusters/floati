@@ -505,6 +505,10 @@ class PrepClearLooseningTests(unittest.TestCase):
                 "needs_observed",
                 "needs_observation",
                 "needs_wake",
+                # T3 account gate and dispatch receipts.
+                "t3_dispatch_grant",
+                "t3_dispatch_receipt",
+                "t3_dispatch_child_link",
             },
             set(_SPECS) - before,
         )

@@ -44,7 +44,7 @@ _GOVERNED_PROTOCOL_ASSET_ROOTS = (
     "schemas/v3",
     "schemas/v4",
 )
-_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 204
+_FLOATI_GOVERNED_PROTOCOL_ASSET_COUNT = 210
 _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # Versioned schemas may evolve in place, but their reviewed membership is
     # fixed. Content bytes deliberately do not participate in this pin. The
@@ -72,7 +72,7 @@ _FLOATI_GOVERNED_PROTOCOL_PATHS_SHA256 = (
     # v1 native dispatch launcher record.
     # Upgrade preparation adds the v1 epoch carry verification.
     # NEEDS-YOU-OBSERVED-1 adds the v1 needs-observed item.
-    '1f0cdecd4103a318eca187b3dda1603466a5992560ae92bf83b1c4549292a343'
+    '618148956e5d9b5958e8ccf969188a318c59e4c9eb9baf2873340a1351c9d200'
 )
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEY_COUNT = 1
 _FLOATI_GOVERNED_PROTOCOL_COMMON_KEYS_SHA256 = (

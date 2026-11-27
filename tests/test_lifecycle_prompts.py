@@ -491,7 +491,9 @@ class LifecyclePromptTests(unittest.TestCase):
         # NEEDS-YOU-OBSERVED-1 reserves needs-observe; observe was already reserved.
         # NET-MCP-ASK-1 reserves the top-level who verb.
         # Fleet topology reserves role-clear and the net route command family.
-        self.assertEqual(len(reserved), 305, sorted(reserved))
+        # NET-CROSS-OPTIN-1 reserves cross, cross-disable, cross-enable,
+        # disable and enable.
+        self.assertEqual(len(reserved), 310, sorted(reserved))
         self.assertTrue({"node-role-clear", "net-route-add", "net-route-remove",
                          "net-route-list"} <= reserved)
         self.assertIn("checkout-liveness", reserved)

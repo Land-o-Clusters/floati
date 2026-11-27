@@ -13,6 +13,7 @@ from floati.codex_wait_liveness import process_start_epoch
 from floati.cursor_wait import run_cursor_stop_wait
 from floati.errors import ProtocolRefusal
 from floati import waiter_invocation
+from tests.readiness import wait_process
 from tests.cursor_invocation_fixture import CursorInvocationFixture
 
 
@@ -170,7 +171,7 @@ class CursorWaitInvocationContractTests(unittest.TestCase):
                         pass
         self.addCleanup(cleanup)
         host["control"].touch()
-        host["process"].wait(timeout=3)
+        wait_process(host["process"], "scratch hook chain host exits")
         self.f.wait_until(lambda: len(self.f.rows()) == 2,
             "a surviving intermediate parent hid the host's exit", seconds=3)
         self.f.wait_until(lambda: process_start_epoch(pid) != births[pid],

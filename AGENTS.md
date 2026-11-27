@@ -116,6 +116,9 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | --- | --- | --- |
 | `describe` | `floati describe --json` | project the live command contract |
 | `setup` | `floati setup --root PATH [--seat {claude,codex,cursor,zcode}] [--session SESSION] [--executable PATH] [--hook {claude,codex,cursor,zcode}] [--confirm TOKEN &#124; --teardown]` | set up one seat in a new local fleet |
+| `cross` | `floati cross {enable&#124;disable}` | manage local cross-machine opt-in |
+| `cross enable` | `floati cross enable --root ROOT [--listen ADDRESS] [--preview &#124; --resume]` | preview or approve local cross-machine opt-in |
+| `cross disable` | `floati cross disable --root ROOT [--dry-run]` | stop cross-machine operation for this root |
 | `overlap` | `floati overlap {report&#124;observe}` | derive local overlap evidence |
 | `overlap report` | `floati overlap report --repository PATH --base-ref REF --left-ref REF --right-ref REF` | emit one local overlap fact |
 | `overlap observe` | `floati overlap observe --repository PATH --base-ref REF` | name worktree pairs that changed one path |
@@ -266,7 +269,7 @@ reviewed help metadata; `--check` detects drift in this table and the static hel
 | `seat migrate` | `floati seat migrate --root ROOT --as NODE --workspace PATH --idempotency-key KEY [--coordinator NODE]` | migrate one registered pre-governance seat once |
 | `seat retire` | `floati seat retire --root ROOT [--apply]` | offer git worktree remove for finished row trees |
 | `hook` | `floati hook {install&#124;uninstall}` | install explicit native harness hooks |
-| `hook install` | `floati hook install --harness {cursor,codex,zcode,claude} --root ROOT [--as NODE] [--workspace WORKSPACE] [--prepare-only] --runtime RUNTIME [--hooks HOOKS] [--destination DESTINATION] [--hook-timeout-seconds HOOK_TIMEOUT_SECONDS] [--wait-deadline-seconds WAIT_DEADLINE_SECONDS] [--acknowledge-stop-hook-change ACKNOWLEDGE_STOP_HOOK_CHANGE]` | install Cursor, Codex, zcode, or Claude native hooks |
+| `hook install` | `floati hook install --harness {cursor,codex,zcode,claude} --root ROOT [--as NODE] [--workspace WORKSPACE] [--prepare-only] --runtime RUNTIME [--hooks HOOKS] [--destination DESTINATION] [--hook-timeout-seconds HOOK_TIMEOUT_SECONDS] [--wait-deadline-seconds WAIT_DEADLINE_SECONDS] [--acknowledge-stop-hook-change ACKNOWLEDGE_STOP_HOOK_CHANGE] [--t3-gates T3_GATES] [--confirm CONFIRM]` | install Cursor, Codex, zcode, or Claude native hooks |
 | `hook uninstall` | `floati hook uninstall --harness {cursor,zcode,claude} [--hooks HOOKS] --root ROOT --as NODE --workspace WORKSPACE --runtime RUNTIME` | remove one cursor seat marker or restore one zcode or Claude Stop hook |
 | `wake` | `floati wake {pause&#124;resume&#124;status&#124;arm&#124;wait&#124;daemon}` | control exact wake coordinates |
 | `wake pause` | `floati wake pause --root ROOT --as NODE --session SESSION [--idempotency-key KEY]` | pause one exact session |

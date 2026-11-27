@@ -1,7 +1,7 @@
 """Task1 exact dispatch admission, replay and conversation privacy."""
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import Readiness, wait_queue, wait_event, wait_join
 import io
 import hashlib
 from copy import deepcopy
@@ -321,10 +321,11 @@ class AdhocJournalTests(AdhocFixture, unittest.TestCase):
             start.set()
             for process in parents:
                 if process.pid is not None:
-                    process.join(10)
+                    readiness = Readiness("admission contender exits during cleanup")
+                    process.join(readiness.remaining())
                     if process.is_alive():
                         process.terminate()
-                        process.join(5)
+                        wait_join(process, "collect terminated admission contender")
             results.close()
             results.join_thread()
 
@@ -339,7 +340,7 @@ class AdhocJournalTests(AdhocFixture, unittest.TestCase):
         self.assertEqual(["admitted", "admitted"], [row[0] for row in outcomes], outcomes)
         self.assertEqual(outcomes[0][2], outcomes[1][2])
         for process in parents:
-            process.join(10)
+            wait_join(process, "admission contender exits after its result")
             self.assertEqual(0, process.exitcode)
         admitted = outcomes[0][2]
         before = self.tree_bytes()
@@ -367,10 +368,11 @@ class AdhocJournalTests(AdhocFixture, unittest.TestCase):
             start.set()
             for process in parents:
                 if process.pid is not None:
-                    process.join(10)
+                    readiness = Readiness("admission contender exits during cleanup")
+                    process.join(readiness.remaining())
                     if process.is_alive():
                         process.terminate()
-                        process.join(5)
+                        wait_join(process, "collect terminated admission contender")
             results.close()
             results.join_thread()
 
@@ -387,7 +389,7 @@ class AdhocJournalTests(AdhocFixture, unittest.TestCase):
         self.assertEqual(1, len(admitted), outcomes)
         self.assertEqual([("error", "ProtocolRefusal", "adhoc_dispatch_busy")], refused)
         for process in parents:
-            process.join(10)
+            wait_join(process, "admission contender exits after its result")
             self.assertEqual(0, process.exitcode)
         self.assertEqual("admitted", self.journal().show(admitted[0][2]["dispatch_id"])["phase"])
         self.assert_no_provider_effects()

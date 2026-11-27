@@ -20,6 +20,7 @@ from floati.registry import REGISTRY_KINDS, Registry
 from floati.root import FloatiRoot
 from floati.work import WorkLog
 from floati.workers import WorkerReceipts
+from tests.readiness import wait_join
 
 
 NOW = datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc)
@@ -315,7 +316,7 @@ class ReceiptHistorySnapshotTests(unittest.TestCase):
                     result.append(repr(failure))
             writer = threading.Thread(target=contender)
             writer.start()
-            writer.join(timeout=2)
+            wait_join(writer, "native epoch contender finishes during receipt query")
             self.assertFalse(writer.is_alive(), "native epoch contender exceeded its bounded attempt")
             outcomes.append((path, result))
 

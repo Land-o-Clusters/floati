@@ -23,7 +23,7 @@ from floati.events import EventLog
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from floati.waiter_consent import arm_waiter_consent
-from tests.readiness import wait_event, wait_until
+from tests.readiness import wait_event, wait_join, wait_until
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -57,12 +57,12 @@ class ScratchInbox:
 
     def close(self):
         self.stopped.set()
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wake:
-            wake.connect(self.path)
-        self.thread.join(5)
-        self.listener.close()
-        if self.thread.is_alive():
-            raise AssertionError("owned scratch socket did not exit")
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wake:
+                wake.connect(self.path)
+            wait_join(self.thread, "owned scratch socket exits")
+        finally:
+            self.listener.close()
 
 
 class ClaudeInboxTests(unittest.TestCase):

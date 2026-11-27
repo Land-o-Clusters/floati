@@ -94,6 +94,31 @@ class CapabilityMatrixVersionTests(unittest.TestCase):
             self.assertIn("2.1.251 (Claude Code)", rendered)
             self.assertIn(CURRENT_RECEIPT, rendered)
 
+    def test_t3_rows_link_current_evidence_and_mark_august_cells_stale(self) -> None:
+        for mode in ("full", "compact"):
+            rendered = self.render(mode)
+            cli_row = "| t3 / cli |" if mode == "full" else "| t3 |"
+            for surface, row_start, historical_version in (
+                ("cli", cli_row, "t3 v0.0.35"),
+                ("desktop", "| t3 / desktop |", "T3 Code Nightly 0.0.35-nightly.20260826.1195"),
+            ):
+                with self.subTest(mode=mode, surface=surface):
+                    coordinate = f"t3/{surface}"
+                    current = self.dataset["declared_current_versions"].get(coordinate)
+                    self.assertIsNotNone(current, f"{coordinate} has no current-build receipt")
+                    self.assertNotEqual(historical_version, current["version"])
+                    receipt = REPOSITORY_ROOT / current["receipt_path"]
+                    self.assertIn(current["version"], receipt.read_text(encoding="utf-8"))
+                    self.assertIn(f"]({current['receipt_path']})", rendered)
+
+                    row = next(line for line in rendered.splitlines() if line.startswith(row_start))
+                    cells = row.split("|")[2:-1]
+                    if mode == "compact":
+                        cells = cells[:-1]  # The final column is a row note.
+                    self.assertTrue(cells)
+                    for cell in cells:
+                        self.assertIn("`version_stale: true`", cell)
+
 
 if __name__ == "__main__":
     unittest.main()

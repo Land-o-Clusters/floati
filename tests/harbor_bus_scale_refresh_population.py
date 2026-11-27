@@ -154,9 +154,10 @@ class BusScaleRefreshPopulationTests(unittest.TestCase):
         self.assertTrue(scope["excluded"]["quiet release"].startswith("Native workload pending. "))
         amendment = json.loads(commands._TRAIN_AMENDMENT.read_bytes())
         pending = {" ".join(row["path"]) for row in amendment["commands"]} - {"work add"}
-        self.assertEqual(EXECUTABLE_COUNT + 6 + len(pending), len(scope["inventory"]))
+        self.assertEqual(EXECUTABLE_COUNT + 8 + len(pending), len(scope["inventory"]))
         admin = commands.classify_contract(scope["inventory"])["administration"]
-        self.assertEqual(ADMINISTRATION_COUNT + 4, len(admin))
+        self.assertEqual(ADMINISTRATION_COUNT + 6, len(admin))
+        self.assertTrue({"cross enable", "cross disable"} <= set(admin))
         self.assertIn("setup", admin)
         self.assertIn("seat retire", admin)
         self.assertEqual(NONROUTINE | pending | set(admin) | {"ask", "replay", "who"},

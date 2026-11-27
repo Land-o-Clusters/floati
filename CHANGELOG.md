@@ -4,6 +4,33 @@ All notable changes to Floati are recorded here, by hand. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow the rules in
 [RELEASING.md](RELEASING.md). Every release below names its receipt.
 
+## [Unreleased]
+
+## [0.2.1] — 2026-11-27
+
+Ledger contract: `c7.28`.
+
+<!-- DRAFT-OPUS 2026-11-27 -->
+
+**The quickstart works again.**
+
+### What changed
+
+- **The 0.2.0 quickstart failed on macOS and Linux.** It left the shell outside the clone, so Python could not find Floati. The corrected steps enter the clone first and install with `-B`, so no bytecode is written into it. [Published 0.2.0 quickstart](https://github.com/Land-o-Clusters/floati/blob/v0.2.0/README.md#start-here) · [Corrected quickstart](README.md#start-here) · [Install test](tests/test_deploy.py)
+- **Uninstall can clean up after itself.** A plain uninstall leaves its receipts behind. The uninstall steps now show how to remove them once uninstall succeeds. [Uninstall steps](README.md#how-it-holds-up) · [Cleanup test](tests/test_deploy.py)
+- **An opt-in T3 dispatch gate.** For the provider instances you select, it checks grants on calls from Claude Code parents through the installed hooks. It can record the child IDs T3 returns, and hold new load dispatches during a quiet window or for a held node. [T3 dispatch gate](docs/T3-DISPATCH-GATE.md) · [Dispatch tests](tests/test_t3_dispatch_gate.py)
+- **Cost and quota receipts.** Ask and replay read version 2 cost receipts. Opted-in role routing can use verified quota for an exact T3 provider instance. [Cost tests](tests/test_net_ask_1.py) · [Quota tests](tests/test_net_address_1.py)
+- **Cross-machine code toward Floati 2.0 is included, and off.** Nothing reaches another machine unless you opt in. [Opt-in tests](tests/test_cross_optin.py)
+
+### What we did not measure
+
+- **Cross-machine operation.** It is not qualified. Do not rely on it.
+- **Cost and quota routing with live accounts.** Those paths are tested with fixtures only.
+
+### Release receipt
+
+<!-- Filled from the qualified run: tag and peeled commit, public bundle manifest SHA-256, harbor source, suite count and duration on each platform, skips. -->
+
 ## [0.2.0] — 2026-11-26
 
 Ledger contract: `c7.24`.

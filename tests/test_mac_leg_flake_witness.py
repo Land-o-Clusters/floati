@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.readiness import communicate, wait_readable
+from tests.readiness import communicate, run_process, wait_readable
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -24,9 +24,9 @@ class MacLegFlakeWitnessTests(unittest.TestCase):
             with self.subTest(missing=missing):
                 arguments = [arg for code, option in inputs.items()
                              if code != missing for arg in option]
-                result = subprocess.run(
+                result = run_process(
                     [sys.executable, "-B", str(SCRIPT), *arguments, __name__],
-                    capture_output=True, text=True, timeout=5,
+                    "witness CLI returns a refusal", capture_output=True, text=True,
                 )
 
                 self.assertEqual(2, result.returncode, result.stderr)

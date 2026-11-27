@@ -8,7 +8,7 @@ import unittest
 from unittest import mock
 
 from tests.test_adhoc_threads import ControllerFixture
-from tests.readiness import wait_readable
+from tests.readiness import communicate, wait_readable
 
 
 class AdhocControllerAuthorityTests(ControllerFixture, unittest.TestCase):
@@ -58,7 +58,7 @@ class AdhocControllerAuthorityTests(ControllerFixture, unittest.TestCase):
                 code, _result = self.capture_run()
             self.assertIn(code, {"adhoc_result_unbanked", "adhoc_lease_ended"})
             for child in children:
-                output, errors = child.communicate(timeout=5)
+                output, errors = communicate(child, "revoker exits after guard release")
                 self.assertEqual(0, child.returncode, errors)
                 if output.strip() == "epoch_lock_timeout":
                     # The bounded native writer may time out while the real
@@ -72,4 +72,4 @@ class AdhocControllerAuthorityTests(ControllerFixture, unittest.TestCase):
             for child in children:
                 if child.poll() is None:
                     child.terminate()
-                    child.communicate(timeout=2)
+                    communicate(child, "collect terminated revoker fixture")

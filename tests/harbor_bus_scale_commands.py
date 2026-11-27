@@ -37,7 +37,7 @@ _ADMINISTRATION_PATHS = frozenset({
     "update fleet apply", "update prepare", "uninstall", "purge", "chart add-root",
     "chart remove-root", "survey", "snapshot", "context policy set",
     "context policy clear", "presence set", "role transfer-architect", "role new",
-    "role import", "role edit",
+    "role import", "role edit", "cross enable", "cross disable",
 })
 
 
@@ -161,7 +161,7 @@ class BusScaleCommandCoverageTests(unittest.TestCase):
         classified = _commands.classify_contract(self.rows)
         routine = classified["routine"]
         administration = classified["administration"]
-        self.assertEqual(62, len(_ADMINISTRATION_PATHS))  # BUS-SCALE-CENSUS-1 merged parser
+        self.assertEqual(64, len(_ADMINISTRATION_PATHS))
         self.assertEqual(_ADMINISTRATION_PATHS, set(administration))
         self.assertEqual([], classified["unknown"])
         self.assertEqual(len(routine), len(set(routine)))

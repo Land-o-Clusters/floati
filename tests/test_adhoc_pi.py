@@ -3,12 +3,12 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
 
 from floati.worker_bootstrap_protocol import NATIVE_THREAD_BOUNDS
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 DRIVER = Path(__file__).parent / "fixtures/adhoc-native/pi_driver.py"
@@ -45,8 +45,8 @@ class AdhocPiTests(unittest.TestCase):
         home = self.base / "driver-home"
         home.mkdir(mode=0o700, exist_ok=True)
         env = dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE="1")
-        result = subprocess.run([sys.executable, "-B", str(DRIVER), str(context_path), mode,
-            str(self.store)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8,
+        result = run_process([sys.executable, "-B", str(DRIVER), str(context_path), mode,
+            str(self.store)], "Pi driver returns its result", env=env, capture_output=True,
             umask=umask)
         self.assertEqual(0, result.returncode, result.stderr.decode(errors="replace"))
         return json.loads(result.stdout)

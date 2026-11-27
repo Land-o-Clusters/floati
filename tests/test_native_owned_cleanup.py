@@ -7,7 +7,7 @@ import unittest
 from floati.worker_bootstrap_protocol import BootstrapChannel
 from floati.worker_exec import SpawnedWorkerProcess
 from floati.workers import WorkerRunner
-from tests.readiness import Readiness
+from tests.readiness import Readiness, wait_join
 
 
 class OwnedGroupCleanupTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class OwnedGroupCleanupTests(unittest.TestCase):
         process = SpawnedWorkerProcess(leader)
         channel = BootstrapChannel(parent_socket.detach())
         self.addCleanup(channel.close)
-        self.addCleanup(process.join, 5)
+        self.addCleanup(wait_join, process, "owned group leader is collected")
         def cleanup_owned_group():
             # A readiness failure must also bind and reap this owned fixture;
             # the normal path confirms the group immediately below.
@@ -59,8 +59,9 @@ class OwnedGroupCleanupTests(unittest.TestCase):
         self.assertEqual(verb, "fixture_group_ready")
         self.assertTrue(process.confirm_process_group())
         channel.send(("fixture_group_confirmed", None))
+        finish = Readiness("owned group completes before its leader is reaped")
         WorkerRunner._finish_effect_process(
-            channel, process, time.monotonic() + 3,
+            channel, process, finish.started + finish.bound,
             before_reap=process.shutdown_process_group)
         process.shutdown_process_group()
         process.join(1)

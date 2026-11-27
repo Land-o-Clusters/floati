@@ -3,7 +3,7 @@
 These reconstruct the missing lower-level boundary, not the entire future
 seat teardown verb. Fixtures and tests.__init__ keep HOME and fleet scratch.
 """
-from tests.readiness import wait_event
+from tests.readiness import wait_event, wait_join
 import io
 import json
 import fcntl
@@ -207,7 +207,7 @@ class CursorSessionPauseTests(unittest.TestCase):
                 self.assertIn('followup_message', self.stop(output=PausingOutput()))
         finally:
             if worker.ident is not None:
-                worker.join(2)
+                wait_join(worker, "continuation pause finishes")
         self.assertFalse(worker.is_alive())
         self.assertFalse(errors)
         self.assertTrue(finished.is_set())

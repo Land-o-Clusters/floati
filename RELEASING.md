@@ -24,6 +24,8 @@ suite, so a drift goes red on every seat and every branch; and as a step in
 `release-gate.yml`, which is gated to the public repository and therefore runs
 on the exported projection. Before cutting a new tag, rename `[Unreleased]`
 to the release version and date, and make the four version spellings agree.
+You can leave a fresh, empty `[Unreleased]` section immediately above the
+dated entry.
 Run the second mode by hand before cutting the tag. When that tag already
 exists, the check reads an isolated snapshot of the tag's own tree, including
 its metadata, README receipts, release notes and contract cut. Later working

@@ -17,6 +17,10 @@ import time
 from pathlib import Path
 
 
+# Standalone fixture readiness, release, and collection share this watchdog.
+FIXTURE_WATCHDOG_SECONDS = 60.0
+
+
 def observed_identity(pid: int) -> object:
     """Query only a retained PID; use the runner's native birth witness."""
     source = Path(__file__).resolve().parents[3] / "scripts" / "parallel_processes.py"
@@ -46,7 +50,7 @@ def observe_process(workspace: Path, role: str) -> int:
     (evidence / (role + "-ready.json")).write_text(json.dumps(ready, sort_keys=True) + "\n")
     print(json.dumps(ready, sort_keys=True), flush=True)
     # A safety watchdog for the release handshake, not a product deadline.
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + FIXTURE_WATCHDOG_SECONDS
     release = evidence / (role + "-release")
     while stopped[0] is None and not release.exists() and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -67,14 +71,14 @@ def collect_observed_descendant(child: subprocess.Popen, workspace: Path) -> Non
         except OSError as error:
             errors.append({"operation": "terminate", "error": repr(error)})
     try:
-        code = child.wait(timeout=4)
+        code = child.wait(timeout=FIXTURE_WATCHDOG_SECONDS)
     except (subprocess.TimeoutExpired, OSError) as error:
         errors.append({"operation": "bounded_wait", "error": repr(error)})
         try:
             child.kill()
         except OSError as error:
             errors.append({"operation": "kill", "error": repr(error)})
-        code = child.wait()
+        code = child.wait(timeout=FIXTURE_WATCHDOG_SECONDS)
     result = {"pid": child.pid, "exit_code": code, "collected": True}
     if errors:
         result["collection_errors"] = errors
@@ -92,7 +96,7 @@ def start_observed_descendant(workspace: Path) -> subprocess.Popen:
                         "--observation-workspace", str(workspace)], cwd=workspace,
                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         started = time.monotonic()
-        bound = 60.0
+        bound = FIXTURE_WATCHDOG_SECONDS
         ready, _, _ = select.select([child.stdout], [], [], bound)
         if not ready:
             raise RuntimeError(
@@ -159,7 +163,7 @@ def write_boundary_evidence(args: argparse.Namespace, workspace: Path) -> None:
         )
         thread.start()
         results["main"] = _write_errno(tenant_target)
-        thread.join(2)
+        thread.join(FIXTURE_WATCHDOG_SECONDS)
         results["thread_alive"] = thread.is_alive()
         results["thread"] = thread_result[0] if thread_result else "missing"
     elif args.boundary_mode == "provider-descendant":

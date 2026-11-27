@@ -2,6 +2,8 @@
 
 import json
 import unittest
+from copy import deepcopy
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
 from tests import test_net_ask_1
@@ -14,7 +16,9 @@ from floati.errors import ProtocolRefusal
 from pathlib import Path
 from tests.readiness import READY_SECONDS
 from tests.schema_validation import validate_json_schema
-from floati import cli
+from floati import cli, role_addressing
+from floati.addressing import _digest
+from floati.puddle_quota_snapshot import QuotaUnavailable, read_puddle_quota_snapshot
 
 
 class NetAddress1Tests(unittest.TestCase):
@@ -181,11 +185,11 @@ class NetAddress1Tests(unittest.TestCase):
         self.assertEqual(["blue", "green"], artifact["evidence"]["recipients"])
         self.assertEqual(2, len(artifact["evidence"]["results"]))
 
-    def assign_reviewers(self):
+    def assign_reviewers(self, green_harness="Claude"):
         fixture = self.fleet
         completed, artifact = fixture.invoke_in_process(
             "node", "add", "--root", str(fixture.fleet), "--node", "green",
-            "--harness", "Claude", "--lifetime", "permanent",
+            "--harness", green_harness, "--lifetime", "permanent",
         )
         self.assertEqual(0, completed.returncode, artifact)
         for node in ("blue", "green"):
@@ -293,6 +297,329 @@ class NetAddress1Tests(unittest.TestCase):
         self.assertEqual(34, completed.returncode, artifact)
         questions = [row for row in self.fleet.events() if row["kind"] == "ask_question"]
         self.assertEqual(["blue"], [row["recipient"] for row in questions])
+
+    def quota_v2_fixture(self):
+        self.fleet.fleet = self.fleet.base / "fleet-sample"
+        self.fleet.initialize_fleet()
+        self.assign_reviewers("Codex")
+        root = resolve_command_root(str(self.fleet.fleet))
+        export = self.fleet.base / "quota"
+        export.mkdir(mode=0o700)
+        snapshot = export / "puddle-quota-v2.json"
+        observed = "2026-11-26T12:00:00Z"
+        accounts = ["acct-" + suffix * 32 for suffix in ("a", "b")]
+        bindings = [
+            {"tenant_id": root.tenant_id, "node_id": node, "harness": "codex",
+             "account_ref": account, "binding_id": f"b-{node}-1",
+             "valid_from": observed, "expires_at": "2026-11-26T12:02:00Z"}
+            for node, account in zip(("blue", "green"), accounts)
+        ]
+        readings = [
+            {"harness": "codex", "account_ref": account, "reading_id": "r-" + digit * 32,
+             "observed_at": observed, "value": {
+                 "status": "MEASURED", "window_kind": "account_primary",
+                 "window_seconds": 18000, "remaining_bps": remaining,
+                 "resets_at": reset, "expires_at": expiry,
+             }}
+            for account, digit, remaining, reset, expiry in (
+                (accounts[0], "2", 2300, "2026-11-26T12:15:00Z", "2026-11-26T12:02:00Z"),
+                (accounts[1], "3", 6700, "2026-11-26T12:01:00Z", "2026-11-26T12:01:00Z"),
+            )
+        ]
+        document = {"schema_version": 2, "tenant_id": root.tenant_id, "readings": readings}
+        args = self.arguments("role:reviewer", "ask")
+        return snapshot, document, bindings, args
+
+    def quota_v2_publish(self, snapshot, document):
+        if snapshot.exists() or snapshot.is_symlink():
+            snapshot.unlink()
+        snapshot.write_text(json.dumps(document), encoding="utf-8")
+        snapshot.chmod(0o400)
+
+    def quota_v2_call(self, bindings, args, stamp="2026-11-26T12:00:30Z"):
+        at = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        with patch.object(role_addressing, "datetime") as clock, patch.object(
+            role_addressing, "checked_account_bindings", return_value=bindings, create=True,
+        ):
+            clock.now.return_value = at
+            return self.fleet.invoke_in_process(*args)
+
+    def test_quota_v2_frozen_preview_vectors(self):
+        snapshot, document, bindings, args = self.quota_v2_fixture()
+        preview = [*args, "--preview", "--puddle-quota-snapshot", str(snapshot)]
+
+        def check(rows, checked, expected, stamp="2026-11-26T12:00:30Z", age=30):
+            self.quota_v2_publish(snapshot, dict(document, readings=rows))
+            completed, artifact = self.quota_v2_call(checked, preview, stamp)
+            evidence = artifact["evidence"]
+            if expected in {"blue", "green"}:
+                self.assertEqual(0, completed.returncode, artifact)
+                self.assertEqual(3, evidence["preview_version"])
+                self.assertEqual([expected], evidence["recipients"])
+                self.assertEqual("puddle_quota_snapshot_v2", evidence["route"]["source"])
+                self.assertEqual(age, evidence["route"]["age_seconds"])
+                compared = {b["account_ref"] for b in checked}
+                self.assertEqual(sorted((r for r in rows if r["account_ref"] in compared),
+                                        key=lambda r: r["account_ref"]),
+                                 evidence["route"]["readings"])
+                self.assertEqual({b["node_id"]: b["binding_id"] for b in checked},
+                                 {n: b["binding_id"] for n, b in evidence["route"]["candidates"].items()})
+            else:
+                self.assertEqual(35, completed.returncode, artifact)
+                self.assertEqual("UNKNOWN", evidence["outcome"])
+                self.assertEqual(expected, evidence["code"])
+            return evidence
+
+        blue, green = document["readings"]
+        with self.subTest(vector="Q01"):
+            check([green, blue], bindings, "green")
+        with self.subTest(vector="Q02"):
+            swapped = [dict(b, account_ref=bindings[1 - i]["account_ref"],
+                            binding_id=b["binding_id"] + "-new") for i, b in enumerate(bindings)]
+            check([blue, green], swapped, "blue")
+        with self.subTest(vector="Q03"):
+            for checked in (bindings[:1], [*bindings, bindings[1]],
+                            [bindings[0], dict(bindings[1], account_ref="Green")],
+                            [bindings[0], dict(bindings[1], tenant_id="other-fleet")],
+                            [bindings[0], dict(bindings[1], expires_at="2026-11-26T12:02:01Z")]):
+                check([blue, green], checked, "quota_account_unbound")
+        with self.subTest(vector="Q04"):
+            check([blue], bindings, "quota_reading_missing")
+            unknown = dict(green, reading_id="r-" + "4" * 32,
+                           value={"status": "UNKNOWN", "reason": "source_unavailable"})
+            self.assertEqual("source_unavailable",
+                             check([blue, unknown], bindings, "quota_reading_unknown")["reason"])
+            check([blue, green, dict(unknown, account_ref="acct-" + "c" * 32)], bindings, "green")
+        with self.subTest(vector="Q05"):
+            check([blue, green], bindings, "green", "2026-11-26T12:00:00Z", 0)
+            check([blue, green], bindings, "green", "2026-11-26T12:00:59.999999Z", 59)
+            check([blue, green], bindings, "quota_reading_stale", "2026-11-26T12:01:00Z")
+            check([blue, dict(green, observed_at="2026-11-26T12:00:31Z")],
+                  bindings, "quota_reading_future")
+        with self.subTest(vector="Q06"):
+            zero = dict(blue, value=dict(blue["value"], remaining_bps=0))
+            for remaining, expected in ((1, "green"), (0, "quota_headroom_tied")):
+                check([zero, dict(green, value=dict(green["value"], remaining_bps=remaining))],
+                      bindings, expected)
+            check([blue, green], [dict(bindings[0], account_ref=green["account_ref"]), bindings[1]],
+                  "quota_headroom_tied")
+        with self.subTest(vector="Q07"):
+            for kind, duration in (("account_weekly", 604800), ("account_primary", 14400)):
+                check([blue, dict(green, value=dict(green["value"], window_kind=kind,
+                                                  window_seconds=duration))],
+                      bindings, "quota_window_incomparable")
+        with self.subTest(vector="Q08"):
+            for invalid in ([blue, green, blue], [blue, dict(green, reading_id=blue["reading_id"])],
+                            [blue, dict(green, email="name@example.invalid")],
+                            *([blue, dict(green, value=dict(green["value"], **change))]
+                              for change in ({"remaining_bps": 10001}, {"remaining_bps": True},
+                                             {"expires_at": "2026-11-26T12:01:01Z"}))):
+                check(invalid, bindings, "quota_snapshot_invalid")
+            self.quota_v2_publish(snapshot, dict(document, tenant_id="other-fleet"))
+            completed, artifact = self.quota_v2_call(bindings, preview)
+            self.assertEqual(35, completed.returncode, artifact)
+            self.assertEqual("quota_tenant_mismatch", artifact["evidence"]["code"])
+        self.assertEqual([], self.fleet.events())
+
+    def test_quota_v2_confirm_rechecks_then_recovers_recorded_question(self):
+        snapshot, document, bindings, args = self.quota_v2_fixture()
+        self.quota_v2_publish(snapshot, document)
+        selection = [*args, "--puddle-quota-snapshot", str(snapshot)]
+        completed, artifact = self.quota_v2_call(bindings, [*selection, "--preview"])
+        self.assertEqual(0, completed.returncode, artifact)
+        path = snapshot.parent / "preview.json"
+        path.write_text(json.dumps(artifact), encoding="utf-8")
+        preview = artifact["evidence"]
+        confirm = [*selection, "--recipient-preview", str(path)]
+        swapped = [dict(b, account_ref=bindings[1 - i]["account_ref"],
+                        binding_id=b["binding_id"] + "-new") for i, b in enumerate(bindings)]
+        other_reading = deepcopy(document)
+        other_reading["readings"][0]["reading_id"] = "r-" + "4" * 32
+        for checked, payload, time, rc, code in (
+            (swapped, document, "12:00:31", 20, "address_preview_changed"),
+            ([bindings[0], dict(bindings[1], binding_id="b-green-2")],
+             document, "12:00:31", 20, "address_preview_changed"),
+            (bindings, other_reading, "12:00:31", 20, "address_preview_changed"),
+            (bindings, document, "12:00:29", 20, "address_preview_changed"),
+            (bindings, document, "12:01:00", 35, "quota_reading_stale"),
+        ):
+            with self.subTest(code=code, time=time):
+                self.quota_v2_publish(snapshot, payload)
+                completed, artifact = self.quota_v2_call(checked, confirm, f"2026-11-26T{time}Z")
+                self.assertEqual(rc, completed.returncode, artifact)
+                self.assertEqual(code, artifact["evidence"]["code"])
+                self.assertEqual([], self.fleet.events())
+        refreshed = [dict(b, valid_from="2026-11-26T12:00:30Z",
+                          expires_at="2026-11-26T12:02:30Z") for b in bindings]
+        completed, artifact = self.quota_v2_call(refreshed, confirm, "2026-11-26T12:00:31Z")
+        self.assertEqual(34, completed.returncode, artifact)
+        question_id = artifact["evidence"]["results"][0]["question_id"]
+        snapshot.unlink()
+        completed, artifact = self.quota_v2_call([], confirm, "2026-11-26T12:02:00Z")
+        self.assertEqual(34, completed.returncode, artifact)
+        self.assertEqual(question_id, artifact["evidence"]["results"][0]["question_id"])
+        questions = [row for row in self.fleet.events() if row["kind"] == "ask_question"]
+        self.assertEqual([question_id], [row["id"] for row in questions])
+        self.assertEqual(preview, questions[0]["address_preview"])
+        root = resolve_command_root(str(self.fleet.fleet))
+        altered = deepcopy(questions[0])
+        altered["address_preview"]["route"]["age_seconds"] = 29
+        payload = {k: v for k, v in altered["address_preview"].items() if k != "digest"}
+        altered["address_preview"]["digest"] = _digest(payload)
+        with self.assertRaises(ProtocolRefusal) as caught:
+            validate_record(altered, root.tenant_id, {"ask_question"}, integrity=False)
+        self.assertEqual("address_preview_invalid", caught.exception.code)
+
+    def test_quota_v2_input_refusals_do_not_fall_back(self):
+        snapshot, document, bindings, args = self.quota_v2_fixture()
+        preview = [*args, "--preview"]
+        selection = [*preview, "--puddle-quota-snapshot", str(snapshot)]
+
+        def refuse(argv, reason, stamp="2026-11-26T12:00:30Z"):
+            completed, artifact = self.quota_v2_call(bindings, argv, stamp)
+            self.assertEqual(35, completed.returncode, artifact)
+            self.assertEqual("UNKNOWN", artifact["evidence"]["outcome"])
+            self.assertEqual(reason, artifact["evidence"]["code"])
+
+        refuse(preview, "quota_snapshot_not_selected")
+        refuse(selection, "quota_snapshot_missing")
+        v1 = snapshot.with_name("puddle-quota-v1.json")
+        sample = {"status": "MEASURED", "reading_id": "legacy", "remaining_bps": 9000,
+                  "measured_at": "2026-11-26T12:00:00Z", "expires_at": "2026-11-26T12:02:00Z"}
+        self.quota_v2_publish(v1, {"schema_version": 1, "readings": {"codex": sample}})
+        snapshot.symlink_to(v1)
+        refuse(selection, "quota_snapshot_unreadable")
+        self.quota_v2_publish(snapshot, dict(document, schema_version=3))
+        refuse(selection, "quota_snapshot_version_unsupported")
+        self.quota_v2_publish(snapshot, document)
+        with self.assertRaisesRegex(QuotaUnavailable, "^quota_snapshot_invalid$"):
+            read_puddle_quota_snapshot(snapshot)
+        preview_path = snapshot.parent / "preview.json"
+        completed, artifact = self.quota_v2_call(bindings, selection)
+        self.assertEqual(0, completed.returncode, artifact)
+        preview_path.write_text(json.dumps(artifact), encoding="utf-8")
+        refuse([*args, "--recipient-preview", str(preview_path), "--puddle-quota-snapshot", str(v1)],
+               "v2_evidence_required")
+
+        alias = self.fleet.base / "alias"
+        alias.symlink_to(snapshot.parent, target_is_directory=True)
+        refuse([*preview, "--puddle-quota-snapshot", str(alias / snapshot.name)],
+               "quota_snapshot_unreadable")
+        snapshot.chmod(0o444)
+        refuse(selection, "quota_snapshot_unreadable")
+        snapshot.chmod(0o400)
+        refuse(selection, "quota_reading_stale", "2026-11-26T12:01:00Z")
+        snapshot.unlink()
+        raw = json.dumps(document)
+        for altered in (raw.replace("2300", "2.3e3"), raw.replace("2300", "2300.0"),
+                        raw.replace('"schema_version": 2', '"schema_version": 2, "schema_version": 2'),
+                        "\ufeff" + raw):
+            snapshot.write_text(altered, encoding="utf-8")
+            snapshot.chmod(0o400)
+            refuse(selection, "quota_snapshot_invalid")
+            snapshot.unlink()
+        self.quota_v2_publish(snapshot, {"schema_version": 2, "readings": {}})
+        refuse(selection, "quota_snapshot_invalid")
+        self.quota_v2_publish(v1, document)
+        refuse([*preview, "--puddle-quota-snapshot", str(v1)], "quota_snapshot_invalid")
+
+        root = resolve_command_root(str(self.fleet.fleet))
+        Registry(root).retire("blue")
+        completed, artifact = self.quota_v2_call([], self.arguments("blue", "ask"))
+        self.assertEqual(20, completed.returncode, artifact)
+        self.quota_v2_publish(snapshot, document)
+        completed, artifact = self.quota_v2_call([], selection)
+        self.assertEqual(35, completed.returncode, artifact)
+        self.assertEqual("quota_account_unbound", artifact["evidence"]["code"])
+        completed, artifact = self.quota_v2_call([], self.arguments("green", "ask"))
+        self.assertEqual(34, completed.returncode, artifact)
+        Registry(root).retire("green")
+        refuse(selection, "quota_role_empty")
+
+    def test_quota_v2_t3_members_preserve_ordinary_role_routing(self):
+        snapshot, document, bindings, args = self.quota_v2_fixture()
+        blue, green = document["readings"]
+        bound_green = dict(green, reading_id="r-" + "5" * 32, t3_provider_instance={
+            "instance_ref": "2a8d85f356f5a2f54d16e576866dce9739af0cc9d11d39702682c1a4d319e1e3",
+            "verified_at": "2026-11-26T12:00:00Z",
+        })
+        preview = [*args, "--preview", "--puddle-quota-snapshot", str(snapshot)]
+        for row, rc in (
+            (bound_green, 0),
+            (green, 0),
+            (dict(bound_green, t3_provider_instance=None), 35),
+            (dict(bound_green, t3_provider_instance=dict(
+                bound_green["t3_provider_instance"], providerInstanceId="codex-green")), 35),
+        ):
+            with self.subTest(status=rc, reading=row):
+                self.quota_v2_publish(snapshot, dict(document, readings=[blue, row]))
+                completed, artifact = self.quota_v2_call(bindings, preview)
+                self.assertEqual(rc, completed.returncode, artifact)
+                if rc == 0:
+                    self.assertEqual(["green"], artifact["evidence"]["recipients"])
+                    self.assertEqual(row, artifact["evidence"]["route"]["readings"][1])
+                else:
+                    self.assertEqual("quota_snapshot_invalid", artifact["evidence"]["code"])
+
+    def test_quota_v2_t3_frozen_target_vectors(self):
+        from floati.t3_quota_readout import T3Instance, T3Inventory, target_quota
+
+        snapshot, document, _, _ = self.quota_v2_fixture()
+        root = resolve_command_root(str(self.fleet.fleet))
+        start = datetime(2026, 11, 26, 11, tzinfo=timezone.utc)
+        blue, green = document["readings"]
+        references = (
+            "93d1a5add3586df103c734078d7b86270d6abcb177dd859587a902e5f2588f8a",
+            "2a8d85f356f5a2f54d16e576866dce9739af0cc9d11d39702682c1a4d319e1e3",
+        )
+        bound_blue, bound_green = [
+            dict(row, reading_id="r-" + digit * 32, t3_provider_instance={
+                "instance_ref": instance_ref, "verified_at": "2026-11-26T12:00:00Z",
+            }) for row, digit, instance_ref in zip((blue, green), ("4", "5"), references)
+        ]
+        blue_instance = T3Instance("codex-blue", "codex", start)
+        green_instance = T3Instance("codex-green", "codex", start)
+        inventory = T3Inventory("env-local", True, (blue_instance, green_instance))
+        current = inventory
+
+        def readout(rows, *, target="codex-green", account=green["account_ref"],
+                    minute=0, second=30):
+            self.quota_v2_publish(snapshot, dict(document, readings=rows))
+            return target_quota(
+                root, snapshot, "env-local", target, lambda environment: current,
+                account_ref=account, at=datetime(2026, 11, 26, 12, minute, second, tzinfo=timezone.utc),
+            )
+
+        def unknown(result, reason):
+            self.assertEqual("UNKNOWN", result["outcome"])
+            self.assertEqual(reason, result["code"])
+            self.assertNotIn("remaining_bps", result)
+
+        with self.subTest(vector="T01"):
+            for node, row, expected in (("codex-green", bound_green, 6700),
+                                        ("codex-blue", bound_blue, 2300)):
+                result = readout([bound_blue, bound_green], target=node, account=row["account_ref"])
+                self.assertEqual("MEASURED", result["outcome"])
+                self.assertEqual(expected, result["remaining_bps"])
+                self.assertEqual(30, result["age_seconds"])
+                self.assertEqual(row["reading_id"], result["reading_id"])
+        with self.subTest(vector="T02"):
+            unknown(readout([bound_blue, green]), "t3_instance_binding_missing")
+        with self.subTest(vector="T03"):
+            unknown(readout([bound_blue]), "t3_instance_binding_mismatch")
+        with self.subTest(vector="T04"):
+            unknown(readout([bound_blue, bound_green], minute=1, second=0), "quota_reading_stale")
+            stale = dict(bound_green, reading_id="r-" + "6" * 32, t3_provider_instance=dict(
+                bound_green["t3_provider_instance"], verified_at="2026-11-26T11:58:30Z"))
+            unknown(readout([bound_blue, stale]), "t3_instance_binding_stale")
+        with self.subTest(vector="T05"):
+            current = T3Inventory("env-local", True, (blue_instance,))
+            unknown(readout([bound_blue, bound_green]), "t3_instance_removed")
+            current = T3Inventory("env-local", False, (blue_instance,))
+            unknown(readout([bound_blue, bound_green]), "t3_instance_inventory_unavailable")
+            recreated = T3Instance("codex-green", "codex", start.replace(hour=12, second=15))
+            current = T3Inventory("env-local", True, (blue_instance, recreated))
+            unknown(readout([bound_blue, bound_green]), "t3_instance_binding_changed")
 
     def test_retiring_the_last_recipient_invalidates_the_preview(self):
         """A vanished group must refuse as changed rather than reuse stale recipients."""

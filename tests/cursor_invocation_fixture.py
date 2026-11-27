@@ -1,7 +1,7 @@
 """Real scratch waiter launch and bounded observation shared by lifecycle tests."""
 from __future__ import annotations
 
-from tests.readiness import READY_SECONDS, wait_until
+from tests.readiness import READY_SECONDS, wait_until, wait_process
 
 import json
 import os
@@ -90,6 +90,6 @@ class CursorInvocationFixture:
             process = job["process"]
             if process.poll() is None:
                 process.terminate()
-            process.wait(timeout=5)
+            wait_process(process, "scratch waiter exits")
             for stream in (job["stdout"], job["stderr"]):
                 stream.close()

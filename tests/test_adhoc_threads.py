@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from tests.readiness import communicate
 import sys
 import unittest
 from unittest import mock
@@ -81,7 +82,14 @@ class _FixtureExecution:
             cwd=case.profile_record["workspace"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, start_new_session=True,
             env={**os.environ, "HOME": str(case.base / "private-home")})
-        stdout, stderr = child.communicate(json.dumps(payload), timeout=5)
+        try:
+            stdout, stderr = communicate(
+                child, "thread fixture returns its result", input=json.dumps(payload),
+            )
+        except AssertionError:
+            child.kill()
+            communicate(child, "collect terminated thread fixture")
+            raise
         self.last_native_transport = {"stdout_bytes": len(stdout.encode()), "stderr_bytes": len(stderr.encode()),
             "combined_bytes": len(stdout.encode()) + len(stderr.encode()), "protocol_records": 0,
             "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),

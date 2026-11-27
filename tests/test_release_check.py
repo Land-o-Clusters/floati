@@ -409,6 +409,19 @@ class ReleaseSpellingCheckTests(unittest.TestCase):
         self.assertEqual(check_release(root, tag="v0.2.0"), [])
         self.assertEqual(changelog_heading(root), ("0.2.0", "2026-09-01"))
 
+    def test_empty_unreleased_section_keeps_the_candidate_checkable(self) -> None:
+        root = self._tree(version="0.2.1", heading="## [0.2.1] - 2026-11-27")
+        changelog = root / "CHANGELOG.md"
+        dated = changelog.read_text(encoding="utf-8")
+        for notes in ("", "Work in progress.\n\nLedger contract: `c7.3`.\n\n"):
+            with self.subTest(notes=notes):
+                changelog.write_text(dated.replace(
+                    "# Changelog\n\n", "# Changelog\n\n## [Unreleased]\n\n" + notes,
+                ), encoding="utf-8")
+                self.assertEqual([], check_release(root))
+                expected = ["changelog_date_unreleased:Unreleased"] if notes else []
+                self.assertEqual(expected, check_release(root, tag="v0.2.1"))
+
     def test_a_readme_claim_without_a_live_receipt_names_each_claim(self) -> None:
         """A receipt link that does not resolve refuses, and both claims are named."""
 

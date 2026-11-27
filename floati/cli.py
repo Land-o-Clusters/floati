@@ -2502,6 +2502,9 @@ def _parser() -> _ArtifactParser:
     setup_action.add_argument('--teardown', action='store_true')
     setup.set_defaults(handler=_network_setup)
 
+    from .cross_optin import register_cross
+    register_cross(commands)
+
     overlap = commands.add_parser("overlap")
     overlap_commands = overlap.add_subparsers(
         dest="overlap_command", required=True

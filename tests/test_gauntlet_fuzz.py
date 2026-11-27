@@ -54,6 +54,7 @@ from tests.hm3i_gauntlet_fixtures import (
     canonical_observation_from_records,
 )
 from floati.runtruth import LEGACY_RUN_KINDS
+from tests.readiness import Readiness, run_process, wait_join
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -179,12 +180,11 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
     def invoke(self, *arguments: str) -> subprocess.CompletedProcess[bytes]:
         environment = dict(os.environ)
         environment["PYTHONPYCACHEPREFIX"] = "\x2ftmp/floati-hm3h-fuzz-pycache"
-        return subprocess.run(
-            [sys.executable, "-m", "floati", *arguments],
+        return run_process(
+            [sys.executable, "-m", "floati", *arguments], "gauntlet CLI fixture exits",
             cwd=REPO_ROOT,
             env=environment,
             capture_output=True,
-            timeout=5,
             check=False,
         )
 
@@ -530,20 +530,22 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 resolver(None, create=False, environ={"FLOATI_BUS_CONFIG": str(ignored_config.path)})
             self.assertEqual("cannot_speak", absent.exception.code)
 
-            init_explicit = subprocess.run(
+            init_explicit = run_process(
                 [sys.executable, "-m", "floati", "init", "--root", str(explicit.path)],
+                "initialize the explicit fixture root",
                 cwd=REPO_ROOT,
                 env={**os.environ, "FLOATI_BUS_ROOT": str(environment.path)},
-                text=True, capture_output=True, check=False, timeout=5,
+                text=True, capture_output=True, check=False,
             )
             self.assertEqual(0, init_explicit.returncode, init_explicit.stderr)
             self.assertEqual(
                 str(explicit.path), json.loads(init_explicit.stdout)["evidence"]["root"]
             )
-            init_environment = subprocess.run(
-                [sys.executable, "-m", "floati", "init"], cwd=REPO_ROOT,
+            init_environment = run_process(
+                [sys.executable, "-m", "floati", "init"],
+                "initialize the environment fixture root", cwd=REPO_ROOT,
                 env={**os.environ, "FLOATI_BUS_ROOT": str(environment.path)},
-                text=True, capture_output=True, check=False, timeout=5,
+                text=True, capture_output=True, check=False,
             )
             self.assertEqual(0, init_environment.returncode, init_environment.stderr)
             self.assertEqual(
@@ -559,14 +561,15 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 "--destination",
                 str(destination),
             ]
-            explicit_result = subprocess.run(
-                [*command, "--root", str(explicit.path)], cwd=REPO_ROOT,
+            explicit_result = run_process(
+                [*command, "--root", str(explicit.path)],
+                "read status for the explicit fixture root", cwd=REPO_ROOT,
                 env={
                     **os.environ,
                     "PATH": str(scan_root),
                     "FLOATI_BUS_ROOT": str(environment.path),
                 },
-                capture_output=True, check=False, timeout=5,
+                capture_output=True, check=False,
             )
             self.assertEqual(0, explicit_result.returncode, explicit_result.stderr)
             explicit_artifact = json.loads(explicit_result.stdout)
@@ -585,14 +588,14 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 str(explicit.path),
                 explicit_artifact["evidence"]["root"],
             )
-            environment_result = subprocess.run(
-                command, cwd=REPO_ROOT,
+            environment_result = run_process(
+                command, "read status for the environment fixture root", cwd=REPO_ROOT,
                 env={
                     **os.environ,
                     "PATH": str(scan_root),
                     "FLOATI_BUS_ROOT": str(environment.path),
                 },
-                capture_output=True, check=False, timeout=5,
+                capture_output=True, check=False,
             )
             self.assertEqual(0, environment_result.returncode, environment_result.stderr)
             environment_artifact = json.loads(environment_result.stdout)
@@ -606,10 +609,10 @@ class ReaderFuzzGauntletTests(unittest.TestCase):
                 str(environment.path),
                 environment_artifact["evidence"]["root"],
             )
-            absent_result = subprocess.run(
-                command, cwd=REPO_ROOT,
+            absent_result = run_process(
+                command, "read status without a fixture root", cwd=REPO_ROOT,
                 env={**os.environ, "FLOATI_BUS_CONFIG": str(ignored_config.path)},
-                capture_output=True, check=False, timeout=5,
+                capture_output=True, check=False,
             )
             self.assertEqual(22, absent_result.returncode)
             absent_artifact = json.loads(absent_result.stdout)
@@ -2340,10 +2343,12 @@ class SequencerHostileGauntletTests(unittest.TestCase):
                 request = client.request(self.run_created("alpha", 12))
                 request["operation"] = "unknown_socket_operation"
                 payload = json.dumps(request, separators=(",", ":")).encode("utf-8") + b"\n"
+                readiness = Readiness("sequencer returns the operation refusal")
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
-                    channel.settimeout(3)
+                    channel.settimeout(readiness.remaining())
                     channel.connect(str(service.socket_path))
                     channel.sendall(payload)
+                    channel.settimeout(readiness.remaining())
                     response = json.loads(channel.recv(65536))
                 self.assertEqual("refused", response["status"])
                 self.assertEqual("operation_invalid", response["code"])
@@ -2351,8 +2356,10 @@ class SequencerHostileGauntletTests(unittest.TestCase):
                 self.assertEqual([positive], RunLedger(root).records())
             finally:
                 stop.set()
-                thread.join(3)
-                service.close()
+                try:
+                    wait_join(thread, "gauntlet sequencer exits")
+                finally:
+                    service.close()
 
     def test_semantically_hostile_admission_refuses_replay_and_writer_preserves_bytes(self) -> None:
         """Catches schema-valid admission evidence bypassing semantic replay validation."""

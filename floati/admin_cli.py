@@ -884,6 +884,20 @@ def _hook_relay(args: argparse.Namespace) -> int:
 def _hook_install(args: argparse.Namespace) -> HandlerResult:
     from .errors import ProtocolRefusal
 
+    if args.t3_gates is not None:
+        from .t3_hook_install import install_t3_hook
+
+        if args.harness != "claude" or args.prepare_only or any(
+                getattr(args, name) is not None for name in
+                ("actor", "workspace", "destination", "hook_timeout_seconds",
+                 "wait_deadline_seconds", "acknowledge_stop_hook_change")):
+            raise ProtocolRefusal("t3_hook_options_invalid",
+                                  "Use the T3 gate settings without seat or waiter options.")
+        return "ok", install_t3_hook(root=args.root, runtime=args.runtime, settings=args.hooks,
+                                     gate_path=args.t3_gates, confirmation=args.confirm), OK
+    if args.confirm is not None:
+        raise ProtocolRefusal("t3_hook_options_invalid", "--confirm requires --t3-gates.")
+
     if args.prepare_only:
         if args.harness != "codex" or args.actor is not None or args.workspace is not None or args.wait_deadline_seconds is not None:
             raise ProtocolRefusal("arguments_invalid",
@@ -1801,6 +1815,8 @@ def register_admin_commands(commands: argparse._SubParsersAction) -> None:
     hook_install.add_argument("--hook-timeout-seconds", type=int)
     hook_install.add_argument("--wait-deadline-seconds", type=int)
     hook_install.add_argument("--acknowledge-stop-hook-change")
+    hook_install.add_argument("--t3-gates")
+    hook_install.add_argument("--confirm")
     hook_install.set_defaults(handler=_hook_install)
     hook_uninstall = hook_commands.add_parser("uninstall")
     hook_uninstall.add_argument("--harness", choices=("cursor", "zcode", "claude"), required=True)

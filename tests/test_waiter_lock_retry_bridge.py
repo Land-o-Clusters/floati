@@ -111,7 +111,7 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
         actor = threading.Timer(seconds, invoke)
         actor.start()
         def finish():
-            actor.join(5)
+            wait_join(actor, "native bridge fixture actor exits")
             self.assertFalse(actor.is_alive(), "native fixture actor must finish")
             self.assertEqual([], failures)
         self.addCleanup(finish)
@@ -475,13 +475,35 @@ class WaiterLockRetryBridgeTests(unittest.TestCase):
     def test_committed_native_wake_is_not_erased_by_later_corrupt_observation(self):
         from floati import codex_wait
         original = codex_wait.run_stop_waiter
+        waiting, appended = threading.Event(), threading.Event()
         sent = []
-        self.later(lambda: sent.append(self.send()))
+
+        def publish_when_waiting():
+            try:
+                wait_event(waiting, "native bridge starts waiting for mail")
+                sent.append(self.send())
+            finally:
+                appended.set()
+
+        actor = threading.Thread(target=publish_when_waiting)
+        actor.start()
+        self.addCleanup(wait_join, actor, "collect bridge fixture sender")
+        self.addCleanup(waiting.set)
+
         def completed(*args, **kwargs):
+            def release_sender(_seconds):
+                self.assertFalse(waiting.is_set(), "sent mail must wake the next observation")
+                waiting.set()
+                wait_event(appended, "bridge fixture mail append")
+                self.assertEqual(1, len(sent))
+
+            kwargs["wait_readable"] = scripted_readiness(release_sender, interval=0.01)
             result = original(*args, **kwargs)
+            self.assertEqual("fresh_work", kwargs["_waiter_result"].get("kind"))
             self.root.resolve_relative("receipts/deliveries/seat.jsonl").write_bytes(b"not-json\n")
             return result
-        with mock.patch.object(codex_wait, "run_stop_waiter", completed):
+
+        with self.controlled_clock(), mock.patch.object(codex_wait, "run_stop_waiter", completed):
             self.invoke()
         self.assertEqual(1, len(self.output.getvalue().splitlines()))
         self.assertIn(sent[0]["id"], json.loads(self.output.getvalue())["reason"])

@@ -44,7 +44,7 @@ from floati.worker_bootstrap_protocol import (
 from floati.worker_isolation import cleanup_worker_isolation, prepare_worker_isolation
 from tests.test_spawn_groups import _Task2Case
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.readiness import READY_SECONDS, Readiness, wait_until
+from tests.readiness import READY_SECONDS, Readiness, wait_join, wait_process, wait_until
 from floati.identity_fence import RETIRED_PRODUCT_NAME as _RETIRED_NAME
 
 
@@ -221,11 +221,9 @@ class _GrandchildHangAdapter:
         try:
             time.sleep(30)
         finally:
-            try:
-                child.wait(timeout=1)
-            except subprocess.TimeoutExpired:
+            if child.poll() is None:
                 child.terminate()
-                child.wait(timeout=1)
+            wait_process(child, "owned grandchild fixture exits")
         return object()
 
     def drive(self, handle: object, item: dict, *, deadline_seconds: float) -> list[dict[str, str]]:
@@ -609,7 +607,7 @@ class WorkerContractTests(unittest.TestCase):
         self.assertTrue(process.is_alive())
         parent.send(("observation_closed", None))
         self.assertEqual(("observation_closed_ack", None), parent.recv())
-        process.join(2)
+        wait_join(process, "spawn context fixture exits")
         parent.close()
         self.assertEqual(
             ["descendant", "descendant", "spawned", "result"],
@@ -629,7 +627,7 @@ class WorkerContractTests(unittest.TestCase):
         self.assertEqual("result", parent.recv()[0])
         parent.send(("observation_closed", None))
         self.assertEqual(("observation_closed_ack", None), parent.recv())
-        process.join(2)
+        wait_join(process, "governed observation fixture exits")
         parent.close()
         self.assertEqual(0, process.exitcode)
 
@@ -665,14 +663,16 @@ class WorkerContractTests(unittest.TestCase):
         process.start()
         child.close()
         messages = [parent.recv(), parent.recv()]
-        process.join(1)
-        finished_without_ack = not process.is_alive()
-        if process.is_alive():
-            parent.send(("observation_closed", None))
-            process.join(2)
-        parent.close()
+        try:
+            wait_join(process, "disabled spawn fixture exits without an acknowledgement")
+        finally:
+            try:
+                if process.is_alive():
+                    parent.send(("observation_closed", None))
+                    wait_join(process, "collect disabled spawn fixture after acknowledgement")
+            finally:
+                parent.close()
         self.assertEqual(["spawned", "result"], [row[0] for row in messages])
-        self.assertTrue(finished_without_ack)
         self.assertEqual(0, process.exitcode)
 
     def test_runner_records_typed_degradation_after_process_death(self) -> None:
@@ -1368,7 +1368,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     validate_isolation_backend(first_frame[1]["backend"]),
                 )
                 process.terminate()
-            process.join(3.0)
+            wait_join(process, "relocated prelude fixture exits")
 
             self.assertFalse(proof.exists())
             self.assertIsNotNone(process.exitcode)
@@ -1429,7 +1429,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
             ):
                 process, channel = spawn_effect_worker(bootstrap.resolve(), payload)
             channel.close()
-            process.join(3.0)
+            wait_join(process, "mutated prelude fixture exits")
 
             self.assertEqual(126, process.exitcode)
             self.assertFalse(proof.exists())
@@ -1494,7 +1494,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     validate_isolation_backend(first_frame[1]["backend"]),
                 )
                 process.terminate()
-            process.join(3.0)
+            wait_join(process, "prelude finder fixture exits")
 
             self.assertTrue(control_proof.is_file())
             self.assertFalse(target_proof.exists())
@@ -1719,8 +1719,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     self.assertEqual(["process_timeout"], result)
                 finally:
                     child_socket.close()
-                    thread.join(1.0)
-                    channel.close()
+                    try:
+                        wait_join(thread, "partial-frame receiver exits after peer close")
+                    finally:
+                        channel.close()
 
     def test_effect_exec_rejects_stateful_spec_mapping_and_duplicate_kind_binding(
         self,
@@ -1957,7 +1959,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
             ):
                 process, channel = spawn_effect_worker(bootstrap.resolve(), {})
             channel.close()
-            process.join(3.0)
+            wait_join(process, "verified bootstrap fixture exits")
 
             self.assertEqual(0, process.exitcode)
             self.assertEqual("opened", marker.read_text(encoding="utf-8"))
@@ -1993,7 +1995,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
             ):
                 process, channel = spawn_effect_worker(bootstrap.resolve(), {})
             channel.close()
-            process.join(3.0)
+            wait_join(process, "rejected bootstrap fixture exits")
 
             self.assertEqual(126, process.exitcode)
             self.assertFalse(marker.exists())
@@ -2207,11 +2209,11 @@ class WorkerEffectPipeTests(unittest.TestCase):
                                 parent.send(("effect_reporting_closed", None))
                         elif not process.is_alive():
                             break
-                    process.join(0.5)
+                    wait_join(process, "unaccepted backend fixture exits")
                 finally:
                     if process.is_alive():
                         process.terminate()
-                        process.join(2)
+                        wait_join(process, "collect terminated unsupported-backend fixture")
                     parent.close()
 
                 self.assertEqual(0, callback_count.value)
@@ -2251,11 +2253,11 @@ class WorkerEffectPipeTests(unittest.TestCase):
                     self.assertEqual(
                         "effect_worker_isolation_unavailable", caught.exception.code,
                     )
-                    process.join(2)
+                    wait_join(process, "noncanonical backend fixture exits")
                 finally:
                     if process.is_alive():
                         process.terminate()
-                        process.join(2)
+                        wait_join(process, "collect terminated noncanonical backend fixture")
                     parent.close()
                 self.assertEqual(0, process.exitcode)
 
@@ -2275,11 +2277,11 @@ class WorkerEffectPipeTests(unittest.TestCase):
                             parent, process, time.monotonic() + 2.0,
                         ),
                     )
-                    process.join(2)
+                    wait_join(process, "canonical backend fixture exits")
                 finally:
                     if process.is_alive():
                         process.terminate()
-                        process.join(2)
+                        wait_join(process, "collect terminated canonical backend fixture")
                     parent.close()
                 self.assertEqual(0, process.exitcode)
 
@@ -2364,11 +2366,11 @@ class WorkerEffectPipeTests(unittest.TestCase):
                 messages.append(parent.recv())
             parent.send(("effect_reporting_closed", None))
             messages.append(parent.recv())
-            process.join(2)
+            wait_join(process, "isolation-ready fixture exits")
         finally:
             if process.is_alive():
                 process.terminate()
-                process.join(2)
+                wait_join(process, "collect terminated isolation-ready fixture")
             parent.close()
         self.assertEqual(0, process.exitcode)
         self.assertEqual(
@@ -2398,7 +2400,7 @@ class WorkerEffectPipeTests(unittest.TestCase):
         messages = [parent.recv(), parent.recv(), parent.recv(), parent.recv()]
         parent.send(("observation_closed", None))
         self.assertEqual(("observation_closed_ack", None), parent.recv())
-        process.join(2)
+        wait_join(process, "lawful spawn pipe fixture exits")
         parent.close()
         self.assertEqual(
             ["descendant", "descendant", "spawned", "result"],
@@ -2496,8 +2498,10 @@ class WorkerEffectPipeTests(unittest.TestCase):
                 )
             self.assertEqual("protocol_error", caught.exception.code)
         finally:
-            process.join(2)
-            parent.close()
+            try:
+                wait_join(process, "late-report fixture exits")
+            finally:
+                parent.close()
 
     def test_retained_emitter_after_close_ack_is_protocol_error_before_completion(self) -> None:
         """Catches close acknowledgement winning a race with a retained pipe emitter."""
@@ -2635,11 +2639,11 @@ class WorkerEffectPipeTests(unittest.TestCase):
         child.close()
         try:
             frames = [parent.recv(), parent.recv()]
-            process.join(2)
+            wait_join(process, "legacy fork fixture exits")
         finally:
             if process.is_alive():
                 process.terminate()
-                process.join(2)
+                wait_join(process, "collect terminated legacy fork fixture")
             parent.close()
         self.assertEqual(0, process.exitcode)
         self.assertEqual(["spawned", "result"], [frame[0] for frame in frames])

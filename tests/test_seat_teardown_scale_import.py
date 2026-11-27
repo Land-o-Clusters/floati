@@ -25,6 +25,40 @@ def load_scale_module():
 
 
 class ScaleImportTests(unittest.TestCase):
+    def test_measurement_rejects_a_run_that_never_publishes_a_cold_bank(self):
+        source = Path(__file__).resolve().parents[1] / "scripts/measure-send-index-bank.py"
+        spec = importlib.util.spec_from_file_location("_cold_measurement_control", source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            scratch = Path(temporary)
+
+            class NativeFallbackFixture(unittest.TestCase):
+                def setUp(self):
+                    self.root = SimpleNamespace(tenant_home=scratch)
+                    self.f = SimpleNamespace(base=scratch)
+
+                def seed_history(self, records):
+                    pass
+
+                def perform(self, *, native):
+                    pass
+
+                def test_native_observer_final_hundred_thousand_includes_report_pair(self):
+                    self.perform(native=True)
+
+            fixture = SimpleNamespace(SeatTeardownNativeScaleTests=NativeFallbackFixture)
+            output = io.StringIO()
+            with mock.patch.dict(sys.modules, {"tests.test_seat_teardown_scale": fixture}),\
+                    mock.patch.object(sys.modules["tests"], "test_seat_teardown_scale",
+                                      fixture, create=True),\
+                    mock.patch("sys.stdout", new_callable=io.StringIO),\
+                    mock.patch("sys.stderr", new_callable=io.StringIO):
+                result = module._measure(100000, output)
+            self.assertEqual(1, result)
+            self.assertIn('"exit": 1', output.getvalue())
+
     def test_measurement_refuses_unsafe_scratch_before_loading_native_fixture(self):
         """Missing mode or symlink validation must not admit a native run."""
         source = Path(__file__).resolve().parents[1] / 'scripts/measure-send-index-bank.py'

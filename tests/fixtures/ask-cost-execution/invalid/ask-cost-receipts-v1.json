@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "tenant_id": "fleet-sample",
+  "generation_id": "g-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "pairs": [
+    {
+      "question": {
+        "id": "ask-question-019b0000000070008000000000000001",
+        "timestamp": "2026-11-26T11:59:58Z",
+        "sender": "red",
+        "recipient": "blue",
+        "acting_session_id": "sess-red"
+      },
+      "presentation": {
+        "id": "ask-presentation-019b0000000070008000000000000002",
+        "timestamp": "2026-11-26T12:00:00Z",
+        "sender": "blue",
+        "recipient": "red",
+        "acting_session_id": "sess-blue",
+        "reply_to": "ask-question-019b0000000070008000000000000001"
+      },
+      "answer": {
+        "id": "ask-answer-019b0000000070008000000000000003",
+        "timestamp": "2026-11-26T12:00:08Z",
+        "sender": "blue",
+        "recipient": "red",
+        "acting_session_id": "sess-blue",
+        "reply_to": "ask-question-019b0000000070008000000000000001",
+        "note": "excluded content"
+      }
+    }
+  ]
+}

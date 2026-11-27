@@ -9,6 +9,7 @@ from floati.registry import Registry
 from floati.records import validate_record
 from floati.seat_teardown import SeatTeardown
 from floati.waiter_invocation import _paths, _read
+from tests.readiness import wait_process
 from tests import test_seat_teardown as fixture
 from tests.cursor_invocation_fixture import CursorInvocationFixture
 
@@ -81,7 +82,7 @@ class SeatTeardownLiveWaiterTests(unittest.TestCase):
                     if job is not None:
                         if job.poll() is None:
                             job.terminate()
-                        job.wait(timeout=5)
+                        wait_process(job, "foreign workspace fixture exits")
 
     def test_oversized_process_birth_has_typed_record_refusal(self):
         record = SeatTeardown(self.root).teardown(fixture.NODE, self.home,

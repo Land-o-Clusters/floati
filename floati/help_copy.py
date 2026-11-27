@@ -10,6 +10,25 @@ from .copy import GH_AUTHENTICATION_REMEDY
 
 
 HELP_COPY = {
+ 'cross': {'description': 'manage local cross-machine opt-in',
+           'body': 'Cross-machine operation starts off and requires an explicit local enable.',
+           'notes': (),
+           'examples': 'floati cross enable --root /absolute/fleet --preview',
+           'option_docs': {}},
+ 'cross enable': {'description': 'preview or approve local cross-machine opt-in',
+                  'body': 'Preview the inventory or approve the exact plan at a controlling terminal outside a seat workspace.',
+                  'notes': ('Enable requires a qualified local key store.',),
+                  'examples': 'floati cross enable --root /absolute/fleet --preview',
+                  'option_docs': {'--root': 'Explicit fleet root.',
+                                  '--preview': 'Show the proposed inventory without changing it.',
+                                  '--resume': 'Continue the original approved enable.',
+                                  '--listen': 'Reserved for cross-machine listener support.'}},
+ 'cross disable': {'description': 'stop cross-machine operation for this root',
+                   'body': 'Preview the journaled inventory or initiate the local disable.',
+                   'notes': (),
+                   'examples': 'floati cross disable --root /absolute/fleet --dry-run',
+                   'option_docs': {'--root': 'Explicit fleet root.',
+                                   '--dry-run': 'List the journaled inventory without changing it.'}},
  'needs': {'description': 'raise and read what needs a person',
            'body': 'One pull read of every review, approval and question agents have raised for a person in this root, and every orchestrator thread Floati observed finishing or waiting on a person, each with its source, freshness and read state.',
            'notes': ('An item bound to a ref, commit or files is checked against that subject each time it is read; a stale item names what moved.',
@@ -814,7 +833,9 @@ HELP_COPY = {
                           'synchronous context relays; idle wake retains the Stop waiter. The relay '
                           'skips unchanged event metadata and reads at most once per session interval '
                           '(FLOATI_CLAUDE_RELAY_INTERVAL_SECONDS, default 30, integer range 5–3600).',
-                  'notes': ('Codex requires all five options below; Claude accepts only --hooks. Cursor and zcode reject them.',
+                  'notes': ('Claude T3 installation uses --t3-gates and an explicit settings file. Omit seat and waiter options.',
+                            'Without --confirm, the T3 hook command previews the settings change.',
+                            'Codex requires its five hook options. Cursor and zcode reject them.',
                             'Codex --prepare-only prepares the global Stop hook before any seat exists: omit --as, --workspace and --wait-deadline-seconds. It creates no seat mapping, consent, lifecycle commands or trust state. Seat add prints the exact acknowledged preparation command when needed.',
                             'Claude never discovers settings in the account home. Reinstall is byte-identical; changed settings refuse.',
                             'Codex Stop changes require the exact preimage:target acknowledgment printed '
@@ -847,7 +868,9 @@ HELP_COPY = {
                                   '--destination': 'Required for Codex only: absolute installed bundle store; rejected for Cursor and zcode.',
                                   '--hook-timeout-seconds': 'Required for Codex only: Stop timeout; rejected for Cursor and zcode.',
                                   '--wait-deadline-seconds': 'Required for Codex only: wait bound below the Stop timeout; rejected for Cursor and zcode.',
-                                  '--acknowledge-stop-hook-change': 'Required for Codex only: exact PREIMAGE:TARGET pair; rejected for Cursor and zcode.'}},
+                                  '--acknowledge-stop-hook-change': 'Required for Codex only: exact PREIMAGE:TARGET pair; rejected for Cursor and zcode.',
+                                  '--t3-gates': 'Absolute JSON gate list for a Claude T3 delegate hook.',
+                                  '--confirm': 'Apply the T3 hook preview with this exact token.'}},
  'hook uninstall': {'description': 'remove one cursor seat marker or restore one zcode or Claude Stop hook',
                     'body': 'Cursor removes the seat marker hook install wrote for the workspace. The '
                             'user-level hook file stays, so a later chat with no marker journals and does '
@@ -1040,7 +1063,7 @@ HELP_COPY = {
                          '--to': 'Exact node, everyone, repo:NAME, person:HANDLE, or role:NAME. Replies require an exact node.',
                          '--preview': 'Print the resolved recipient list and its digest without sending or waiting.',
                          '--recipient-preview': 'Saved preview artifact for the reviewed group or role recipient list.',
-                         '--puddle-quota-snapshot': 'Absolute path to the local puddle-quota-v1.json export. Supply it when previewing or confirming a role ask.',
+                         '--puddle-quota-snapshot': 'Absolute path to the local puddle-quota-v1.json or puddle-quota-v2.json export. Select v2 explicitly for account-aware routing. Use the same version for preview and confirmation.',
                          '--repo': 'DRAFT - Repository label stored on the question or answer.',
                          '--sha': 'DRAFT - Banked commit the question or answer names.',
                          '--repository': 'DRAFT - Explicit checkout for the banked SHA check.',

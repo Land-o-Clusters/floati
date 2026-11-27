@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_barrier, wait_event
+from tests.readiness import run_process, wait_barrier, wait_event, wait_join
 import hashlib
 import importlib
 import json
@@ -60,14 +60,13 @@ class _GitFixture(unittest.TestCase):
             "GIT_CONFIG_SYSTEM": os.devnull,
             "GIT_TERMINAL_PROMPT": "0",
         }
-        return subprocess.run(
-            [_GIT, *arguments],
+        return run_process(
+            [_GIT, *arguments], "reconciliation Git fixture returns",
             cwd=self.repository if cwd is None else cwd,
             env=environment,
             check=True,
             capture_output=True,
             text=True,
-            timeout=5,
         )
 
     @staticmethod
@@ -1145,7 +1144,7 @@ class CompensationTests(_GitFixture):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(5)
+            wait_join(thread, "compensation confirmation contender exits")
         self.assertEqual(2, len(outcomes))
         self.assertEqual(1, sum(status == "ok" for status, _ in outcomes))
         self.assertEqual(1, sum(status == "refused" for status, _ in outcomes))

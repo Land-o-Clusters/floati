@@ -72,12 +72,10 @@ class HostPermissionDeadlineTests(unittest.TestCase):
                 return_value=self.fixture.now + timedelta(seconds=900)),\
                 patch.object(deadline, "_monotonic",
                     return_value=occurrence.started_monotonic + 901):
-            started = time.monotonic()
             owner = deadline.start_deadline(occurrence)
         self.assertIsNotNone(owner, "native due-child startup was unavailable")
         self.addCleanup(owner.cancel)
-        self.assertLess(time.monotonic() - started, 5,
-            "a permission observer must not wait for its 15-minute deadline")
+        self.assertTrue(owner.released, "parent must release the observed child")
         result = self.wait_exit(owner)
         self.assertEqual(0, result, "owned child failed to publish/reap under its controlled clock")
         self.assertEqual(1, sum(row["kind"] == "message_envelope"
