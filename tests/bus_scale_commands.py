@@ -49,6 +49,8 @@ _ASK_REPLAY_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-7faae5
 _ASK_REPLAY_SOURCE_SHA = "7faae5cd1f6d8897c21531aec2b8c216f8485847"
 _FLEET_DESIGN_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-4aa55427.json")
 _FLEET_DESIGN_SOURCE_SHA = "4aa55427cdd679bf042840bc5773a35b54a7ef9e"
+_CROSS_OPTIN_AMENDMENT = _FIXTURE_PATH.with_name("native-command-amendment-0aeb5d0a.json")
+_CROSS_OPTIN_SOURCE_SHA = "0aeb5d0a661704690462b77387d3a60417cedc47"
 _ROW_FIELDS = frozenset({
     "path", "program", "executable", "public", "mcp_exposure", "mcp_required",
     "mcp_omit", "artifact_schema_version", "arguments",
@@ -60,6 +62,8 @@ _ROW_FIELDS = frozenset({
 _ADMINISTRATION = {
     "init": "Fleet creation and initial topology, outside routine seat operation.",
     "setup": "Operator provisioning and file restoration for one local seat.",
+    "cross enable": "Attended cross-machine opt-in administration.",
+    "cross disable": "Explicit cross-machine teardown administration.",
     "register": "Registry membership administration.",
     "retire": "Registry membership administration.",
     "node add": "Node provisioning and initial assignment.",
@@ -218,11 +222,14 @@ def _baseline_state() -> tuple[dict[str, dict], dict[str, str]]:
     fleet_design = _FLEET_DESIGN_AMENDMENT.read_bytes()
     if hashlib.sha256(fleet_design).hexdigest() != expected_fixture_sha256(_FLEET_DESIGN_AMENDMENT):
         raise ValueError("fleet design command amendment digest changed")
+    cross_optin = _CROSS_OPTIN_AMENDMENT.read_bytes()
+    if hashlib.sha256(cross_optin).hexdigest() != expected_fixture_sha256(_CROSS_OPTIN_AMENDMENT):
+        raise ValueError("cross opt-in command amendment digest changed")
     rows, signatures = _baseline_template(
-        data, amendment, prepare, train, quiet, ask_replay, fleet_design,
+        data, amendment, prepare, train, quiet, ask_replay, fleet_design, cross_optin,
         str(worker_workspace_root().parent),
     )
-    if len(_ADMINISTRATION) != 62 or not set(_ADMINISTRATION) <= set(rows):
+    if len(_ADMINISTRATION) != 64 or not set(_ADMINISTRATION) <= set(rows):
         raise ValueError("reviewed administration exceptions do not bind the fixture")
     return rows, signatures
 
@@ -230,7 +237,7 @@ def _baseline_state() -> tuple[dict[str, dict], dict[str, str]]:
 @lru_cache(maxsize=4)
 def _baseline_template(
     data: bytes, amendment: bytes, prepare: bytes, train: bytes, quiet: bytes, ask_replay: bytes,
-    fleet_design: bytes, temporary_parent: str,
+    fleet_design: bytes, cross_optin: bytes, temporary_parent: str,
 ) -> tuple[dict, dict]:
     """Private templates are never returned through the mutable public API."""
     fixture = json.loads(data)
@@ -336,6 +343,17 @@ def _baseline_template(
             or set(fleet_design_rows) & set(rows) != {bundle_path}):
         raise ValueError("fleet design command amendment scope changed")
     rows.update(fleet_design_rows)
+
+    cross_document = json.loads(cross_optin)
+    cross_rows = _from_commands(cross_document["commands"])
+    hook_path = "hook install"
+    if (cross_document.get("schema_version") != 0
+            or cross_document.get("source_commit") != _CROSS_OPTIN_SOURCE_SHA
+            or set(cross_rows) != {"cross enable", "cross disable", hook_path}
+            or set(cross_rows) & set(rows) != {hook_path}
+            or cross_document.get("predecessors") != {hook_path: _signature(rows[hook_path])}):
+        raise ValueError("cross opt-in command amendment scope changed")
+    rows.update(cross_rows)
 
     # Compare predecessors in the captured grammar, then substitute the two
     # exact example tokens for the native platform. All other fields stay exact.

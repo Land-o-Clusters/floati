@@ -1,7 +1,7 @@
 export-baseline	.github/labeler.yml:30
-manifest	bundle-manifest.v0.json:16035
+manifest	bundle-manifest.v0.json:16231
 docs	docs/AGENT-OPERATIONS.md:184
-docs	docs/COPY-LEDGER.md:214
+docs	docs/COPY-LEDGER.md:217
 docs	docs/demo/tui/install-moment-standard.txt:13
 docs	docs/evidence/WEEKEND-P0-CODEX-WAKE-WAITER.md:129
 docs	docs/evidence/WEEKEND-SD1-UNINSTALL-ROUNDTRIP.md:16
@@ -30,8 +30,8 @@ update-readback	floati/fleet_update.py:1616
 update-readback	floati/fleet_update.py:1633
 update-readback	floati/fleet_update.py:1636
 update-readback	floati/fleet_update.py:1637
-docs	floati/generated_help.py:5477
-docs	floati/help_copy.py:878
+docs	floati/generated_help.py:5564
+docs	floati/help_copy.py:901
 update-readback	floati/reader_currency.py:173
 update-readback	floati/reader_currency.py:177
 install	floati/seat_onboarding.py:633
@@ -55,12 +55,12 @@ install	tests/test_codex_hook_install.py:431
 install	tests/test_codex_hook_install.py:449
 install	tests/test_codex_hook_install.py:496
 install	tests/test_cursor_host_install.py:133
-install	tests/test_deploy.py:54
-install	tests/test_deploy.py:55
-install	tests/test_deploy.py:100
-install	tests/test_deploy.py:535
-install	tests/test_deploy.py:680
-install	tests/test_deploy.py:685
+install	tests/test_deploy.py:64
+install	tests/test_deploy.py:65
+install	tests/test_deploy.py:110
+install	tests/test_deploy.py:545
+install	tests/test_deploy.py:690
+install	tests/test_deploy.py:695
 update-readback	tests/test_doctor.py:732
 update-readback	tests/test_doctor.py:951
 update-readback	tests/test_doctor.py:1034
@@ -79,7 +79,7 @@ install	tests/test_hook_preconditions.py:104
 install	tests/test_host_observer_install.py:39
 install	tests/test_host_observer_install.py:89
 install	tests/test_host_observer_install.py:91
-install	tests/test_host_permission_activity_contracts.py:81
+install	tests/test_host_permission_activity_contracts.py:19
 install	tests/test_install_trust_preflight.py:160
 install	tests/test_install_trust_preflight.py:315
 install	tests/test_install_trust_preflight.py:332
@@ -102,4 +102,4 @@ install	tests/test_rollback_hook_1.py:47
 install	tests/test_rollback_hook_1.py:160
 install	tests/test_seat_execution_host_tool_native.py:85
 install	tests/test_seat_onboard.py:59
-install	tests/test_wait_command.py:157
+install	tests/test_wait_command.py:172

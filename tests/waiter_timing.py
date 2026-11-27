@@ -1,7 +1,27 @@
 """Explicit scripted readiness for existing virtual-clock/race controls."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from datetime import datetime, timezone
 import select
+import time
+from unittest.mock import patch
+
+
+@contextmanager
+def seeded_mail_timing():
+    """Read durable fixture mail at one instant across both waiter clocks."""
+    now = time.time()
+    stamp = datetime.fromtimestamp(now, timezone.utc).isoformat(timespec="milliseconds")
+
+    def unexpected_wait(*_args):
+        raise AssertionError("seeded mail must be presented without waiting")
+
+    # Delivery liveness compares the event timestamp with the hold's own
+    # wall-time testimony. Keep those on the same timeline as the wait budget.
+    with patch("floati.events.utc_now", return_value=stamp.replace("+00:00", "Z")):
+        yield dict(monotonic=lambda: 0.0, wall_time=lambda: now,
+                   sleep=unexpected_wait, wait_readable=unexpected_wait)
 
 
 def scripted_readiness(sleeper, *, interval=1.0):

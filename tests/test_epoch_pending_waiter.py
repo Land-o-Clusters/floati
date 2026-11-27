@@ -1,9 +1,8 @@
 """Authorized Stop repairs a pending epoch before native presentation.
 
 Small fixture histories only. Native watch polls, recovery, controllers,
-decisions and readers remain real. Exact-wake controls sleep normally; the
-deadline control advances its injected monotonic clock at recovery/readiness
-so startup cost cannot consume the interval the test intends to observe.
+decisions and readers remain real. The fixture clock advances at readiness
+and accounts for recovery cost in the deadline control.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ import json
 import os
 import re
 import sys
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -217,9 +215,7 @@ class EpochPendingWaiterTests(unittest.TestCase):
                 sent.append(self._send("post-recovery-exact-notification"))
             if terminal == "deadline":
                 waits.append(seconds)
-                clock[0] += seconds
-            else:
-                time.sleep(seconds)
+            clock[0] += seconds
 
         with mock.patch.object(_HoldEvidence, "_report", report),\
                 mock.patch.object(codex_wait._WaiterInputsWatch, "changed", observed_changed),\
@@ -232,7 +228,7 @@ class EpochPendingWaiterTests(unittest.TestCase):
                 hook_payload={"cwd": str(self.workspace), "session_id": self.session},
                 stdout=stdout, stderr=stderr, wait_readable=scripted_readiness((sleep), interval=(0.01)), sleep=sleep,
                 poll_interval_seconds=0.01, _waiter_result=native_result,
-                **({"monotonic": lambda: clock[0]} if terminal == "deadline" else {}),
+                monotonic=lambda: clock[0],
             )
 
         self.assertEqual(0, status, stderr.getvalue())
@@ -286,7 +282,17 @@ class EpochPendingWaiterTests(unittest.TestCase):
         self._run_pending("PREPARED", "marker_prepared_durable")
 
     def test_committed_marker_automatically_recovers_before_clean_poll_and_exact_wake(self):
-        self._run_pending("COMMITTED", "marker_committed_durable")
+        run_stop_waiter = codex_wait.run_stop_waiter
+        host_ticks = iter((0.0, 7.0))
+
+        def run_under_startup_contention(**arguments):
+            # Delayed startup can exhaust the host's original window while
+            # recovery and presentation still have real work to perform.
+            arguments.setdefault("monotonic", lambda: next(host_ticks, 7.0))
+            return run_stop_waiter(**arguments)
+
+        with mock.patch.object(codex_wait, "run_stop_waiter", run_under_startup_contention):
+            self._run_pending("COMMITTED", "marker_committed_durable")
 
     def test_partial_selected_frame_is_not_read_before_automatic_recovery(self):
         self._run_pending("COMMITTED", "live_events_write_1", partial_frame=True)

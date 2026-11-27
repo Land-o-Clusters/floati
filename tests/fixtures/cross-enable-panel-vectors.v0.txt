@@ -1,0 +1,26 @@
+| ENABLE-PANEL | `floati-enable-panel-v12` | `floati-enable-panel-v12-am1` | `floati-enable-panel-v12-am3` | `floati-enable-panel-v12-am4` | Attended preview and independent continuation. |
+| V12-E1, R7.9 preview preimage length | 169 bytes |
+| V12-E2, rendered_digest | `fd49ceaf1338c2cc94f2e95e6e8de6bfc59d48fc48698c3237e51d1578ac5de7` |
+| V12-E3, SHA-256(J(start)) = approval_sha256 | `9c0c57beaca345b87acffd5500e44e94d5af275ee412be7efc8cf58a8507ef68` |
+| V12-E4, SHA-256(J(complete)) = transition_sha256 | `d4368457cd1a8909b319c28f9065a857cb9f3eb86c9848c839aa6ead6b126730` |
+| V12-E5, review ID for this synthetic E/g/transition | `cross-review-480e2c9c8b57dc7a4d24c2ed4f65101f0a712ec41a4b2ce532ac32111b4f17df` |
+| V12-E6, SHA-256(J(review)), semantic body only | `a2790e740b4389190269ebd8f518ff1b76b441abfdf01cc99365cd195ba5f0f7` |
+| V12A1-E1 | R7.9 preview preimage length (bytes) | `173` |
+| V12A1-E2 | rendered_digest | `60b5e569a2a2d380f03ac4840bd0ca0dd5ca69ad4e8190ed83ed11b6ec98cde6` |
+| V12A1-E3 | approval_sha256 = SHA-256(J(start)) | `1baa32a5487d821c15a23b2abb159e805e87a5bb3eb0029cd9cbb12840e9ca1b` |
+| V12A1-E4 | transition_sha256 = SHA-256(J(complete)) | `cb9cd103d5f2f7819d8c1c98a4865e1699f77192ddbbe049aa067519c3ebbc22` |
+| V12A1-E5 | review ID | `cross-review-480e2c9c8b57dc7a4d24c2ed4f65101f0a712ec41a4b2ce532ac32111b4f17df` |
+| V12A1-E6 | SHA-256(J(review)) | `4317c757c220e6a6c42474d8409a9645a02c7c33e6af5aace2c9f243b25c4cd8` |
+| V12A3-E1 | preview preimage length | — | `173` |
+| V12A3-E2 | rendered_digest | — | `08ff5b41cf1acfae62f4426b9e2424f462f8cc1e3ac51253dc13e015d6dba056` |
+| V12A3-E3 | approval_sha256 | — | `8b1df0f6402fa64e367f540d855e7c236c7321ca0a2e6c6a798fcb090622b862` |
+| V12A3-E4 | transition_sha256 | — | `54e3854a177b991d717ceb4056ddd49856181b8681337c45eb901a3a9e1cad7a` |
+| V12A3-E5 | review ID | — | `cross-review-480e2c9c8b57dc7a4d24c2ed4f65101f0a712ec41a4b2ce532ac32111b4f17df` |
+| V12A3-E6 | SHA-256(J(review)) | — | `2d38dd7152f39ee00e7a14f697a8823b3b42b4268448d331f9295fe7f5c415f5` |
+| V12A4-E1 | preview preimage length | — | `173` |
+| V12A4-E2 | rendered_digest | — | `3f15ba7c8107f8d36cc92b4c947d4ef97badd4e824732f70ed21181b2ef25559` |
+| V12A4-E3 | approval_sha256 | — | `b1c6bca6536f64561a8d5701a1db730402b1dc9a23af499b5f872d1832a834df` |
+| V12A4-E4 | transition_sha256 | — | `d29620ee40403c70e2bd680c41b051de12fd61d44368e9de1617d935b9dbb9b4` |
+| V12A4-E5 | review ID | — | `cross-review-480e2c9c8b57dc7a4d24c2ed4f65101f0a712ec41a4b2ce532ac32111b4f17df` |
+| V12A4-E6 | SHA-256(J(review)) | — | `2382ee06a32a4e1aadab220e356acfe1059f3ce5e812ffae35084cb3adf54627` |
+start = {"cause":null,"enable_generation":7,"enable_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","human_act":{"channel":"controlling_terminal","rendered_digest":"faa74788f8d428cf8a4dd30d4f5d3bc0e6fcc7fad6a83265c0deef25b2abe446"},"id":"cross-optin-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-enable-started","kind":"cross_optin","phase":"enable_started","plan":{"listen":["127.0.0.1:4321"],"root":"/fixture/harbor","store":"keychain","unit":"launchd"},"schema_version":1,"token":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}

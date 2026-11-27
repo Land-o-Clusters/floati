@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import os
 import stat
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+from . import ask_cost_v2
 
 
 _EXPORT_VARIABLE = "FLOATI_PUDDLE_ASK_COST_EXPORT"
@@ -14,25 +16,44 @@ _MAX_EXPORT_BYTES = 1024 * 1024
 _PAIR_FIELDS = ("tenant_id", "question_id", "answer_id")
 
 
-def project_ask_cost(tenant_id: str, question_id: str, asker: str, answer_id: str | None) -> dict:
-    if answer_id is None:
-        return {"status": "unmeasured", "reason": "ask_answer_absent", "attributed_to": asker}
-    measurement, reason = _read_measurement((tenant_id, question_id, answer_id))
+def project_ask_cost(question, answer, *, now=None, require_v2=False) -> dict:
+    """Project cost for validated Floati receipts with one clock per evaluation."""
+    configured = os.environ.get(_EXPORT_VARIABLE)
+    path = Path(configured) if configured else None
+    attribution = {"attributed_to": question["sender"]}
+    v2 = path is not None and path.name == ask_cost_v2.BASENAME
+    if v2 or require_v2:
+        evaluated = (now() if now is not None else datetime.now(timezone.utc)).astimezone(timezone.utc)
+        attribution.update(
+            attributed_to_session=question["acting_session_id"],
+            evaluated_at=evaluated.isoformat().replace("+00:00", "Z"),
+        )
+    if answer is None or answer["kind"] != "ask_answer":
+        absent = {"status": "unmeasured", "reason": "ask_answer_absent", **attribution}
+        if v2 or require_v2:
+            absent["outcome"] = "UNKNOWN"
+        return absent
+    if v2:
+        if not path.is_absolute() or path.as_posix() != configured or ".." in path.parts:
+            evidence = {"reason": "puddle_ask_cost_invalid"}
+        else:
+            evidence = ask_cost_v2.evaluate(path, question, answer, evaluated, _MAX_EXPORT_BYTES, _unique_object)
+        if "total_tokens" in evidence:
+            return {"status": "measured", **attribution, **evidence}
+        return {"status": "unmeasured", "outcome": "UNKNOWN", **attribution, **evidence}
+    pair = (question["tenant_id"], question["id"], answer["id"])
+    measurement, reason = _read_measurement(path, pair, require_v2=require_v2)
     if measurement is None:
-        return {"status": "unmeasured", "reason": reason, "attributed_to": asker,
-                "outcome": "UNKNOWN"}
+        return {"status": "unmeasured", "reason": reason, **attribution, "outcome": "UNKNOWN"}
     return {
-        "status": "measured",
-        "attributed_to": asker,
+        "status": "measured", **attribution,
         **{key: measurement[key] for key in ("total_tokens", "measurement_id", "observed_at")},
     }
 
 
-def _read_measurement(pair: tuple[str, str, str]) -> tuple[dict | None, str | None]:
-    configured = os.environ.get(_EXPORT_VARIABLE)
-    if not configured:
+def _read_measurement(path, pair, *, require_v2):
+    if path is None:
         return None, "puddle_measured_cost_seam_unavailable"
-    path = Path(configured)
     try:
         if not path.is_absolute() or path.name != "ask-cost-v1.json" or path.resolve(strict=True) != path:
             return None, "puddle_ask_cost_invalid"
@@ -50,6 +71,8 @@ def _read_measurement(pair: tuple[str, str, str]) -> tuple[dict | None, str | No
         return None, "puddle_ask_cost_invalid"
     if not isinstance(export, dict) or type(export.get("schema_version")) is not int:
         return None, "puddle_ask_cost_invalid"
+    if export["schema_version"] == 2:
+        return None, "puddle_ask_cost_invalid"
     if export["schema_version"] != 1:
         return None, "puddle_ask_cost_version_unsupported"
     rows = export.get("records")
@@ -58,6 +81,8 @@ def _read_measurement(pair: tuple[str, str, str]) -> tuple[dict | None, str | No
         for row in rows
     ):
         return None, "puddle_ask_cost_invalid"
+    if require_v2:
+        return None, "v2_evidence_required"
     matches = [row for row in rows if tuple(row[key] for key in _PAIR_FIELDS) == pair]
     if not matches:
         return None, "puddle_ask_cost_not_found"

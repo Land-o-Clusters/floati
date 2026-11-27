@@ -4,8 +4,11 @@ import hashlib
 import inspect
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +26,13 @@ from tests.git_fixture_cache import cached_tree, fixture_git
 # the fence's own governed token rather than spelled: these fixtures drive a
 # refusal (or assert an absence) whose whole mechanism is these exact bytes.
 LEGACY_PREFIX = "." + RETIRED_PRODUCT_NAME
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def readme_bash_blocks(start: str, end: str) -> list[str]:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split(start, 1)[1].split(end, 1)[0]
+    return re.findall(r"```bash\n(.*?)\n```", section, re.DOTALL)
 
 try:
     import floati.deploy as deploy
@@ -695,6 +705,75 @@ class DeploymentWriterTests(unittest.TestCase):
             ".floati-install/wiring-journal.v1.jsonl",
             removed["foreign_preserved"],
         )
+
+    def test_readme_install_runs_from_the_clones_parent(self) -> None:
+        block = readme_bash_blocks("## Start here", "## What you get")[0]
+        clone, _, install_steps = block.partition("\n")
+        public_url = "https://github.com/Land-o-Clusters/floati.git"
+        self.assertIn(public_url, clone)
+        clone = clone.replace(public_url, shlex.quote(str(self.source)))
+        ref = re.search(r"--ref (\S+)", install_steps)
+        self.assertIsNotNone(ref, install_steps)
+
+        # The fixture deploys a small manifest. Supply the real bootstrap
+        # package for Python imports without adding its files to that manifest.
+        shutil.copytree(
+            REPOSITORY_ROOT / "floati", self.source / "floati",
+            dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        (self.source / ".gitignore").write_text(
+            "/floati/*\n!/floati/__init__.py\n", encoding="utf-8"
+        )
+        self._write_manifest()
+        self._git("add", ".gitignore", "floati/__init__.py", "bundle-manifest.v0.json")
+        self._git("commit", "--quiet", "-m", "Supply the bootstrap entry point")
+        self._git("tag", ref.group(1))
+
+        checkout = self.base / "floati"
+        destination = self.base / "destination"
+        # Mirror the Linux import collision: the checkout directory is itself
+        # called floati, so its parent sees a namespace without __main__.
+        local_clone = clone.replace("/absolute/floati", shlex.quote(str(checkout)))
+        cloned = subprocess.run(
+            ["/bin/sh", "-ec", local_clone],
+            cwd=self.base, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(0, cloned.returncode, cloned.stderr)
+        shutil.copytree(self.source / "floati", checkout / "floati", dirs_exist_ok=True)
+        script = install_steps.replace("/absolute/floati", shlex.quote(str(checkout)))
+        script = script.replace("/absolute/install", shlex.quote(str(destination)))
+        env = dict(os.environ, PATH=f"{Path(sys.executable).parent}:/usr/bin:/bin")
+        env.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            ["/bin/sh", "-ec", script],
+            cwd=self.base, env=env, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("installed", json.loads(result.stdout)["evidence"]["status"])
+        self.assertTrue((destination / "scripts/floati").is_file())
+
+    def test_readme_cleanup_removes_plain_install_retained_records(self) -> None:
+        destination = self.base / "destination"
+        self._writer(destination, committed_tree=True).run()
+        removed = UninstallWriter(destination).run()
+        self.assertEqual(
+            sorted(path.relative_to(destination).as_posix()
+                   for path in destination.rglob("*") if path.is_file()),
+            removed["retained_records"],
+        )
+
+        # Run the steps after the uninstall preview against the actual leftovers.
+        blocks = readme_bash_blocks("**Leaving.**", "**Composing with it.**")
+        script = "\n".join(blocks[1:]).replace(
+            "/absolute/install", shlex.quote(str(destination))
+        )
+        result = subprocess.run(
+            ["/bin/sh", "-ec", script],
+            cwd=self.base, env=dict(os.environ, PATH="/usr/bin:/bin"),
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertFalse(destination.exists(), sorted(destination.rglob("*")))
 
     def test_first_install_refuses_found_shadow_before_destination_creation(self) -> None:
         """A known preceding executable must block writes before the destination exists."""

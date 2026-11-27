@@ -47,6 +47,9 @@ class CursorHoldUnionTests(unittest.TestCase):
         return CodexWaitSessionLedger(self.f.root).arm(self.f.binding, self.f.consent,
             session, idempotency_key="union-arm-" + session, take_over=True)
 
+    def now(self):
+        return self.epoch + timedelta(seconds=self.elapsed)
+
     def run_waiter(self, *, on_sleep=None, stdout=None, workspace=None, **overrides):
         called = False
         def sleep(seconds):
@@ -79,7 +82,7 @@ class CursorHoldUnionTests(unittest.TestCase):
             stdout=self.output if stdout is None else stdout, stderr=self.f.stderr,
             clock=lambda: self.elapsed, sleep=sleep,
             wait_readable=scripted_readiness(sleep, interval=1),
-            now_utc=lambda: (self.epoch + timedelta(seconds=self.elapsed)).isoformat().replace("+00:00", "Z"),
+            now_utc=lambda: self.now().isoformat().replace("+00:00", "Z"),
             ledger_mtime=lambda: self.f.events.path.stat().st_size if self.f.events.path.exists() else 0)
         arguments.update(overrides)
         with mock.patch("floati.cursor_wait.Path.cwd", return_value=workspace or self.f.workspace),\
@@ -105,8 +108,12 @@ class CursorHoldUnionTests(unittest.TestCase):
             self.assertEqual(str(self.f.workspace), rows[0]["workspace"])
             self.assertEqual(self.f.session, rows[0]["acting_session_id"])
             self.assertEqual("", self.output.getvalue())
-            self.f.assert_stop_hook_ready(self.f.send("union-during-hold"))
-        body = self.run_waiter(on_sleep=send_during_hold)
+            self.f.assert_stop_hook_ready(self.f.send("union-during-hold", now=self.now()))
+        # The fixture's hold is active even if physical startup takes longer
+        # than its two-second logical window.
+        with mock.patch.object(readiness, "datetime", wraps=datetime) as host_clock:
+            host_clock.now.return_value = self.epoch + timedelta(seconds=3)
+            body = self.run_waiter(on_sleep=send_during_hold)
         self.assertIn("unread mail", body["followup_message"])
         self.assert_closed()
         self.assertEqual("flushed", self.rows()[-1]["publication"])

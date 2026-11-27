@@ -31,7 +31,7 @@ from floati.work import WorkLog
 from floati.workers import WorkerAdapterFailure, WorkerRefusals, WorkerRunner
 from floati.runtruth import RunLedger
 from floati.policy import RepositoryPolicy
-from tests.readiness import Readiness, wait_event
+from tests.readiness import Readiness, wait_event, wait_join, wait_until
 from tests.time_bounds import derived_codex_handshake_budget_seconds
 from tests.hm3i_gauntlet_fixtures import (
     CANONICAL_RUN_KINDS,
@@ -386,6 +386,14 @@ def _build_trace_and_crash_at_run_append(
     builders[trace_name](root)
 
 
+def _collect_crash_fixture(process, description):
+    try:
+        wait_join(process, description)
+    except AssertionError:
+        process.terminate()
+        wait_join(process, f"collect terminated fixture after {description}")
+
+
 class CrashPointGauntletTests(unittest.TestCase):
     @staticmethod
     def bytes_under(path: Path) -> dict[str, bytes]:
@@ -398,7 +406,7 @@ class CrashPointGauntletTests(unittest.TestCase):
     def run_crasher(self, target: object, args: tuple[object, ...]) -> None:
         process = multiprocessing.get_context("fork").Process(target=target, args=args)
         process.start()
-        process.join(5)
+        wait_join(process, "crash fixture exits")
         self.assertEqual(CRASH_EXIT, process.exitcode)
 
     def seeded_mail_root(self, base: Path) -> FloatiRoot:
@@ -900,10 +908,7 @@ class ThreadObservationCrashTests(unittest.TestCase):
                         ),
                     )
                     crasher.start()
-                    crasher.join(10)
-                    if crasher.is_alive():
-                        crasher.terminate()
-                        crasher.join(5)
+                    _collect_crash_fixture(crasher, "crasher exits after its terminal outcome")
                     self.assertEqual(CRASH_EXIT, crasher.exitcode)
 
                     path = root.resolve_relative(ledger_type.relative_path)
@@ -934,10 +939,7 @@ class ThreadObservationCrashTests(unittest.TestCase):
                     )
                     restarted.start()
                     status, value = results.get(timeout=10)
-                    restarted.join(10)
-                    if restarted.is_alive():
-                        restarted.terminate()
-                        restarted.join(5)
+                    _collect_crash_fixture(restarted, "restarted exits after its terminal outcome")
                     self.assertEqual(0, restarted.exitcode)
                     if point in torn_points:
                         self.assertEqual("error", status, value)
@@ -1077,10 +1079,7 @@ class EffectLedgerCrashTests(unittest.TestCase):
                     ),
                 )
                 crasher.start()
-                crasher.join(10)
-                if crasher.is_alive():
-                    crasher.terminate()
-                    crasher.join(5)
+                _collect_crash_fixture(crasher, "crasher exits after its terminal outcome")
                 self.assertEqual(CRASH_EXIT, crasher.exitcode)
 
                 durable = EffectLedger(case.root).records()
@@ -1097,10 +1096,7 @@ class EffectLedgerCrashTests(unittest.TestCase):
                 )
                 restarted.start()
                 status, value = results.get(timeout=10)
-                restarted.join(10)
-                if restarted.is_alive():
-                    restarted.terminate()
-                    restarted.join(5)
+                _collect_crash_fixture(restarted, "restarted exits after its terminal outcome")
                 self.assertEqual(0, restarted.exitcode)
                 self.assertEqual("ok", status, value)
                 self.assertEqual(durable[0], value)
@@ -1142,10 +1138,7 @@ class EffectLedgerCrashTests(unittest.TestCase):
                     ),
                 )
                 crasher.start()
-                crasher.join(10)
-                if crasher.is_alive():
-                    crasher.terminate()
-                    crasher.join(5)
+                _collect_crash_fixture(crasher, "crasher exits after its terminal outcome")
                 self.assertEqual(CRASH_EXIT, crasher.exitcode)
 
                 path = case.root.resolve_relative(EffectLedger.relative_path)
@@ -1170,10 +1163,7 @@ class EffectLedgerCrashTests(unittest.TestCase):
                 )
                 restarted.start()
                 status, value = results.get(timeout=10)
-                restarted.join(10)
-                if restarted.is_alive():
-                    restarted.terminate()
-                    restarted.join(5)
+                _collect_crash_fixture(restarted, "restarted exits after its terminal outcome")
                 self.assertEqual(0, restarted.exitcode)
                 if point in torn_points:
                     self.assertEqual("error", status)
@@ -1352,26 +1342,22 @@ class EffectWorkerCrashTests(unittest.TestCase):
                 adapter_pid = runner.last_process_audit["adapter_pid"]
                 self.assertEqual(adapter_pid, provider_group)
                 self.assertEqual([], runner.last_process_audit["registered_process_groups"])
-                deadline = time.monotonic() + 0.5
-                provider_survived = True
-                while time.monotonic() < deadline:
+                def provider_absent():
                     try:
                         os.kill(provider_pid, 0)
                     except ProcessLookupError:
-                        provider_survived = False
-                        break
-                    time.sleep(0.01)
-                audited_survivors = runner.last_process_audit["alive_after_cleanup"]
-                if provider_survived:
+                        return True
+                    return False
+
+                try:
+                    wait_until(provider_absent, "TERM-ignoring provider exits after worker cleanup")
+                except AssertionError:
                     try:
                         os.killpg(provider_group, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                self.assertEqual(
-                    (False, []),
-                    (provider_survived, audited_survivors),
-                    "TERM-ignoring provider survived while the audit reported empty",
-                )
+                    raise
+                self.assertEqual([], runner.last_process_audit["alive_after_cleanup"])
 
     def test_isolation_failure_does_not_record_process_lost_effect_unknown(self) -> None:
         """Catches a pre-callback isolation refusal inventing dispatched uncertainty."""
@@ -1537,7 +1523,7 @@ class WakeHoldCrashTests(unittest.TestCase):
                 root = CrashPointGauntletTests().seeded_mail_root(base)
                 process = multiprocessing.get_context("fork").Process(target=_wake_evaluate_then_crash, args=(str(base), point))
                 process.start()
-                process.join(5)
+                wait_join(process, "hold-append crash fixture exits")
                 self.assertEqual(CRASH_EXIT, process.exitcode)
                 if point in torn:
                     with self.assertRaises(IntegrityFailure):

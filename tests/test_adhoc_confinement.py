@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import stat
-import subprocess
+from tests.readiness import run_process
 import sys
 import unittest
 from unittest import mock
@@ -86,8 +86,9 @@ class AdhocConfinementTests(AdhocFixture, unittest.TestCase):
             alias = notes / "escape-link"
             alias.symlink_to(Path(targets["home"]).parent, target_is_directory=True)
             attempted = dict(targets, symlink=str(alias / "hostile-write"))
-            completed = subprocess.run([sys.executable, "-B", str(provider.resolve())],
-                input=json.dumps(attempted), capture_output=True, text=True, timeout=5)
+            completed = run_process([sys.executable, "-B", str(provider.resolve())],
+                "confinement fixture returns its write observations",
+                input=json.dumps(attempted), capture_output=True, text=True)
             return {"exit": completed.returncode, "stderr": completed.stderr,
                     "writes": json.loads(completed.stdout)}
 

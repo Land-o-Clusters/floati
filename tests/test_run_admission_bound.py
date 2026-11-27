@@ -17,6 +17,7 @@ from floati.root import FloatiRoot
 from floati.runtruth import RunLedger
 from floati.scheduler import RetryPolicy, RunScheduler
 from floati.sequencer import SequencerClient, SequencerConfig, SequencerService
+from tests.readiness import wait_join
 from tests.test_admission import ITEM_A, ITEM_B, VALID_POLICY
 
 try:
@@ -197,8 +198,10 @@ class RunAdmissionBoundTests(unittest.TestCase):
 
         def cleanup() -> None:
             stop.set()
-            worker.join(3)
-            service.close()
+            try:
+                wait_join(worker, "admission sequencer exits")
+            finally:
+                service.close()
 
         self.addCleanup(cleanup)
         managed = RunLedger(

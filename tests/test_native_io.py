@@ -17,7 +17,7 @@ from unittest import mock
 from floati.worker_bootstrap_protocol import NATIVE_THREAD_BOUNDS
 from floati.worker_errors import WorkerAdapterFailure
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.readiness import Readiness
+from tests.readiness import Readiness, wait_process, wait_until
 
 HARNESS = Path(__file__).parent / "fixtures/adhoc-native/stream_harness.py"
 # These reviewed fixture branches never create another process. Unknown modes
@@ -37,6 +37,14 @@ def required_api(case, module, name):
     loaded = importlib.import_module(module)
     case.assertTrue(hasattr(loaded, name), "API ABSENT: " + module + "." + name)
     return getattr(loaded, name)
+
+
+def _pid_absent(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
 
 
 @contextmanager
@@ -65,8 +73,8 @@ def owned_child(case, mode, *args, duration=None):
                 if process.poll() is None:
                     process.terminate()
                     try:
-                        process.wait(timeout=0.3)
-                    except subprocess.TimeoutExpired:
+                        wait_process(process, "terminated native fixture exits")
+                    except AssertionError:
                         process.kill()
             else:
                 # Unknown modes may share the deliberate inherited-pipe
@@ -83,23 +91,15 @@ def owned_child(case, mode, *args, duration=None):
                         if mode != "inherited-pipe" or sig != signal.SIGKILL:
                             raise
                     try:
-                        process.wait(timeout=0.3)
-                    except subprocess.TimeoutExpired:
+                        wait_process(process, "native group fixture leader exits")
+                    except AssertionError:
                         continue
-            process.wait(timeout=2)
+            wait_process(process, "collect the native I/O fixture leader")
             if mode == "inherited-pipe":
                 # Prove cleanup here even if the test body raised, rather than
                 # relying on an assertion after the context manager returns.
                 descendant = int(Path(args[0]).read_text())
-                cleanup_deadline = time.monotonic() + 2
-                while True:
-                    try:
-                        os.kill(descendant, 0)
-                    except ProcessLookupError:
-                        break
-                    case.assertLess(time.monotonic(), cleanup_deadline,
-                                    "owned inherited-pipe descendant not reaped")
-                    time.sleep(0.01)
+                wait_until(lambda: _pid_absent(descendant), "owned inherited-pipe descendant exits")
         finally:
             process.stdout.close()
             process.stderr.close()
@@ -190,7 +190,7 @@ class NativeIOTests(_NativeIOFixture, unittest.TestCase):
             with owned_child(self, "inherited-pipe", pid_file, duration=3) as process:
                 reader = self.reader(process)
                 self.assertEqual({"terminal": True}, reader.read_record())
-                process.wait(timeout=1)
+                wait_process(process, "inherited-pipe leader exits after its terminal frame")
                 # Give both interpreters time to start, then consume most of
                 # the same original budget before checking the inherited pipe.
                 # A fresh budget in drain_to_exit would miss this deadline.
@@ -202,14 +202,7 @@ class NativeIOTests(_NativeIOFixture, unittest.TestCase):
                 self.assertEqual("process_timeout", caught.exception.code)
                 self.assertLess(time.monotonic(), process.fixture_deadline + 0.3)
             descendant = int(pid_file.read_text())
-            deadline = time.monotonic() + 2
-            while True:
-                try:
-                    os.kill(descendant, 0)
-                except ProcessLookupError:
-                    break
-                self.assertLess(time.monotonic(), deadline, "owned descendant not reaped")
-                time.sleep(0.01)
+            wait_until(lambda: _pid_absent(descendant), "inherited-pipe descendant is absent after cleanup")
 
 
 
@@ -222,7 +215,7 @@ class OrdinaryNativeIOTests(_NativeIOFixture, unittest.TestCase):
         with mock.patch.object(os, "killpg", side_effect=AssertionError(
                 "collected single-process fixture was signalled")):
             with owned_child(self, "digest") as process:
-                process.wait(timeout=2)
+                wait_process(process, "native digest fixture exits")
 
     def test_live_single_process_fixture_uses_owned_process_signal(self):
         process = None
@@ -239,10 +232,10 @@ class OrdinaryNativeIOTests(_NativeIOFixture, unittest.TestCase):
                     if process.poll() is None:
                         process.terminate()
                     try:
-                        process.wait(timeout=0.3)
-                    except subprocess.TimeoutExpired:
+                        wait_process(process, "collect terminated native signal control")
+                    except AssertionError:
                         process.kill()
-                        process.wait(timeout=2)
+                        wait_process(process, "collect killed native signal control")
                 finally:
                     process.stdout.close()
                     process.stderr.close()

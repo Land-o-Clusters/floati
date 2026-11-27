@@ -19,6 +19,7 @@ from .root import IDENTIFIER_PATTERN
 from .adhoc_records import ADHOC_KINDS, ADHOC_RECORD_VERSIONS, ADHOC_SPECS, validate_adhoc_record
 from .needs_records import NEEDS_KINDS, NEEDS_SPECS, validate_needs_record
 from .territory_records import TERRITORY_KINDS, TERRITORY_SPECS, validate_territory_record
+from .t3_dispatch_records import T3_DISPATCH_KINDS, T3_DISPATCH_SPECS, validate_t3_dispatch
 from .inbound_hold_records import INBOUND_HOLD_KINDS, INBOUND_HOLD_SPECS, validate_inbound_hold_record
 
 
@@ -672,6 +673,7 @@ _SPECS: Mapping[str, tuple[str, FrozenSet[str]]] = {
     **NEEDS_SPECS,
     **TERRITORY_SPECS,
     **INBOUND_HOLD_SPECS,
+    **T3_DISPATCH_SPECS,
 }
 
 
@@ -798,7 +800,7 @@ _SPECIAL_V1_RECORD_KINDS = frozenset({
     "native_dispatch_launcher_record", "wake_daemon_directory_ownership_record",
     "codex_binding_repair_receipt", "epoch_history_commit", "bus_epoch_recovery_receipt",
     "declared_route_receipt",
-}) | NEEDS_KINDS | TERRITORY_KINDS | INBOUND_HOLD_KINDS | QUIET_KINDS | ASK_RECORD_KINDS
+}) | NEEDS_KINDS | TERRITORY_KINDS | INBOUND_HOLD_KINDS | QUIET_KINDS | ASK_RECORD_KINDS | T3_DISPATCH_KINDS
 
 
 def is_newer_record_version(kind: str, version: object) -> bool:
@@ -974,6 +976,8 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
         return validated
     if kind in TERRITORY_KINDS:
         return validate_territory_record(record, expected_tenant, refuse)
+    if kind in T3_DISPATCH_KINDS:
+        return validate_t3_dispatch(record, expected_tenant, refuse)
     if kind in INBOUND_HOLD_KINDS:
         return validate_inbound_hold_record(record, expected_tenant, refuse)
     prefix, fields = _SPECS[kind]
@@ -1006,7 +1010,7 @@ def validate_record(record: Any, expected_tenant: str, allowed_kinds: FrozenSet[
     if kind in {"message_envelope", "ask_question"} and "address_preview" in record:
         from .addressing import validate_preview
         preview = record["address_preview"]
-        if kind == "ask_question" and isinstance(preview, dict) and preview.get("preview_version") == 2:
+        if kind == "ask_question" and isinstance(preview, dict) and preview.get("preview_version") in (2, 3):
             from .role_addressing import validate_role_preview
             validate_role_preview(preview, refuse)
         else:

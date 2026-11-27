@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/t3-dispatch-child-link-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "dispatch_key",
+    "parent_thread_id",
+    "status",
+    "task_id",
+    "child_thread_id"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "t3_dispatch_child_link"},
+    "id": {
+      "type": "string",
+      "pattern": "^t3-child-link-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "dispatch_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "parent_thread_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"},
+    "status": {"enum": ["linked", "unparseable-response", "call-failed"]},
+    "task_id": {},
+    "child_thread_id": {}
+  },
+  "if": {"properties": {"status": {"const": "linked"}}},
+  "then": {
+    "properties": {
+      "task_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/%-]{0,511}$"},
+      "child_thread_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/%-]{0,511}$"}
+    }
+  },
+  "else": {
+    "properties": {
+      "task_id": {"type": "null"},
+      "child_thread_id": {"type": "null"}
+    }
+  }
+}

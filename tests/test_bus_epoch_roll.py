@@ -57,7 +57,7 @@ from floati.wake_daemon_contract import (
 from floati.wake_hold import WakeAttemptLedger, WakeHoldController
 from tests.schema_validation import SchemaValidationError, validate_json_schema
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.waiter_timing import scripted_readiness
+from tests.waiter_timing import scripted_readiness, seeded_mail_timing
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -4080,6 +4080,7 @@ class GovernedBusEpochRollTests(unittest.TestCase):
             probe_participant.binding, probe_consent, "probe-reader-session",
             idempotency_key="probe-reader-session-claim")
         probe_output, probe_errors = io.StringIO(), io.StringIO()
+        probe_result: dict[str, object] = {}
         ticks = 0
 
         def probe_sleep(_seconds: float) -> None:
@@ -4089,22 +4090,22 @@ class GovernedBusEpochRollTests(unittest.TestCase):
                 receipt = self._roll_success(root=probe_root, key="probe-roll")
                 self._assert_reader_roll(probe_root, receipt, "probe-roll")
             else:
-                probe_rc = run_stop_waiter(
-                    bus_home=probe_root.path,
-                    hook_payload={"cwd": str(probe_workspace),
-                                  "session_id": "probe-reader-session"},
-                    stdout=probe_output, stderr=probe_errors,
-                    # The probe envelope is already durable. Startup may
-                    # not consume this immediate native reader's budget.
-                    monotonic=lambda: 0.0,
-                    wait_readable=lambda *_args: self.fail(
-                        "the post-roll probe envelope must be admitted without waiting"),
-                )
+                with seeded_mail_timing() as timing:
+                    probe_rc = run_stop_waiter(
+                        bus_home=probe_root.path,
+                        hook_payload={"cwd": str(probe_workspace),
+                                      "session_id": "probe-reader-session"},
+                        stdout=probe_output, stderr=probe_errors,
+                        _waiter_result=probe_result, **timing,
+                    )
                 self.assertEqual(0, probe_rc, probe_errors.getvalue())
 
         report = DoctorProbe(probe_root, budget_seconds=2, sleeper=probe_sleep,
                              poll_interval_seconds=1).run(["actor-a"])
-        self.assertEqual("PASS", report.by_node["actor-a"].verdict)
+        self.assertEqual(
+            "PASS", report.by_node["actor-a"].verdict,
+            (probe_result, probe_output.getvalue(), probe_errors.getvalue()),
+        )
         live_probes = EventLog(probe_root).records()
         self.assertEqual(1, len(live_probes), "probe must retry once in the new epoch")
         probe_id = str(live_probes[0]["id"])

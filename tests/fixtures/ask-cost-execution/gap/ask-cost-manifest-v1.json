@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "tenant_id": "fleet-sample",
+  "generation_id": "g-cccccccccccccccccccccccccccccccc",
+  "files": {
+    "ask-cost-execution-v1.json": "ae770ba1c534294d913633f1d12e54aca898ce48a047ea214037f832198b1724",
+    "ask-cost-receipts-v1.json": "141d1ddf2968ee420ecba484c666accf249cdc9888d0dea90b7c4cf1d94476d8"
+  }
+}

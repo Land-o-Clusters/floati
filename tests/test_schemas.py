@@ -85,6 +85,48 @@ def load_schema(name: str) -> dict:
 
 
 class SchemaContractTests(unittest.TestCase):
+    def test_ask_cost_projection_fixtures_share_a_closed_generation(self):
+        from floati.events import validate_event_records
+
+        directory = Path("tests/fixtures/ask-cost-execution")
+        names = ("ask-cost-execution-v1", "ask-cost-receipts-v1", "ask-cost-manifest-v1")
+        for case in ("complete", "gap", "invalid"):
+            raw = {name: (directory / case / (name + ".json")).read_bytes() for name in names}
+            data = {name: json.loads(payload) for name, payload in raw.items()}
+            for name in names:
+                with self.subTest(case=case, artifact=name):
+                    schema = V1_SCHEMA_DIR / (name + ".schema.json")
+                    if case == "invalid":
+                        with self.assertRaises(SchemaValidationError):
+                            validate_json_schema(data[name], schema)
+                    else:
+                        validate_json_schema(data[name], schema)
+            if case == "invalid":
+                continue
+            execution, receipts, manifest = (data[name] for name in names)
+            for name in names[:2]:
+                self.assertEqual(manifest["generation_id"], data[name]["generation_id"])
+                self.assertEqual(manifest["tenant_id"], data[name]["tenant_id"])
+                self.assertEqual(manifest["files"][name + ".json"],
+                                 hashlib.sha256(raw[name]).hexdigest())
+            scope = execution["scopes"][0]
+            pair = receipts["pairs"][0]
+            envelopes = []
+            for kind, receipt in pair.items():
+                fields = {"repo": "floati", "sha": "a" * 40, "doc": "note.md", "note": "sample"}
+                if kind == "presentation":
+                    fields = {}
+                envelope = validate_record(
+                    dict(receipt, **fields, kind="ask_" + kind, schema_version=1,
+                         tenant_id=manifest["tenant_id"], idempotency_key=kind),
+                    manifest["tenant_id"], frozenset({"ask_" + kind}), integrity=False,
+                )
+                envelopes.append(envelope)
+                self.assertEqual(scope[kind + "_id"], receipt["id"])
+            validate_event_records(envelopes)
+            self.assertEqual("complete" if case == "complete" else "incomplete",
+                             scope["completeness"]["status"])
+
     def test_v4_keeps_v0_tide_schema_bytes_frozen(self) -> None:
         expected = {
             "tide-policy-record.schema.json": (

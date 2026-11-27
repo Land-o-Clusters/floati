@@ -5,13 +5,13 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from typing import List, Tuple
 from unittest import mock
 
 from floati.errors import ProtocolRefusal
+from tests.readiness import wait_process, wait_until
 
 
 HARNESS = (
@@ -104,7 +104,17 @@ class ThreadSourceTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
         )
-        self.addCleanup(lambda: process.poll() is None and process.kill())
+        def collect():
+            try:
+                if process.poll() is None:
+                    process.kill()
+                wait_process(process, "reference thread fixture is collected")
+            finally:
+                process.stdin.close()
+                process.stdout.close()
+                process.stderr.close()
+
+        self.addCleanup(collect)
         assert process.stdin is not None and process.stdout is not None
         for message in (
             {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "control", "version": "0"}}},
@@ -117,9 +127,7 @@ class ThreadSourceTests(unittest.TestCase):
                 response = json.loads(process.stdout.readline())
         self.assertEqual("idle", response["result"]["thread"]["status"]["type"])
         process.stdin.close()
-        process.wait(timeout=1)
-        process.stdout.close()
-        process.stderr.close()
+        wait_process(process, "reference thread fixture exits after EOF")
         self.assertEqual(["initialize", "initialized", "thread/read"], methods.read_text().splitlines())
 
     def test_source_sends_only_initialize_initialized_and_exact_thread_read(self) -> None:
@@ -403,15 +411,14 @@ class ThreadSourceTests(unittest.TestCase):
         result, _, _, diagnostic = self.read_from_harness("ignore-term-child")
         self.assertEqual("observed", result.observation_outcome)
         descendant = int(Path(str(diagnostic) + ".descendant").read_text(encoding="ascii"))
-        deadline = time.monotonic() + 1
-        while time.monotonic() < deadline:
+        def absent():
             try:
                 os.kill(descendant, 0)
             except ProcessLookupError:
-                break
-            time.sleep(0.01)
-        else:
-            self.fail("SIGTERM-ignoring harness descendant survived source cleanup")
+                return True
+            return False
+
+        wait_until(absent, "SIGTERM-ignoring harness descendant exits after source cleanup")
 
     def test_production_source_has_no_forbidden_method_or_content_surface(self) -> None:
         source = Path("floati/thread_source.py").read_text(encoding="utf-8")

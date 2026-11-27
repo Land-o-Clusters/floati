@@ -5,17 +5,18 @@ import hashlib
 import io
 import json
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 from unittest.mock import patch
 
 from floati.events import EventLog
 from tests import test_host_permission_observations as fixture
+from tests.readiness import run_process
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "tests/fixtures/f2-seat-stall-host-1/codex-activity-contracts.json"
+SESSION_END_LAUNCHER = ROOT / "scripts/floati-codex-wait"
 
 
 class HostPermissionActivityContractTests(unittest.TestCase):
@@ -78,9 +79,9 @@ class HostPermissionActivityContractTests(unittest.TestCase):
         occurrence = self.observe()
         payload = self.activity("SessionEnd")
         self.assertNotIn("turn_id", payload)
-        child = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/floati-codex-wait"),
-            "--root", str(self.root.path)], input=json.dumps(payload), text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False)
+        child = run_process([sys.executable, "-B", str(SESSION_END_LAUNCHER),
+            "--root", str(self.root.path)], "session-end launcher exits",
+            input=json.dumps(payload), text=True, capture_output=True, check=False)
         self.assertEqual(0, child.returncode, child.stderr)
         self.assertEqual("", child.stdout)
         self.assertIsNone(self.publish(occurrence, 900))

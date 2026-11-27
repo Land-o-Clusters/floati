@@ -1,5 +1,5 @@
 """A different node's live Floati dispatch never becomes this seat's host."""
-from tests.readiness import READY_SECONDS, Readiness, wait_until
+from tests.readiness import READY_SECONDS, Readiness, communicate, wait_join, wait_process, wait_until
 import json
 import multiprocessing
 import os
@@ -38,7 +38,7 @@ class _ManagedJobAdapter:
                 incoming.close()
         ready = process.stdout.readline().split()
         if len(ready) != 2 or ready[0] != 'ready':
-            process.communicate(timeout=5)
+            communicate(process, "unready managed job fixture exits")
             raise RuntimeError('native managed job did not become ready')
         publication = self.ready.with_name(self.ready.name + '.publishing')
         publication.write_text(ready[1])
@@ -55,7 +55,7 @@ class _ManagedJobAdapter:
                 time.sleep(.01)
             return []
         finally:
-            process.communicate(timeout=5)
+            communicate(process, "managed job fixture exits after release")
 
 
 def _run_worker(root, node, adapter, cwd, crash=None):
@@ -97,18 +97,19 @@ class SeatTeardownWorkerProvenanceTests(unittest.TestCase):
         worker.start()
         def finish():
             release.touch()
-            worker.join(20)
-            if worker.is_alive():
+            try:
+                wait_join(worker, "managed job worker fixture exits")
+            except AssertionError:
                 worker.terminate()
-                worker.join(5)
+                wait_join(worker, "collect terminated managed job worker fixture")
             self.assertEqual(0, worker.exitcode)
             if ready.exists():
                 from floati.seat_host_worker import _identity
                 pid = int(ready.read_text())
-                deadline = time.monotonic() + 5
-                while _identity(pid) is not None and time.monotonic() < deadline:
-                    time.sleep(.01)
-                self.assertIsNone(_identity(pid), 'fixture EOF must release its native job')
+                def absent():
+                    return _identity(pid) is None
+
+                wait_until(absent, "native job exits after fixture EOF")
         self.addCleanup(finish)
         wait_until(lambda: ready.exists() or not worker.is_alive(),
             "other-node worker managed child publication")
@@ -181,18 +182,19 @@ class SeatTeardownWorkerProvenanceTests(unittest.TestCase):
             crash.touch()
             release.touch()
             os.close(writer)
-            worker.join(20)
-            if worker.is_alive():
+            try:
+                wait_join(worker, "managed job worker fixture exits")
+            except AssertionError:
                 worker.terminate()
-                worker.join(5)
+                wait_join(worker, "collect terminated managed job worker fixture")
             self.assertEqual(0, worker.exitcode)
             if ready.exists():
                 from floati.seat_host_worker import _identity
                 pid = int(ready.read_text())
-                deadline = time.monotonic() + 5
-                while _identity(pid) is not None and time.monotonic() < deadline:
-                    time.sleep(.01)
-                self.assertIsNone(_identity(pid), 'fixture EOF must release its orphan native job')
+                def absent():
+                    return _identity(pid) is None
+
+                wait_until(absent, "orphan native job exits after fixture EOF")
         self.addCleanup(finish)
         wait_until(lambda: ready.exists() or not worker.is_alive(),
             "orphan managed child publication")
@@ -201,7 +203,7 @@ class SeatTeardownWorkerProvenanceTests(unittest.TestCase):
         from floati.seat_host_worker import _identity
         original_parent = _identity(pid)['ppid']
         crash.touch()
-        worker.join(10)
+        wait_join(worker, "crashed runner fixture exits")
         self.assertEqual(0, worker.exitcode)
         readiness = Readiness("orphan native job reparenting")
         identity = _identity(pid)
@@ -268,7 +270,7 @@ class SeatTeardownWorkerProvenanceTests(unittest.TestCase):
         ready = leader.stdout.readline().split()
         self.assertEqual('ready', ready[0])
         pid = int(ready[1])
-        self.assertEqual(0, leader.wait(timeout=5))
+        self.assertEqual(0, wait_process(leader, "managed group leader exits after its readiness frame"))
         self.assertNotEqual(pid, leader.pid)
         self.assertEqual(leader.pid, os.getpgid(pid))
         session = 'worker-' + uuid7_hex()

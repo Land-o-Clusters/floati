@@ -1,7 +1,7 @@
 """Native send contention must not turn a policy hint into false corruption."""
 from __future__ import annotations
 
-from tests.readiness import wait_event, wait_poll
+from tests.readiness import Readiness, wait_event, wait_join, wait_poll
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
@@ -160,10 +160,11 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
 
         def collect():
             for child in children:
-                child.join(10)
+                readiness = Readiness("exclusive waiter exits during cleanup")
+                child.join(readiness.remaining())
                 if child.is_alive():
                     child.terminate()
-                    child.join(5)
+                    wait_join(child, "collect terminated exclusive waiter")
             incoming.close()
 
         self.addCleanup(collect)
@@ -184,7 +185,7 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
         self.assertFalse(result["due"])
         wait_poll(incoming, "exclusive waiter outcome")
         self.assertEqual({"kind": "acquired"}, incoming.recv())
-        children[0].join(10)
+        wait_join(children[0], "exclusive waiter exits after its outcome")
         self.assertEqual(0, children[0].exitcode)
 
     def test_pristine_observer_shares_a_ledger_lock_created_while_it_waits(self):
@@ -203,10 +204,11 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
         def collect():
             release.set()
             waiting.set()
-            child.join(10)
+            readiness = Readiness("shared epoch writer exits during cleanup")
+            child.join(readiness.remaining())
             if child.is_alive():
                 child.terminate()
-                child.join(5)
+                wait_join(child, "collect terminated shared epoch writer")
             incoming.close()
 
         self.addCleanup(collect)
@@ -230,7 +232,7 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
         self.assertEqual({"kind": "ledger_lock_created"}, incoming.recv())
         wait_poll(incoming, "native shared writer release")
         self.assertEqual({"kind": "released", "observer_finished": True}, incoming.recv())
-        child.join(10)
+        wait_join(child, "shared epoch writer exits after its report")
         self.assertEqual(0, child.exitcode)
 
     def assert_invalid_sidecar_refuses_without_blocking(self, shape, code):
@@ -281,11 +283,11 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
         outgoing.close()
 
         def collect_child():
-            child.join(2)
-            if child.is_alive():
+            try:
+                wait_join(child, "owned sidecar observer exits")
+            except AssertionError:
                 child.terminate()
-                child.join(2)
-            self.assertFalse(child.is_alive(), "owned observer escaped cleanup")
+                wait_join(child, "collect terminated sidecar observer")
 
         self.addCleanup(incoming.close)
         self.addCleanup(collect_child)
@@ -398,12 +400,13 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
 
         def cleanup_child():
             release.set()
-            child.join(5)
-            if child.is_alive():
+            try:
+                wait_join(child, "owned epoch writer exits after release")
+            except AssertionError:
                 child.terminate()
-                child.join(5)
-            incoming.close()
-            self.assertFalse(child.is_alive(), "owned writer was not collected")
+                wait_join(child, "collect terminated epoch writer")
+            finally:
+                incoming.close()
 
         self.addCleanup(cleanup_child)
 
@@ -427,8 +430,7 @@ class EpochObservationConcurrencyTests(unittest.TestCase):
             timeline.append({"kind": "release_writer", "reason": reason})
             release.set()
             child_result = receive("sent")
-            child.join(5)
-            self.assertFalse(child.is_alive(), "native writer did not exit")
+            wait_join(child, "native epoch writer exits after publication")
             self.assertEqual(0, child.exitcode)
             timeline.append({"kind": "writer_collected", "exit_code": child.exitcode})
 

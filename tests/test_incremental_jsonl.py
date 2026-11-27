@@ -17,6 +17,7 @@ from floati.events import EVENT_KINDS, EventLog
 from floati.identity_fence import RETIRED_PRODUCT_NAME
 from floati.registry import Registry
 from floati.root import FloatiRoot
+from tests.readiness import wait_join
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -336,7 +337,7 @@ class LogHistorySnapshotTests(unittest.TestCase):
             append_lock_available.append(self.with_writer_lock(lambda: None))
             writer = threading.Thread(target=replacing)
             writer.start()
-            writer.join(timeout=2)
+            wait_join(writer, "native epoch attempt finishes during history read")
             self.assertFalse(writer.is_alive(), "native epoch attempt did not finish its bounded lock attempt")
 
         records, failure = None, None

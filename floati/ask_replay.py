@@ -66,9 +66,7 @@ def replay_ask(root, question_id: str, *, repository: str | None = None) -> dict
         "receipts": [_receipt_entry(row) for row in chain],
         "presented": presented,
         "acted": acted,
-        "cost": project_ask_cost(
-            root.tenant_id, question_id, asked["node"], answer["id"] if answer else None,
-        ),
+        "cost": project_ask_cost(question, answer),
         "git_change": _git_change(question, answer, repository),
         **history,
     }

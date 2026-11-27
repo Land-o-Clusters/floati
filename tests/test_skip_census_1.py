@@ -85,6 +85,8 @@ PINNED_SKIP_REASONS = {
         "sites": 1,
         "kind": HOST_CAPABILITY,
     },
+    # The cross journal's real drive-cache flush; the simulated legs run everywhere.
+    "F_FULLFSYNC exists only on Darwin": {"sites": 1, "kind": HOST_CAPABILITY},
     "Claude reference adapter is unavailable": {
         "sites": 1,
         "kind": HOST_CAPABILITY,
@@ -126,7 +128,8 @@ PINNED_SKIP_REASONS = {
         "kind": PRODUCT,
     },
     "not in this tree (private to the harbor repository by export policy): {dyn}": {
-        "sites": 1,
+        # The readiness wrapper forwards the private bridge fixture's named skip.
+        "sites": 2,
         "kind": PRODUCT,
     },
     "no canonical sticky temp root owned by another uid on this host": {

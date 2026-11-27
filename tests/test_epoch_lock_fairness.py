@@ -24,7 +24,7 @@ from floati.cli import main
 from floati.doctor import project_root_layout_findings
 from floati.errors import ProtocolRefusal
 from floati.root import FloatiRoot
-from tests.readiness import wait_event, wait_poll
+from tests.readiness import Readiness, wait_event, wait_join, wait_poll
 
 
 _HOLDERS = 4
@@ -155,10 +155,11 @@ class EpochExclusiveFairnessTests(unittest.TestCase):
             resume.set()
             stop.set()
             for process, incoming in holders:
-                process.join(10)
+                readiness = Readiness("epoch fairness participant exits during cleanup")
+                process.join(readiness.remaining())
                 if process.is_alive():
                     process.terminate()
-                    process.join(5)
+                    wait_join(process, "collect terminated epoch fairness participant")
                 incoming.close()
             self.assertFalse(any(process.is_alive() for process, _ in holders),
                              "a shared holder escaped cleanup")
@@ -178,7 +179,7 @@ class EpochExclusiveFairnessTests(unittest.TestCase):
             wait_poll(incoming, "shared holder stream resumed after the exclusive hold")
             message = incoming.recv()
             self.assertEqual("done", message.get("kind"), message)
-            process.join(10)
+            wait_join(process, "shared stream holder exits after its outcome")
             self.assertEqual(0, process.exitcode)
             results.append(message)
         return results
@@ -294,10 +295,11 @@ class EpochExclusiveFairnessTests(unittest.TestCase):
 
         def collect():
             for process in processes:
-                process.join(10)
+                readiness = Readiness("epoch fairness participant exits during cleanup")
+                process.join(readiness.remaining())
                 if process.is_alive():
                     process.terminate()
-                    process.join(5)
+                    wait_join(process, "collect terminated epoch fairness participant")
 
         self.addCleanup(collect)
         for target, ready, description in (
@@ -309,8 +311,7 @@ class EpochExclusiveFairnessTests(unittest.TestCase):
             if ready is not None:
                 wait_event(ready, description)
         for process in processes:
-            process.join(30)
-            self.assertFalse(process.is_alive(), "a lock participant deadlocked")
+            wait_join(process, "ordered epoch fairness participant exits")
             self.assertEqual(0, process.exitcode)
         seen = dict(outcomes.get(timeout=5) for _ in range(3))
         self.assertEqual({"first_saw_second": True, "second_refused": None,

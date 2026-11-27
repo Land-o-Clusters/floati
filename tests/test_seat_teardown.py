@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import subprocess
+from tests.readiness import communicate
 import sys
 import tempfile
 import unittest
@@ -784,7 +785,7 @@ class SeatTeardownTests(unittest.TestCase):
                 service.teardown(NODE,self.home,SESSION,repo='floati',doc='report.md',idempotency_key='native-journey')
         finally:
             # EOF ends this owned scratch child; no signal or sibling process control.
-            child.communicate(timeout=5)
+            communicate(child, "owned teardown fixture exits after EOF")
         self.assertEqual('seat_teardown_activity_in_flight',caught.exception.code,caught.exception.detail)
         self.assertIn('PID '+str(child.pid),caught.exception.detail)
         self.assertFalse(self.rows())

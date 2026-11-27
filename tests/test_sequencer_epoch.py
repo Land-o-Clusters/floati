@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import wait_queue, wait_event, wait_join
 import json
 import multiprocessing
 import os
@@ -155,7 +155,7 @@ class SequencerEpochTests(unittest.TestCase):
         )
         process.start()
         self.assertTrue(wait_event(ready, 'sequencer_epoch: ready synchronization'))
-        process.join(5)
+        wait_join(process, "abandoned epoch owner exits")
         self.assertEqual(0, process.exitcode)
 
     def _closed_epoch(self) -> None:
@@ -343,7 +343,7 @@ class SequencerEpochTests(unittest.TestCase):
             self.assertEqual(before, self.ledger.current())
         finally:
             release.set()
-            process.join(5)
+            wait_join(process, "managed owner fixture exits")
         self.assertEqual(0, process.exitcode)
 
     def test_two_process_closed_epoch_takeover_cas_yields_one_next_epoch(self) -> None:
@@ -364,7 +364,7 @@ class SequencerEpochTests(unittest.TestCase):
         results = [wait_queue(queue, 'sequencer_epoch: queue frame') for _ in processes]
         release.set()
         for process in processes:
-            process.join(5)
+            wait_join(process, "epoch takeover contender exits")
             self.assertEqual(0, process.exitcode)
         self.assertEqual(1, sum(status == "ok" and value == 2 for status, value in results))
         self.assertEqual(
@@ -502,7 +502,7 @@ class SequencerEpochTests(unittest.TestCase):
                 args=(run_ledger, lease, capability, child_record, queue),
             )
             process.start()
-            process.join(5)
+            wait_join(process, "forked managed append control exits")
             self.assertEqual(0, process.exitcode)
             self.assertEqual(
                 ("refused", "sequencer_lease_process_mismatch"),
@@ -521,7 +521,7 @@ class SequencerEpochTests(unittest.TestCase):
                 target=_fork_managed_release_and_exit, args=(lease, queue)
             )
             process.start()
-            process.join(5)
+            wait_join(process, "forked managed release control exits")
             self.assertEqual(0, process.exitcode)
             self.assertEqual(
                 [
@@ -548,7 +548,7 @@ class SequencerEpochTests(unittest.TestCase):
                 target=_fork_direct_lease_use, args=(lease, queue)
             )
             process.start()
-            process.join(5)
+            wait_join(process, "forked direct lease control exits")
             self.assertEqual(0, process.exitcode)
             self.assertEqual(
                 [
@@ -628,8 +628,8 @@ class SequencerEpochTests(unittest.TestCase):
                 time.sleep(0.05)
                 self.assertFalse(release_done.is_set())
                 continue_fsync.set()
-                append_thread.join(5)
-                release_thread.join(5)
+                wait_join(append_thread, "managed append finishes after fsync")
+                wait_join(release_thread, "matching lease release finishes")
                 self.assertFalse(append_thread.is_alive())
                 self.assertFalse(release_thread.is_alive())
         finally:
@@ -658,7 +658,7 @@ class SequencerEpochTests(unittest.TestCase):
             self.assertEqual("ledger_lock_timeout", caught.exception.code)
         finally:
             continue_fsync.set()
-            process.join(5)
+            wait_join(process, "direct owner append fixture exits")
         self.assertEqual(0, process.exitcode)
         self.assertEqual("ok", wait_queue(queue, 'sequencer_epoch: queue frame')[0])
 

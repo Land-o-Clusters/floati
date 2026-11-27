@@ -9,7 +9,7 @@ answer record's id. Nothing listens and nothing leaves the machine.
 from __future__ import annotations
 
 import io
-from tests.readiness import READY_SECONDS, Readiness
+from tests.readiness import READY_SECONDS, Readiness, communicate
 
 import json
 import os
@@ -21,6 +21,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
@@ -121,11 +122,7 @@ class NetAsk1Tests(unittest.TestCase):
     def reap(self, process: subprocess.Popen[str]) -> None:
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGKILL)
-        try:
-            process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
+        communicate(process, "collect the owned ask command after group shutdown")
 
     def finish(self, process: subprocess.Popen[str]) -> dict:
         readiness = Readiness("ask command returns its terminal receipt")
@@ -479,6 +476,218 @@ class NetAsk1Tests(unittest.TestCase):
                 missing["evidence"]["cost"],
             )
 
+    def test_execution_projection_refuses_unmapped_native_coordinates(self):
+        from floati.ask_execution import AnswerExecutionProjection, NativeCoordinate
+
+        export = self.base / "execution"
+        export.mkdir(mode=0o700)
+        runtime = AnswerExecutionProjection(resolve_command_root(str(self.fleet)), export)
+        _, timed_out = self.invoke_in_process(*self.question_argv(note="cost", key="unmapped", wait=0))
+        presentation = dict(sender="blue", recipient="red", session="sess-blue",
+                            question_id=timed_out["evidence"]["question_id"],
+                            idempotency_key="unmapped-present", sequence=0)
+        session = "019f7000-0000-7000-8000-000000000000"
+        turn = "019f7000-0001-7000-8000-000000000000"
+
+        with self.subTest("unknown harness"):
+            with self.assertRaises((ValueError, KeyError)) as refused:
+                runtime.present("other", **presentation)
+            self.assertIs(type(refused.exception), ValueError)
+            self.assertEqual("ask_execution_source_unsupported", str(refused.exception))
+        scope = runtime.present("codex", **presentation)
+        coordinate = NativeCoordinate("openai", session, session, turn)
+        scope.bind_turn(coordinate)
+        scope.issued(1, coordinate, "provider-issue")
+        with self.subTest("Puddle display ordinal is not a final selector"):
+            with self.assertRaisesRegex(ValueError, "^ask_execution_final_coordinate_invalid$"):
+                scope.ended(2, 1, "completed", final_call_id="1")
+        with self.subTest("lineage from another source"):
+            with self.assertRaisesRegex(ValueError, "^ask_execution_coordinate_invalid$"):
+                scope.bind_turn(NativeCoordinate("openai", "copied-header", session, turn))
+
+    def test_execution_projection_recovers_committed_scopes_without_reexecuting(self):
+        from floati.ask_execution import AnswerExecutionProjection, NativeCoordinate
+        from floati.ask_cost_v2 import session_reference
+
+        export = self.base / "execution"
+        export.mkdir(mode=0o700)
+        root = resolve_command_root(str(self.fleet))
+        codex_session = "019f7000-0000-7000-8000-000000000000"
+        codex_turn = "019f7000-0001-7000-8000-000000000000"
+        counters = (1000, 600, 120, 40, 1120)
+        for harness, coordinate in (
+            ("codex", NativeCoordinate("openai", codex_session, codex_session, codex_turn)),
+            ("claude-code", NativeCoordinate("anthropic", "s", "s", "user-1")),
+            ("codex-without-final", NativeCoordinate("openai", codex_session, codex_session, codex_turn)),
+        ):
+            with self.subTest(harness=harness):
+                runtime = AnswerExecutionProjection(root, export)
+                question_argv = self.question_argv(note="check execution", key=harness, wait=0)
+                _, timed_out = self.invoke_in_process(*question_argv)
+                qid = timed_out["evidence"]["question_id"]
+                scope = runtime.present(
+                    "codex" if harness == "codex-without-final" else harness,
+                    sender="blue", recipient="red", question_id=qid,
+                    session="sess-blue", idempotency_key=harness + "-present", sequence=0,
+                )
+                scope.bind_turn(coordinate)
+                if harness == "claude-code":
+                    scope.issued(1, coordinate, "req_dup", message_id="msg_dup")
+                    scope.ended(2, 1, "completed")
+                else:
+                    scope.issued(1, coordinate, "1")
+                    if harness == "codex":
+                        scope.ended(2, 1, "completed", codex_final_usage=(counters, counters))
+                    else:
+                        scope.ended(2, 1, "completed")
+                close_sequence = 3
+                if harness == "codex":
+                    scope.issued(3, coordinate, "2")
+                    scope.ended(4, 3, "completed", codex_final_usage=(
+                        (1020, 605, 125, 42, 1145), (20, 5, 5, 2, 25),
+                    ))
+                    close_sequence = 5
+                elif harness == "codex-without-final":
+                    scope.issued(4, coordinate, "2", parent_attempt=1)
+                    scope.ended(5, 4, "completed", codex_final_usage=(counters, counters))
+                    close_sequence = 6
+                result = scope.answer(
+                    sequence=close_sequence, through_sequence=close_sequence,
+                    idempotency_key=harness + "-reply", note="checked",
+                    repo="floati", sha=self.sha, doc="note.md",
+                )
+                answer_id = result["evidence"]["answer_id"]
+                # A fresh publisher recovers the staged evidence after the durable append.
+                self.assertFalse((export / "ask-cost-manifest-v1.json").exists())
+                if harness != "codex-without-final":
+                    continue
+
+                AuthorityGrantStore(root).grant_exact("bus-epoch-roll", "red", 1, datetime.now(timezone.utc))
+                roll_bus_epoch(root, actor="red", idempotency_key="archive-execution")
+                restarted = AnswerExecutionProjection(root, export)
+                restarted.publish()
+                restarted.publish()
+                manifest = json.loads((export / "ask-cost-manifest-v1.json").read_bytes())
+                documents = {}
+                for name, digest in manifest["files"].items():
+                    raw = (export / name).read_bytes()
+                    self.assertEqual(digest, sha256(raw).hexdigest())
+                    documents[name] = json.loads(raw)
+                    self.assertEqual(manifest["generation_id"], documents[name]["generation_id"])
+                scopes = documents["ask-cost-execution-v1.json"]["scopes"]
+                self.assertEqual(3, len(scopes))
+                codex, = (row for row in scopes if row["completeness"]["status"] == "complete")
+                self.assertEqual("codex", codex["harness"])
+                self.assertEqual(
+                    (codex_session, codex_session, codex_turn),
+                    tuple(codex[field] for field in ("source_lineage_id", "native_session_id", "native_turn_id")),
+                )
+                self.assertEqual(
+                    ["ed3685a1b320098b06eac056b80c1726ff42c5e979307e3099c3ec6e2ef34ac6",
+                     "e4d81013101d94a852245d98c421f45a80b6c23932581fdc67607d9ea5ca55b6"],
+                    [attempt["native_call_id"] for attempt in codex["attempts"]],
+                )
+                claude, = (row for row in scopes if row["harness"] == "claude-code")
+                self.assertEqual(("s", "s", "user-1"),
+                                 tuple(claude[field] for field in ("source_lineage_id", "native_session_id",
+                                                                  "native_turn_id")))
+                self.assertEqual("incomplete", claude["completeness"]["status"])
+                self.assertEqual("req_dup", claude["attempts"][0]["native_call_id"])
+                unresolved, = (row for row in scopes if row["answer_id"] == answer_id)
+                self.assertEqual("incomplete", unresolved["completeness"]["status"])
+                self.assertEqual([], unresolved["attempts"])
+                self.assertEqual(session_reference(root.tenant_id, answer_id, "sess-blue"),
+                                 unresolved["answering_session_ref"])
+                self.assertEqual(3, len(documents["ask-cost-receipts-v1.json"]["pairs"]))
+                for document in documents.values():
+                    self.assertNotIn("checked", json.dumps(document))
+                    self.assertNotIn("note.md", json.dumps(document))
+
+    def test_wait_refuses_cost_when_the_answer_chain_contradicts_a_presentation(self):
+        from floati.ask import wait_for_question
+        from floati.ids import uuid7_hex
+
+        self.invoke_in_process(*self.question_argv(note="check chain", key="chain", wait=0))
+        question = next(row for row in self.events() if row["kind"] == "ask_question")
+        result, answer = self.invoke_in_process(*self.reply_argv(
+            question["id"], disposition="answer", key="chain-reply", note="checked",
+        ))
+        self.assertEqual(0, result.returncode, answer)
+        root = resolve_command_root(str(self.fleet))
+        # A schema-valid presentation after the terminal contradicts the chain.
+        with root.resolve_relative("events.jsonl").open("ab") as stream:
+            stream.write(encode_frame({
+                "schema_version": 1, "kind": "ask_presentation",
+                "id": "ask-presentation-" + uuid7_hex(), "timestamp": utc_now(),
+                "tenant_id": root.tenant_id, "sender": "blue", "recipient": "red",
+                "acting_session_id": "sess-blue", "reply_to": question["id"],
+                "idempotency_key": "late-presentation",
+            }))
+        observed = wait_for_question(root, question, 0)
+        self.assertEqual("ask_answer_unreadable", observed["evidence"].get("code"))
+        self.assertNotIn("cost", observed["evidence"])
+
+    def test_v2_cost_agrees_on_answer_retry_and_retained_replay(self):
+        class CostClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 11, 26, 12, 0, 30, tzinfo=tz)
+
+        question_argv = self.question_argv(note="check costs", key="measured-v2", wait=0)
+        with mock.patch("floati.ask._stamp", return_value="2026-11-26T11:59:58Z"):
+            _, before = self.invoke_in_process(*question_argv)
+        question_id = before["evidence"]["question_id"]
+        root = resolve_command_root(str(self.fleet))
+        replay_argv = ("replay", "--root", str(self.fleet), "--question", question_id)
+        _, pending = self.invoke_in_process(*replay_argv)
+        self.assertEqual("ask_answer_absent", pending["evidence"]["cost"]["reason"])
+        reply_argv = self.reply_argv(
+            question_id, disposition="answer", key="measured-v2-reply", note="checked",
+        )
+        native_id = "019b0000000070008000000000000003"
+        receipts = [row for row in self.events() if row["id"] == question_id]
+        q = receipts[0]
+        def reference(rid, session):
+            return sha256("\0".join(("floati.ask-session.v2", root.tenant_id, rid, session))
+                          .encode("utf-8")).hexdigest()
+
+        row = {
+            "question_id": question_id, "answer_id": "ask-answer-" + native_id,
+            "asking_node": "red", "asking_session_ref": reference(question_id, q["acting_session_id"]),
+            "answering_node": "blue", "answering_session_ref": reference("ask-answer-" + native_id, "sess-blue"),
+            "observed_at": "2026-11-26T12:00:10Z", "checked_at": "2026-11-26T12:00:10Z",
+            "expires_at": "2026-11-27T12:00:10Z",
+            "usage": {"basis": "MEASURED", "measurement_id": "m-" + "1" * 32, "total_tokens": 73},
+        }
+        export = self.base / "ask-cost-v2.json"
+        export.touch(mode=0o600)
+        export.write_text(json.dumps({"schema_version": 2, "tenant_id": root.tenant_id,
+                                      "records": [row]}))
+        with mock.patch.dict(os.environ, {"FLOATI_PUDDLE_ASK_COST_EXPORT": str(export)}),\
+                mock.patch("floati.ask_cost.datetime", CostClock),\
+                mock.patch("floati.ask._stamp", return_value="2026-11-26T12:00:08Z"),\
+                mock.patch("floati.ask.uuid7_hex", return_value=native_id):
+            answer_cost = None
+            for argv in (reply_argv, question_argv, replay_argv):
+                with self.subTest(command=argv[0], mode=argv):
+                    result, artifact = self.invoke_in_process(*argv)
+                    self.assertEqual(0, result.returncode, artifact)
+                    cost = artifact["evidence"]["cost"]
+                    self.assertEqual("measured", cost["status"], cost)
+                    self.assertEqual(73, cost["total_tokens"])
+                    self.assertEqual("red", cost["attributed_to"])
+                    self.assertEqual("sess-red", cost["attributed_to_session"])
+                    self.assertEqual(row["usage"]["measurement_id"], cost["measurement_id"])
+                    if answer_cost is None:
+                        answer_cost = cost
+                    self.assertEqual(answer_cost, cost)
+            AuthorityGrantStore(root).grant_exact("bus-epoch-roll", "red", 1, datetime.now(timezone.utc))
+            roll_bus_epoch(root, actor="red", idempotency_key="archive-v2-cost")
+            self.assertNotIn(question_id, [row["id"] for row in self.events()])
+            _, archived = self.invoke_in_process(*replay_argv)
+            self.assertEqual(answer_cost, archived["evidence"]["cost"])
+            self.assertEqual("2026-11-26T12:00:30Z", answer_cost["evaluated_at"])
+
     def test_recipient_can_present_an_ask_and_replay_the_durable_receipt(self):
         _, timed_out = self.invoke_in_process(*self.question_argv(
             note="read the banked note", key="presentation", wait=0,
@@ -762,6 +971,128 @@ class NetAsk1Tests(unittest.TestCase):
 
 
 class NetAsk1PureTests(unittest.TestCase):
+    def test_v2_cost_frozen_vectors(self):
+        from floati.ask_cost import project_ask_cost
+
+        fixture = REPOSITORY_ROOT / "tests/fixtures/ask-cost-execution/complete/ask-cost-receipts-v1.json"
+        source = json.loads(fixture.read_bytes())
+        pair = source["pairs"][0]
+        q, a = (dict(pair[kind], tenant_id=source["tenant_id"], kind="ask_" + kind)
+                for kind in ("question", "answer"))
+        # Exact Example C field values, independently emitted by Puddle's
+        # testV2ExactCostUsesFinalsOnceAndKeepsRevisionOnRecheck.
+        frozen = (fixture.parents[1] / "ask-cost-v2.json").read_text()
+        generation = json.loads(frozen)
+        row = generation["records"][0]
+        fresh = "2026-11-26T12:00:30Z"
+
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as directory:
+            root = Path(directory)
+            export = root / "ask-cost-v2.json"
+            legacy = root / "ask-cost-v1.json"
+            legacy.touch(mode=0o600)
+            legacy_row = {
+                "tenant_id": q["tenant_id"], "question_id": q["id"], "answer_id": a["id"],
+                **row["usage"], "observed_at": row["observed_at"],
+            }
+            legacy.write_text(json.dumps({"schema_version": 1, "records": [legacy_row]}))
+
+            def lookup(*, data=generation, when=fresh, question=q, answer=a,
+                       selected=export, require_v2=False, raw=None):
+                if selected == export and not export.is_symlink():
+                    export.touch(mode=0o600)
+                    export.write_text(json.dumps(data) if raw is None else raw)
+                with mock.patch.dict(os.environ, {
+                    "FLOATI_PUDDLE_ASK_COST_EXPORT": str(selected) if selected else "",
+                }):
+                    return project_ask_cost(
+                        question, answer, now=lambda: datetime.fromisoformat(when[:-1] + "+00:00"),
+                        require_v2=require_v2,
+                    )
+
+            def expect_reason(reason, **kwargs):
+                cost = lookup(**kwargs)
+                self.assertEqual(("unmeasured", "UNKNOWN", reason),
+                                 (cost["status"], cost["outcome"], cost["reason"]), cost)
+                self.assertEqual("red", cost["attributed_to"])
+                self.assertNotIn("total_tokens", cost)
+                return cost
+
+            def with_row(**fields):
+                return dict(generation, records=[dict(row, **fields)])
+
+            cost = lookup(raw=frozen)
+            self.assertEqual(
+                ("measured", 73, "m-" + "1" * 32, "red", "sess-red"),
+                (cost["status"], cost["total_tokens"], cost["measurement_id"],
+                 cost["attributed_to"], cost["attributed_to_session"]),
+            )
+            for when, expected in (
+                ("2026-11-26T12:00:10Z", None),
+                ("2026-11-26T12:00:09.999999Z", "puddle_ask_cost_future"),
+                ("2026-11-27T12:00:10Z", "puddle_ask_cost_stale"),
+                ("2026-11-27T12:00:09.999999Z", None),
+            ):
+                with self.subTest(when=when):
+                    if expected:
+                        expect_reason(expected, when=when)
+                    else:
+                        self.assertEqual(73, lookup(when=when)["total_tokens"])
+            renewed = lookup(data=with_row(checked_at="2026-11-27T12:00:11Z",
+                                           expires_at="2026-11-28T12:00:11Z"),
+                             when="2026-11-27T12:00:11Z")
+            self.assertEqual(row["usage"]["measurement_id"], renewed["measurement_id"])
+            self.assertEqual(row["observed_at"], renewed["observed_at"])
+            self.assertEqual(73, renewed["total_tokens"])
+            for total, marker in ((0, "2"), (53, "3")):
+                usage = dict(row["usage"], total_tokens=total, measurement_id="m-" + marker * 32)
+                result = lookup(data=with_row(usage=usage))
+                self.assertEqual(total, result["total_tokens"])
+                self.assertEqual(usage["measurement_id"], result["measurement_id"])
+            for usage in (
+                {"basis": "DERIVED", "reason": "bounded_population", "lower_tokens": 48, "upper_tokens": 73},
+                {"basis": "ESTIMATE", "reason": "assumption_required"},
+                *({"basis": "UNKNOWN", "reason": reason} for reason in (
+                    "usage_missing", "execution_unbound", "population_incomplete", "usage_conflict",
+                    "source_unsupported", "session_conflict", "counter_invalid",
+                )),
+            ):
+                with self.subTest(usage=usage):
+                    self.assertEqual(usage, {key: value for key, value in
+                                             expect_reason(usage["reason"], data=with_row(usage=usage)).items()
+                                             if key in usage})
+            for change in (
+                {"asking_node": "green"}, {"answering_node": "green"},
+                {"asking_session_ref": row["answering_session_ref"],
+                 "answering_session_ref": row["asking_session_ref"]},
+            ):
+                expect_reason("puddle_ask_cost_binding_mismatch", data=with_row(**change))
+            expect_reason("puddle_ask_cost_not_found", question=dict(q, tenant_id="other"),
+                          answer=dict(a, tenant_id="other"))
+            expect_reason("puddle_ask_cost_not_found", answer=dict(a, id=a["id"][:-1] + "4"))
+            for duplicate in (row, dict(row, question_id=q["id"][:-1] + "8", answer_id=a["id"][:-1] + "9")):
+                expect_reason("puddle_ask_cost_ambiguous", data=dict(generation, records=[row, duplicate]))
+            for bad in (-1, True, 1.0, 2**63):
+                expect_reason("puddle_ask_cost_invalid", data=with_row(usage=dict(row["usage"], total_tokens=bad)))
+            expect_reason("puddle_ask_cost_invalid", data=with_row(checked_at=row["expires_at"]))
+            expect_reason("puddle_ask_cost_invalid", raw='{"schema_version":2,"schema_version":2}')
+            expect_reason("puddle_ask_cost_version_unsupported", data=dict(generation, schema_version=3))
+            expect_reason("ask_answer_absent", answer=None)
+            expect_reason("puddle_measured_cost_seam_unavailable", selected=None)
+            self.assertEqual(73, lookup(selected=legacy)["total_tokens"])
+            expect_reason("v2_evidence_required", selected=legacy, require_v2=True)
+            expect_reason("puddle_ask_cost_stale", when=row["expires_at"])
+            legacy.write_text(json.dumps(generation))
+            expect_reason("puddle_ask_cost_invalid", selected=legacy)
+            expect_reason("puddle_ask_cost_invalid", selected=legacy, require_v2=True)
+            export.unlink()
+            expect_reason("puddle_measured_cost_seam_unavailable", selected=str(export))
+            os.link(legacy, export)
+            expect_reason("puddle_ask_cost_unreadable", selected=str(export))
+            export.unlink()
+            export.symlink_to(legacy)
+            expect_reason("puddle_ask_cost_unreadable")
+
     def test_answered_is_not_projected_without_the_answer_receipt(self) -> None:
         """A terminal with no answer id cannot be shown as answered."""
 

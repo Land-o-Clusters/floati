@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Floati ask cost receipt projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "generation_id",
+    "pairs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "$ref": "#/$defs/node"
+    },
+    "generation_id": {
+      "$ref": "#/$defs/generation"
+    },
+    "pairs": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/pair"
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^g-[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "question": {
+      "type": "string",
+      "pattern": "^ask-question-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "presentation": {
+      "type": "string",
+      "pattern": "^ask-presentation-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "answer": {
+      "type": "string",
+      "pattern": "^ask-answer-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "stamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$(?![\\s\\S])"
+    },
+    "questionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "timestamp",
+        "sender",
+        "recipient",
+        "acting_session_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/question"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/stamp"
+        },
+        "sender": {
+          "$ref": "#/$defs/node"
+        },
+        "recipient": {
+          "$ref": "#/$defs/node"
+        },
+        "acting_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "presentationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "timestamp",
+        "sender",
+        "recipient",
+        "acting_session_id",
+        "reply_to"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/presentation"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/stamp"
+        },
+        "sender": {
+          "$ref": "#/$defs/node"
+        },
+        "recipient": {
+          "$ref": "#/$defs/node"
+        },
+        "acting_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reply_to": {
+          "$ref": "#/$defs/question"
+        }
+      }
+    },
+    "answerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "timestamp",
+        "sender",
+        "recipient",
+        "acting_session_id",
+        "reply_to"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/answer"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/stamp"
+        },
+        "sender": {
+          "$ref": "#/$defs/node"
+        },
+        "recipient": {
+          "$ref": "#/$defs/node"
+        },
+        "acting_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reply_to": {
+          "$ref": "#/$defs/question"
+        }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "presentation",
+        "answer"
+      ],
+      "properties": {
+        "question": {
+          "$ref": "#/$defs/questionReceipt"
+        },
+        "presentation": {
+          "$ref": "#/$defs/presentationReceipt"
+        },
+        "answer": {
+          "$ref": "#/$defs/answerReceipt"
+        }
+      }
+    }
+  }
+}

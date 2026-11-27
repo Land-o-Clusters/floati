@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 import warnings
 from contextlib import ExitStack, contextmanager
@@ -28,7 +27,7 @@ from tests.test_effect_reconciliation_observer import (
     observer_exec_rebound_descriptors,
 )
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.readiness import wait_until
+from tests.readiness import Readiness, wait_until
 
 
 class _ModuleView:
@@ -1325,9 +1324,12 @@ class EffectReconciliationExecTests(unittest.TestCase):
 
         def reap_then_report_failure(process):
             process._signal(signal.SIGTERM)
-            if not real_wait(process, time.monotonic() + 0.1):
+            graceful = Readiness("observer ends during injected cleanup failure")
+            if not real_wait(process, graceful.started + graceful.bound):
                 process._signal(signal.SIGKILL)
-                self.assertTrue(real_wait(process, time.monotonic() + 1.0))
+                forced = Readiness("collect killed observer in injected cleanup failure")
+                if not real_wait(process, forced.started + forced.bound):
+                    raise forced.failure()
             return False
 
         def capture_cleanup_result(request, cause):
@@ -1697,15 +1699,14 @@ class EffectReconciliationExecTests(unittest.TestCase):
                 )
             self.assertTrue(descendant_pid.exists(), "hostile descendant did not launch")
             descendant = int(descendant_pid.read_text(encoding="ascii").strip())
-            deadline = time.monotonic() + 2.0
-            while time.monotonic() < deadline:
+            def absent():
                 try:
                     os.kill(descendant, 0)
                 except ProcessLookupError:
-                    break
-                time.sleep(0.01)
-            else:
-                self.fail("SIGTERM-ignoring observer descendant survived cleanup")
+                    return True
+                return False
+
+            wait_until(absent, "SIGTERM-ignoring observer descendant exits")
             self.assertEqual(
                 ("unknown", "observer_timeout"),
                 (result.outcome, result.reason_code),

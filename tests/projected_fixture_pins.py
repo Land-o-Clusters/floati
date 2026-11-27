@@ -32,6 +32,8 @@ SOURCE_FIXTURE_DIGESTS = {
         "f97fca08deced2ecd016a7b849e4367e5118fdd5a3be6268ad99b36f68fcfc7a",
     "tests/fixtures/bus-scale-census/native-command-amendment-4aa55427.json":
         "c19992536c3309ca5dfa69ab1bf0ad89220bc6ace61b95d54c301c3ed0c85c3a",
+    "tests/fixtures/bus-scale-census/native-command-amendment-0aeb5d0a.json":
+        "1d564e1d88343cd278a709e56a90063b59615ec9bedae81c29b645872bb21140",
     "tests/fixtures/node-spinup-command-contract.v0.json":
         "57c5fd86638fff7456513814f152d5abfe2102253e55fc60aeaa6093087d1e80",
     "tests/fixtures/update-prepare-command-contract.v0.json":

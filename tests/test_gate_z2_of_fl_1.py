@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -37,6 +38,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.parallel_processes import ProcessQuery
+from tests.readiness import Readiness, wait_process, wait_readable
 
 _LOOSE_OBJECTS = 1400
 _LOOSE_OBJECTS_NO_KNOB = 8000  # git's default gc.auto threshold is 6700
@@ -163,11 +165,16 @@ def _maintenance_children_under(prefix: Path) -> list[str]:
     A failed live observation refuses instead of proving an empty census.
     """
     marker = _ATTRIBUTION_ENV + "=" + _fixture_marker(prefix)
-    deadline = time.monotonic() + 2.0
-    listing = subprocess.run(
-        ["/bin/ps", "-axo", "pid=,command="], capture_output=True, text=True,
-        timeout=2,
-    )
+    readiness = Readiness("native maintenance attribution census finishes")
+
+    def collect(*args):
+        try:
+            return subprocess.run(["/bin/ps", *args], capture_output=True,
+                                  text=True, timeout=readiness.remaining())
+        except subprocess.TimeoutExpired:
+            raise readiness.failure() from None
+
+    listing = collect("-axo", "pid=,command=")
     if listing.returncode or listing.stderr:
         raise RuntimeError("native maintenance census unavailable")
     query = ProcessQuery()
@@ -190,20 +197,8 @@ def _maintenance_children_under(prefix: Path) -> list[str]:
         before = query.identity(pid)
         if before is None or before['zombie']:
             continue
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise RuntimeError("maintenance attribution census bound exhausted")
-        observed = subprocess.run(
-            ["/bin/ps", "eww", "-p", str(pid), "-o", "pid=,command="],
-            capture_output=True, text=True, timeout=min(1.0, remaining),
-        )
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise RuntimeError("maintenance attribution census bound exhausted")
-        command_now = subprocess.run(
-            ["/bin/ps", "-p", str(pid), "-o", "pid=,command="],
-            capture_output=True, text=True, timeout=min(1.0, remaining),
-        )
+        observed = collect("eww", "-p", str(pid), "-o", "pid=,command=")
+        command_now = collect("-p", str(pid), "-o", "pid=,command=")
         observed_start = time.monotonic()
         after = query.identity(pid)
         observed_end = time.monotonic()
@@ -302,6 +297,37 @@ class ProjectionFixtureIdentityTests(unittest.TestCase):
     a detached one from a bare HOME) is git's behaviour on this input and
     is what the gate classes observe. It runs no process census and spawns
     no maintenance, so it carries no serial reason."""
+
+    def test_scoped_maintenance_observation_survives_delayed_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            projection = Path(temporary) / "projection"
+            marker = _fixture_marker(projection, create=True)
+            environment = {**os.environ, _ATTRIBUTION_ENV: marker}
+            with subprocess.Popen(
+                [sys.executable, "-B", "-c",
+                 "import sys; print('ready', flush=True); sys.stdin.read()", "git maintenance"],
+                env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            ) as child:
+                try:
+                    wait_readable(child.stdout, "owned maintenance observer fixture starts")
+                    self.assertEqual("ready\n", child.stdout.readline())
+                    collect = subprocess.Popen._communicate
+                    for query in ("-axo", "eww", "-p"):
+                        with self.subTest(query=query):
+                            def delayed(process, data, deadline, timeout):
+                                if process.args[:2] == ["/bin/ps", query] and (
+                                        query == "-axo" or str(child.pid) in process.args):
+                                    with patch.object(subprocess, "_time",
+                                                      lambda: time.monotonic() + 9):
+                                        return collect(process, data, deadline, timeout)
+                                return collect(process, data, deadline, timeout)
+
+                            with patch.object(subprocess.Popen, "_communicate", delayed):
+                                hits = _maintenance_children_under(projection)
+                            self.assertEqual([str(child.pid)], [hit.split()[0] for hit in hits])
+                finally:
+                    child.stdin.close()
+                    wait_process(child, "owned maintenance observer fixture exits")
 
     def test_gate_objects_are_exactly_the_payload_blobs_all_loose(self) -> None:
         expected = {

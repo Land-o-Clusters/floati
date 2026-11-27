@@ -2,7 +2,6 @@
 import hashlib
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -10,6 +9,7 @@ from unittest import mock
 from floati import effect_reconciliation_observer as observer
 from floati.effect_reconciliation_protocol import build_request, validate_result
 from floati.ids import uuid7_hex
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -25,9 +25,8 @@ class AdhocRemoteCompatibilityTests(unittest.TestCase):
         }
 
     def git(self, *arguments, data=None):
-        return subprocess.run(["/usr/bin/git", *arguments], cwd=self.base,
-            env=self.environment, input=data, capture_output=True, check=True,
-            timeout=5).stdout
+        return run_process(["/usr/bin/git", *arguments], "local Git fixture returns",
+            cwd=self.base, env=self.environment, input=data, capture_output=True, check=True).stdout
 
     def remote(self, branch, object_format):
         remote = self.base / (branch + "-" + object_format + ".git")

@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://landoclusters.com/floati/schemas/v1/t3-dispatch-receipt-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "tenant_id",
+    "timestamp",
+    "parent_thread_id",
+    "provider_instance",
+    "requested_model",
+    "role",
+    "isolation",
+    "base_ref",
+    "brief_path",
+    "task_digest",
+    "dispatch_key",
+    "decision",
+    "reason",
+    "grant_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "t3_dispatch_receipt"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^t3-dispatch-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "parent_thread_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "provider_instance": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requested_model": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "isolation": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "base_ref": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "brief_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "pattern": "^(?:~?/|\\.{1,2}/)?[A-Za-z0-9_.+-]+(?:/[A-Za-z0-9_.+-]+)+\\.md$"
+    },
+    "task_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "dispatch_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "dispatch_class": {
+      "enum": ["load", "measurement", null]
+    },
+    "hold_node": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$"
+    },
+    "hold": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "detail", "expected_release"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^(hold|quiet-window)-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+            },
+            "detail": {"type": ["string", "null"], "maxLength": 512},
+            "expected_release": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "pattern": "Z$"
+            }
+          }
+        }
+      ]
+    },
+    "decision": {
+      "enum": [
+        "allowed",
+        "denied",
+        "allowed_with_gap"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "t3_check_unavailable",
+        "t3_grant_consumed",
+        "t3_grant_required",
+        "t3_project_hold",
+        "t3_quiet_window",
+        "t3_ungated",
+        "t3_target_unresolved"
+      ]
+    },
+    "grant_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^t3-grant-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "allowed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "t3_ungated",
+              "t3_grant_consumed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "denied"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "t3_grant_required",
+              "t3_check_unavailable",
+              "t3_project_hold",
+              "t3_quiet_window"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"reason": {"enum": ["t3_project_hold", "t3_quiet_window"]}}
+      },
+      "then": {
+        "required": ["hold", "dispatch_class"],
+        "properties": {
+          "hold": {"type": "object"},
+          "dispatch_class": {"const": "load"}
+        }
+      },
+      "else": {
+        "properties": {"hold": {"type": "null"}}
+      }
+    },
+    {
+      "if": {"properties": {"reason": {"const": "t3_project_hold"}}},
+      "then": {
+        "required": ["hold_node"],
+        "properties": {
+          "hold_node": {"type": "string"},
+          "hold": {"properties": {"id": {"pattern": "^hold-"}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"reason": {"const": "t3_quiet_window"}}},
+      "then": {
+        "properties": {
+          "hold": {"properties": {"id": {"pattern": "^quiet-window-"}}}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "allowed_with_gap"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "t3_check_unavailable",
+              "t3_target_unresolved"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "t3_grant_consumed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "pattern": "^t3-grant-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "grant_id": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -100,8 +100,10 @@ class SequencerTests(unittest.TestCase):
     @staticmethod
     def stop(service, stop: threading.Event, thread: threading.Thread) -> None:
         stop.set()
-        thread.join(3)
-        service.close()
+        try:
+            wait_join(thread, "sequencer service exits after stop")
+        finally:
+            service.close()
 
     def client(self, service, client_id: str = "client-a"):
         return SequencerClient(service.socket_path, service.epoch, client_id)
@@ -312,9 +314,7 @@ class SequencerTests(unittest.TestCase):
 
         def refuse_after_frame(_channel):
             # Hold the refusal until the client has finished writing its frame.
-            # The bound catches a broken handshake, not slow host scheduling.
-            if not sent.wait(10):
-                raise AssertionError("client did not send its frame")
+            wait_event(sent, "client sends its frame before peer refusal")
             return os.geteuid() + 1
 
         service._peer_uid = refuse_after_frame
@@ -553,7 +553,7 @@ class SequencerTests(unittest.TestCase):
             time.sleep(0.05)
             self.assertFalse(finished.is_set())
             release.set()
-            thread.join(3)
+            wait_join(thread, "append finishes after covering fsync")
         self.assertFalse(thread.is_alive())
         self.assertEqual("ok", result[0]["status"])
 
@@ -1275,8 +1275,8 @@ class SequencerTests(unittest.TestCase):
         self.assertTrue(wait_event(entered, 'sequencer: entered synchronization'))
         close_thread.start()
         release.set()
-        remember_thread.join(5)
-        close_thread.join(5)
+        wait_join(remember_thread, "in-flight cache write finishes")
+        wait_join(close_thread, "sequencer close finishes")
         self.assertFalse(remember_thread.is_alive())
         self.assertFalse(close_thread.is_alive())
         self.assertFalse(remember_errors, remember_errors)

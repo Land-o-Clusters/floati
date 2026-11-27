@@ -6,7 +6,7 @@ The parent owns RED execution and banking before any production correction.
 """
 from __future__ import annotations
 
-from tests.readiness import wait_event
+from tests.readiness import wait_event, wait_join
 import copy
 import fcntl
 import hashlib
@@ -105,7 +105,7 @@ class _TakeoverRace:
 
     def collect(self):
         if self.thread is not None:
-            self.thread.join(6)
+            wait_join(self.thread, "scratch B-arm is collected")
             self.case.assertFalse(self.thread.is_alive(), "scratch B-arm was not collected")
         self.case.assertFalse(self.errors, repr(self.errors))
 

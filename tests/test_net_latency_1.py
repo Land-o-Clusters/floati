@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 from tests.banked_sha_fixture import banked_send_repository
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -105,10 +106,10 @@ class NetLatencyTests(unittest.TestCase):
         return self.instrument.parser().parse_args([*self._argv_for_script(), *extra])
 
     def test_cli_unserved_refusal_is_typed_and_leaves_no_speed_receipt(self):
-        result = subprocess.run([
+        result = run_process([
             "/usr/bin/python3", "-B", str(SCRIPT), *self._argv_for_script(),
-            "--wait-seconds", "0"], cwd=self.fixture.repository, env=self.fixture.environment,
-            capture_output=True, text=True, timeout=5)
+            "--wait-seconds", "0"], "ask latency CLI returns its refusal",
+            cwd=self.fixture.repository, env=self.fixture.environment, capture_output=True, text=True)
         self.assertEqual(20, result.returncode, result.stderr)
         artifact = json.loads(result.stdout)
         self.assertEqual("refused", artifact["status"])
@@ -172,10 +173,11 @@ class ClaudeHookLatencyTests(unittest.TestCase):
     SCRIPT = SOURCE / "scripts/measure-claude-hook-latency.py"
 
     def invoke(self, *arguments):
-        result = subprocess.run(
+        result = run_process(
             ["/usr/bin/python3", "-B", str(self.SCRIPT), *arguments],
+            "hook latency instrument returns its artifact",
             cwd=SOURCE, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
-            capture_output=True, text=True, timeout=5)
+            capture_output=True, text=True)
         self.assertTrue(result.stdout, result.stderr)
         return result.returncode, json.loads(result.stdout)
 

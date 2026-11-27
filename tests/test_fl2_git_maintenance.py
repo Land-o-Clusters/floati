@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 import collections
 import os
-import subprocess
+from tests.readiness import run_process
 import tempfile
 import unittest
 from pathlib import Path
@@ -387,10 +387,10 @@ class ProductGitMaintenanceTests(unittest.TestCase):
                                 "GIT_CONFIG_GLOBAL": "/dev/null",
                                 "GIT_CONFIG_SYSTEM": "/dev/null",
                                 "GIT_TERMINAL_PROMPT": "0"})
-        subprocess.run(
+        run_process(
             ["/usr/bin/git", "-c", "gc.auto=0", "-c", "gc.autoDetach=false",
              "-c", "maintenance.auto=false", "init", "--quiet", str(cls.repository)],
-            env=cls.environment, check=True, capture_output=True, timeout=5)
+            "initialize the Git maintenance fixture", env=cls.environment, check=True, capture_output=True)
         cls.config = cls.repository / ".git/config"
         with cls.config.open("a", encoding="utf-8") as stream:
             stream.write("\n[gc]\n\tauto = 1\n\tautoDetach = true\n"
@@ -448,9 +448,9 @@ class ProductGitMaintenanceTests(unittest.TestCase):
         self.assertEqual([], _command_options(sites[0][2]))
         # The native protected-prefix assertion would actually fail under the
         # same hostile config, not merely match an expected owner by hand.
-        query = subprocess.run(["/usr/bin/git", *_command_options(sites[0][2]),
+        query = run_process(["/usr/bin/git", *_command_options(sites[0][2]),
             "-C", str(self.repository), "config", "--get", "gc.auto"],
-            env=self.environment, capture_output=True, text=True, timeout=5, check=True)
+            "read the unprotected Git configuration", env=self.environment, capture_output=True, text=True, check=True)
         self.assertNotEqual(POLICY["gc.auto"], query.stdout.strip())
 
     def test_borrowed_exec_contract_rejects_changed_forwarding_or_executable(self):
@@ -480,8 +480,9 @@ class ProductGitMaintenanceTests(unittest.TestCase):
                 with self.subTest(key=key):
                     command, environment = _borrowed_git_launch(descriptor,
                         {"dev": metadata.st_dev, "ino": metadata.st_ino}, ("config", "--get", key))
-                    query = subprocess.run(command, env=environment, close_fds=True,
-                        pass_fds=(descriptor,), capture_output=True, text=True, timeout=5, check=True)
+                    query = run_process(command, "read the borrowed Git configuration",
+                        env=environment, close_fds=True,
+                        pass_fds=(descriptor,), capture_output=True, text=True, check=True)
                     self.assertEqual(expected, query.stdout.strip())
         finally:
             os.close(descriptor)
@@ -551,11 +552,10 @@ class ProductGitMaintenanceTests(unittest.TestCase):
         for prefix in sorted(prefixes):
             for key, expected in POLICY.items():
                 with self.subTest(prefix=prefix, key=key):
-                    query = subprocess.run(
+                    query = run_process(
                         ["/usr/bin/git", *prefix,
                          "-C", str(self.repository), "config", "--get", key],
-                        env=self.environment, capture_output=True, text=True,
-                        timeout=5, check=True)
+                        "read the protected Git configuration", env=self.environment, capture_output=True, text=True, check=True)
                     self.assertEqual(expected, query.stdout.strip())
         self.assertEqual(self.before, self.config.read_bytes())
 

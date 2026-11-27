@@ -3,13 +3,13 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from floati.worker_bootstrap_protocol import NATIVE_THREAD_BOUNDS
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 DRIVER = Path(__file__).parent / "fixtures" / "adhoc-native" / "claude_driver.py"
@@ -50,8 +50,8 @@ class AdhocClaudeTests(unittest.TestCase):
         home = self.base / "driver-home"
         home.mkdir(mode=0o700, exist_ok=True)
         env = dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE="1")
-        result = subprocess.run([sys.executable, "-B", str(DRIVER), str(path), mode],
-                                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
+        result = run_process([sys.executable, "-B", str(DRIVER), str(path), mode],
+                             "Claude driver returns its result", env=env, capture_output=True)
         self.assertEqual(0, result.returncode, result.stderr.decode(errors="replace"))
         return json.loads(result.stdout)
 
@@ -103,8 +103,8 @@ class AdhocClaudeTests(unittest.TestCase):
         provider = DRIVER.with_name("claude_provider.py")
         environment = {"PATH": os.defpath, "HOME": str(self.slot),
                        "CLAUDE_CONFIG_DIR": str(self.slot), "PYTHONDONTWRITEBYTECODE": "1"}
-        login = subprocess.run([sys.executable, "-B", str(provider), "auth", "login"],
-            env=environment, capture_output=True, timeout=8)
+        login = run_process([sys.executable, "-B", str(provider), "auth", "login"],
+            "Claude login fixture exits", env=environment, capture_output=True)
         self.assertEqual(1, login.returncode)
         self.assertIn(b"Keychain error", login.stderr)
         self.assertEqual([".claude.json"], [path.name for path in self.slot.iterdir()])
@@ -115,8 +115,8 @@ class AdhocClaudeTests(unittest.TestCase):
                                  "macOS must refuse before a native child can fall back to Keychain")
                 self.assertEqual([], result["events"])
                 self.assertEqual([], self.launches())
-        setup = subprocess.run([sys.executable, "-B", str(provider), "setup-token"],
-            env=environment, capture_output=True, timeout=8)
+        setup = run_process([sys.executable, "-B", str(provider), "setup-token"],
+            "Claude setup-token fixture exits", env=environment, capture_output=True)
         self.assertEqual(0, setup.returncode)
         # Owner handoff stores the setup-token output once, without putting the
         # credential in argv, controller environment, a transcript or evidence.

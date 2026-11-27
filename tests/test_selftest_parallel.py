@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 import floati.selftest as selftest
+from tests.readiness import run_process
 from tests.temp_roots import REAL_TEMP_ROOT
 
 
@@ -60,12 +61,13 @@ class SerialSelftestTests(unittest.TestCase):
             for name in ("FLOATI_HOST_TEMP_ROOT", "FLOATI_TEST_TEMP_ROOT", selftest.WORKERS_ENV):
                 environment.pop(name, None)
             # The fixture exercises discovery without installing a second bundle.
-            run = subprocess.run(
+            run = run_process(
                 [sys.executable, "-B", "-c",
                  "from floati import selftest; "
                  "selftest.finish = lambda success, root: selftest.outcome_for(success, []); "
                  "raise SystemExit(selftest.main([]))"],
-                cwd=root, env=environment, capture_output=True, text=True, timeout=5,
+                "serial fixture discovery finishes",
+                cwd=root, env=environment, capture_output=True, text=True,
             )
             self.assertEqual(0, run.returncode, run.stderr)
 

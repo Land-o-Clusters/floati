@@ -13,7 +13,7 @@ from floati.errors import ProtocolRefusal
 from floati.ids import uuid7_hex
 from floati.workers import WorkerReceipts
 from tests.test_adhoc_threads import ControllerFixture
-from tests.readiness import Readiness
+from tests.readiness import Readiness, communicate
 
 
 PROVIDER = r'''
@@ -144,7 +144,7 @@ class SenderConversationsTests(ControllerFixture, unittest.TestCase):
             finally:
                 if child.poll() is None:
                     child.terminate()
-                    child.communicate(timeout=3)
+                    communicate(child, "collect stopped sender conversation fixture")
             owner.last_process_audit.update(adapter_pid=child.pid, registered_process_groups=[child.pid])
             owner.last_native_transport = {'stdout_bytes': len(stdout.encode()),
                 'stderr_bytes': len(stderr.encode()), 'combined_bytes': len(stdout.encode()) + len(stderr.encode()),

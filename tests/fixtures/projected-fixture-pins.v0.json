@@ -1,5 +1,12 @@
 {
   "fixtures": {
+    "tests/fixtures/bus-scale-census/native-command-amendment-0aeb5d0a.json": {
+      "adapters": [
+        "machine_literal_escape"
+      ],
+      "projected_sha256": "d8daf742cdd7ef76f5e916d9efbbb809cec4f07b7a62e3a256c2c6a4cbb909b6",
+      "source_sha256": "1d564e1d88343cd278a709e56a90063b59615ec9bedae81c29b645872bb21140"
+    },
     "tests/fixtures/bus-scale-census/native-command-amendment-4aa55427.json": {
       "adapters": [
         "machine_literal_escape"

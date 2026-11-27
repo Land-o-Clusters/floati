@@ -1,12 +1,16 @@
 """Preview and confirm one role-addressed question using measured quota."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .addressing import _digest, _refuse, load_recipient_preview
 from .errors import ProtocolRefusal
 from .puddle_quota_snapshot import (
     SOURCE, QuotaUnavailable, quota_utc, read_puddle_quota_snapshot, reading_interval,
 )
+from .puddle_quota_v2 import SNAPSHOT_NAME as ACCOUNT_SNAPSHOT_NAME, SOURCE as ACCOUNT_SOURCE
+from .puddle_quota_v2 import UnknownQuotaReading
+from .quota_role_route import account_route, binding_generations, historical_account_route
 from .registry import Registry
 from .root import validate_identifier
 from .session_identity import IDENTIFIER_PATTERN
@@ -56,7 +60,16 @@ def _winner(candidates, readings, at):
     return winners[0]
 
 
-def role_recipient_preview(root, sender, address, snapshot_path):
+def checked_account_bindings(root, candidates, at):
+    """Boundary for the consented local adapter's synchronous identity check.
+
+    There is no enrolled adapter on this runtime. The missing binding stays
+    distinct from account handles merely observed in the quota file.
+    """
+    return ()
+
+
+def role_recipient_preview(root, sender, address, snapshot_path, *, require_v2=False):
     role = validate_identifier(address[5:], "role")
     now = datetime.now(timezone.utc)
     candidates = _candidates(root, sender, role, now)
@@ -65,22 +78,34 @@ def role_recipient_preview(root, sender, address, snapshot_path):
             raise QuotaUnavailable("quota_role_empty")
         if len(candidates) > _MAX_CANDIDATES:
             raise QuotaUnavailable("quota_role_too_large")
-        readings = read_puddle_quota_snapshot(snapshot_path)
-        now = datetime.now(timezone.utc)
-        winner = _winner(candidates, readings, now)
+        if snapshot_path is not None and Path(snapshot_path).name == ACCOUNT_SNAPSHOT_NAME:
+            winner, age, candidates, readings = account_route(
+                root, candidates, snapshot_path, now, checked_account_bindings,
+            )
+            version, source = 3, ACCOUNT_SOURCE
+        else:
+            readings = read_puddle_quota_snapshot(snapshot_path)
+            if require_v2:
+                raise QuotaUnavailable("v2_evidence_required")
+            now = datetime.now(timezone.utc)
+            winner = _winner(candidates, readings, now)
+            readings = {harness: readings[harness] for harness in sorted(set(candidates.values()))}
+            measured, _ = reading_interval(readings[candidates[winner]])
+            age = int((now - measured).total_seconds())
+            version, source = 2, SOURCE
     except QuotaUnavailable as exc:
-        return {
+        unknown = {
             "outcome": "UNKNOWN", "code": str(exc), "address": address,
             "candidates": list(candidates),
             "remedy": "Choose a node and ask again with its exact ID.",
         }
-    readings = {harness: readings[harness] for harness in sorted(set(candidates.values()))}
-    measured, _ = reading_interval(readings[candidates[winner]])
+        if isinstance(exc, UnknownQuotaReading):
+            unknown["reason"] = exc.reason
+        return unknown
     payload = {
-        "preview_version": 2, "tenant_id": root.tenant_id, "sender": sender,
+        "preview_version": version, "tenant_id": root.tenant_id, "sender": sender,
         "address": address, "recipients": [winner],
-        "route": {"source": SOURCE, "evaluated_at": now.isoformat(),
-                  "age_seconds": int((now - measured).total_seconds()),
+        "route": {"source": source, "evaluated_at": now.isoformat(), "age_seconds": age,
                   "candidates": candidates, "readings": readings},
     }
     return dict(payload, digest=_digest(payload))
@@ -89,9 +114,10 @@ def role_recipient_preview(root, sender, address, snapshot_path):
 def validate_role_preview(preview, refuse):
     """Validate a historical decision from its embedded evidence alone."""
     try:
+        version = preview["preview_version"]
         if (set(preview) != {"preview_version", "tenant_id", "sender", "address",
                              "recipients", "route", "digest"}
-                or type(preview["preview_version"]) is not int or preview["preview_version"] != 2
+                or type(version) is not int or version not in (2, 3)
                 or not is_role_address(preview["address"])):
             raise ValueError
         validate_identifier(preview["address"][5:], "role")
@@ -100,21 +126,27 @@ def validate_role_preview(preview, refuse):
         route = preview["route"]
         if (not isinstance(route, dict)
                 or set(route) != {"source", "evaluated_at", "age_seconds", "candidates", "readings"}
-                or route["source"] != SOURCE or type(route["age_seconds"]) is not int):
+                or route["source"] != (ACCOUNT_SOURCE if version == 3 else SOURCE)
+                or type(route["age_seconds"]) is not int):
             raise ValueError
         candidates, readings = route["candidates"], route["readings"]
         if (not isinstance(candidates, dict) or not 1 <= len(candidates) <= _MAX_CANDIDATES
-                or preview["sender"] in candidates or not isinstance(readings, dict)
-                or set(readings) != set(candidates.values())
-                or any(not IDENTIFIER_PATTERN.fullmatch(harness) for harness in candidates.values())):
+                or preview["sender"] in candidates):
             raise ValueError
         for node in candidates:
             validate_identifier(node, "recipient")
         at = quota_utc(route["evaluated_at"])
-        winner = _winner(candidates, readings, at)
-        measured, _ = reading_interval(readings[candidates[winner]])
+        if version == 3:
+            winner, age = historical_account_route(candidates, readings, at)
+        else:
+            if (not isinstance(readings, dict) or set(readings) != set(candidates.values())
+                    or any(not IDENTIFIER_PATTERN.fullmatch(h) for h in candidates.values())):
+                raise ValueError
+            winner = _winner(candidates, readings, at)
+            measured, _ = reading_interval(readings[candidates[winner]])
+            age = int((at - measured).total_seconds())
         if (preview["recipients"] != [winner]
-                or route["age_seconds"] != int((at - measured).total_seconds())
+                or route["age_seconds"] != age
                 or preview["digest"] != _digest({k: v for k, v in preview.items() if k != "digest"})):
             raise ValueError
     except (AttributeError, KeyError, ProtocolRefusal, TypeError, ValueError):
@@ -130,13 +162,21 @@ def load_role_preview(root, sender, address, path):
 
 
 def confirm_role_preview(root, saved, snapshot_path):
-    current = role_recipient_preview(root, saved["sender"], saved["address"], snapshot_path)
+    version = saved["preview_version"]
+    current = role_recipient_preview(
+        root, saved["sender"], saved["address"], snapshot_path, require_v2=version == 3,
+    )
     if current.get("outcome") == "UNKNOWN":
         return current
     prior = saved["route"]
     route = current["route"]
-    if (current["recipients"] != saved["recipients"]
-            or route["candidates"] != prior["candidates"] or route["readings"] != prior["readings"]
+    same_version = current["preview_version"] == version
+    same_bindings = (
+        binding_generations(route["candidates"]) == binding_generations(prior["candidates"])
+        if same_version and version == 3 else route["candidates"] == prior["candidates"]
+    )
+    if (not same_version or not same_bindings or current["recipients"] != saved["recipients"]
+            or route["readings"] != prior["readings"]
             or quota_utc(route["evaluated_at"]) < quota_utc(prior["evaluated_at"])):
         _refuse("address_preview_changed", "The role preview is out of date.",
                 "Preview the role again or ask one exact node.")

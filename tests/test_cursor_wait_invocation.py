@@ -1,7 +1,7 @@
 """Live hook invocations end with their hold and never queue a duplicate."""
 from __future__ import annotations
 
-from tests.readiness import wait_event
+from tests.readiness import wait_event, wait_join, wait_process
 import os
 import io
 from pathlib import Path
@@ -94,9 +94,11 @@ class CursorWaitInvocationTests(unittest.TestCase):
                 self.assertEqual("{}\n", duplicate_output.getvalue())
             finally:
                 release.set()
-                original.join(5)
-                if duplicate.ident is not None:
-                    duplicate.join(5)
+                try:
+                    wait_join(original, "original hook finishes after flush release")
+                finally:
+                    if duplicate.ident is not None:
+                        wait_join(duplicate, "duplicate hook is collected")
         self.assertFalse(original.is_alive())
         self.assertFalse(duplicate.is_alive())
         self.assertEqual([], errors)
@@ -114,7 +116,7 @@ class CursorWaitInvocationTests(unittest.TestCase):
                     pass
         self.addCleanup(cleanup_child)
         host["control"].touch()
-        host["process"].wait(timeout=3)
+        wait_process(host["process"], "scratch hook host exits")
         self.f.wait_until(lambda: len(self.f.rows()) == 2,
             "host exit left an orphan holding the seat", seconds=3)
         self.f.wait_until(lambda: process_start_epoch(child_pid) != child_birth,

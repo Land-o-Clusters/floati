@@ -1,0 +1,397 @@
+{
+  "commands": [
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ROOT",
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": false,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "dry_run",
+          "nargs": 0,
+          "option_strings": [
+            "--dry-run"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "cross",
+        "disable",
+        "--root",
+        "\u002fprivate/tmp/floati-contract"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "cross",
+        "disable"
+      ],
+      "program": "floati cross disable",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ROOT",
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "ADDRESS",
+          "mutually_exclusive_group": null,
+          "name": "listen",
+          "nargs": null,
+          "option_strings": [
+            "--listen"
+          ],
+          "positional": false,
+          "repeat": true,
+          "required": false,
+          "type": "array"
+        },
+        {
+          "choices": [],
+          "default": false,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": 0,
+          "name": "preview",
+          "nargs": 0,
+          "option_strings": [
+            "--preview"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "choices": [],
+          "default": false,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": 0,
+          "name": "resume",
+          "nargs": 0,
+          "option_strings": [
+            "--resume"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "cross",
+        "enable",
+        "--root",
+        "\u002fprivate/tmp/floati-contract"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [
+        {
+          "arguments": [
+            "preview",
+            "resume"
+          ],
+          "required": false
+        }
+      ],
+      "path": [
+        "cross",
+        "enable"
+      ],
+      "program": "floati cross enable",
+      "public": true
+    },
+    {
+      "arguments": [
+        {
+          "choices": [
+            "cursor",
+            "codex",
+            "zcode",
+            "claude"
+          ],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "harness",
+          "nargs": null,
+          "option_strings": [
+            "--harness"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "root",
+          "nargs": null,
+          "option_strings": [
+            "--root"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": "NODE",
+          "mutually_exclusive_group": null,
+          "name": "actor",
+          "nargs": null,
+          "option_strings": [
+            "--as"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "workspace",
+          "nargs": null,
+          "option_strings": [
+            "--workspace"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": false,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "prepare_only",
+          "nargs": 0,
+          "option_strings": [
+            "--prepare-only"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "runtime",
+          "nargs": null,
+          "option_strings": [
+            "--runtime"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": true,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "hooks",
+          "nargs": null,
+          "option_strings": [
+            "--hooks",
+            "--settings"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "destination",
+          "nargs": null,
+          "option_strings": [
+            "--destination"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "integer",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "hook_timeout_seconds",
+          "nargs": null,
+          "option_strings": [
+            "--hook-timeout-seconds"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "integer"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "integer",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "wait_deadline_seconds",
+          "nargs": null,
+          "option_strings": [
+            "--wait-deadline-seconds"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "integer"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "acknowledge_stop_hook_change",
+          "nargs": null,
+          "option_strings": [
+            "--acknowledge-stop-hook-change"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "t3_gates",
+          "nargs": null,
+          "option_strings": [
+            "--t3-gates"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        },
+        {
+          "choices": [],
+          "default": null,
+          "item_type": "string",
+          "metavar": null,
+          "mutually_exclusive_group": null,
+          "name": "confirm",
+          "nargs": null,
+          "option_strings": [
+            "--confirm"
+          ],
+          "positional": false,
+          "repeat": false,
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "artifact_schema_version": null,
+      "example_argv": [
+        "hook",
+        "install",
+        "--harness",
+        "cursor",
+        "--root",
+        "\u002fprivate/tmp/floati-contract",
+        "--runtime",
+        "value"
+      ],
+      "executable": true,
+      "mcp_exposure": "never",
+      "mcp_omit": [],
+      "mcp_required": [],
+      "mutually_exclusive_groups": [],
+      "path": [
+        "hook",
+        "install"
+      ],
+      "program": "floati hook install",
+      "public": true
+    }
+  ],
+  "predecessors": {
+    "hook install": "{\"arguments\":[{\"choices\":[\"cursor\",\"codex\",\"zcode\",\"claude\"],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"harness\",\"nargs\":null,\"option_strings\":[\"--harness\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"root\",\"nargs\":null,\"option_strings\":[\"--root\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":\"NODE\",\"mutually_exclusive_group\":null,\"name\":\"actor\",\"nargs\":null,\"option_strings\":[\"--as\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"workspace\",\"nargs\":null,\"option_strings\":[\"--workspace\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":false,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"prepare_only\",\"nargs\":0,\"option_strings\":[\"--prepare-only\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"boolean\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"runtime\",\"nargs\":null,\"option_strings\":[\"--runtime\"],\"positional\":false,\"repeat\":false,\"required\":true,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"hooks\",\"nargs\":null,\"option_strings\":[\"--hooks\",\"--settings\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"destination\",\"nargs\":null,\"option_strings\":[\"--destination\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"},{\"choices\":[],\"default\":null,\"item_type\":\"integer\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"hook_timeout_seconds\",\"nargs\":null,\"option_strings\":[\"--hook-timeout-seconds\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"integer\"},{\"choices\":[],\"default\":null,\"item_type\":\"integer\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"wait_deadline_seconds\",\"nargs\":null,\"option_strings\":[\"--wait-deadline-seconds\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"integer\"},{\"choices\":[],\"default\":null,\"item_type\":\"string\",\"metavar\":null,\"mutually_exclusive_group\":null,\"name\":\"acknowledge_stop_hook_change\",\"nargs\":null,\"option_strings\":[\"--acknowledge-stop-hook-change\"],\"positional\":false,\"repeat\":false,\"required\":false,\"type\":\"string\"}],\"artifact_schema_version\":null,\"example_argv\":[\"hook\",\"install\",\"--harness\",\"cursor\",\"--root\",\"\u002fprivate/tmp/floati-contract\",\"--runtime\",\"value\"],\"executable\":true,\"mcp_exposure\":\"never\",\"mcp_omit\":[],\"mcp_required\":[],\"mutually_exclusive_groups\":[],\"path\":[\"hook\",\"install\"],\"program\":\"floati hook install\",\"public\":true}"
+  },
+  "schema_version": 0,
+  "source_commit": "0aeb5d0a661704690462b77387d3a60417cedc47"
+}

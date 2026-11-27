@@ -29,7 +29,7 @@ from floati.seat_declaration import SeatDeclaration
 from floati.worker_bootstrap_protocol import BootstrapChannel, NATIVE_THREAD_BOUNDS
 from tests.fixtures.adhoc_stage1 import AdhocFixture
 from tests.temp_roots import REAL_TEMP_ROOT
-from tests.readiness import Readiness, wait_event
+from tests.readiness import Readiness, wait_event, wait_join, wait_process
 from tests.test_native_io import HARNESS, required_api
 
 BINDING_FIELDS = ("profile_id", "profile_digest", "dispatch_id", "dispatch_digest",
@@ -247,7 +247,7 @@ class _NativeThreadProtocolFixture(AdhocFixture):
         contender = threading.Thread(target=mutate)
         def cleanup():
             if contender.ident is not None:
-                contender.join(timeout=6)
+                wait_join(contender, "collect the canonical transition writer")
             self.assertFalse(contender.is_alive(), "canonical transition writer outlived the fixture")
         self.addCleanup(cleanup)
         visits = []
@@ -267,7 +267,7 @@ class _NativeThreadProtocolFixture(AdhocFixture):
                 ack = protocol.accept(self.event(), now=self.now)
             except ProtocolRefusal as exc:
                 refusal = exc
-        contender.join(timeout=6)
+        wait_join(contender, "canonical transition writer exits after acceptance")
         self.assertFalse(contender.is_alive(), "competing writer remained blocked after accept returned")
         self.assertTrue(visits, "test must reach the actual authentication boundary")
         self.assertEqual([], failures, failures)
@@ -305,10 +305,10 @@ class _NativeThreadProtocolFixture(AdhocFixture):
                 if process.poll() is None:
                     process.terminate()
                 try:
-                    process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
+                    wait_process(process, "opened emitter fixture exits")
+                except AssertionError:
                     process.kill()
-                    process.wait(timeout=1)
+                    wait_process(process, "collect killed opened emitter fixture")
             finally:
                 for stream in (process.stdin, process.stdout, process.stderr):
                     stream.close()
@@ -433,14 +433,15 @@ class NativeThreadProtocolTests(_NativeThreadProtocolFixture, unittest.TestCase)
             start.set()
             for child in parents:
                 if child.pid is not None:
-                    child.join(2)
-                    if child.is_alive():
+                    try:
+                        wait_join(child, "collect the opened contender")
+                    except AssertionError:
                         child.terminate()
-                        child.join(2)
-                    if child.is_alive():
-                        child.kill()
-                        child.join(2)
-                    self.assertFalse(child.is_alive())
+                        try:
+                            wait_join(child, "collect terminated opened contender")
+                        except AssertionError:
+                            child.kill()
+                            wait_join(child, "collect killed opened contender")
             results.close()
             results.join_thread()
         self.addCleanup(cleanup)
@@ -465,7 +466,7 @@ class NativeThreadProtocolTests(_NativeThreadProtocolFixture, unittest.TestCase)
         self.assertEqual([("refused", "native_session_mismatch")],
                          [row for row in outcomes if row[0] != "ack"])
         for child in parents:
-            child.join(2)
+            wait_join(child, "native opened contender exits after publication")
             self.assertEqual(0, child.exitcode)
         rows = AdhocJournal(self.root).records()
         self.assertEqual(2, len(rows))
@@ -1221,7 +1222,7 @@ class NativeChannelDeadlineTests(unittest.TestCase):
             stop.set()
             peer.close()
             if thread.ident is not None:
-                thread.join(timeout=1)
+                wait_join(thread, "trickle writer exits after stop")
             self.assertFalse(thread.is_alive())
         self.addCleanup(cleanup)
         deadline = time.monotonic() + 0.15

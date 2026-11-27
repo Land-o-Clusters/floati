@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_barrier, wait_poll, wait_until
+from tests.readiness import Readiness, wait_barrier, wait_join, wait_poll, wait_until
 import hashlib
 import multiprocessing
 import json
@@ -1493,7 +1493,7 @@ class SpawnGroupControllerTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(5)
+            wait_join(thread, "spawn creation contender exits")
         self.assertEqual(2, len(outcomes))
         self.assertTrue(all(isinstance(row, tuple) for row in outcomes), outcomes)
         self.assertEqual(outcomes[0], outcomes[1])
@@ -1670,7 +1670,7 @@ class SpawnGroupControllerTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(5)
+            wait_join(thread, "spawn activation and abort contenders exit")
         state = case.ledger.project().run(case.run_id)["spawn_groups"][group_id]["state"]
         self.assertIn(state, {"closed", "aborted"})
         winners = sum(
@@ -2410,7 +2410,7 @@ class SpawnGroupJoinTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(5)
+            wait_join(thread, "scheduled retry contender exits")
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertFalse(errors, errors)
         winners = [row.scheduled_winner for row in coordinators]
@@ -3789,9 +3789,10 @@ class _ManagedSpawnCase:
         testcase.addCleanup(self.close)
 
     def close(self) -> None:
-        if not self.service._closed:
-            self.stop.set()
-            self.thread.join(3)
+        self.stop.set()
+        try:
+            wait_join(self.thread, "spawn group sequencer exits")
+        finally:
             self.service.close()
 
     def restart(self) -> "_ManagedSpawnCase":
@@ -3804,12 +3805,14 @@ class _ManagedSpawnCase:
         )
 
     def raw(self, payload: bytes) -> dict[str, object]:
+        readiness = Readiness("spawn group socket returns its response")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
-            channel.settimeout(3)
+            channel.settimeout(readiness.remaining())
             channel.connect(str(self.service.socket_path))
             channel.sendall(payload)
             response = b""
             while not response.endswith(b"\n"):
+                channel.settimeout(readiness.remaining())
                 chunk = channel.recv(65536)
                 if not chunk:
                     break
@@ -4938,7 +4941,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(5)
+            wait_join(thread, "cancellation contender exits")
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertFalse(errors, errors)
         self.assertEqual(2, len(results))
@@ -5243,7 +5246,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
         self.assertTrue(wait_poll(receiving, 'spawn_groups: receiving synchronization'), "forked launch probe returned no result")
         forked_result = receiving.recv()
         receiving.close()
-        process.join(3)
+        wait_join(process, "forked launch capability probe exits")
         self.assertFalse(process.is_alive())
         outcomes.append(forked_result[0])
 
@@ -5285,7 +5288,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
             outcomes.append("accepted")
         real_parent.send("stop")
         real_parent.close()
-        unrelated_process.join(3)
+        wait_join(unrelated_process, "wrong-pipe fixture exits")
         self.assertFalse(unrelated_process.is_alive())
         self.assertEqual(
             (
@@ -5347,7 +5350,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
 
             dead_process = context.Process(target=lambda: None)
             dead_process.start()
-            dead_process.join(3)
+            wait_join(dead_process, "dead-process control exits")
             self.assertFalse(dead_process.is_alive())
 
             def dead_process_authorizer(*_args: object) -> object:
@@ -5417,7 +5420,7 @@ class SpawnGroupFinalFixTests(unittest.TestCase):
             )
             live_fork_result = fork_receiving.recv()
             fork_receiving.close()
-            fork_process.join(3)
+            wait_join(fork_process, "live launch fork probe exits")
             self.assertFalse(fork_process.is_alive())
             self.assertEqual(("refused", "descendant_launch_capability_required"), live_fork_result)
             self.assertEqual(live_owner_before, live_owner.ledger.records())

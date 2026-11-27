@@ -935,6 +935,33 @@ def _ledger_signature(path):
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
+def dispatch_window(root: FloatiRoot) -> Optional[dict]:
+    """Read a confirmed open window even when there are no seats to pause."""
+    from .records import validate_record
+
+    path = _ledger_path(root)
+    signature = _ledger_signature(path)
+    rows, partial = _read(root)
+    if partial:
+        raise _unknown("quiet history is incomplete")
+    for row in rows:
+        validate_record(row, root.tenant_id, QUIET_KINDS, integrity=True)
+    host = NativeHost()
+    live = [(window_id, window, state) for window_id, window in _windows(rows).items()
+            if (state := _state(window, host)) not in TERMINAL_PHASES]
+    if _ledger_signature(path) != signature:
+        raise _unknown("quiet history changed during the read")
+    if not live:
+        return None
+    if len(live) != 1 or live[0][2] not in ("open", "settling"):
+        raise _unknown("quiet window state is uncertain")
+    window_id, window, state = live[0]
+    if state == "settling":
+        return None
+    _, cap_at = _window_times(window)
+    return {"id": window_id, "detail": None, "expected_release": cap_at}
+
+
 def observe_build_hold(root: FloatiRoot) -> Optional[Tuple[bool, datetime, Optional[datetime]]]:
     """Return the effective hold, observation time, and known cap, if attestable."""
     from .records import validate_record

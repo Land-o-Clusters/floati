@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import wait_queue, wait_event, wait_join
 from floati import fixture_ids as public_ids
 
 import dataclasses
@@ -326,7 +326,7 @@ class CapabilityBindingTests(unittest.TestCase):
 
         def cleanup() -> None:
             stop.set()
-            worker.join(3)
+            wait_join(worker, "capability sequencer exits")
             service.close()
 
         self.addCleanup(cleanup)
@@ -364,7 +364,7 @@ class CapabilityBindingTests(unittest.TestCase):
 
         def cleanup() -> None:
             stop.set()
-            worker.join(3)
+            wait_join(worker, "capability sequencer exits")
             service.close()
 
         self.addCleanup(cleanup)
@@ -429,7 +429,7 @@ class CapabilityBindingTests(unittest.TestCase):
 
         def cleanup() -> None:
             stop.set()
-            worker.join(3)
+            wait_join(worker, "capability sequencer exits")
             service.close()
 
         self.addCleanup(cleanup)
@@ -548,7 +548,7 @@ class CapabilityBindingTests(unittest.TestCase):
 
         def cleanup() -> None:
             stop.set()
-            worker.join(3)
+            wait_join(worker, "capability sequencer exits")
             service.close()
 
         self.addCleanup(cleanup)
@@ -653,16 +653,16 @@ class CapabilityBindingTests(unittest.TestCase):
             return service, stop, worker
 
         service, stop, worker = start_service("sequencer-a")
-        self.addCleanup(stop.set)
-        self.addCleanup(worker.join, 3)
         self.addCleanup(service.close)
+        self.addCleanup(wait_join, worker, "capability sequencer fixture is collected")
+        self.addCleanup(stop.set)
         client = SequencerClient(service.socket_path, service.epoch, "exact-preclaim")
         genuine = client.bind_admission(
             genuine_admission_run, self.plan, self.policy, "ignored"
         )
         epoch_record_id = service._lease.record["id"]
         stop.set()
-        worker.join(3)
+        wait_join(worker, "capability sequencer exits")
         service.close()
 
         admission_operation = "admission_binding_evaluation"
@@ -720,9 +720,9 @@ class CapabilityBindingTests(unittest.TestCase):
         )
         self.assertEqual(before_preclaims, RunLedger(self.root).records())
         restarted, restarted_stop, restarted_worker = start_service("sequencer-b")
-        self.addCleanup(restarted_stop.set)
-        self.addCleanup(restarted_worker.join, 3)
         self.addCleanup(restarted.close)
+        self.addCleanup(wait_join, restarted_worker, "restarted capability sequencer fixture is collected")
+        self.addCleanup(restarted_stop.set)
         retry = SequencerClient(
             restarted.socket_path, restarted.epoch, "genuine-retry"
         ).bind_admission(genuine_admission_run, self.plan, self.policy, "ignored")
@@ -908,7 +908,7 @@ class CapabilityBindingTests(unittest.TestCase):
                 outcomes["capability"] = "ok"
         finally:
             stop.set()
-            worker.join(3)
+            wait_join(worker, "capability sequencer exits")
             service.close()
 
         restarted, restarted_stop, restarted_worker = start_service("forged-sink-b")
@@ -918,7 +918,7 @@ class CapabilityBindingTests(unittest.TestCase):
             ).bind_admission(genuine_admission_run, self.plan, self.policy, "ignored")
         finally:
             restarted_stop.set()
-            restarted_worker.join(3)
+            wait_join(restarted_worker, "restarted capability sequencer exits")
             restarted.close()
 
         self.assertEqual(genuine["record"], retry["record"])
@@ -1121,7 +1121,7 @@ class CapabilityBindingTests(unittest.TestCase):
             process.start()
         start.set()
         for process in processes:
-            process.join(8)
+            wait_join(process, "capability snapshot contender exits")
             self.assertEqual(0, process.exitcode)
         results = [wait_queue(queue, 'capability_binding: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})
@@ -1232,7 +1232,7 @@ class CapabilityBindingTests(unittest.TestCase):
             process.start()
         start.set()
         for process in processes:
-            process.join(8)
+            wait_join(process, "dispatch contender exits")
             self.assertEqual(0, process.exitcode)
         results = [wait_queue(queue, 'capability_binding: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})
@@ -1265,7 +1265,7 @@ class CapabilityBindingTests(unittest.TestCase):
             self.assertEqual(before, self.ledger.records())
         finally:
             release.set()
-            holder.join(4)
+            wait_join(holder, "capability grant lock holder exits")
         self.assertEqual(0, holder.exitcode)
 
     def test_snapshot_and_v1_dispatch_short_writes_roll_back_exactly(self) -> None:

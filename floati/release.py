@@ -38,6 +38,7 @@ VERSION_ASSIGNMENT = re.compile(r'^__version__\s*=\s*"([^"]+)"\s*$', re.MULTILIN
 CHANGELOG_HEADING = re.compile(
     r"^##[ \t]+\[([^\]\n]+)\](?:[ \t]*[—–-][ \t]*(.+?))?[ \t]*$", re.MULTILINE
 )
+SECTION_HEADING = re.compile(r"^##[ \t]+", re.MULTILINE)
 TAG_SPELLING = re.compile(r"^v(.+)$")
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 UNRELEASED = "Unreleased"
@@ -96,19 +97,30 @@ def pyproject_version(repo_root) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def changelog_heading(repo_root) -> Optional[Tuple[str, str]]:
-    """The first release heading, including Keep a Changelog's `[Unreleased]`.
+def _release_section(source: str) -> Tuple[Optional[re.Match], str]:
+    heading = CHANGELOG_HEADING.search(source)
+    if heading is None:
+        return None, ""
+    following = SECTION_HEADING.search(source, heading.end())
+    body = source[heading.end():following.start() if following else len(source)]
+    if heading.groups() == (UNRELEASED, None) and not body.strip() and following:
+        dated = CHANGELOG_HEADING.match(source, following.start())
+        if dated is not None and dated.group(1) != UNRELEASED:
+            following = SECTION_HEADING.search(source, dated.end())
+            body = source[dated.end():following.start() if following else len(source)]
+            return dated, body
+    return heading, body
 
-    First, because Keep a Changelog puts the newest section at the top and a
-    release is always about the newest one.
-    """
+
+def changelog_heading(repo_root) -> Optional[Tuple[str, str]]:
+    """The newest release heading, skipping a fresh empty Unreleased section."""
 
     path = Path(repo_root) / "CHANGELOG.md"
     try:
         source = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    match = CHANGELOG_HEADING.search(source)
+    match, _ = _release_section(source)
     return (match.group(1), match.group(2) or UNRELEASED) if match else None
 
 
@@ -149,13 +161,9 @@ def ledger_contract_findings(repo_root, *, historical_tag=None, observations=Non
         source = (Path(repo_root) / "CHANGELOG.md").read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []  # The heading check names the missing document.
-    heading = CHANGELOG_HEADING.search(source)
+    heading, body = _release_section(source)
     if heading is None:
         return []  # The heading check names the missing entry.
-    body = source[heading.end():]
-    following = re.search(r"^##[ \t]+", body, re.MULTILINE)
-    if following is not None:
-        body = body[:following.start()]
     declarations = re.findall(r"^Ledger contract:.*$", body, re.MULTILINE)
     historical_absence = historical_tag is not None and not declarations
     if historical_absence:

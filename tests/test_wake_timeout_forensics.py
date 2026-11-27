@@ -8,7 +8,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -116,23 +115,17 @@ class WakeTimeoutForensicsTests(unittest.TestCase):
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             return
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return
-            time.sleep(0.02)
+        self._assert_reaped(pid)
 
     def _assert_reaped(self, pid: int) -> None:
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline:
+        def absent():
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
-                return
-            time.sleep(0.02)
-        self.fail(f"child pid {pid} remained present instead of being reaped")
+                return True
+            return False
+
+        wait_until(absent, f"owned forensic child {pid} exits")
 
     def test_pipe_blocked_child_sidecar_names_the_blocked_call(self) -> None:
         script = self._hanging_script()

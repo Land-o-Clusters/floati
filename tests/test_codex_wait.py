@@ -8,7 +8,6 @@ import io
 import json
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -63,19 +62,23 @@ class CodexWaitParticipationTests(unittest.TestCase):
             path.relative_to(self.bus_home).as_posix()
             for path in self.bus_home.rglob("*")
         }
-        started = time.monotonic()
+        outcome = {}
+        wait = mock.Mock(side_effect=AssertionError("an unmapped workspace entered a hold"))
         status = run_stop_waiter(
             bus_home=self.bus_home,
             hook_payload={"cwd": str(self.workspace), "session_id": "thread-one"},
             stdout=stdout,
             stderr=stderr,
+            sleep=wait,
+            wait_readable=wait,
+            _waiter_result=outcome,
         )
-        elapsed = time.monotonic() - started
 
         self.assertEqual(0, status)
+        self.assertEqual("nonparticipant", outcome["kind"])
+        wait.assert_not_called()
         self.assertEqual("", stdout.getvalue())
         self.assertEqual("", stderr.getvalue())
-        self.assertLess(elapsed, 0.25)
         self.assertEqual(
             before,
             {
@@ -463,18 +466,34 @@ class _CodexWaitRuntimeFixture(_CodexWaitContractFixture):
 
 # Keep the contract methods running with and without armed consent.
 class CodexWaitRuntimeTests(_CodexWaitRuntimeFixture, CodexWaitContractTests):
-    def test_fresh_envelope_emits_one_block_and_records_wake_after_flush(self) -> None:
+    def publish_seeded_mail(self, payload, stdout, stderr):
         from floati.codex_wait import run_stop_waiter
+
+        def unexpected_wait(*_):
+            self.fail("durable mail must be presented before waiting")
+
+        return run_stop_waiter(
+            bus_home=self.bus_home, hook_payload=payload, stdout=stdout, stderr=stderr,
+            monotonic=lambda: 0.0, sleep=unexpected_wait, wait_readable=unexpected_wait,
+        )
+
+    def test_fresh_envelope_emits_one_block_and_records_wake_after_flush(self) -> None:
+        from floati import codex_wait
 
         message = self.send("runtime-ping")
         stdout = io.StringIO()
         stderr = io.StringIO()
-        status = run_stop_waiter(
-            bus_home=self.bus_home,
-            hook_payload={"cwd": str(self.workspace), "session_id": "thread-live"},
-            stdout=stdout,
-            stderr=stderr,
-        )
+        invoke = codex_wait._run_stop_waiter_invocation
+        host_ticks = iter((0.0, 3.0))
+
+        def run_under_startup_contention(**arguments):
+            arguments.setdefault("monotonic", lambda: next(host_ticks, 3.0))
+            return invoke(**arguments)
+
+        with mock.patch.object(codex_wait, "_run_stop_waiter_invocation", run_under_startup_contention):
+            status = self.publish_seeded_mail(
+                {"cwd": str(self.workspace), "session_id": "thread-live"}, stdout, stderr,
+            )
 
         self.assertEqual(0, status)
         decision = self.load_block_decision(stdout, stderr)
@@ -610,12 +629,7 @@ class CodexWaitRuntimeTests(_CodexWaitRuntimeFixture, CodexWaitContractTests):
 
         self.send("runtime-held-first")
         payload = {"cwd": str(self.workspace), "session_id": "thread-held-later"}
-        run_stop_waiter(
-            bus_home=self.bus_home,
-            hook_payload=payload,
-            stdout=io.StringIO(),
-            stderr=io.StringIO(),
-        )
+        self.assertEqual(0, self.publish_seeded_mail(payload, io.StringIO(), io.StringIO()))
         clock = [0.0]
         later: list[dict] = []
 

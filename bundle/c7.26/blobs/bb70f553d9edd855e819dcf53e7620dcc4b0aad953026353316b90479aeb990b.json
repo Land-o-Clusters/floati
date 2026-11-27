@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Floati ask cost execution projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "generation_id",
+    "scopes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "$ref": "#/$defs/node"
+    },
+    "generation_id": {
+      "$ref": "#/$defs/generation"
+    },
+    "scopes": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/scope"
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$(?![\\s\\S])"
+    },
+    "generation": {
+      "type": "string",
+      "pattern": "^g-[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "question": {
+      "type": "string",
+      "pattern": "^ask-question-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "presentation": {
+      "type": "string",
+      "pattern": "^ask-presentation-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "answer": {
+      "type": "string",
+      "pattern": "^ask-answer-[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$(?![\\s\\S])"
+    },
+    "nativeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$(?![\\s\\S])"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$(?![\\s\\S])"
+    },
+    "stamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$(?![\\s\\S])"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_id",
+        "question_id",
+        "presentation_id",
+        "answer_id",
+        "asking_node",
+        "asking_session_ref",
+        "answering_node",
+        "presentation_session_ref",
+        "answering_session_ref",
+        "harness",
+        "provider",
+        "source_lineage_id",
+        "native_session_id",
+        "native_turn_id",
+        "opened_at",
+        "closed_at",
+        "opened_sequence",
+        "closed_sequence",
+        "completeness",
+        "attempts"
+      ],
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^s-[a-f0-9]{32}$(?![\\s\\S])"
+        },
+        "question_id": {
+          "$ref": "#/$defs/question"
+        },
+        "presentation_id": {
+          "$ref": "#/$defs/presentation"
+        },
+        "answer_id": {
+          "$ref": "#/$defs/answer"
+        },
+        "asking_node": {
+          "$ref": "#/$defs/node"
+        },
+        "asking_session_ref": {
+          "$ref": "#/$defs/digest"
+        },
+        "answering_node": {
+          "$ref": "#/$defs/node"
+        },
+        "presentation_session_ref": {
+          "$ref": "#/$defs/digest"
+        },
+        "answering_session_ref": {
+          "$ref": "#/$defs/digest"
+        },
+        "harness": {
+          "enum": [
+            "codex",
+            "claude-code"
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/node"
+        },
+        "source_lineage_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "native_session_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "native_turn_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "opened_at": {
+          "$ref": "#/$defs/stamp"
+        },
+        "closed_at": {
+          "$ref": "#/$defs/stamp"
+        },
+        "opened_sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "closed_sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "completeness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "through_sequence"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "complete",
+                "incomplete"
+              ]
+            },
+            "through_sequence": {
+              "$ref": "#/$defs/sequence"
+            }
+          }
+        },
+        "attempts": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/attempt"
+          }
+        }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "source_lineage_id",
+        "native_session_id",
+        "native_turn_id",
+        "native_call_id",
+        "parent_attempt",
+        "issued_sequence",
+        "ended_sequence",
+        "disposition",
+        "membership"
+      ],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/node"
+        },
+        "source_lineage_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "native_session_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "native_turn_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "native_call_id": {
+          "$ref": "#/$defs/nativeId"
+        },
+        "parent_attempt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sequence"
+            }
+          ]
+        },
+        "issued_sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "ended_sequence": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sequence"
+            }
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "completed",
+            "failed",
+            "cancelled",
+            "open"
+          ]
+        },
+        "membership": {
+          "enum": [
+            "exclusive",
+            "shared"
+          ]
+        }
+      }
+    }
+  }
+}

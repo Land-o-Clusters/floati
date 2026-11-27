@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.readiness import READY_SECONDS
 from tests.test_cli import LAUNCHER
 
 from floati import fixture_ids as public_ids
@@ -910,6 +911,7 @@ class CliWorkflowTests(unittest.TestCase):
             self.assertFalse(root.resolve_relative("receipts/acks/worker-a.jsonl").exists())
 
     def test_orchestrate_seeds_streams_and_emits_one_final_artifact(self) -> None:
+        from floati import orchestrate, tui_render
         from floati.cli import main
 
         current = datetime.now(timezone.utc)
@@ -935,17 +937,33 @@ class CliWorkflowTests(unittest.TestCase):
         )
         stdout = io.StringIO()
         stderr = io.StringIO()
+        parent_pid = os.getpid()
+        render = tui_render.render_plain_dump
+        frame_rendered = False
 
-        with patch("floati.cli.CodexAppServerAdapter", return_value=_CliOrchestrateAdapter()):
+        def record_first_frame(model):
+            nonlocal frame_rendered
+            frame = render(model)
+            frame_rendered = True
+            return frame
+
+        def clock_after_frame():
+            gap = 9.0 if frame_rendered and os.getpid() == parent_pid else 0.0
+            return time.monotonic() + gap
+
+        clock = SimpleNamespace(monotonic=clock_after_frame, sleep=time.sleep)
+        with patch("floati.cli.CodexAppServerAdapter", return_value=_CliOrchestrateAdapter()),\
+                patch.object(orchestrate, "time", clock),\
+                patch.object(tui_render, "render_plain_dump", record_first_frame):
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 exit_code = main(
                     [
                         "orchestrate", "--root", str(self.home), "--plan", str(plan),
-                        "--adapter", "codex", "--deadline", "5", "--no-animation",
+                        "--adapter", "codex", "--deadline", str(READY_SECONDS), "--no-animation",
                     ]
                 )
 
-        self.assertEqual(0, exit_code, stderr.getvalue())
+        self.assertEqual(0, exit_code, stdout.getvalue() or stderr.getvalue())
         lines = stdout.getvalue().splitlines()
         self.assertEqual(1, len(lines))
         artifact = json.loads(lines[0])

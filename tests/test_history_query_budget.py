@@ -9,6 +9,7 @@ from floati import archive_source_pool as pools, archive_catalog_entries as cata
 from floati import archive_survivor_admission as admission
 from floati import archive_survivor_bundle as bundle, archive_consumption_domain as consumption
 from floati import archive_execution_domain as execution, archive_presentation_domain as presentation
+from tests.readiness import wait_join
 
 
 class QueryWorkHookTests(unittest.TestCase):
@@ -51,7 +52,7 @@ class QueryWorkHookTests(unittest.TestCase):
                     outcomes.append(own.remaining)
             thread = threading.Thread(target=foreign)
             thread.start()
-            thread.join(2)
+            wait_join(thread, "foreign query work finishes")
             self.assertFalse(thread.is_alive())
             self.assertEqual(5, state.remaining)
             work._query_charge(5)

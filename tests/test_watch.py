@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests import time_bounds
+from tests.readiness import wait_process
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -681,13 +682,10 @@ class WatchTests(unittest.TestCase):
         child = self._streaming_child(None)
         child.send_signal(signal.SIGINT)
         try:
-            child.wait(timeout=5)
-        except subprocess.TimeoutExpired:
+            wait_process(child, "watch exits after SIGINT inherited as ignored")
+        except AssertionError:
             child.kill()
-            self.fail(
-                "watch child did not honour SIGINT within 5s under inherited "
-                f"SIG_IGN; host loadavg {os.getloadavg()}"
-            )
+            raise
         self.assertEqual(0, child.returncode)
         self.assertEqual("", child.stderr.read())
 

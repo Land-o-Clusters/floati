@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import subprocess
+from tests.readiness import wait_process
 import sys
 import tempfile
 import time
@@ -132,13 +133,13 @@ class _FaultAdapter:
         except ProcessLookupError:
             pass
         try:
-            self.child.wait(timeout=0.5)
-        except subprocess.TimeoutExpired:
+            wait_process(self.child, "cancelled orchestration child exits")
+        except AssertionError:
             try:
                 os.killpg(self.child.pid, 9)
             except ProcessLookupError:
                 pass
-            self.child.wait(timeout=0.5)
+            wait_process(self.child, "collect killed orchestration child")
 
 
 def _fail_final_complete_receipt(

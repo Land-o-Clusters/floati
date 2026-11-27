@@ -11,6 +11,7 @@ import json
 import os
 import signal
 import subprocess
+from tests.readiness import wait_process
 import sys
 import tempfile
 import unittest
@@ -163,7 +164,7 @@ class CursorUserHookTests(unittest.TestCase):
                 os.killpg(proc.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 return
-            proc.wait(timeout=5)
+            wait_process(proc, "collect the stopped Cursor user-hook fixture")
 
         self.addCleanup(reap)
         payload = json.dumps({"hook_event_name": "stop", "workspace_roots": [str(root) for root in roots]})

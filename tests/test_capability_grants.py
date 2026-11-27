@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import wait_queue, wait_event, wait_join
 from floati import fixture_ids as public_ids
 
 import dataclasses
@@ -159,7 +159,7 @@ class CapabilityGrantLedgerTests(unittest.TestCase):
             process.start()
         start.set()
         for process in processes:
-            process.join(6)
+            wait_join(process, "authority and grant contender exits")
             self.assertEqual(0, process.exitcode)
         results = [wait_queue(queue, 'capability_grants: queue frame') for _ in processes]
         self.assertNotIn("error", {status for status, _ in results})

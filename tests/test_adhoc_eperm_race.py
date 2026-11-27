@@ -16,7 +16,7 @@ from unittest import mock
 
 from floati.adapters.headless_template import HarnessProfile, HeadlessProfileAdapter
 from floati.worker_errors import WorkerAdapterFailure
-from tests.readiness import Readiness, wait_readable
+from tests.readiness import Readiness, wait_process, wait_readable
 
 
 class AdhocEpermRaceTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class AdhocEpermRaceTests(unittest.TestCase):
     def reap(process):
         if process.poll() is None:
             process.kill()
-        process.wait(timeout=5)
+        wait_process(process, "collect the owned group fixture")
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None:
                 stream.close()
@@ -80,7 +80,7 @@ class AdhocEpermRaceTests(unittest.TestCase):
         zombie = self.member(leader.pid)
         self.leave_zombie(zombie)
         leader.stdin.close()
-        leader.wait(timeout=5)
+        wait_process(leader, "owned group leader exits after EOF")
         # The parent deliberately withholds reaping until after cancel returns.
         if sys.platform == "darwin":
             with self.assertRaises(PermissionError) as caught:
@@ -91,14 +91,14 @@ class AdhocEpermRaceTests(unittest.TestCase):
         except WorkerAdapterFailure as exc:
             self.fail("an exited zombie-only group must be cleaned: " + exc.code)
         self.assertIsNone(adapter._active_process)
-        zombie.wait(timeout=5)
+        wait_process(zombie, "collect the observed zombie group member")
         with self.assertRaises(ProcessLookupError):
             os.killpg(leader.pid, 0)
 
     def test_eperm_after_reap_can_be_proved_absent(self):
         adapter, leader = self.fixture()
         leader.stdin.close()
-        leader.wait(timeout=5)
+        wait_process(leader, "owned group leader exits after EOF")
         real_killpg = os.killpg
 
         def denied_probe(group, signum):
@@ -117,7 +117,7 @@ class AdhocEpermRaceTests(unittest.TestCase):
         adapter, leader = self.fixture()
         member = self.member(leader.pid)
         leader.stdin.close()
-        leader.wait(timeout=5)
+        wait_process(leader, "owned group leader exits after EOF")
         # Model a member we cannot signal (e.g. changed credentials). Keep the
         # actual member live; replacing only the signal syscall earns no verdict.
         real_killpg = os.killpg
@@ -139,7 +139,7 @@ class AdhocEpermRaceTests(unittest.TestCase):
     def test_unreadable_group_evidence_keeps_ownership(self):
         adapter, leader = self.fixture()
         leader.stdin.close()
-        leader.wait(timeout=5)
+        wait_process(leader, "owned group leader exits after EOF")
         real_killpg = os.killpg
 
         def denied_probe(group, signum):

@@ -523,6 +523,7 @@ class DoctorProbeTests(DeliveryHealthTestBase):
         from floati.cursor_presentations import CursorPresentationLedger
         from floati.jsonl import read_records_snapshot
         from floati.waiter_consent import arm_waiter_consent
+        from tests.waiter_timing import seeded_mail_timing
 
         base = Path(self.temp.name).resolve()
         workspace = base / "probe-waiter-workspace"
@@ -550,11 +551,12 @@ class DoctorProbeTests(DeliveryHealthTestBase):
             stdout, stderr, native_result = io.StringIO(), io.StringIO(), {}
             with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}), patch(
                 "floati.wake_daemon_adapters.CODEX_EXECUTABLE", base / "absent-codex",
-            ):
+            ), seeded_mail_timing() as timing:
                 code = run_stop_waiter(
                     bus_home=self.root.path,
                     hook_payload={"cwd": str(workspace), "session_id": session},
                     stdout=stdout, stderr=stderr, _waiter_result=native_result,
+                    **timing,
                 )
             self.assertEqual(0, code, stderr.getvalue())
             self.assertEqual("fresh_work", native_result["kind"], native_result)

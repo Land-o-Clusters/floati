@@ -5,7 +5,7 @@ maintenance boundary, or a genuine native append extends the selected bytes
 after the real carry planner returns. Native validation, decisions and writes run.
 """
 from contextlib import ExitStack, contextmanager
-from tests.readiness import wait_event
+from tests.readiness import wait_event, wait_join
 import hashlib
 import io
 import json
@@ -76,12 +76,12 @@ def run_case(case, base):
     native_maintenance = epoch_rotation.stop_maintenance
     native_plan = epoch_carry.build_carry_plan
     calls = []
-    accelerated = case in {"lock_deadline", "lock_retry_release"}
+    force_acquisition_timeout = case in {"lock_deadline", "lock_retry_release"}
     clock = [0.0]
     acquisition_timeouts = []
 
     def monotonic():
-        return clock[0] if accelerated else time.monotonic()
+        return clock[0]
 
     def hold_epoch():
         descriptor = None
@@ -89,10 +89,7 @@ def run_case(case, base):
             descriptor = os.open(root.tenant_home, os.O_RDONLY | os.O_DIRECTORY)
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             ready.set()
-            if case in {"lock_release", "lock_short_map"}:
-                release.wait(0.15)
-            else:
-                release.wait(8)
+            wait_event(release, "release the owned epoch lock")
         except BaseException as failure:
             thread_errors.append(repr(failure))
             ready.set()
@@ -111,15 +108,13 @@ def run_case(case, base):
         try:
             return native_maintenance(*args, **kwargs)
         except ProtocolRefusal as failure:
-            if accelerated and failure.code == "epoch_lock_timeout":
+            if force_acquisition_timeout and failure.code == "epoch_lock_timeout":
                 acquisition_timeouts.append(monotonic())
                 if case == "lock_retry_release":
                     # Release only after native flock acquisition actually
                     # timed out, then let the original waiter retry it.
                     release.set()
-                    children[0].join(3)
-                    if children[0].is_alive():
-                        raise AssertionError("private tenant lock holder did not release")
+                    wait_join(children[0], "epoch lock holder exits before retry")
             raise
 
     def planner(current, payloads):
@@ -142,18 +137,19 @@ def run_case(case, base):
         return plan
 
     def sleep(seconds):
-        if case == "lock_short_map" and ready.is_set() and not mutations:
-            # The native epoch acquisition calls sleep only after the actual
-            # flock reports contention; its pre-acquisition checker already ran.
-            mutations.append(case)
-            (root.path / WORKSPACE_MAP_RELATIVE).write_bytes(b"not-json\n")
+        if (case in {"lock_release", "lock_short_map"} and ready.is_set()
+                and not release.is_set()):
+            # The native lock attempt has reached contention. Publish the
+            # controlled map change before allowing the next acquisition.
+            if case == "lock_short_map":
+                mutations.append(case)
+                (root.path / WORKSPACE_MAP_RELATIVE).write_bytes(b"not-json\n")
+            release.set()
+            wait_join(children[0], "epoch lock holder releases after contention")
         if case == "member_pause" and mutations and not release.is_set():
             release.set()
             WakeController(root).pause("seat", "session", idempotency_key="race-pause")
-        if accelerated:
-            clock[0] += seconds
-        else:
-            time.sleep(seconds)
+        clock[0] += seconds
 
     began = time.monotonic()
     window_started = monotonic()
@@ -161,10 +157,13 @@ def run_case(case, base):
         with ExitStack() as changes:
             changes.enter_context(replace_attribute(epoch_rotation, "stop_maintenance", maintenance))
             changes.enter_context(replace_attribute(epoch_carry, "build_carry_plan", planner))
-            if accelerated:
+            # The real flock, retry, and delivery are exercised on the
+            # original consent window. Advance its clock only when native
+            # code requests a wait, independent of fixture scheduling.
+            changes.enter_context(replace_attribute(bus_epoch, "time",
+                SimpleNamespace(monotonic=monotonic, sleep=sleep)))
+            if force_acquisition_timeout:
                 changes.enter_context(replace_attribute(bus_epoch, "EPOCH_LOCK_TIMEOUT_SECONDS", 0.1))
-                changes.enter_context(replace_attribute(bus_epoch, "time",
-                    SimpleNamespace(monotonic=monotonic, sleep=sleep)))
             status = run_stop_waiter(bus_home=root.path,
                 hook_payload={"cwd": str(workspace), "session_id": "session"},
                 stdout=output, stderr=errors, monotonic=monotonic,
@@ -173,7 +172,7 @@ def run_case(case, base):
     finally:
         release.set()
         for child in children:
-            child.join(3)
+            wait_join(child, "owned epoch holder exits")
     elapsed = time.monotonic() - began
     window_elapsed = monotonic() - window_started
     all_collected = all(not child.is_alive() for child in children)
@@ -189,10 +188,10 @@ def run_case(case, base):
         checks.update(fresh_exact_mail=outcome.get("kind") == "fresh_work"
             and outcome.get("item_ids") == [message["id"]],
             one_exact_delivery=len(deliveries) == 1 and deliveries[0]["item_ids"] == [message["id"]],
-            no_integrity_exit=all(row["reason_code"] != "integrity_failure" for row in exits))
+            no_integrity_exit=all(row["reason_code"] != "integrity_failure" for row in exits),
+            original_window=window_elapsed < budget)
         if case == "lock_retry_release":
             checks["acquisition_timeout_retried"] = bool(acquisition_timeouts) and len(calls) >= 3
-            checks["original_window"] = window_elapsed < budget
     elif case == "lock_deadline":
         checks.update(rearm=outcome.get("kind") == "exhausted"
             and "re-arm" in decision.get("reason", ""),

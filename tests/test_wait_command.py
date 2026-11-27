@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from floati import fixture_ids as public_ids
 
+from contextlib import contextmanager, nullcontext
+from functools import partial
 import io
 import json
 import os
@@ -27,10 +29,21 @@ from floati.jsonl import read_records_snapshot
 from floati.registry import Registry
 from floati.root import FloatiRoot
 from tests.temp_roots import REAL_TEMP_ROOT
+from tests.waiter_timing import seeded_mail_timing
 
 
 NODE = public_ids.builder("floati")
 EXHAUSTION_REASON = "(floati: wait deadline exhausted; end this turn to re-arm)"
+
+
+@contextmanager
+def _seeded_mail_clock():
+    from floati import codex_wait
+
+    with seeded_mail_timing() as timing:
+        waiter = partial(codex_wait.run_stop_waiter, **timing)
+        with mock.patch.object(codex_wait, "run_stop_waiter", waiter):
+            yield
 
 
 class WaitFixture:
@@ -126,6 +139,7 @@ class WaitCommandTests(unittest.TestCase):
         session_id: str,
         stdin_payload: Optional[dict] = None,
         workspace: Optional[str] = None,
+        seeded: bool = False,
     ) -> tuple[int, str]:
         from floati import cli
 
@@ -147,17 +161,30 @@ class WaitCommandTests(unittest.TestCase):
         stdin = io.StringIO(
             "" if stdin_payload is None else json.dumps(stdin_payload)
         )
-        with mock.patch("sys.stdout", stdout), mock.patch("sys.stdin", stdin):
+        clock = _seeded_mail_clock() if seeded else nullcontext()
+        with clock, mock.patch("sys.stdout", stdout), mock.patch("sys.stdin", stdin):
             status = cli.main(argv)
         return status, stdout.getvalue()
 
     def run_script(
-        self, fixture: WaitFixture, *, session_id: str
+        self, fixture: WaitFixture, *, session_id: str, seeded: bool = False
     ) -> tuple[int, str]:
         launcher = Path(__file__).resolve().parents[1] / "scripts" / "floati-codex-wait"
         payload = {"cwd": str(fixture.workspace), "session_id": session_id}
+        command = [sys.executable, str(launcher), "--root", str(fixture.bus_home)]
+        if seeded:
+            # Execute the real launcher in a separate interpreter, using the
+            # same fixture clock as the verb's immediate-delivery arm.
+            program = (
+                "import runpy, sys\n"
+                "from tests.test_wait_command import _seeded_mail_clock\n"
+                "sys.argv.pop(0)\n"
+                "with _seeded_mail_clock():\n"
+                "    runpy.run_path(sys.argv[0], run_name='__main__')\n"
+            )
+            command[1:1] = ["-c", program]
         completed = subprocess.run(
-            [sys.executable, str(launcher), "--root", str(fixture.bus_home)],
+            command,
             input=json.dumps(payload),
             capture_output=True,
             text=True,
@@ -214,7 +241,7 @@ class WaitCommandTests(unittest.TestCase):
         fixture = WaitFixture(self.base, "verb-fresh", deadline_seconds=2)
         message = fixture.send("verb-fresh-ping")
 
-        status, emitted = self.run_verb(fixture, session_id="seat-verb")
+        status, emitted = self.run_verb(fixture, session_id="seat-verb", seeded=True)
 
         self.assertEqual(0, status)
         decision = json.loads(emitted)
@@ -234,6 +261,7 @@ class WaitCommandTests(unittest.TestCase):
         status, emitted = self.run_verb(
             fixture,
             session_id="seat-stdin",
+            seeded=True,
             stdin_payload={
                 "cwd": str(fixture.workspace),
                 "session_id": "seat-stdin",
@@ -313,13 +341,15 @@ class WaitCommandTests(unittest.TestCase):
         verb_message = verb_fixture.send("parity-ping")
 
         script_status, script_out = self.run_script(
-            script_fixture, session_id="seat-parity"
+            script_fixture, session_id="seat-parity", seeded=True
         )
         verb_status, verb_out = self.run_verb(
-            verb_fixture, session_id="seat-parity"
+            verb_fixture, session_id="seat-parity", seeded=True
         )
 
         self.assertEqual(script_status, verb_status)
+        self.assertIn(script_message["id"], script_out)
+        self.assertIn(verb_message["id"], verb_out)
         self.assertEqual(
             self.normalize(script_out, script_message["id"]),
             self.normalize(verb_out, verb_message["id"]),

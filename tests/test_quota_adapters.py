@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+from tests.readiness import wait_process
 import sys
 import tempfile
 import textwrap
@@ -401,10 +402,10 @@ class QuotaAdapterTests(unittest.TestCase):
                 if child.poll() is None:
                     child.terminate()
                     try:
-                        child.wait(timeout=1.0)
-                    except subprocess.TimeoutExpired:
+                        wait_process(child, "quota observer fixture exits after termination")
+                    except AssertionError:
                         child.kill()
-                        child.wait(timeout=1.0)
+                        wait_process(child, "collect killed quota observer fixture")
                 for stream in (child.stdin, child.stdout, child.stderr):
                     if stream is not None:
                         stream.close()

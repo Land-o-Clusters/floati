@@ -740,6 +740,7 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             "floati/adapters/herdr_host.py",
             "floati/adapters/t3.py",
             "floati/claude_inbox.py",
+            "floati/cross_lan.py",
             "floati/effect_reconciliation_exec.py",
             "floati/sequencer.py",
             "floati/sequencer_scale.py",
@@ -838,7 +839,11 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             # NEEDS-YOU-OBSERVED-1: floati/needs_observed.py starts the explicitly
             # configured orchestrator CLI for one bounded read; Popen 16 -> 17.
             # Ask replay adds one fixed local Git inspection with transports disabled.
-            {"Popen": 18, "os-family": 3, "run": 61, "run_child": 1},
+            # T3 dispatch gate adds one bounded local Floati check child.
+            # Cross opt-in adds _PlatformStore._run. KeychainStore.probe
+            # and SecretServiceStore.probe select security and secret-tool
+            # for the ruled attended enable and disable store operations.
+            {"Popen": 18, "os-family": 3, "run": 63, "run_child": 1},
             dict(kinds),
             "the subprocess-family population moved; re-measure and re-pin",
         )
@@ -871,7 +876,9 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
             # each (49); the quiet window's other argv is one literal list.
             # NEEDS-YOU-OBSERVED-1: the configured orchestrator argv is dynamic (32).
             # The ask replay site uses argv returned by fixed_git_command.
-            {"all-literal-list": 1, "dynamic": 33, "mixed": 49},
+            # T3's argv selects the confirmed launcher or local recovery Python.
+            # The cross store argv uses its selected helper and operation.
+            {"all-literal-list": 1, "dynamic": 35, "mixed": 49},
             dict(argv_classes),
             "the argv-shape distribution moved; re-measure and re-pin",
         )
@@ -1170,7 +1177,20 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
                         line[:node.func.end_col_offset - 4] + "LEDGER_BIND"
                         + line[node.func.end_col_offset:])
                 source = "".join(lines)
-            if pattern.search(source):
+            if relative == "floati/cross_lan.py":
+                # X1: only the cross listener is present in this tree. Pin
+                # both calls inside its owner and still scan the whole file.
+                tree = _parsed_source(path, source)
+                transport, = (node for node in tree.body
+                              if isinstance(node, ast.ClassDef) and node.name == "LanTransport")
+                listener, = (node for node in transport.body
+                             if isinstance(node, ast.FunctionDef) and node.name == "listen")
+                socket_calls = [ast.unparse(node) for node in ast.walk(listener)
+                                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                                and node.func.attr in {"bind", "listen"}]
+                self.assertCountEqual(["stream.bind(target)", "stream.listen(16)"], socket_calls)
+                self.assertEqual(2, len(pattern.findall(source)))
+            elif pattern.search(source):
                 calls.append(relative)
         self.assertEqual(["floati/sequencer.py"], calls)
         source = (self.repository_root / "floati/sequencer.py").read_text(encoding="utf-8")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_queue, wait_event
+from tests.readiness import wait_queue, wait_event, wait_join
 from floati import fixture_ids as public_ids
 
 import hashlib
@@ -1095,7 +1095,7 @@ class EffectControllerAuthorityTests(unittest.TestCase):
                     finally:
                         call_finished.set()
                         replacement_installed.set()
-                        attacker.join(5)
+                        wait_join(attacker, "policy rebinding contender exits")
                 self.assertFalse(attacker.is_alive())
                 self.assertEqual([], attacker_errors)
                 self.assertIsNotNone(refusal)
@@ -1150,14 +1150,14 @@ class EffectControllerAuthorityTests(unittest.TestCase):
                 "effect intent must wait while managed acceptance holds the guard",
             )
             release.set()
-            managed.join(10)
-            effect.join(10)
+            wait_join(managed, "managed acceptance fixture exits")
+            wait_join(effect, "direct effect fixture exits")
         finally:
             release.set()
             for process in (managed, effect):
                 if process.pid is not None and process.is_alive():
                     process.terminate()
-                    process.join(5)
+                    wait_join(process, "collect terminated effect race fixture")
         self.assertEqual(0, managed.exitcode)
         self.assertEqual(0, effect.exitcode)
         observed = {wait_queue(results, 'effect_controller: results frame') for _ in range(2)}
@@ -1228,7 +1228,7 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
         context = multiprocessing.get_context("fork")
         control = context.Process(target=lambda: None)
         control.start()
-        control.join(3)
+        wait_join(control, "ordinary fork hook control exits")
         self.assertEqual(0, control.exitcode)
         self.assertTrue(proof.is_file())
         proof.unlink()
@@ -1652,14 +1652,13 @@ class WorkerEffectAuthorityTests(unittest.TestCase):
         process.start()
         try:
             self.assertTrue(wait_event(started, 'effect_controller: started synchronization'))
-            process.join(10)
-            self.assertFalse(process.is_alive())
+            wait_join(process, "independent effect fixture exits")
             self.assertEqual(0, process.exitcode)
             outcome = wait_queue(results, 'effect_controller: results frame')
         finally:
             if process.is_alive():
                 process.terminate()
-                process.join(5)
+                wait_join(process, "collect terminated independent effect fixture")
             results.close()
             results.join_thread()
         self.assertEqual("effect_ok", outcome[0], outcome)

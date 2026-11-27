@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.readiness import wait_barrier, wait_event, wait_join
+from tests.readiness import Readiness, wait_barrier, wait_event, wait_join
 from floati import fixture_ids as public_ids
 
 import errno
@@ -1158,8 +1158,10 @@ class _ManagedSuspensionContext(_DirectSuspensionContext):
 
     def close(self) -> None:
         self.stop.set()
-        self.thread.join(3)
-        self.service.close()
+        try:
+            wait_join(self.thread, "approval sequencer exits")
+        finally:
+            self.service.close()
 
     def restart_service(self) -> "_ManagedSuspensionContext":
         self.close()
@@ -1187,12 +1189,14 @@ class _ManagedSuspensionContext(_DirectSuspensionContext):
 
     def raw_append(self, record: dict[str, object]) -> dict[str, object]:
         payload = self.client.frame(record)
+        readiness = Readiness("approval socket returns its response")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
-            channel.settimeout(3)
+            channel.settimeout(readiness.remaining())
             channel.connect(str(self.service.socket_path))
             channel.sendall(payload)
             response = b""
             while not response.endswith(b"\n"):
+                channel.settimeout(readiness.remaining())
                 chunk = channel.recv(65536)
                 if not chunk:
                     break
@@ -1307,9 +1311,11 @@ class ApprovalSuspensionManagedTests(unittest.TestCase):
     def test_identical_semantic_aliases_each_receive_one_response_and_close(self) -> None:
         managed = self.managed_ready_context()
         channels = []
+        readiness = Readiness("both suspension alias responses arrive and close")
         for _index in range(2):
             channel = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            channel.settimeout(3)
+            self.addCleanup(channel.close)
+            channel.settimeout(readiness.remaining())
             channel.connect(str(managed.service.socket_path))
             channel.sendall(managed.suspension_payload())
             channels.append(channel)
@@ -1317,6 +1323,7 @@ class ApprovalSuspensionManagedTests(unittest.TestCase):
         for channel in channels:
             payload = b""
             while True:
+                channel.settimeout(readiness.remaining())
                 chunk = channel.recv(65536)
                 if not chunk:
                     break
