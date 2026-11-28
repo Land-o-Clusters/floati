@@ -16,7 +16,9 @@ class SeatBoardHelpTests(unittest.TestCase):
                 self.assertIsNotNone(page)
                 self.assertIn('floati ' + topic + ' - ', page)
                 self.assertTrue(rows[topic]['public'])
-                self.assertIn('| `' + topic + '` |', table)
+        self.assertIn('| `seat` |', table)
+        self.assertNotIn('| `seat board` |', table)
+        self.assertIn('board', help_for(['seat', '--help']).split('Subcommands: ')[1].splitlines()[0].split(', '))
         page = help_for(['seat', 'board', '--help'])
         self.assertIsNotNone(page)
         for option in ('--root', '--as', '--workspace', '--session', '--idempotency-key', '--take-over'):

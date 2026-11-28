@@ -25,6 +25,7 @@ import time
 import unittest
 from pathlib import Path
 
+from floati import __version__
 from floati.wiring_journal import journal_path
 from scripts.fixture_finalizer import owned_child
 from tests.temp_roots import REAL_TEMP_ROOT
@@ -215,6 +216,7 @@ class PackagedSmokeBattery(unittest.TestCase):
 
         python = Path("/usr/bin/python3")
         git = Path("/usr/bin/git")
+        release_ref = f"v{__version__}"
         for tool in (python, git):
             if not tool.is_file():
                 self.fail(json.dumps({
@@ -250,7 +252,7 @@ class PackagedSmokeBattery(unittest.TestCase):
         run_git(seed, "config", "user.email", "release@example.invalid")
         run_git(seed, "add", ".")
         run_git(seed, "commit", "--quiet", "-m", "release fixture")
-        run_git(seed, "tag", "v0.2.1")
+        run_git(seed, "tag", release_ref)
         source = Path(self.temp.name) / "readme-clone"
         run_git(Path(self.temp.name), "clone", "--quiet", "--no-local", str(seed), str(source))
 
@@ -260,9 +262,9 @@ class PackagedSmokeBattery(unittest.TestCase):
         clean_home.mkdir()
         readme = (source / "README.md").read_text(encoding="utf-8")
         self.assertIn(
-            "git -C /absolute/floati checkout v0.2.1\n"
+            f"git -C /absolute/floati checkout {release_ref}\n"
             "cd /absolute/floati\n"
-            "python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.1",
+            f"python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref {release_ref}",
             readme,
         )
         self.assertIn(
@@ -308,10 +310,10 @@ class PackagedSmokeBattery(unittest.TestCase):
                 )
             return read_artifact(completed)
 
-        run_git(source, "checkout", "--quiet", "v0.2.1")
+        run_git(source, "checkout", "--quiet", release_ref)
         install_rc, install = read_artifact(_readme_install([
             str(python), "-B", "-m", "floati", "install", "--source", str(source),
-            "--destination", str(destination), "--ref", "v0.2.1",
+            "--destination", str(destination), "--ref", release_ref,
         ], source=source, environment=environment, destination=destination,
             managed_files=len(manifest["files"])))
         self.assertEqual(0, install_rc, install)

@@ -45,24 +45,9 @@ APPROVED_README_TOP = """<p align="center">
     <img src="docs/assets/floati-wordmark.svg" alt="floati" width="260">
   </picture>
 </h1>
-<p align="center"><strong>Keep your coding tools. Coordinate the work between them.</strong></p>
-<p align="center">One bus, one board, one set of receipts, for the coding agents you already run.</p>
-<p align="center"><strong>Point your coding agent at this repository. <a href="AGENTS.md"><code>AGENTS.md</code></a> walks it from install to a verified fleet.</strong></p>
+<p align="center"><strong>Floati lets the coding agents you already run ask each other and hand off work on your own machine. It wakes the other session and leaves a receipt. No account, no server.</strong></p>
 
-<p align="center">
-  <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
-  <img alt="platform macOS today" src="https://img.shields.io/badge/platform-macOS%20today-3E4A56">
-  <a href="#what-it-runs-with"><img alt="harnesses 12 measured" src="https://img.shields.io/badge/harnesses-12%20measured-3E4A56"></a>
-</p>
-
-<p align="center">
-  <a href="#start-here">Start here</a> ·
-  <a href="#what-you-get">What you get</a> ·
-  <a href="#what-it-runs-with">What it runs with</a> ·
-  <a href="#how-it-holds-up">How it holds up</a> ·
-  <a href="#what-is-still-wrong">What is still wrong</a> ·
-  <a href="docs/ROADMAP.md">Roadmap</a>
-</p>
+## Start here
 
 """
 

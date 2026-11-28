@@ -1,4 +1,4 @@
-"""Operator-only controlling-terminal approval for a local T3 dispatch grant."""
+"""Local T3 dispatch grants and readouts."""
 import argparse
 from datetime import timedelta
 import hashlib
@@ -66,7 +66,18 @@ def _grant(args):
     return transaction(root, decide)
 
 
-def main(argv=None):
+def _route(args, read_inventory, at):
+    from .t3_quota_readout import candidate_quota
+
+    if (not coordinate(args.environment)
+            or len(args.provider) != len(set(args.provider))
+            or not all(coordinate(provider) for provider in args.provider)):
+        raise ProtocolRefusal("t3_route_targets_invalid", "Supply an environment and distinct provider instance IDs.")
+    return candidate_quota(FloatiRoot.open_direct_home(Path(args.root)), args.puddle_quota_snapshot,
+                           args.environment, args.provider, read_inventory, at=at or _utc(utc_now()))
+
+
+def main(argv=None, *, read_inventory=None, at=None):
     parser = argparse.ArgumentParser(prog="python3 -m floati.t3_gate")
     commands = parser.add_subparsers(dest="verb", required=True)
     grant = commands.add_parser("grant")
@@ -82,10 +93,17 @@ def main(argv=None):
     board.add_argument("--base-ref", required=True)
     board.add_argument("--bindings", required=True)
     board.add_argument("--producer-tip")
+    route = commands.add_parser("route", help="show advisory headroom for T3 provider instances")
+    route.add_argument("--root", required=True)
+    route.add_argument("--environment", required=True)
+    route.add_argument("--provider", action="append", required=True)
+    route.add_argument("--puddle-quota-snapshot")
     args = parser.parse_args(argv)
     try:
         if args.verb == "grant":
             evidence = _grant(args)
+        elif args.verb == "route":
+            evidence = _route(args, read_inventory, at)
         else:
             from .t3_shared_base import board as shared_base_board
             evidence = shared_base_board(FloatiRoot.open_direct_home(Path(args.root)),
@@ -96,7 +114,11 @@ def main(argv=None):
     except IntegrityFailure as exc:
         evidence, status, exit_code = {"code": exc.code, "detail": exc.detail}, "malformed_evidence", 33
     except (DurabilityFailure, OSError):
-        failure = "t3_grant_write_failed" if args.verb == "grant" else "t3_board_read_failed"
+        failure = {
+            "grant": "t3_grant_write_failed",
+            "board": "t3_board_read_failed",
+            "route": "t3_route_read_failed",
+        }[args.verb]
         evidence, status, exit_code = {"code": failure}, "degraded", 35
     print(json.dumps({"artifact_version": 0, "command": f"t3 {args.verb}", "status": status,
                       "evidence": evidence}, sort_keys=True))

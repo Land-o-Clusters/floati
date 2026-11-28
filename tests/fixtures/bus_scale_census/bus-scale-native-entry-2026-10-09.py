@@ -284,7 +284,8 @@ def routine_subprocess(case, argv, kwargs, fixture, workspace, context):
                              ("/usr/sbin/lsof", "/usr/bin/lsof") if Path(name).is_file()), None)
                 if tuple(argv) == (lsof, "-nP", "-F", "pn", "+D", str(lane)):
                     return kwargs.get("env") == {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
-        return tuple(argv) in commands and kwargs.get("env") == fixed_git_environment("/usr/bin/git")
+        environment = fixed_git_environment("/usr/bin/git", local_only=case == "overlap-report")
+        return tuple(argv) in commands and kwargs.get("env") == environment
     except (KeyError, OSError, TypeError, ValueError):
         return False
 

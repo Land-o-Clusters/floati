@@ -1,10 +1,14 @@
 """Preview and confirm one role-addressed question using measured quota."""
 
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
 from .addressing import _digest, _refuse, load_recipient_preview
 from .errors import ProtocolRefusal
+from .framing import encode_frame
+from .jsonl import MAX_RECORD_BYTES
 from .puddle_quota_snapshot import (
     SOURCE, QuotaUnavailable, quota_utc, read_puddle_quota_snapshot, reading_interval,
 )
@@ -69,6 +73,69 @@ def checked_account_bindings(root, candidates, at):
     return ()
 
 
+def _preview(tenant, sender, address, version, source, at, winner, age, candidates, readings):
+    payload = {
+        "preview_version": version, "tenant_id": tenant, "sender": sender,
+        "address": address, "recipients": [winner],
+        "route": {"source": source, "evaluated_at": at.isoformat(), "age_seconds": age,
+                  "candidates": candidates, "readings": readings},
+    }
+    return dict(payload, digest=_digest(payload))
+
+
+@lru_cache(maxsize=1)
+def _account_preview_candidate_bound():
+    """Budget the largest v3 question, with a distinct full reading per node."""
+    from .ask import _question_record
+
+    identifier = "x" * 64
+    observed = "2026-11-27T12:00:00.123456Z"
+    expiry = "2026-11-27T12:02:00.123456Z"
+    evaluated = quota_utc("2026-11-27T12:01:59.123456Z")
+    binding = {
+        "harness": "codex", "account_ref": "acct-" + "a" * 32, "binding_id": "b-" + "b" * 62,
+        "valid_from": observed, "expires_at": expiry,
+    }
+    reading = {
+        "harness": "codex", "account_ref": binding["account_ref"], "reading_id": "r-" + "a" * 32,
+        "observed_at": observed,
+        "t3_provider_instance": {"instance_ref": "a" * 64, "verified_at": observed},
+        "value": {
+            "status": "MEASURED", "window_kind": "account_primary", "window_seconds": 31536000,
+            "remaining_bps": 10000, "resets_at": expiry, "expires_at": expiry,
+        },
+    }
+    preview = _preview(identifier, identifier, "role:" + identifier, 3, ACCOUNT_SOURCE,
+                       evaluated, identifier, 119, {identifier: binding}, [reading])
+    # The record limits count characters. One valid Unicode scalar can use
+    # four UTF-8 bytes, wider than any allowed JSON escape.
+    wide = "\U0001f680"
+    question = _question_record(
+        SimpleNamespace(tenant_id=identifier), sender=identifier, recipient=identifier,
+        repo="r" * 128, sha="a" * 64, doc=wide * 1024, note=wide * 1024,
+        session=wide * 128, idempotency_key=wide * 128, address_preview=preview,
+    )
+    question["timestamp"] = "2026-11-27T12:01:59.123Z"
+    one_account_bytes = len(encode_frame(question))
+
+    # A successful comparison has one unique winner. Additional readings
+    # therefore need at most four headroom digits, plus the two separators.
+    reading = dict(reading, value=dict(reading["value"], remaining_bps=9999))
+    preview["route"]["candidates"]["y" * 64] = binding
+    preview["route"]["readings"].append(reading)
+    additional_account_bytes = len(encode_frame(question)) - one_account_bytes
+    return min(_MAX_CANDIDATES, 1 + (MAX_RECORD_BYTES - one_account_bytes) // additional_account_bytes)
+
+
+def _unknown(address, candidates, code, **details):
+    return {
+        "outcome": "UNKNOWN", "code": code, "address": address,
+        "candidates": list(candidates),
+        "remedy": "Choose a node and ask again with its exact ID.",
+        **details,
+    }
+
+
 def role_recipient_preview(root, sender, address, snapshot_path, *, require_v2=False):
     role = validate_identifier(address[5:], "role")
     now = datetime.now(timezone.utc)
@@ -76,14 +143,18 @@ def role_recipient_preview(root, sender, address, snapshot_path, *, require_v2=F
     try:
         if not candidates:
             raise QuotaUnavailable("quota_role_empty")
-        if len(candidates) > _MAX_CANDIDATES:
-            raise QuotaUnavailable("quota_role_too_large")
         if snapshot_path is not None and Path(snapshot_path).name == ACCOUNT_SNAPSHOT_NAME:
+            bound = _account_preview_candidate_bound()
+            if len(candidates) > bound:
+                return _unknown(address, candidates, "quota_role_preview_too_large",
+                                candidate_count=len(candidates), candidate_bound=bound)
             winner, age, candidates, readings = account_route(
                 root, candidates, snapshot_path, now, checked_account_bindings,
             )
             version, source = 3, ACCOUNT_SOURCE
         else:
+            if len(candidates) > _MAX_CANDIDATES:
+                raise QuotaUnavailable("quota_role_too_large")
             readings = read_puddle_quota_snapshot(snapshot_path)
             if require_v2:
                 raise QuotaUnavailable("v2_evidence_required")
@@ -94,21 +165,9 @@ def role_recipient_preview(root, sender, address, snapshot_path, *, require_v2=F
             age = int((now - measured).total_seconds())
             version, source = 2, SOURCE
     except QuotaUnavailable as exc:
-        unknown = {
-            "outcome": "UNKNOWN", "code": str(exc), "address": address,
-            "candidates": list(candidates),
-            "remedy": "Choose a node and ask again with its exact ID.",
-        }
-        if isinstance(exc, UnknownQuotaReading):
-            unknown["reason"] = exc.reason
-        return unknown
-    payload = {
-        "preview_version": version, "tenant_id": root.tenant_id, "sender": sender,
-        "address": address, "recipients": [winner],
-        "route": {"source": source, "evaluated_at": now.isoformat(), "age_seconds": age,
-                  "candidates": candidates, "readings": readings},
-    }
-    return dict(payload, digest=_digest(payload))
+        details = {"reason": exc.reason} if isinstance(exc, UnknownQuotaReading) else {}
+        return _unknown(address, candidates, str(exc), **details)
+    return _preview(root.tenant_id, sender, address, version, source, now, winner, age, candidates, readings)
 
 
 def validate_role_preview(preview, refuse):

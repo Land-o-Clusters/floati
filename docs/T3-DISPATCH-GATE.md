@@ -140,3 +140,29 @@ missing worktree binding.
 Bindings are local testimony supplied by the caller. The board validates the
 receipt and measures Git facts for the given worktree. It has no T3 lifecycle
 feed, so retain only children you want to compare. The board is advisory.
+
+## Headroom at target choice
+
+Before calling `delegate_task`, pass the enrolled local environment ID and
+the exact provider instance IDs from T3's current capabilities. Select the
+private Puddle v2 export explicitly.
+
+```sh
+python3 -m floati.t3_gate route --root FLEET --environment ENVIRONMENT \
+  --provider codex-blue --provider codex-green --provider claude \
+  --puddle-quota-snapshot /absolute/path/to/puddle-quota-v2.json
+```
+
+The command emits one advisory JSON row per proposed instance. A
+`MEASURED` row gives the remaining basis points, reading ID, observation
+time, age and window duration. Compare matching Codex account-primary
+durations. An `UNKNOWN` row gives a reason and carries no headroom.
+Run the read again before acting on a saved choice. The caller chooses
+the target and dispatches it through T3.
+
+The target list identifies which rows to show. A local integration must
+also provide fresh inventory and independently verify continuity of each
+instance's registration and provider account. The Python entry point
+`floati.t3_gate.main` accepts that trusted inventory reader. Until a live
+reader is wired in, the standalone command returns UNKNOWN for every
+target, including when the export contains a matching instance reference.

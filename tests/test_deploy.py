@@ -707,7 +707,7 @@ class DeploymentWriterTests(unittest.TestCase):
         )
 
     def test_readme_install_runs_from_the_clones_parent(self) -> None:
-        block = readme_bash_blocks("## Start here", "## What you get")[0]
+        block = readme_bash_blocks("### Install from a source checkout", "## What you get")[0]
         clone, _, install_steps = block.partition("\n")
         public_url = "https://github.com/Land-o-Clusters/floati.git"
         self.assertIn(public_url, clone)
@@ -1047,6 +1047,95 @@ class DeploymentWriterTests(unittest.TestCase):
         self.assertEqual(before, collision.read_bytes())
         self.assertFalse((destination / ".floati-install").exists())
         self.assertFalse(os.path.lexists(destination / f"{LEGACY_PREFIX}-install"))
+
+
+class ReadmeQuickstartTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(temporary.cleanup)
+        cls.base = Path(temporary.name).resolve()
+        cls.source = cls.base / "floati"
+        cls.destination = cls.base / "install"
+        cls.git = "/usr/bin/git"
+        env = dict(os.environ, PATH="/usr/bin:/bin:/usr/sbin:/sbin")
+        subprocess.run(
+            [cls.git, "clone", "--quiet", "--shared", str(REPOSITORY_ROOT), str(cls.source)],
+            env=env, capture_output=True, check=True, timeout=60,
+        )
+        cls.sha = subprocess.check_output(
+            [cls.git, "rev-parse", "HEAD"], cwd=cls.source, env=env, text=True,
+        ).strip()
+        # The candidate stands in for the published checkout's banked tip.
+        subprocess.run(
+            [cls.git, "update-ref", "refs/remotes/origin/main", cls.sha],
+            cwd=cls.source, env=env, check=True,
+        )
+        DeploymentWriter(
+            cls.source, cls.destination, "install", ref=cls.sha,
+            committed_tree=True, installer_path=env["PATH"],
+        ).run()
+        cls.readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+        cls.blocks = readme_bash_blocks("### Install from a source checkout", "### Cursor Remote Control")
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory(dir=self.base)
+        self.addCleanup(temporary.cleanup)
+        self.home = Path(temporary.name)
+        self.launcher = self.destination / "scripts/floati"
+        self.env = {
+            "HOME": str(self.home),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+    def run_recipe(self, script: str, *, direct: bool = False) -> subprocess.CompletedProcess:
+        if direct:
+            script = re.sub(r"^floati ", "/absolute/install/scripts/floati ", script, flags=re.M)
+        script = (
+            script.replace("/absolute/my-sessions", str(self.home / "my-sessions"))
+            .replace("/absolute/install", str(self.destination))
+            .replace("/absolute/floati", str(self.source))
+        )
+        return subprocess.run(
+            ["/bin/sh", "-ec", script], cwd=self.source, env=self.env,
+            capture_output=True, text=True, timeout=60,
+        )
+
+    def test_readme_absolute_launcher_doctor_is_healthy(self) -> None:
+        start = next(block for block in self.blocks if block.startswith("floati init "))
+        initialized = self.run_recipe(start.splitlines()[0], direct=True)
+        self.assertEqual(0, initialized.returncode, initialized.stdout + initialized.stderr)
+
+        # The published recipe originally gave only an inline 'floati doctor'.
+        direct = next((block for block in self.blocks if "/scripts/floati doctor " in block), None)
+        if direct is None:
+            direct = re.search(r"`(floati doctor --root [^`]+)`", self.readme).group(1)
+        result = self.run_recipe(direct, direct=True)
+        report = json.loads(result.stdout)
+        attention = [
+            row for row in report["evidence"]["findings"]
+            if row["severity"] in {"error", "warning"}
+        ]
+        self.assertEqual(0, result.returncode, (attention, result.stderr))
+        self.assertEqual("healthy", report["status"])
+
+    def test_readme_two_seat_example_records_delivery_and_ack(self) -> None:
+        self.env["PATH"] = str(self.launcher.parent) + os.pathsep + self.env["PATH"]
+        start = next(block for block in self.blocks if block.startswith("floati init "))
+        seats = next(block for block in self.blocks if block.startswith("floati node add "))
+        # Fill the old recipe's example coordinates exactly as in the published replay.
+        seats = seats.replace("<40-hex>", self.sha).replace("--repo myapp", "--repo Land-o-Clusters/floati")
+        seats = seats.replace("--doc docs/briefs/row-1.md", "--doc README.md")
+        result = self.run_recipe(start.splitlines()[0] + "\n" + seats)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        artifacts = [json.loads(line) for line in result.stdout.splitlines()]
+        sent = next(row["evidence"]["message"] for row in artifacts if row["command"] == "send")
+        history = artifacts[-1]["evidence"]
+        self.assertEqual("builder-a", history["node_id"])
+        for kind in ("deliveries", "acks"):
+            self.assertEqual([[sent["id"]]], [row["item_ids"] for row in history[kind]])
+        self.assertEqual([], history["consumptions"])
 
 
 if __name__ == "__main__":

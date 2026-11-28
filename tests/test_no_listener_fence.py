@@ -927,6 +927,7 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         )
         pinned = {
             "floati/cli.py",
+            "scripts/agent_bootstrap.py",
             "scripts/capture-demo-assets.py",
             "scripts/capture-shot1-locf1.py",
             "scripts/capture-tui-moments.py",
@@ -1074,6 +1075,8 @@ class WholeProductNoListenerFenceTests(unittest.TestCase):
         )
         pinned = {
             ("floati/cli.py", "4a4ea4b2f1ec4f5b"),
+            # Development-only pip install of the worktree's locked wheels.
+            ("scripts/agent_bootstrap.py", "4521bbb290104625"),
             ("scripts/capture-demo-assets.py", "4053d11281a3c0e1"),
             ("scripts/capture-demo-assets.py", "70cb7fa74220ea0a"),
             ("scripts/capture-shot1-locf1.py", "ebeffdefb0d69c7d"),

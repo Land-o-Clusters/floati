@@ -124,12 +124,10 @@ def verb_table(parser):
     from .help_copy import HELP_COPY
     def cell(value):
         return value.replace('|', '&#124;').replace('\n', ' ')
-    lines = ['| Command | Syntax | Purpose |', '| --- | --- | --- |']
-    for topic, (current, chain) in _registry(parser).items():
-        if not topic:
-            continue
-        lines.append('| `' + topic + '` | `' + cell(_synopsis(topic, current, chain))
-                     + '` | ' + cell(HELP_COPY[topic]['description']) + ' |')
+    lines = ['| Command | Purpose |', '| --- | --- |']
+    for topic, (_, chain) in _registry(parser).items():
+        if len(chain) == 1:
+            lines.append('| `' + topic + '` | ' + cell(HELP_COPY[topic]['description']) + ' |')
     return '\n'.join(lines) + '\n'
 
 

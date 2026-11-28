@@ -17,6 +17,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import statistics
 import subprocess
 import sys
@@ -32,6 +33,21 @@ from floati.registry import Registry  # noqa: E402
 from floati.root import resolve_command_root  # noqa: E402
 
 
+RECEIPT_CONSTANTS = {
+    "receipt_version": 1,
+    "status": "MEASURED",
+    "harness_model_basis": "operator_supplied",
+    "service_warmth_basis": "discarded_correlated_answer_before_samples",
+    "clock": "monotonic_ns",
+    "timing_scope": "question_published_to_correlated_answer_observed",
+    "percentile_method": "nearest_rank",
+}
+LABEL_FIELDS = ("root", "served_node", "sender", "harness", "model")
+NUMBER_FIELDS = ("load1_start", "load1_end", "median_seconds", "p95_seconds",
+                 "min_seconds", "max_seconds")
+CORRELATION_FIELDS = ("question_id", "answer_id")
+
+
 class LatencyRefusal(Exception):
     def __init__(self, code, detail):
         super().__init__(detail)
@@ -39,7 +55,8 @@ class LatencyRefusal(Exception):
 
 
 def parser():
-    result = argparse.ArgumentParser(description=__doc__)
+    result = argparse.ArgumentParser(
+        description=__doc__, epilog="To check a saved receipt offline, use --validate-receipt PATH by itself.")
     result.add_argument("--root", required=True, help="exact canonical fleet directory; no ambient fallback")
     result.add_argument("--from", dest="sender", required=True)
     result.add_argument("--to", dest="recipient", required=True, help="node already serving asks")
@@ -63,6 +80,71 @@ def statistics_for(samples):
     return {"n": len(ordered), "median_seconds": statistics.median(ordered),
             "p95_seconds": ordered[math.ceil(0.95 * len(ordered)) - 1],
             "min_seconds": ordered[0], "max_seconds": ordered[-1]}
+
+
+def validate_receipt(receipt):
+    """Check the version 1 shape, sample statistics, and distinct receipt IDs."""
+    def require(valid, detail):
+        if not valid:
+            raise LatencyRefusal("latency_receipt_invalid", detail)
+
+    def named(value):
+        return isinstance(value, str) and bool(value.strip())
+
+    def nonnegative(value):
+        return type(value) in (int, float) and 0 <= value <= sys.float_info.max
+
+    fields = {*RECEIPT_CONSTANTS, *LABEL_FIELDS, *NUMBER_FIELDS,
+              "run_id", "source_sha", "source_dirty", "question_sha", "started_at",
+              "ended_at", "timing_includes", "warmup", "samples", "n"}
+    require(isinstance(receipt, dict) and receipt.keys() == fields, "receipt fields must match version 1")
+    require(type(receipt["receipt_version"]) is int and receipt["timing_includes"] == ["answer_polling"] and all(
+        receipt[field] == expected for field, expected in RECEIPT_CONSTANTS.items()),
+        "receipt version, measurement status or method is invalid")
+    require(all(named(receipt[field]) for field in LABEL_FIELDS) and Path(receipt["root"]).is_absolute(),
+            "an absolute root, sender, served node, harness and model must be named")
+    for field, pattern in (("run_id", r"[0-9a-f]{32}"),
+                           ("source_sha", r"[0-9a-f]{40}(?:[0-9a-f]{24})?"),
+                           ("question_sha", r"[0-9a-f]{40}(?:[0-9a-f]{24})?"),
+                           ("started_at", r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?\+00:00"),
+                           ("ended_at", r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?\+00:00")):
+        require(named(receipt[field]) and re.fullmatch(pattern, receipt[field]), f"{field} is invalid")
+    for field in ("started_at", "ended_at"):
+        try:
+            datetime.fromisoformat(receipt[field])
+        except ValueError as exc:
+            raise LatencyRefusal("latency_receipt_invalid", f"{field} is invalid") from exc
+    require(type(receipt["source_dirty"]) is bool, "source_dirty must be a boolean")
+    require(all(nonnegative(receipt[field]) for field in NUMBER_FIELDS),
+            "host load and timing summaries must be finite nonnegative numbers")
+    n, samples = receipt["n"], receipt["samples"]
+    require(type(n) is int and 1 <= n <= 10000 and isinstance(samples, list) and len(samples) == n,
+            "sample population must contain exactly N rows (1..10000)")
+
+    seen = set()
+    for index, row in enumerate([receipt["warmup"], *samples]):
+        fields = set(CORRELATION_FIELDS) if index == 0 else {*CORRELATION_FIELDS, "index", "seconds"}
+        require(isinstance(row, dict) and row.keys() == fields, f"probe {index} has invalid fields")
+        if index:
+            require(type(row["index"]) is int and row["index"] == index and nonnegative(row["seconds"]),
+                    f"sample {index} has an invalid index or elapsed time")
+        for field in CORRELATION_FIELDS:
+            identifier = row[field]
+            require(named(identifier) and identifier not in seen, f"probe {index} has a missing or reused {field}")
+            seen.add(identifier)
+
+    expected = statistics_for([row["seconds"] for row in samples])
+    require(all(receipt[field] == value for field, value in expected.items()),
+            "median, p95 and range must agree with the recorded samples")
+
+
+def unique_json_object(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise LatencyRefusal("latency_receipt_invalid", "receipt JSON repeats an object key")
+        result[name] = value
+    return result
 
 
 def canonical_directory(value, code):
@@ -161,24 +243,41 @@ def measure(args, *, load=None):
     load_end = load()[0]
     if git(SOURCE, "rev-parse", "HEAD") != source_sha:
         raise LatencyRefusal("latency_source_changed", "source commit changed during measurement")
-    return {"receipt_version": 1, "status": "MEASURED", "run_id": run_id,
+    receipt = {**RECEIPT_CONSTANTS, "run_id": run_id,
             "root": str(root_path), "served_node": args.recipient, "sender": args.sender,
             "harness": args.harness, "model": args.model,
-            "harness_model_basis": "operator_supplied",
-            "service_warmth_basis": "discarded_correlated_answer_before_samples",
             "warmup": {name: warmup[name] for name in ("question_id", "answer_id")},
             "source_sha": source_sha, "source_dirty": source_dirty,
             "question_sha": args.question_sha,
             "started_at": started_at, "ended_at": datetime.now(timezone.utc).isoformat(),
-            "clock": "monotonic_ns", "timing_scope": "question_published_to_correlated_answer_observed",
-            "timing_includes": ["answer_polling"],
-            "percentile_method": "nearest_rank", "load1_start": load_start, "load1_end": load_end,
+            "timing_includes": ["answer_polling"], "load1_start": load_start, "load1_end": load_end,
             "samples": samples, **statistics_for([row["seconds"] for row in samples])}
+    validate_receipt(receipt)
+    return receipt
+
+
+def check_saved_receipt(argv):
+    check = argparse.ArgumentParser(description="Check ask latency receipt structure and sample consistency offline.")
+    check.add_argument("--validate-receipt", required=True, type=Path)
+    path = check.parse_args(argv).validate_receipt
+    try:
+        if not path.is_file():
+            raise LatencyRefusal("latency_receipt_invalid", "supply a regular receipt file")
+        receipt = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_json_object)
+    except (OSError, ValueError, RecursionError) as exc:
+        raise LatencyRefusal("latency_receipt_invalid", "cannot read a valid receipt JSON object") from exc
+    validate_receipt(receipt)
+    print(json.dumps({"artifact_version": 0, "command": "measure-ask-latency", "status": "ok",
+                      "evidence": {"receipt": str(path), "n": receipt["n"], "run_id": receipt["run_id"]}}))
+    return 0
 
 
 def main(argv=None):
-    args = parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
     try:
+        if argv and argv[0].split("=", 1)[0] == "--validate-receipt":
+            return check_saved_receipt(argv)
+        args = parser().parse_args(argv)
         receipt = measure(args)
         output = canonical_directory(args.out, "latency_output_invalid") / (
             "ask-latency-" + receipt["run_id"] + ".json")

@@ -189,6 +189,51 @@ class ParallelSelftestTests(unittest.TestCase):
         self.assertEqual(selftest.outcome_for(True, ["digest_mismatch"]), code)
         self.assertNotIn("bundle_verified", out)
 
+    def test_hosted_shards_run_each_discovered_id_once_and_refuse_a_red_shard(self) -> None:
+        self.write_suite(failing=True)
+        self.write_bundle(manifest_ok=True)
+        self.commit()
+        receipts = []
+        for shard in (1, 2):
+            output = self.bank / f"shard-{shard}"
+            run = run_process(
+                [sys.executable, "-B", "scripts/test-parallel.py", "run",
+                 "--workers", "1", "--output", str(output),
+                 "--shard-count", "2", "--shard-index", str(shard)],
+                "isolated shard finishes", cwd=self.root, capture_output=True, text=True,
+            )
+            self.assertIn(run.returncode, (0, 1), run.stderr)
+            receipts.append(json.loads((output / "final.json").read_text()))
+        ids = ["test_alpha.Alpha.test_alpha", "test_beta.Beta.test_beta"]
+        for field in ("started_ids", "stopped_ids"):
+            self.assertCountEqual(ids, [item for row in receipts for item in row["aggregate"][field]])
+        self.assertCountEqual([True, False], [row["successful"] for row in receipts])
+
+        from scripts.parallel_plan import reconcile_shards
+
+        head = receipts[0]["source"]["head"]
+        self.assertFalse(reconcile_shards(receipts, 2, head)["successful"])
+        with self.assertRaises(ValueError):
+            reconcile_shards([receipts[0], receipts[0]], 2, head)
+        with self.assertRaises(ValueError):
+            reconcile_shards(receipts[:1], 2, head)
+
+    def test_single_runner_verdict_checks_the_full_native_population(self) -> None:
+        from scripts.parallel_plan import reconcile_shards
+
+        code, _ = self.run_mode(failing=False, manifest_ok=True)
+        self.assertEqual(0, code)
+        receipt = json.loads((self.bank / "run" / "final.json").read_text())
+        head = receipt["source"]["head"]
+        verdict = reconcile_shards([receipt], 1, head)
+        self.assertTrue(verdict["successful"])
+        self.assertEqual(2, verdict["population_count"])
+
+        # Losing a native callback must fail even when the run reports success.
+        receipt["results"][0]["started_ids"].clear()
+        with self.assertRaises(ValueError):
+            reconcile_shards([receipt], 1, head)
+
     def test_parallel_mode_succeeds_when_the_suite_and_manifest_pass(self) -> None:
         loader = unittest.TestLoader()
         control = loader.loadTestsFromName(
@@ -199,10 +244,24 @@ class ParallelSelftestTests(unittest.TestCase):
         result = control.run(unittest.TestResult())
         self.assertEqual(1, result.testsRun)
         self.assertTrue(result.wasSuccessful(), (result.errors, result.failures))
-        code, out = self.run_mode(failing=False, manifest_ok=True)
+        profile = "test_id,seconds\ntest_alpha.Alpha.test_alpha,30\ntest_beta.Beta.test_beta,1\n"
+        alternate = "test_id,seconds\ntest_alpha.Alpha.test_alpha,1\ntest_beta.Beta.test_beta,30\n"
+        platform = "macos" if sys.platform == "darwin" else "linux"
+        other_platform = "linux" if platform == "macos" else "macos"
+        code, out = self.run_mode(
+            failing=False, manifest_ok=True,
+            profiles={platform: profile, other_platform: alternate},
+        )
         self.assertEqual(selftest.outcome_for(True, []), code)
         payload = json.loads(out.strip().splitlines()[-1])
         self.assertEqual("bundle_verified", payload["status"])
+        report = json.loads((self.bank / "run" / "final.json").read_text(encoding="utf-8"))
+        self.assertEqual("profile seconds", report["weights"])
+        self.assertEqual(hashlib.sha256(profile.encode()).hexdigest(), report["profile"]["sha256"])
+        self.assertEqual(
+            ["test_alpha.Alpha.test_alpha", "test_beta.Beta.test_beta"], report["census"]["ids"],
+        )
+        self.assertEqual(2, report["aggregate"]["tests_run"])
 
     def test_parallel_mode_prints_the_failing_test_and_the_erroring_subtest(self) -> None:
         code, out = self.run_mode(failing=False, manifest_ok=True, reported=True)
@@ -350,10 +409,16 @@ class ParallelSelftestTests(unittest.TestCase):
         self.assertNotIn("boom.Boom.test_a", text)
 
     def run_mode(
-        self, *, failing: bool, manifest_ok: bool, reported: bool = False
+        self, *, failing: bool, manifest_ok: bool, reported: bool = False,
+        profiles: dict[str, str] | None = None,
     ) -> tuple[int, str]:
         parallel_mode_exit = selftest.parallel_mode_exit
         self.write_suite(failing=failing, reported=reported)
+        if profiles:
+            directory = self.root / "scripts" / "profiles"
+            directory.mkdir()
+            for platform, content in profiles.items():
+                (directory / f"harbor-{platform}.csv").write_text(content, encoding="utf-8")
         self.write_bundle(manifest_ok=manifest_ok)
         self.commit()
         output = self.bank / "run"

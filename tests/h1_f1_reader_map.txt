@@ -1,5 +1,5 @@
 export-baseline	.github/labeler.yml:30
-manifest	bundle-manifest.v0.json:16231
+manifest	bundle-manifest.v0.json:16247
 docs	docs/AGENT-OPERATIONS.md:184
 docs	docs/COPY-LEDGER.md:217
 docs	docs/demo/tui/install-moment-standard.txt:13

@@ -1,5 +1,34 @@
 [project]
 name = "floati"
-version = "0.2.1"
+version = "0.2.2"
 requires-python = ">=3.9"
 dependencies = []
+description = "Local handoffs with receipts for coding agents"
+readme = {text = "Floati connects coding agents on the same machine. See the documentation for setup, supported harnesses, and receipt examples.", content-type = "text/plain"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+floati = "floati.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/Land-o-Clusters/floati#start-here"
+Source = "https://github.com/Land-o-Clusters/floati"
+Issues = "https://github.com/Land-o-Clusters/floati/issues"
+
+[tool.hatch.build.hooks.custom]
+path = "scripts/build-pypi.py"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["pyproject.toml", "scripts/build-pypi.py", "scripts/pypi/floati/__init__.py"]
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+exclude = ["*"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"scripts/pypi/floati/__init__.py" = "floati/__init__.py"

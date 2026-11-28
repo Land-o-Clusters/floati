@@ -39,6 +39,40 @@ Install the Python verification packages with `python3 -m pip install pillow jso
 in your chosen development environment. These tools support signature, image and
 schema checks; they are not required for the basic install and solo work-log flow.
 
+### T3 worktrees on the Harbor Mac
+
+Run `scripts/agent-bootstrap.sh` from the checkout. It creates a worktree-local
+`.venv` from `scripts/agent-test-requirements.txt`. Repository setup takes no
+packages or build output from the primary checkout. The host needs Python
+matching `pyproject.toml`, Node 26 for the OpenCode bridge tests, Git, and
+Minisign. The bridge uses Node's built-ins and requires no npm install.
+
+Run `scripts/agent-bootstrap.sh doctor` (the `doctor` Make target) to check the
+test tools, free disk space, and installed Codex project-job profile. The
+gateway uses its registered interpreter and tools. Doctor reports the exact
+registry field and canonical Homebrew replacement when an upgrade moves a
+pinned executable.
+
+For focused local checks use the virtual environment's Python. For the two
+managed batteries use the gateway from the worktree root.
+
+```sh
+.venv/bin/python -B -m unittest tests.test_managed_test_tools tests.test_opencode_host_bridge
+~/.codex/bin/codex-project-job floati-harbor selftest
+~/.codex/bin/codex-project-job floati-harbor unittest
+```
+
+Register this shell command as T3's `runOnWorktreeCreate` in the project.
+It skips branches predating bootstrap and leaves a worktree open for diagnosis
+if setup fails.
+
+```sh
+if [ -f scripts/agent-bootstrap.sh ]; then
+    scripts/agent-bootstrap.sh || printf '%s\n' 'Floati bootstrap failed. Run scripts/agent-bootstrap.sh doctor.' >&2
+fi
+exit 0
+```
+
 ## Why the docs folder looks like that
 
 See [docs/CASE-LAW.md](docs/CASE-LAW.md). Short version: the receipts are the

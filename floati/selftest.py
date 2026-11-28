@@ -288,7 +288,7 @@ def parallel_mode_exit(
 ) -> int:
     """Run ``scripts/test-parallel.py run`` and then the manifest contract.
 
-    Profile and reference are omitted. The runner then schedules by test counts.
+    The runner selects the committed platform timing profile when available.
     Non-success outcomes are printed before the runner's one-line summary.
     The runner's exit code still decides the manifest step.
     """

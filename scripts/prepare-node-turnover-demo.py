@@ -287,9 +287,20 @@ def git(cwd, *arguments):
     return result.stdout.strip()
 
 
-def prepare(base, harness, acknowledgement):
+def prepare(base, harness, acknowledgement, *, zcode_executable=None):
     coordinates = paths(base)
-    if harness == 'zcode':
+    if zcode_executable is not None:
+        if harness != 'zcode':
+            raise SetupRefusal('turnover_demo_arguments_invalid',
+                '--zcode-executable applies only to a zcode demonstration',
+                'use --harness zcode or omit --zcode-executable')
+        executable = Path(zcode_executable)
+        if (not executable.is_absolute() or not executable.is_file()
+                or not os.access(executable, os.X_OK)):
+            raise SetupRefusal('turnover_demo_arguments_invalid',
+                'the declared ZCode terminal entry must be an absolute executable file',
+                'supply the full path to the installed standalone terminal CLI with --zcode-executable')
+    elif harness == 'zcode':
         from floati.adapters.zcode import require_zcode_terminal_runtime
 
         require_zcode_terminal_runtime()
@@ -362,6 +373,7 @@ def prepare(base, harness, acknowledgement):
     launcher = shlex.quote(str(SOURCE / 'scripts/floati')) if harness == 'codex' else 'floati'
     return {"status": "ok", "harness": harness, "node": "seat", "coordinator": "architect",
         **({'credential': cursor_credential_route(base)} if harness == 'cursor' else {}),
+        **({'launch_argv': [str(executable)]} if zcode_executable is not None else {}),
         **{name: str(path) for name, path in coordinates.items()},
         "runtime": str(SOURCE), "sha": sha, "doc": "report.md",
         "launch_environment": {"HOME": str(account), "CODEX_HOME": str(account / ".codex"),
@@ -388,6 +400,8 @@ def main(argv=None):
         help='owner-run launch of an existing Cursor demo using its private scratch API key')
     actions.add_argument('--save-cursor-key', action='store_true',
         help='owner-run hidden input saved exclusively in the validated scratch account')
+    actions.add_argument('--zcode-executable', metavar='EXECUTABLE',
+        help='absolute standalone ZCode terminal executable to record for the owner launch')
     try:
         args = parser.parse_args(argv)
         if args.launch_cursor or args.save_cursor_key:
@@ -402,7 +416,8 @@ def main(argv=None):
             result = save_cursor_key(base)
         else:
             base = validate_base(args.base)
-            result = prepare(base, args.harness, args.acknowledge_stop_hook_change)
+            result = prepare(base, args.harness, args.acknowledge_stop_hook_change,
+                zcode_executable=args.zcode_executable)
         code = 0
     except Exception as error:
         if not hasattr(error, "code"):

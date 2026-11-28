@@ -230,6 +230,41 @@ class CursorDemoUmaskTests(unittest.TestCase):
 
 
 class ZcodeDemoEntrypointTests(unittest.TestCase):
+    def test_owner_can_prepare_turnover_with_an_explicit_terminal_executable(self):
+        demo = runpy.run_path(str(Path(__file__).resolve().parents[1] /
+            'scripts/prepare-node-turnover-demo.py'))
+        with tempfile.TemporaryDirectory(dir=REAL_TEMP_ROOT) as temporary:
+            directory = Path(temporary).resolve()
+            standalone = directory / 'ZCode Terminal'
+            launched = directory / 'launched'
+            standalone.write_text('#!/bin/sh\ntouch ' + shlex.quote(str(launched)) + '\n')
+            standalone.chmod(0o700)
+            base = directory / 'floati-turnover-owner-zcode'
+            args = ['--harness', 'zcode', '--base', str(base), '--zcode-executable']
+            with mock.patch.dict(demo['validate_base'].__globals__,
+                    {'platform_temp_root': lambda: directory}),\
+                    mock.patch('floati.adapters.zcode._DEFAULT_COMMAND',
+                    ('/usr/bin/node', str(directory / 'ZCode.app/Contents/Resources/glm/zcode.cjs'))):
+                for invalid in ('zcode', str(directory), str(directory / 'missing')):
+                    with self.subTest(executable=invalid), contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(20, demo['main'](args + [invalid]))
+                        self.assertFalse(base.exists())
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = demo['main'](args + [str(standalone)])
+            result = json.loads(output.getvalue())
+            self.assertEqual(0, code, result)
+            self.assertEqual([str(standalone)], result['launch_argv'])
+            self.assertEqual(str(base / 'account'), result['launch_environment']['HOME'])
+            prepared = {'workspace': Path(result['workspace'])}
+            # The preparer's workspace is synthetic: it must sit under this test's
+            # temporary directory, and the joins below read it as such.
+            self.assertTrue(prepared['workspace'].is_relative_to(directory), prepared)
+            self.assertTrue((prepared['workspace'] / '.zcode/hooks.json').is_file())
+            self.assertTrue((prepared['workspace'] / 'boot-seat.md').is_file())
+            self.assertTrue((prepared['workspace'] / 'teardown-seat.md').is_file())
+            self.assertFalse(launched.exists())
+
     def test_missing_interactive_runtime_refuses_before_preparing_a_seat(self):
         import plistlib
         import subprocess

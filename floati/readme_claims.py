@@ -23,7 +23,7 @@ STAMP = re.compile(r'\b(?:MEASURED|DERIVED|ESTIMATE)\b', re.I)
 # list ordinals, and command lines. Decimal quantities remain quantities.
 DATE = re.compile(r'\b\d{4}-\d{2}-\d{2}\b')
 VERSION = re.compile(r'\b(?:v?\d+(?:\.\d+){2,}(?:[-+][\w.-]+)?|v\d+\.\d+|(?:Python|version)\s+\d+(?:\.\d+)+)\b', re.I)
-# Digits in names such as SHA-256, MX-1 and AGPL-3.0 are identifiers,
+# Digits in names such as SHA-256, MX-1 and Apache-2.0 are identifiers,
 # not quantities; a leading quantity such as 20-surface is still counted.
 IDENTIFIER = re.compile(r'\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+(?:\.\d+)*\b')
 LIST_ORDINAL = re.compile(r'^\s*\d+[.)]\s+')
@@ -31,6 +31,7 @@ COMMAND_LINE = re.compile(r'^\s*(?:\$\s+|(?:python\d*|floati|git|pip\d*|npm|npx|
 QUANTITY = re.compile(r'(?<![\w/#.])\d[\d,]*(?:\.\d+)?(?:[A-Za-zµμ%]+)?(?!\w|\.\d)')
 TEARDOWN_COLUMNS = frozenset({'teardown', 'worker teardown', 'observed lifecycle'})
 TEARDOWN_ABSENCE = re.compile(r'NOT_YET_MEASURED: `[a-z][a-z0-9_]*`')
+WORKER_TEARDOWN = 'worker teardown'
 
 
 def normalize_unit(text):
@@ -101,8 +102,100 @@ def _visible(text):
     return HTML_TAG.sub('', text)
 
 
+def _observation_id(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _completed_worker_boot(arm, node, harness):
+    boot = arm['boot']
+    evidence = boot['evidence']
+    board = evidence['board']
+    hold = evidence['first_hold']
+    session = arm['next_session']
+    consent = evidence['consent_receipt_id']
+    presented = board['item_ids']
+    return (
+        boot['status'] == 'ok'
+        and evidence['node_id'] == board['node_id'] == hold['node_id'] == node
+        and evidence['harness'] == hold['harness'] == harness
+        and evidence['acting_session_id'] == board['acting_session_id'] == hold['acting_session_id'] == session
+        and board['step'] == 'completed'
+        and all(map(_observation_id, (board['id'], board['arm_receipt_id'], board['delivery_receipt_id'])))
+        and isinstance(presented, list) and all(map(_observation_id, presented))
+        and set(arm['after_close']['pending_mail']).issubset(presented)
+        and evidence['hook']['state'] == 'verified'
+        and hold['phase'] == 'start'
+        and _observation_id(hold['id'])
+        and _observation_id(consent)
+        and hold['consent_receipt_id'] == consent
+    )
+
+
+def _clear_worker_residue(snapshot):
+    return (snapshot['claim_session'] is None and snapshot['consent_armed'] is False
+            and snapshot['hook_active'] is False)
+
+
+def _worker_teardown_verdict(path, harness):
+    """Replay the comparison in a retained native receipt without running a harness."""
+    if path.suffix != '.json':
+        return None
+    try:
+        pair = json.loads(path.read_text(encoding='utf-8'))
+        if (harness not in {'codex', 'claude', 'cursor', 'zcode'} or pair['harness'] != harness
+            or not re.fullmatch(r'[a-f0-9]{40}', pair['source_sha'])
+            or not _observation_id(pair['native_version']) or not _observation_id(pair['node'])):
+            return None
+        node = pair['node']
+        omission, control = pair['omission'], pair['control']
+        sessions = [arm[key] for arm in (omission, control)
+                    for key in ('previous_session', 'next_session')]
+        if not all(map(_observation_id, sessions)) or len(set(sessions)) != len(sessions):
+            return None
+        for arm in (omission, control):
+            snapshot = arm['after_close']
+            mail = snapshot['pending_mail']
+            if (not re.fullmatch(r'[a-f0-9]{64}', arm['transcript_sha256'])
+                or snapshot['claim_session'] not in (None, arm['previous_session'])
+                or type(snapshot['consent_armed']) is not bool
+                or type(snapshot['hook_active']) is not bool
+                or not isinstance(mail, list) or not all(map(_observation_id, mail))):
+                return None
+        # Each arm needs a pending message witness to prove that a fresh board
+        # can still see mail. A contested arm keeps its witness pending.
+        if not all(arm['after_close']['pending_mail'] for arm in (omission, control)):
+            return None
+        teardown = control['teardown']
+        evidence = teardown['evidence']
+        if not (
+            teardown['status'] == 'ok' and evidence['node_id'] == node
+            and evidence['harness'] == harness and evidence['acting_session_id'] == control['previous_session']
+            and evidence['teardown']['step'] == 'completed'
+            and _observation_id(evidence['teardown']['id'])
+            and evidence['activation']['state'] == 'disarmed'
+            and _observation_id(evidence['activation']['consent_receipt_id'])
+            and _clear_worker_residue(control['after_close'])
+            and _completed_worker_boot(control, node, harness)
+        ):
+            return None
+        if 'teardown' in omission:
+            return None
+        boot = omission['boot']
+        if (boot['status'] == 'refused' and boot['evidence']['code'] == 'seat_board_claim_contested'
+            and omission['after_close']['claim_session'] == omission['previous_session']
+            and boot['evidence']['remedy'] == 'pass --take-over to replace claimant ' + omission['previous_session']
+            and omission['after_refusal']['pending_mail'] == omission['after_close']['pending_mail']):
+            return 'teardown required'
+        if _clear_worker_residue(omission['after_close']) and _completed_worker_boot(omission, node, harness):
+            return 'no teardown needed'
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+        # Absent, unreadable and malformed observations cannot support a verdict.
+        return None
+    return None
+
+
 def _units(source):
-    """Yield (line, sentence-or-cell, verdict kind) in document order."""
+    """Yield (line, sentence-or-cell, verdict kind, harness) in document order."""
     paragraph = []
     paragraph_line = 1
     verdict_columns = {}
@@ -137,7 +230,7 @@ def _units(source):
             raw = text[start:end]
             if raw.strip():
                 lead = len(raw) - len(raw.lstrip())
-                yield paragraph_line + text[:start + lead].count('\n'), raw.strip(), False
+                yield paragraph_line + text[:start + lead].count('\n'), raw.strip(), None, None
             start = end
 
     lines = source.splitlines(keepends=True)
@@ -159,18 +252,19 @@ def _units(source):
                     for i, cell in enumerate(cells):
                         name = _visible(cell).strip('*_ ').casefold()
                         if name in TEARDOWN_COLUMNS:
-                            verdict_columns[i] = 'teardown'
+                            verdict_columns[i] = name if name == WORKER_TEARDOWN else 'teardown'
                         elif name in {'bus', 'work', 'wake'}:
                             verdict_columns[i] = 'capability'
             # A shortened Markdown row still renders missing verdict cells.
             # Do not let dropping the trailing separators erase the claim.
             teardown_width = max((i + 1 for i, kind in verdict_columns.items()
-                                  if kind == 'teardown'), default=0)
+                                  if kind in ('teardown', WORKER_TEARDOWN)), default=0)
             cells.extend([''] * max(0, teardown_width - len(cells)))
             for i, cell in enumerate(cells):
                 verdict = verdict_columns.get(i) if not header else None
-                if cell or verdict == 'teardown':
-                    yield line_number, cell, verdict
+                if cell or verdict in ('teardown', WORKER_TEARDOWN):
+                    harness = _visible(cells[0]).strip('*_ ').casefold() if verdict == WORKER_TEARDOWN else None
+                    yield line_number, cell, verdict, harness
             continue
         table = False
         verdict_columns = {}
@@ -194,23 +288,34 @@ def readme_claim_census(repo_root):
     source = _source(root)
     references = {m[1].casefold(): m[2] for m in REFERENCE_DEFINITION.finditer(source)}
     claims = []
-    for line, unit, verdict in _units(source):
+    for line, unit, verdict, harness in _units(source):
         # This exact cell is an absence, excluded from the claim population.
         # Extra prose, a link, an empty reason or an empty cell is a verdict
         # requiring its own receipt, even when it contains no number.
-        if verdict == 'teardown' and TEARDOWN_ABSENCE.fullmatch(normalize_unit(unit)):
+        if verdict in ('teardown', WORKER_TEARDOWN) and TEARDOWN_ABSENCE.fullmatch(normalize_unit(unit)):
             continue
         visible = _visible(unit)
         numeric = IDENTIFIER.sub('', VERSION.sub('', DATE.sub('', LIST_ORDINAL.sub('', visible))))
         if not (verdict or STAMP.search(visible) or QUANTITY.search(numeric)):
             continue
         text = normalize_unit(unit)
-        linked = any(
-            not image and _local_target(target) is not None and _file_in_tree(root, _local_target(target))
-            for _match, image, target in _links(unit, references)
+        local_links = (
+            (match.group(), _local_target(target))
+            for match, image, target in _links(unit, references) if not image
         )
-        claims.append({"line": line, "text": text,
-            "claim_digest": hashlib.sha256(text.encode('utf-8')).hexdigest(), "linked": linked})
+        linked = any(
+            target is not None and _file_in_tree(root, target)
+            and (verdict != WORKER_TEARDOWN or (
+                normalize_unit(markdown) == text
+                and _worker_teardown_verdict(root / target, harness) == normalize_unit(visible).casefold()
+            ))
+            for markdown, target in local_links
+        )
+        claim = {"line": line, "text": text,
+                 "claim_digest": hashlib.sha256(text.encode('utf-8')).hexdigest(), "linked": linked}
+        if verdict == WORKER_TEARDOWN:
+            claim['requires_replay'] = True
+        claims.append(claim)
     return claims
 
 
@@ -261,5 +366,5 @@ def readme_claim_findings(repo_root):
     current = {claim['claim_digest'] for claim in claims}
     findings.extend('readme_claim_allowlist_stale:%s' % digest for digest in sorted(allowed - current))
     findings.extend('readme_claim_unlinked:%s:%s' % (c['line'], c['text'][:80])
-        for c in claims if not c['linked'] and c['claim_digest'] not in allowed)
+        for c in claims if not c['linked'] and (c.get('requires_replay') or c['claim_digest'] not in allowed))
     return findings

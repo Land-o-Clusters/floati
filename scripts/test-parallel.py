@@ -79,6 +79,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fixture_finalizer import cleanup_path, owned_mkdtemp, retain_path
 from parallel_isolation import make_worker_environment, apply_serial_rules, _platform_temp_root, worker_tmp_budget, require_clean_test_environment
 from parallel_plan import make_plan, validate_plan, reconcile, compare_results, worker_limit, validate_worker_count, plan_estimates
+from parallel_plan import shard_census, shard_unit_keys
 from parallel_profile import profile_weights, profile_csv
 from parallel_unittest import discover_suite, select_suite, run_suite
 from parallel_processes import ProcessTree, validate_ownership_receipt
@@ -281,6 +282,8 @@ def child_main(root: Path, output: Path, key: str) -> int:
     expected = read_json(output / 'census.json')
     if census != expected:
         raise ValueError('whole-population census mismatch')
+    if request.get('shard_units'):
+        census = shard_census(census, request['shard_units'])
     plan = read_json(output / 'plan.json')
     validate_plan(census, plan)
     choices = [assignment for assignment in plan['assignments'] if assignment['key'] == key]
@@ -477,13 +480,23 @@ def reference_profile(durations: dict, census: dict) -> tuple:
     }
 
 
-def launch(mode: str, output: Path, workers=None, reference=None, profile=None) -> dict:
+def committed_platform_profile(root: Path, source_head: str):
+    platform_name = {'darwin': 'macos', 'linux': 'linux'}.get(sys.platform)
+    if platform_name is None:
+        return None
+    relative = f'scripts/profiles/harbor-{platform_name}.csv'
+    if not _git(root, 'ls-tree', '--name-only', source_head, '--', relative):
+        return None
+    return root / relative, _git(root, 'show', f'{source_head}:{relative}')
+
+
+def launch(mode: str, output: Path, workers=None, reference=None, profile=None, *, shard=None) -> dict:
     cancellation = Cancellation()
     with cancellation_handlers(cancellation.record):
-        return _launch(mode, output, workers, reference, cancellation, profile)
+        return _launch(mode, output, workers, reference, cancellation, profile, shard)
 
 
-def _launch(mode: str, output: Path, workers, reference, cancellation, profile=None) -> dict:
+def _launch(mode: str, output: Path, workers, reference, cancellation, profile=None, shard=None) -> dict:
     start = time.monotonic()
     load_start = sample_load_average()
     root = Path(__file__).resolve().parent.parent
@@ -500,6 +513,10 @@ def _launch(mode: str, output: Path, workers, reference, cancellation, profile=N
             validate_worker_count(workers)
         if reference is not None and mode != 'run':
             raise ValueError('reference is supported only for run')
+        if shard is not None:
+            index, shard_count = shard
+            if not 1 <= index <= shard_count or mode not in ('plan', 'run') or reference is not None:
+                raise ValueError('invalid shard index/count or incompatible mode')
         output = Path(os.path.abspath(output))
         if output.resolve() != output:
             raise ValueError('output must have ordinary directory ancestors')
@@ -518,8 +535,8 @@ def _launch(mode: str, output: Path, workers, reference, cancellation, profile=N
         report['worker_tmp_budget_bytes'] = budget
         if len(os.fsencode(str(longest_tmp))) > budget:
             raise ValueError('parallel_worker_tmpdir_exceeds_unix_socket_bound')
-        write_json(output / 'request.json', {'mode': mode, 'source': report['source'],
-                                            'interpreter': report['interpreter']})
+        request = {'mode': mode, 'source': report['source'], 'interpreter': report['interpreter']}
+        write_json(output / 'request.json', request)
         children = Children(root, output, scratch, user_site, cancellation)
         phase_start = time.monotonic()
         discovery = children.spawn('discovery')
@@ -528,8 +545,6 @@ def _launch(mode: str, output: Path, workers, reference, cancellation, profile=N
         census = read_json(output / 'census.json')
         if census.get('source') != report['source'] or census.get('interpreter') != report['interpreter']:
             raise ValueError('discovery identity mismatch')
-        count = sum(unit['serial_reason'] is None for unit in census['units'])
-        effective_workers = workers if workers is not None else min(8, os.cpu_count() or 1, max(1, count))
         reference_aggregate = None
         if reference is not None:
             reference_path = Path(reference).resolve(strict=True)
@@ -537,9 +552,14 @@ def _launch(mode: str, output: Path, workers, reference, cancellation, profile=N
                 reference_path, report['source'], report['interpreter'])
         costs = None
         weight_source = 'test counts'
+        profile_input = None
         if profile is not None:
             profile_path = Path(profile).resolve(strict=True)
-            profile_data = profile_path.read_bytes()
+            profile_input = profile_path, profile_path.read_bytes()
+        elif reference is None and mode in ('plan', 'run'):
+            profile_input = committed_platform_profile(root, report['source']['head'])
+        if profile_input is not None:
+            profile_path, profile_data = profile_input
             costs, audit = profile_weights(profile_data, census)
             report['profile'] = {'path': str(profile_path), **audit}
             weight_source = 'profile seconds'
@@ -549,6 +569,18 @@ def _launch(mode: str, output: Path, workers, reference, cancellation, profile=N
                                  'reference_sha256': reference_hash,
                                  'sha256_format': 'canonical test_id,seconds CSV', **audit}
             weight_source = 'serial reference seconds'
+        if shard is not None:
+            keys = shard_unit_keys(census, shard_count, costs)[index - 1]
+            report['shard'] = {'index': index, 'count': shard_count,
+                               'population_ids': census['ids'],
+                               'population_digest': census['population_digest']}
+            request['shard_units'] = keys
+            write_json(output / 'request.json', request)
+            census = shard_census(census, keys)
+            if costs is not None:
+                costs = {key: costs[key] for key in keys}
+        count = sum(unit['serial_reason'] is None for unit in census['units'])
+        effective_workers = workers if workers is not None else min(8, os.cpu_count() or 1, max(1, count))
         plan = make_plan(census, effective_workers, weights=costs)
         validate_plan(census, plan)
         report.update(census=census, plan=plan, workers=effective_workers,
@@ -682,16 +714,21 @@ def main(argv=None):
     parser.add_argument('--reference', type=Path,
                         help='matching serial receipt; supplies estimated costs unless --profile is set')
     parser.add_argument('--profile', type=Path,
-                        help='historical timing CSV for estimated unit costs; serial order is unchanged')
+                        help='override the committed platform timing CSV for estimated unit costs')
+    parser.add_argument('--shard-index', type=int, help='one-based VM shard index')
+    parser.add_argument('--shard-count', type=int, help='number of independent VM shards')
     parser.add_argument('--key', choices=('discovery', 'serial', *(f'worker-{i}' for i in range(1, worker_limit() + 1))), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if (args.shard_index is None) != (args.shard_count is None):
+        parser.error('--shard-index and --shard-count must be given together')
     if args.mode == '_child':
         try:
             return child_main(Path(__file__).resolve().parent.parent, args.output, args.key)
         except BaseException:
             traceback.print_exc()
             return 2
-    report = launch(args.mode, args.output, args.workers, args.reference, args.profile)
+    shard = None if args.shard_index is None else (args.shard_index, args.shard_count)
+    report = launch(args.mode, args.output, args.workers, args.reference, args.profile, shard=shard)
     summary = {key: report[key] for key in (
         'mode', 'status', 'successful', 'qualified', 'wall_seconds', 'error',
         'interruption', 'final_path', 'estimates') if key in report}

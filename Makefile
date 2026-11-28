@@ -1,4 +1,7 @@
-.PHONY: demo demo-capture wall-capture
+.PHONY: demo demo-capture wall-capture doctor
+
+doctor:
+	@scripts/agent-bootstrap.sh doctor
 
 demo:
 	@python3 -m floati.demo

@@ -362,6 +362,13 @@ The exit-20 status: the request was refused before any mutation.
 - Nearest standard term: request refusal (4xx)
 - Where it differs: the artifact's `evidence.code` is a stable machine reason naming what to fix — the request is wrong, not the system; never retry unchanged, and never retry a policy refusal at all.
 
+### register
+
+Add a named seat and its harness to the fleet registry.
+
+- Nearest standard term: enrollment
+- Where it differs: registration adds a durable roster entry. Workspace and hook setup use their own commands and consent.
+
 ### repository
 
 The named repository an envelope's commit lives in.

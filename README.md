@@ -13,52 +13,74 @@
     <img src="docs/assets/floati-wordmark.svg" alt="floati" width="260">
   </picture>
 </h1>
-<p align="center"><strong>Keep your coding tools. Coordinate the work between them.</strong></p>
-<p align="center">One bus, one board, one set of receipts, for the coding agents you already run.</p>
-<p align="center"><strong>Point your coding agent at this repository. <a href="AGENTS.md"><code>AGENTS.md</code></a> walks it from install to a verified fleet.</strong></p>
-
-<p align="center">
-  <img alt="license AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-E8622C">
-  <img alt="platform macOS today" src="https://img.shields.io/badge/platform-macOS%20today-3E4A56">
-  <a href="#what-it-runs-with"><img alt="harnesses 12 measured" src="https://img.shields.io/badge/harnesses-12%20measured-3E4A56"></a>
-</p>
-
-<p align="center">
-  <a href="#start-here">Start here</a> ·
-  <a href="#what-you-get">What you get</a> ·
-  <a href="#what-it-runs-with">What it runs with</a> ·
-  <a href="#how-it-holds-up">How it holds up</a> ·
-  <a href="#what-is-still-wrong">What is still wrong</a> ·
-  <a href="docs/ROADMAP.md">Roadmap</a>
-</p>
-
-<p align="center">Every Floati-specific term — <em>bus</em>, <em>board</em>, <em>receipt</em> — is defined in one plain sentence in the <a href="docs/glossary.md">glossary</a>. <em>(Link line: DRAFT-ZCODE 2026-10-11.)</em></p>
-
-You are already running a fleet. An agent in Codex, two in Claude,
-one in OpenCode, something experimental in Cursor. Each sits in its
-own terminal with its own dialect, and none of them knows the others
-exist. You are the bus, the scheduler, and the one who checks whether
-anything died.
-
-Floati takes those jobs. Register your agents as nodes, whatever
-harness they run in, and they share one bus: they dispatch work,
-message each other with full provenance, and show up on one board.
-A Codex worker, a Claude reviewer and a scout in a third harness in
-one plan is the normal case, not the demo.
-
-<p align="center">
-  <img src="docs/demo/board-glow.gif" alt="The Harbor Board, live: three nodes, each with separate liveness, authority and lock lamps, redrawn as their ledgers change" width="1400">
-</p>
-
-The Harbor Board. Liveness, authority and lock state are three
-separate lamps, because they are three different questions. Every
-terminal image on this page is a capture from a real ledger or a
-declared fixture, listed with its SHA-256 in the manifest beside it;
-the drawings illustrate, the captures measure. If you want to see
-what an agent can do with it, point yours at
-[`AGENTS.md`](AGENTS.md); it walks from install to a verified fleet.
+<p align="center"><strong>Floati lets the coding agents you already run ask each other and hand off work on your own machine. It wakes the other session and leaves a receipt. No account, no server.</strong></p>
 
 ## Start here
+
+<!-- DRAFT-OPUS 2026-11-28: first screen and quickstart copy (architect copy pass). -->
+<!-- Until the first PyPI release, install from the tagged source; `uv tool install floati` replaces this line then. -->
+
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) on your PATH:
+
+```sh
+uv tool install git+https://github.com/Land-o-Clusters/floati@v0.2.2
+```
+
+[Wheel install and setup check](scripts/check-pypi-package.py) ·
+[Local delivery tests](tests/test_codex_wait.py) · [Question and answer tests](tests/test_net_ask_1.py)
+
+### Send work from Claude Code to Codex
+
+Use a Mac with Claude Code and Codex installed. Pick a new directory under
+your home for the demo. Preview Codex setup, review the planned files and
+hook, then repeat the command with the confirmation token in the preview.
+
+```sh
+ROOT="$HOME/floati-demo"
+floati setup --root "$ROOT" --seat codex --session demo-codex --hook codex
+floati setup --root "$ROOT" --seat codex --session demo-codex --hook codex --confirm TOKEN
+floati register --root "$ROOT" claude --harness Claude
+```
+
+Open Codex in the workspace printed by setup. Trust the Floati Stop hook in
+Codex and relaunch in that workspace if Codex asks. In that session, have
+Codex run the following with its actual session ID and the printed workspace.
+Let its turn finish and wait until the Stop hook is waiting for mail.
+[Setup tests](tests/test_net_setup.py) · [Codex hook and waiter guide](docs/AGENT-OPERATIONS.md)
+
+```sh
+floati wake arm --root "$HOME/floati-demo" --as codex \
+  --session "$CODEX_THREAD_ID" --workspace "$PWD" --idempotency-key demo-arm
+```
+
+Open Claude Code in a separate Git checkout with a committed `README.md`.
+Use a commit already reachable from a fetched remote-tracking branch.
+Give Claude Code the command below. Use your repository's name for `demo`
+and the same repository coordinates if Codex sends a reply.
+
+```sh
+floati send --root "$HOME/floati-demo" --from claude --to codex \
+  --repo demo --sha "$(git rev-parse HEAD)" --repository "$PWD" --doc README.md \
+  --note "Review $PWD/README.md and send Claude one suggested improvement." \
+  --idempotency-key demo-handoff
+```
+
+When the Stop hook wakes Codex, have Codex read and acknowledge the handoff
+from its workspace.
+
+```sh
+floati inbox --root "$HOME/floati-demo" --as codex --session "$CODEX_THREAD_ID"
+```
+
+Read the delivery and acknowledgment receipts. An explicit consumption
+record can show that the receiving session acted on the handoff.
+[Delivery tests](tests/test_codex_wait.py)
+
+```sh
+floati receipts codex --root "$HOME/floati-demo"
+```
+
+### Install from a source checkout
 
 Floati is one Python package with no third-party runtime dependencies.
 `pyproject.toml` sets the floor: Python 3.9 or newer.
@@ -66,14 +88,21 @@ Clone it and let it install itself into a directory you choose:
 
 ```bash
 git clone https://github.com/Land-o-Clusters/floati.git /absolute/floati
-git -C /absolute/floati checkout v0.2.1
+git -C /absolute/floati checkout v0.2.2
 cd /absolute/floati
-python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.1
+python3 -B -m floati install --source /absolute/floati --destination /absolute/install --ref v0.2.2
 ```
 
-`/absolute/install/scripts/floati` is the command; add that `scripts`
-directory to your `PATH` or call it by path. Leave out `checkout` and
-`--ref` to install whatever `main` is today.
+`/absolute/install/scripts/floati` is the installed launcher. To use
+the short commands below, put its directory first on this shell's PATH.
+
+```bash
+export PATH="/absolute/install/scripts:$PATH"
+```
+
+You can also substitute `/absolute/install/scripts/floati` for `floati`
+in the commands below. Follow the separate `doctor` command for that
+option. Leave out `checkout` and `--ref` to install whatever `main` is today.
 
 <p align="center">
   <img src="docs/demo/tui/install-moment-dark.png" alt="floati install on a scratch destination: the manifest-exact deploy, then its receipt - status installed, the source SHA it deployed, the wiring journal it opened" width="1400">
@@ -91,22 +120,35 @@ floati board --root /absolute/my-sessions
 
 `work show` lists "Record this session". That is your first durable
 record, and no agent process or wake hook was needed to make it.
-`floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install`
-tells you whether what is on disk still matches the manifest, file by
-file, and names each finding with its remedy.
+`doctor` checks the manifest file by file and reports findings with
+remedies. If you added the launcher to PATH, run:
 
-To grow past one seat, add a node and give it work:
+```bash
+floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install
+```
+
+If you invoke the launcher by path, set PATH for this command so
+`doctor` can also verify what the shell would find under the name `floati`.
+
+```bash
+PATH="/absolute/install/scripts:$PATH" /absolute/install/scripts/floati doctor --root /absolute/my-sessions --source /absolute/floati --destination /absolute/install
+```
+
+To grow past one seat, add a node and send it a message from the
+Floati checkout you cloned above. Drain the inbox as `builder-a`
+using a sample session ID, then inspect the receipts.
 
 ```bash
 floati node add --root /absolute/my-sessions --node builder-a --harness Codex --lifetime permanent
 floati send --root /absolute/my-sessions --from me --to builder-a \
-  --repo myapp --sha <40-hex> --doc docs/briefs/row-1.md --note "Row 1 is yours."
+  --repo Land-o-Clusters/floati --sha "$(git rev-parse HEAD)" --doc README.md --note "Row 1 is yours."
+floati inbox --root /absolute/my-sessions --as builder-a --session quickstart-builder-a
 floati receipts builder-a --root /absolute/my-sessions
 ```
 
-`node add` prints the exact records it will write before writing
-them. `receipts` shows delivery, acknowledgment and consumption as
-three separate histories, so "did they get it?" has an actual answer.
+`node add` prints the exact records it will write before writing them.
+`inbox` presents and acknowledges the message for `builder-a`.
+`receipts` shows both records. The consumption history starts empty.
 Consumption records the recipient's explicit attestation that it acted on an
 acknowledged message. Author it with `floati consume ID --root ROOT --as NODE
 --session SESSION --idempotency-key KEY`, or name the envelope with
@@ -157,6 +199,12 @@ user can still access the seat's files. Floati does not add a filesystem lock,
 change Cursor settings or stop Cursor workers for this workflow.
 
 ## What you get
+
+The [glossary](docs/glossary.md) defines Floati's terms.
+
+<p align="center">
+  <img src="docs/demo/board-glow.gif" alt="The Harbor Board, live: three nodes, each with separate liveness, authority and lock lamps, redrawn as their ledgers change" width="1400">
+</p>
 
 **A bus with provenance.** Every message is a typed envelope: sender,
 recipient, tenant, repository, commit. It is validated on the way in
@@ -490,5 +538,6 @@ item leaves it only with a receipt. The operator's manual is
 [`AGENTS.md`](AGENTS.md); the design and its case law are in
 [`docs/DESIGN.md`](docs/DESIGN.md) and [`docs/CASE-LAW.md`](docs/CASE-LAW.md).
 
-Product code is AGPL-3.0; the interchange schemas and bundle
-specifications are Apache-2.0.
+## License
+
+Floati is licensed under [Apache-2.0](LICENSE).

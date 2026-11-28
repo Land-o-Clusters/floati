@@ -507,7 +507,7 @@ class ReleaseSpellingCheckTests(unittest.TestCase):
             ("Issue [#14](https://example.org/issues/14) is open.", 0),
             ("Version v0.1.2 is current.", 0),
             ("Python 3.9 or newer.", 0),
-            ("Product code is AGPL-3.0 and Apache-2.0.", 0),
+            ("Product code is licensed under Apache-2.0.", 0),
             ("It uses SHA-256 and MX-1 identifiers.", 0),
             ("Run `umask 022`.", 0),
             ("On 2026-10-27 it shipped.", 0),
@@ -570,7 +570,8 @@ class ReleaseSpellingCheckTests(unittest.TestCase):
                     )
                     findings = [f for f in check_release(root)
                                 if f.startswith("readme_claim_unlinked:")]
-                    self.assertEqual(expected, len(findings), findings)
+                    expected_unlinked = int(is_claim) if column == "Worker teardown" else expected
+                    self.assertEqual(expected_unlinked, len(findings), findings)
                     self.assertEqual(is_claim, any(c["text"] == cell
                                                   for c in readme_claim_census(root)))
         (root / "README.md").write_text(
@@ -581,6 +582,101 @@ class ReleaseSpellingCheckTests(unittest.TestCase):
         )
         findings = [f for f in check_release(root) if f.startswith("readme_claim_unlinked:")]
         self.assertEqual(1, len(findings), "the omitted trailing verdict still needs evidence")
+
+    def test_worker_teardown_verdict_replays_both_native_arms(self) -> None:
+        root = self._tree(version="0.1.0", heading="## [0.1.0] — Unreleased")
+        receipt = root / "docs/evidence/conformance/worker-teardown.json"
+        receipt.parent.mkdir(parents=True)
+        link = receipt.relative_to(root).as_posix()
+
+        def arm(previous, successor):
+            consent = "consent-" + successor
+            return {
+                "previous_session": previous,
+                "next_session": successor,
+                "transcript_sha256": ("b" if previous == "omit-old" else "c") * 64,
+                "after_close": {
+                    "claim_session": None, "consent_armed": False,
+                    "hook_active": False, "pending_mail": ["msg-probe"],
+                },
+                "boot": {"status": "ok", "evidence": {
+                    "node_id": "worker", "acting_session_id": successor, "harness": "cursor",
+                    "board": {"step": "completed", "item_ids": ["msg-probe"], "node_id": "worker",
+                              "acting_session_id": successor, "id": "board-" + successor,
+                              "arm_receipt_id": "arm-" + successor,
+                              "delivery_receipt_id": "delivery-" + successor},
+                    "consent_receipt_id": consent,
+                    "hook": {"state": "verified"},
+                    "first_hold": {"id": "hold-" + successor, "phase": "start", "node_id": "worker",
+                                   "harness": "cursor", "acting_session_id": successor,
+                                   "consent_receipt_id": consent},
+                }},
+            }
+
+        def pair():
+            control = arm("control-old", "control-new")
+            control["teardown"] = {"status": "ok", "evidence": {
+                "node_id": "worker", "acting_session_id": "control-old", "harness": "cursor",
+                "teardown": {"id": "teardown-control", "step": "completed"},
+                "activation": {"state": "disarmed", "consent_receipt_id": "consent-disarmed"},
+            }}
+            return {
+                "source_sha": "a" * 40, "native_version": "1.0", "harness": "cursor",
+                "node": "worker", "omission": arm("omit-old", "omit-new"), "control": control,
+            }
+
+        def blocked(data):
+            data["omission"]["after_close"]["claim_session"] = "omit-old"
+            data["omission"]["after_refusal"] = {"pending_mail": ["msg-probe"]}
+            data["omission"]["boot"] = {
+                "status": "refused", "evidence": {"code": "seat_board_claim_contested",
+                                                  "remedy": "pass --take-over to replace claimant omit-old"},
+            }
+            return data
+
+        required = blocked(pair())
+        wrong_reason = blocked(pair())
+        wrong_reason["omission"]["boot"]["evidence"]["code"] = "node_boot_workspace_unrooted"
+        reused_session = pair()
+        reused_session["omission"]["next_session"] = "omit-old"
+        lost_mail = pair()
+        lost_mail["omission"]["boot"]["evidence"]["board"]["item_ids"] = []
+        missing_control = pair()
+        del missing_control["control"]["teardown"]
+        stale_consent = pair()
+        stale_consent["omission"]["after_close"]["consent_armed"] = True
+        unrelated_claim = blocked(pair())
+        unrelated_claim["omission"]["after_close"]["claim_session"] = "other-session"
+        for harness, label, data, passed in (
+            ("cursor", "No teardown needed", pair(), True),
+            ("cursor", "Teardown required", required, True),
+            ("cursor", "No teardown needed", {}, False),
+            ("cursor", "No teardown needed", missing_control, False),
+            ("cursor", "No teardown needed", reused_session, False),
+            ("cursor", "No teardown needed", lost_mail, False),
+            ("cursor", "No teardown needed", stale_consent, False),
+            ("cursor", "Teardown required", unrelated_claim, False),
+            ("cursor", "Teardown required", wrong_reason, False),
+            ("cursor", "No teardown needed", required, False),
+            ("claude", "No teardown needed", pair(), False),
+        ):
+            with self.subTest(harness=harness, label=label, passed=passed):
+                receipt.write_text(json.dumps(data), encoding="utf-8")
+                (root / "README.md").write_text(
+                    "| Harness | Worker teardown |\n| --- | --- |\n"
+                    f"| {harness} | [{label}]({link}) |\n", encoding="utf-8",
+                )
+                claim, = readme_claim_census(root)
+                self.assertEqual(passed, claim["linked"])
+                self.assertEqual(passed, not check_release(root))
+
+        allowlist = root / "docs/release/readme-claims-allowlist.v0.json"
+        allowlist.parent.mkdir(parents=True)
+        allowlist.write_text(json.dumps([{
+            "claim_digest": claim["claim_digest"],
+            "excerpt": claim["text"][:80], "reason": "fixture exemption",
+        }]), encoding="utf-8")
+        self.assertTrue(any(f.startswith("readme_claim_unlinked:") for f in check_release(root)))
 
     def test_readme_publishes_worker_teardown_posture_for_each_stop_hook_harness(self) -> None:
         """The public README exposes the posture even before native pairs exist."""

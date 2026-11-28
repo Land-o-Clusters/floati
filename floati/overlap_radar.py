@@ -25,7 +25,7 @@ def _git(repository: Path, *arguments: str) -> str:
     try:
         result = subprocess.run(
             fixed_git_command("/usr/bin/git", repository, arguments),
-            env={**fixed_git_environment("/usr/bin/git"), "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": ""},
+            env=fixed_git_environment("/usr/bin/git", local_only=True),
             capture_output=True,
             text=True,
             check=False,
