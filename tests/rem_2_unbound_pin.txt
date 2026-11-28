@@ -925,6 +925,7 @@ t3_not_armed
 t3_path_invalid
 t3_port_invalid
 t3_receipt_sink_invalid
+t3_route_targets_invalid
 t3_target_registration_invalid
 t3_target_registration_mismatch
 t3_target_registration_required

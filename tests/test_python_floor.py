@@ -18,17 +18,18 @@ class PythonFloorContractTests(unittest.TestCase):
         metadata = REPOSITORY_ROOT / "pyproject.toml"
         self.assertTrue(metadata.is_file(), "pyproject.toml must declare the Python floor")
         text = metadata.read_text(encoding="utf-8")
+        project = text.partition("[project]\n")[2].split("\n[", 1)[0]
+        expected = {
+            "name": '"floati"',
+            "version": f'"{__version__}"',
+            "requires-python": '">=3.9"',
+            "dependencies": "[]",
+        }
 
-        self.assertEqual(
-            [
-                "[project]",
-                'name = "floati"',
-                f'version = "{__version__}"',
-                'requires-python = ">=3.9"',
-                "dependencies = []",
-            ],
-            [line for line in text.splitlines() if line],
-        )
+        for key, value in expected.items():
+            with self.subTest(key=key):
+                declarations = re.findall(rf"(?m)^[ \t]*{key}[ \t]*=[ \t]*(.+)$", project)
+                self.assertEqual([value], declarations)
 
     def test_operator_documents_name_pyproject_as_the_floor_authority(self) -> None:
         """Catches prose drifting back to an unbound tested-on claim."""

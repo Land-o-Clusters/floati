@@ -1,6 +1,8 @@
 """NET-LATENCY-1: measured warm ask receipts, using scratch fleets only."""
 
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -132,6 +134,59 @@ class NetLatencyTests(unittest.TestCase):
         self.assertEqual(("fake-python", "fixed-delay", "served"),
                          (receipt["harness"], receipt["model"], receipt["served_node"]))
         self.assertRegex(receipt["source_sha"], r"^[0-9a-f]{40}$")
+
+    def test_duplicate_correlation_cannot_publish_a_measurement(self):
+        warmup = {"outcome": "answered", "seconds": 9, "question_id": "q0", "answer_id": "a0"}
+        sample = {"outcome": "answered", "seconds": 1, "question_id": "q1", "answer_id": "a1"}
+        for field, prior in (("question_id", warmup), ("answer_id", warmup),
+                             ("question_id", sample), ("answer_id", sample)):
+            with self.subTest(field=field, prior=prior[field]):
+                reused = dict(sample, question_id="q2", answer_id="a2")
+                reused[field] = prior[field]
+                output = io.StringIO()
+                with mock.patch.object(self.instrument, "ask_once", side_effect=[
+                    warmup, sample, reused,
+                ]), redirect_stdout(output):
+                    code = self.instrument.main([*self._argv_for_script(), "--n", "2"])
+                self.assertEqual(20, code, output.getvalue())
+                self.assertEqual("latency_receipt_invalid", json.loads(output.getvalue())["evidence"]["code"])
+                self.assertEqual([], list(self.out.iterdir()))
+
+    def test_saved_receipt_validation_refuses_incomplete_or_inconsistent_evidence(self):
+        answers = [{"outcome": "answered", "seconds": float(i), "question_id": "q" + str(i),
+                    "answer_id": "a" + str(i)} for i in range(4)]
+        with mock.patch.object(self.instrument, "ask_once", side_effect=answers):
+            receipt = self.instrument.measure(self.arguments())
+        path = self.out / "fixture.json"
+
+        malformed = {
+            "missing_harness": {key: value for key, value in receipt.items() if key != "harness"},
+            "unnamed_model": dict(receipt, model=" "),
+            "unsupported_version": dict(receipt, receipt_version=2),
+            "short_population": dict(receipt, samples=receipt["samples"][:-1]),
+            "wrong_median": dict(receipt, median_seconds=1),
+            "wrong_p95": dict(receipt, p95_seconds=2),
+            "nonfinite_load": dict(receipt, load1_start=float("nan")),
+            "reused_warmup": dict(receipt, warmup={"question_id": "q1", "answer_id": "a0"}),
+            "misordered_samples": dict(receipt, samples=list(reversed(receipt["samples"]))),
+        }
+        for name, value in {"complete": receipt, **malformed}.items():
+            with self.subTest(case=name):
+                path.write_text(json.dumps(value), encoding="utf-8")
+                output, errors = io.StringIO(), io.StringIO()
+                with redirect_stdout(output), redirect_stderr(errors):
+                    try:
+                        code = self.instrument.main(["--validate-receipt", str(path)])
+                    except SystemExit as exc:
+                        code = exc.code
+                self.assertEqual(0 if name == "complete" else 20, code, output.getvalue() + errors.getvalue())
+                artifact = json.loads(output.getvalue())
+                if name == "complete":
+                    self.assertEqual("ok", artifact["status"])
+                    self.assertEqual(3, artifact["evidence"]["n"])
+                else:
+                    self.assertEqual("latency_receipt_invalid", artifact["evidence"]["code"])
+                self.assertEqual([path], list(self.out.iterdir()))
 
     def assert_refusal(self, code, args, *, answers=None):
         with mock.patch.object(self.instrument, "ask_once", side_effect=answers) as ask:

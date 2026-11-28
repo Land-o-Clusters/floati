@@ -6,6 +6,31 @@ All notable changes to Floati are recorded here, by hand. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-11-28
+
+Ledger contract: `c7.30`.
+
+<!-- DRAFT-OPUS 2026-11-28 -->
+
+**One command to install, and the quickstart works on both paths.**
+
+### What changed
+
+- **Install with one command.** `uv tool install git+https://github.com/Land-o-Clusters/floati@v0.2.2` installs the `floati` command. [Package check](scripts/check-pypi-package.py)
+- **Floati is now Apache-2.0.** It was AGPL-3.0. [Licence](LICENSE)
+- **Both quickstart paths pass `doctor`.** Running Floati by its full path no longer fails the health check. [Quickstart tests](tests/test_deploy.py)
+- **The two-seat example shows its receipts.** The receiving seat drains its inbox, and `receipts` shows delivery and acknowledgment for the sent message. [Quickstart tests](tests/test_deploy.py)
+- **A new first screen.** The README now says what Floati does in one sentence, then shows Claude Code handing work to Codex.
+
+### What we did not measure
+
+- **Cross-machine operation.** It is still off by default and not qualified.
+- **A PyPI release.** `uv tool install floati` waits for the first PyPI publish.
+
+### Release receipt
+
+<!-- Filled from the qualified run: tag and peeled commit, public bundle manifest SHA-256, harbor source, suite count and duration on each platform, skips. -->
+
 ## [0.2.1] — 2026-11-27
 
 Ledger contract: `c7.28`.

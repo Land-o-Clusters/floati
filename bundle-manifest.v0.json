@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "LICENSE",
-      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
       "path": "bundle/c7.1/LICENSE",
@@ -8598,6 +8598,14 @@
       "sha256": "d50305d321a27cbcc63a705a5291671056f7c207e2054a0d681035ea37127ec2"
     },
     {
+      "path": "bundle/c7.29/ledger-contract.json",
+      "sha256": "a9019c78324e9c2451c67ff81c1422efb02bfc51a3fa4893fed125a159b53762"
+    },
+    {
+      "path": "bundle/c7.29/ledger-contract.sha256",
+      "sha256": "97747e8fd8922306d18cf8e8893f4c5599b21398cbe6851d1c07f51ed4a11127"
+    },
+    {
       "path": "bundle/c7.3/ledger-contract.json",
       "sha256": "dde0b78b535d63a05ba34722df1995ae0946990f37bf58be5f2354d5adf9a820"
     },
@@ -9328,6 +9336,14 @@
     {
       "path": "bundle/c7.3/schemas/v2/thread-attachment-registered-record.schema.json",
       "sha256": "a8183fa6ce1cf076cf190487b94e8591d8631619fbfd178568b2cf0368c6a719"
+    },
+    {
+      "path": "bundle/c7.30/ledger-contract.json",
+      "sha256": "e4e88c77e3718c8c86ad81cd0f5915e056e4a85c40b2aa35e7acb1ee25f0e96d"
+    },
+    {
+      "path": "bundle/c7.30/ledger-contract.sha256",
+      "sha256": "ae47ed520e7f01d645af106d83813520fc9928ffbb2a304635964f6fd46de279"
     },
     {
       "path": "bundle/c7.4/ledger-contract.json",
@@ -13787,7 +13803,7 @@
     },
     {
       "path": "floati/__init__.py",
-      "sha256": "b76e4222ce1006f76230a4f131e3ad332bd061e2c15d6877d9c7d237f230296e"
+      "sha256": "25547639295defeae3893c7cc5e2e72da665094e3100732b6b103e769909b032"
     },
     {
       "path": "floati/__main__.py",
@@ -14171,7 +14187,7 @@
     },
     {
       "path": "floati/command_codegen.py",
-      "sha256": "549c3b3c4781d362185c2d555a46654d4995aaa429d2a7ecd183df51695466d7"
+      "sha256": "8ede422e22251137080036f4154c34294e333caa2cf312a242576701420c096b"
     },
     {
       "path": "floati/command_contract.py",
@@ -14479,7 +14495,7 @@
     },
     {
       "path": "floati/git_process.py",
-      "sha256": "ac24c252d8cbd66084ba5befeb7662a5209cdc6ffceb12305820ffdf0fe03c08"
+      "sha256": "01e9ff4f1a9bfbd23fc27e37c802212fb625a69430129eada6e67a54360eb768"
     },
     {
       "path": "floati/grants.py",
@@ -14707,7 +14723,7 @@
     },
     {
       "path": "floati/overlap_radar.py",
-      "sha256": "75a87c45de065288e286360fda7e077a4fd1a4951830d968076b6f7ba5aee30d"
+      "sha256": "3d7327c5869c2f24414b94e152a4b6ed80570a7a354ee676e2b5adb34ea16ff1"
     },
     {
       "path": "floati/persons.py",
@@ -14791,7 +14807,7 @@
     },
     {
       "path": "floati/readme_claims.py",
-      "sha256": "73a5b465f61b755531cb654615174d4d6dda6a636261fdd3b1cf866f7b1a09a6"
+      "sha256": "be4faa253e54c7dbb056aa9539d92b8ce93e81cd114c308fc25aa30b34b23038"
     },
     {
       "path": "floati/receipt_prefix.py",
@@ -14839,7 +14855,7 @@
     },
     {
       "path": "floati/role_addressing.py",
-      "sha256": "5a9e2b6091fc6d2170ea15e627f6377f1c270e00cd61ee9745fb484c9b315459"
+      "sha256": "d23f41362372881f4c818c00272c9485d6f901d49cb93c5c6176bb65722ac394"
     },
     {
       "path": "floati/role_assignment.py",
@@ -14955,7 +14971,7 @@
     },
     {
       "path": "floati/selftest.py",
-      "sha256": "3dcb31b9478ccd1232b0a241eb35a2e26a9348023b7ee2feaae4e140dda9dc04"
+      "sha256": "c2c2de9ac3c326823fedf9f0b094d26c24bf5beda04d6ca20ef3ae3bd942ecf9"
     },
     {
       "path": "floati/send_bank.py",
@@ -15067,7 +15083,7 @@
     },
     {
       "path": "floati/t3_gate.py",
-      "sha256": "5d80aec758a6b9099284fe60cd89ed2247495d4685d2bf872525caa8ccdde02c"
+      "sha256": "bf456e79d0fd4cf5e9d2dac922d751f9f93447f1d477029027d84c1558437ad0"
     },
     {
       "path": "floati/t3_hook_install.py",
@@ -15075,7 +15091,7 @@
     },
     {
       "path": "floati/t3_quota_readout.py",
-      "sha256": "e8e01321bdcd2bb4df451d0f8feb2996ca8e4498cfe45ace5c04c21e15e5dd92"
+      "sha256": "6abd59f52f64da3149031c69041a5d71111dca6fd516c1081a36b81054e5665a"
     },
     {
       "path": "floati/t3_shared_base.py",

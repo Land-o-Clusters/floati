@@ -88,6 +88,17 @@ class RoutineExternalPolicyTests(unittest.TestCase):
                             self.assertFalse(entry.scratch_git_probe(argv, dict(kwargs, shell=True), workspace))
                         continue
                     self.assertTrue(policy(case, argv, kwargs, home, workspace, context), (argv, kwargs, context))
+                    if case == "overlap-report":
+                        for key, expected in (("GIT_NO_LAZY_FETCH", "1"),
+                                              ("GIT_ALLOW_PROTOCOL", "")):
+                            with self.subTest(local_git_control=key):
+                                environment = dict(kwargs["env"])
+                                self.assertEqual(expected, environment.pop(key))
+                                self.assertFalse(policy(case, argv, dict(kwargs, env=environment),
+                                                        home, workspace, context))
+                                environment[key] = "https"
+                                self.assertFalse(policy(case, argv, dict(kwargs, env=environment),
+                                                        home, workspace, context))
                     self.assertFalse(policy("presence-show", argv, kwargs, home, workspace, context))
                     self.assertFalse(policy(case, argv + ["--unreviewed"], kwargs,
                                             home, workspace, context))

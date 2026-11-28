@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
+from functools import cache
 
 from .puddle_quota_snapshot import QuotaUnavailable
 from .puddle_quota_v2 import (
-    FRESHNESS, UnknownQuotaReading, current_account_reading, quota_stamp, read_account_quota,
+    FRESHNESS, SOURCE, UnknownQuotaReading, current_account_reading, quota_stamp, read_account_quota,
 )
 
 
@@ -84,13 +85,54 @@ def target_quota(root, path, environment, instance_id, read_inventory, *, at, ac
     attest registration continuity independently. The snapshot alone cannot
     prove that the target still exists or still refers to the same account.
     """
+    return _target_quota(root, environment, instance_id, read_inventory,
+                         lambda: _read_snapshot(root, path), at, account_ref)
+
+
+def _read_snapshot(root, path):
+    if path is None:
+        raise QuotaUnavailable("quota_snapshot_not_selected")
+    return read_account_quota(path, root.tenant_id)
+
+
+def candidate_quota(root, path, environment, provider_ids, read_inventory, *, at):
+    """Evaluate the proposed targets against one inventory and one export generation."""
+    try:
+        inventory = read_inventory(environment) if read_inventory is not None else None
+    except (OSError, QuotaUnavailable):
+        inventory = None
+
+    @cache
+    def snapshot():
+        try:
+            return _read_snapshot(root, path), None
+        except QuotaUnavailable as exc:
+            return None, str(exc)
+
+    def read_snapshot():
+        readings, code = snapshot()
+        if code is not None:
+            raise QuotaUnavailable(code)
+        return readings
+
+    return {
+        "environment_id": environment,
+        "evaluated_at": at.isoformat().replace("+00:00", "Z"),
+        "source": SOURCE,
+        "providers": [
+            {"provider_instance": instance_id, **_target_quota(
+                root, environment, instance_id, lambda _: inventory, read_snapshot, at, None,
+            )}
+            for instance_id in provider_ids
+        ],
+    }
+
+
+def _target_quota(root, environment, instance_id, read_inventory, read_snapshot, at, account_ref):
     try:
         reference = _reference(root.tenant_id, environment, instance_id)
         instance = _current_instance(read_inventory, environment, instance_id, at)
-        if path is None:
-            raise QuotaUnavailable("quota_snapshot_not_selected")
-        readings = read_account_quota(path, root.tenant_id)
-        row = _bound_reading(readings, reference, instance.harness, account_ref)
+        row = _bound_reading(read_snapshot(), reference, instance.harness, account_ref)
         current_account_reading(row, at)
         verified = quota_stamp(row["t3_provider_instance"]["verified_at"])
         if at < verified:
@@ -110,5 +152,7 @@ def target_quota(root, path, environment, instance_id, read_inventory, *, at, ac
     return {
         "outcome": "MEASURED", "reading_id": row["reading_id"],
         "remaining_bps": value["remaining_bps"],
+        "observed_at": row["observed_at"],
+        "window_seconds": value["window_seconds"],
         "age_seconds": (at - quota_stamp(row["observed_at"])).seconds,
     }

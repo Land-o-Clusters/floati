@@ -36,7 +36,7 @@ _FIXED_GIT_ENVIRONMENT = {
 }
 
 
-def fixed_git_environment(executable: str) -> dict[str, str]:
+def fixed_git_environment(executable: str, *, local_only: bool = False) -> dict[str, str]:
     """Return a fixed environment without inheriting ambient Git coordinates."""
 
     executable_path = Path(executable)
@@ -45,6 +45,9 @@ def fixed_git_environment(executable: str) -> dict[str, str]:
         search_directories.insert(0, str(executable_path.parent))
     environment = dict(_FIXED_GIT_ENVIRONMENT)
     environment["PATH"] = os.pathsep.join(dict.fromkeys(search_directories))
+    if local_only:
+        # For Git versions that predate GIT_NO_LAZY_FETCH, deny every protocol too.
+        environment.update(GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="")
     return environment
 
 

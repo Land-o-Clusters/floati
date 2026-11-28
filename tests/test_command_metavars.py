@@ -27,7 +27,7 @@ class CommandMetavarTests(unittest.TestCase):
                 argument = next(a for a in rows[topic]['arguments'] if option in a['option_strings'])
                 self.assertEqual(word, argument.get('metavar'))
                 self.assertIn(option + ' ' + word, pages[topic])
-                self.assertIn(option + ' ' + word, table)
+                self.assertNotIn(option + ' ' + word, table)
     def test_choices_remain_visible_and_unchanged(self):
         parser = _parser()
         self.assertIn('--source {local,github}', help_pages(parser)['intake adopt'])

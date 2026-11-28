@@ -1,8 +1,11 @@
 """A group send must use the recipients shown before the roster changes."""
 
+import io
 import json
 import unittest
+from contextlib import redirect_stdout
 from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
@@ -16,8 +19,10 @@ from floati.errors import ProtocolRefusal
 from pathlib import Path
 from tests.readiness import READY_SECONDS
 from tests.schema_validation import validate_json_schema
-from floati import cli, role_addressing
+from floati import ask, cli, role_addressing
 from floati.addressing import _digest
+from floati.framing import encode_frame
+from floati.jsonl import MAX_RECORD_BYTES
 from floati.puddle_quota_snapshot import QuotaUnavailable, read_puddle_quota_snapshot
 
 
@@ -344,6 +349,117 @@ class NetAddress1Tests(unittest.TestCase):
             clock.now.return_value = at
             return self.fleet.invoke_in_process(*args)
 
+    def test_quota_v2_preview_stops_at_the_maximal_question_frame_boundary(self):
+        """Dense v3 previews must fit a question frame or name the count and bound."""
+        snapshot = self.fleet.base / "quota" / "puddle-quota-v2.json"
+        snapshot.parent.mkdir(mode=0o700)
+        root = resolve_command_root(str(self.fleet.fleet))
+        observed = "2026-11-26T12:00:00.123456Z"
+        evaluated = "2026-11-26T12:01:59.123456+00:00"
+        expiry = "2026-11-26T12:02:00.123456Z"
+        role = "r" * 64
+        # Four UTF-8 bytes per character, the widest legal question text.
+        wide = "\U0001f680"
+        fields = dict(
+            repo="r" * 128, sha="a" * 64, doc=wide * 1024, note=wide * 1024,
+            session=wide * 128, idempotency_key=wide * 128,
+        )
+        bindings = {}
+        readings = []
+        for index in range(128):
+            node = f"n{index:063d}"
+            account = f"acct-{index:032x}"
+            bindings[node] = {
+                "harness": "codex", "account_ref": account, "binding_id": f"b-{index:062d}",
+                "valid_from": observed, "expires_at": expiry,
+            }
+            readings.append({
+                "harness": "codex", "account_ref": account, "reading_id": f"r-{index:032x}",
+                "observed_at": observed,
+                "t3_provider_instance": {"instance_ref": f"{index:064x}", "verified_at": observed},
+                "value": {
+                    "status": "MEASURED", "window_kind": "account_primary",
+                    "window_seconds": 31536000, "remaining_bps": 9999 if index else 10000,
+                    "resets_at": "2026-11-27T00:00:00.123456Z", "expires_at": expiry,
+                },
+            })
+        winner = next(iter(bindings))
+        dense_readings = [{key: value for key, value in row.items()
+                           if key != "t3_provider_instance"} for row in readings]
+
+        # Compute the boundary independently with the actual question writer
+        # and shared frame encoder. Use the longest accepted outer identities
+        # and ledger timestamp as well as the widest compared evidence.
+        def frame_size(count, rows=readings):
+            tenant, sender = "t" * 64, "s" * 64
+            preview = {
+                "preview_version": 3, "tenant_id": tenant, "sender": sender,
+                "address": f"role:{role}", "recipients": [winner],
+                "route": {
+                    "source": "puddle_quota_snapshot_v2", "evaluated_at": evaluated,
+                    "age_seconds": 119, "candidates": dict(list(bindings.items())[:count]),
+                    "readings": rows[:count],
+                },
+            }
+            preview["digest"] = _digest(preview)
+            with patch.object(ask, "_stamp", return_value="2026-11-26T12:01:59.123Z"):
+                question = ask._question_record(
+                    SimpleNamespace(tenant_id=tenant), sender=sender, recipient=winner,
+                    address_preview=preview, **fields,
+                )
+            validate_record(question, tenant, {"ask_question"}, integrity=False)
+            return len(encode_frame(question))
+
+        fitting = next(count - 1 for count in range(1, 129)
+                       if frame_size(count) > MAX_RECORD_BYTES)
+        self.assertLessEqual(frame_size(fitting), MAX_RECORD_BYTES)
+        self.assertGreater(frame_size(fitting + 1), MAX_RECORD_BYTES)
+        self.assertGreater(frame_size(128, dense_readings), MAX_RECORD_BYTES)
+
+        args = self.arguments(f"role:{role}", "ask")
+        for flag, field in (("--repo", "repo"), ("--doc", "doc"), ("--note", "note"),
+                            ("--session", "session"), ("--idempotency-key", "idempotency_key")):
+            args[args.index(flag) + 1] = fields[field]
+        args.extend(["--puddle-quota-snapshot", str(snapshot)])
+        for count in (128, fitting + 1, fitting):
+            with self.subTest(candidates=count):
+                selected = dict(list(bindings.items())[:count])
+                # Keep the 128-account regression comparable to the original
+                # dense export, then exercise optional T3 fields at the bound.
+                rows = (dense_readings if count == 128 else readings)[:count]
+                snapshot.unlink(missing_ok=True)
+                snapshot.write_bytes(encode_frame({
+                    "schema_version": 2, "tenant_id": root.tenant_id, "readings": rows,
+                }))
+                snapshot.chmod(0o400)
+                checked = [dict(binding, node_id=node, tenant_id=root.tenant_id)
+                           for node, binding in selected.items()]
+                roster = dict.fromkeys(selected, "codex")
+                with patch.object(role_addressing, "_candidates", return_value=roster):
+                    completed, artifact = self.quota_v2_call(checked, [*args, "--preview"], evaluated)
+                    evidence = artifact["evidence"]
+                    self.assertEqual([], self.fleet.events())
+                    if count > fitting:
+                        self.assertEqual(
+                            (35, "UNKNOWN", "quota_role_preview_too_large", count, fitting),
+                            (completed.returncode, evidence.get("outcome"), evidence.get("code"),
+                             evidence.get("candidate_count"), evidence.get("candidate_bound")),
+                        )
+                        continue
+                    self.assertEqual(0, completed.returncode, artifact)
+                    self.assertEqual([winner], evidence["recipients"])
+                    self.assertEqual(selected, evidence["route"]["candidates"])
+                    self.assertEqual(rows, evidence["route"]["readings"])
+                    saved = snapshot.with_name("preview.json")
+                    saved.write_bytes(encode_frame(artifact))
+                    completed, artifact = self.quota_v2_call(
+                        checked, [*args, "--recipient-preview", str(saved)], evaluated,
+                    )
+                    self.assertEqual(34, completed.returncode, artifact)
+                    question, = [event for event in self.fleet.events() if event["kind"] == "ask_question"]
+                    self.assertEqual(evidence, question["address_preview"])
+                    self.assertLessEqual(len(encode_frame(question)), MAX_RECORD_BYTES)
+
     def test_quota_v2_frozen_preview_vectors(self):
         snapshot, document, bindings, args = self.quota_v2_fixture()
         preview = [*args, "--preview", "--puddle-quota-snapshot", str(snapshot)]
@@ -620,6 +736,78 @@ class NetAddress1Tests(unittest.TestCase):
             recreated = T3Instance("codex-green", "codex", start.replace(hour=12, second=15))
             current = T3Inventory("env-local", True, (blue_instance, recreated))
             unknown(readout([bound_blue, bound_green]), "t3_instance_binding_changed")
+
+    def test_t3_route_shows_headroom_for_each_exact_current_candidate(self):
+        from floati.t3_gate import main
+        from floati.t3_quota_readout import T3Instance, T3Inventory
+
+        snapshot, document, _, _ = self.quota_v2_fixture()
+        blue, green = document["readings"]
+        bound_rows = [
+            dict(row, reading_id="r-" + digit * 32, t3_provider_instance={
+                "instance_ref": reference, "verified_at": "2026-11-26T12:00:00Z",
+            })
+            for row, digit, reference in (
+                (blue, "4", "93d1a5add3586df103c734078d7b86270d6abcb177dd859587a902e5f2588f8a"),
+                (green, "5", "2a8d85f356f5a2f54d16e576866dce9739af0cc9d11d39702682c1a4d319e1e3"),
+            )
+        ]
+        start = datetime(2026, 11, 26, 11, tzinfo=timezone.utc)
+        instances = (
+            T3Instance("codex-blue", "codex", start),
+            T3Instance("codex-green", "codex", start),
+            T3Instance("claude", "claude", None),
+        )
+        args = ["route", "--root", str(self.fleet.fleet), "--environment", "env-local",
+                "--puddle-quota-snapshot", str(snapshot)]
+        for instance in instances:
+            args.extend(("--provider", instance.instance_id))
+        self.quota_v2_publish(snapshot, dict(document, readings=bound_rows))
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            try:
+                result = main(args)
+            except SystemExit as exc:
+                result = exc.code
+        self.assertEqual(0, result, stdout.getvalue())
+        unknown = json.loads(stdout.getvalue())["evidence"]["providers"]
+        self.assertEqual([("UNKNOWN", "t3_instance_inventory_unavailable")] * 3,
+                         [(row["outcome"], row["code"]) for row in unknown])
+
+        fresh = start.replace(hour=12, second=30)
+        added = start.replace(hour=12, second=15)
+        switched = (instances[0], T3Instance("codex-green", "codex", added), instances[2])
+        for label, rows, current, at, expected in (
+            ("fresh", bound_rows, instances, fresh, (2300, 6700)),
+            ("missing binding", [bound_rows[0], green], instances, fresh,
+             (2300, "t3_instance_binding_mismatch")),
+            ("expired", bound_rows, instances, fresh.replace(minute=2, second=0),
+             ("quota_reading_stale", "quota_reading_stale")),
+            ("account switched", bound_rows, switched, fresh, (2300, "t3_instance_binding_changed")),
+            ("removed", bound_rows, (instances[0], instances[2]), fresh, (2300, "t3_instance_removed")),
+        ):
+            with self.subTest(label=label):
+                self.quota_v2_publish(snapshot, dict(document, readings=rows))
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    result = main(args, at=at, read_inventory=lambda env: T3Inventory(env, True, current))
+                self.assertEqual(0, result, stdout.getvalue())
+                artifact = json.loads(stdout.getvalue())
+                self.assertEqual(("t3 route", "ok"), (artifact["command"], artifact["status"]))
+                readings = artifact["evidence"]["providers"]
+                self.assertEqual([instance.instance_id for instance in instances],
+                                 [row["provider_instance"] for row in readings])
+                for index, (row, value) in enumerate(zip(readings, (*expected, "t3_instance_continuity_unknown"))):
+                    if isinstance(value, int):
+                        self.assertEqual(("MEASURED", value, 30, bound_rows[index]["reading_id"]),
+                                         (row["outcome"], row["remaining_bps"], row["age_seconds"],
+                                          row["reading_id"]))
+                        self.assertEqual(bound_rows[index]["value"]["window_seconds"], row["window_seconds"])
+                    else:
+                        self.assertEqual(("UNKNOWN", value), (row["outcome"], row["code"]))
+                        self.assertNotIn("remaining_bps", row)
+                self.assertNotIn("selected_provider", artifact["evidence"])
+        self.assertEqual([], self.fleet.events())
 
     def test_retiring_the_last_recipient_invalidates_the_preview(self):
         """A vanished group must refuse as changed rather than reuse stale recipients."""

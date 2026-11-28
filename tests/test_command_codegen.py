@@ -19,7 +19,7 @@ class CommandCodegenTests(unittest.TestCase):
         generator = self.generator()
         self.assertEqual([], generator.check(Path(__file__).resolve().parents[1]))
 
-    def test_registry_option_change_reaches_help_docs_and_describe(self):
+    def test_registry_option_change_reaches_help_and_describe(self):
         generator = self.generator()
         parser = _parser()
         commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
@@ -28,13 +28,13 @@ class CommandCodegenTests(unittest.TestCase):
         table = generator.verb_table(parser)
         row = next(r for r in describe_parser(parser)['commands'] if r['path'] == ['describe'])
         self.assertIn('--fixture-format', pages['describe'])
-        self.assertIn('--fixture-format', table)
+        self.assertNotIn('--fixture-format', table)
         argument = next(a for a in row['arguments'] if '--fixture-format' in a['option_strings'])
         self.assertTrue(argument['required'])
         self.assertEqual(['short', 'long'], argument['choices'])
-        for surface in (pages['describe'].split('DESCRIPTION', 1)[0], table):
-            self.assertIn('--fixture-format {short,long}', surface)
-            self.assertNotIn('[--fixture-format', surface)
+        synopsis = pages['describe'].split('DESCRIPTION', 1)[0]
+        self.assertIn('--fixture-format {short,long}', synopsis)
+        self.assertNotIn('[--fixture-format', synopsis)
 
     def test_generated_artifact_edits_are_detected(self):
         generator = self.generator()
@@ -49,10 +49,10 @@ class CommandCodegenTests(unittest.TestCase):
             for name in ('floati/generated_help.py', 'AGENTS.md'):
                 path = scratch / name
                 original = path.read_text(encoding='utf-8')
-                # Mutate generated grammar, not the intentionally preserved manual prose.
+                # Mutate only generated content.
                 if name == 'AGENTS.md':
                     before, generated = original.split(generator.BEGIN, 1)
-                    altered = before + generator.BEGIN + generated.replace('--json', '--hand-edited', 1)
+                    altered = before + generator.BEGIN + generated.replace('| `describe` |', '| `hand-edited` |', 1)
                 else:
                     altered = original.replace('--json', '--hand-edited', 1)
                 self.assertNotEqual(original, altered)
@@ -114,7 +114,10 @@ class SyntheticGrammarTests(unittest.TestCase):
         for fragment in ('(--left | --right)', '--mode {brief,full}',
                          '[--pair FIRST SECOND]', '[--tag TAG]', 'targets [targets ...]'):
             self.assertIn(fragment, synopsis)
-            self.assertIn(fragment.replace('|', '&#124;'), table)
+        self.assertEqual([
+            '| Command | Purpose |', '| --- | --- |',
+            '| `fixture` | Inspect declared fixture data |',
+        ], table.splitlines())
         self.assertNotIn('[--tenant', synopsis)
         self.assertNotIn('[--scope', synopsis)
         self.assertNotIn('[--mode', synopsis)

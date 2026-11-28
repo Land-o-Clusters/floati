@@ -100,10 +100,7 @@ def validate_census(census: dict) -> None:
         actual_classes = {membership[test_id]["class"] for test_id in unit["ids"]}
         if actual_classes != set(unit["classes"]):
             raise ValueError("membership classes mismatch census unit")
-    digest = hashlib.sha256(json.dumps(
-        ids, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")).hexdigest()
-    if census.get("population_digest") != digest:
+    if census.get("population_digest") != _population_digest(ids):
         raise ValueError("population digest mismatch in census")
 
 
@@ -118,6 +115,59 @@ def validate_worker_count(workers: int) -> None:
         raise ValueError(f"parallel_workers_out_of_range: workers must be an integer between 1 and {limit}")
 
 
+def _population_digest(ids):
+    return hashlib.sha256(json.dumps(
+        ids, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+
+
+def _balance(units, count, costs):
+    buckets = [[] for _ in range(count)]
+    loads = [0.0] * count
+    for unit in sorted(units, key=lambda unit: -costs[unit["key"]]):
+        # Stable sorting preserves native order on equal weights.
+        index = min(range(count), key=lambda i: (loads[i], len(buckets[i]), i))
+        buckets[index].append(unit)
+        loads[index] += costs[unit["key"]]
+    return buckets
+
+
+def shard_census(census, unit_keys):
+    keys = set(unit_keys)
+    units = [unit for unit in census["units"] if unit["key"] in keys]
+    if len(units) != len(unit_keys):
+        raise ValueError("invalid shard units")
+    selected = {test_id for unit in units for test_id in unit["ids"]}
+    ids = [test_id for test_id in census["ids"] if test_id in selected]
+    shard = {**census, "ids": ids, "units": units,
+             "membership": {test_id: census["membership"][test_id] for test_id in ids},
+             "population_digest": _population_digest(ids)}
+    validate_census(shard)
+    return shard
+
+
+def shard_unit_keys(census, count, weights=None):
+    """Balance VM shards independently of each VM's local worker count."""
+    validate_census(census)
+    units = census["units"]
+    if not 1 <= count <= len(units):
+        raise ValueError("shard count would produce an empty assignment")
+    costs = _unit_costs(units, weights)
+    return [[unit["key"] for unit in bucket] for bucket in _balance(units, count, costs)]
+
+
+def _unit_costs(units, weights):
+    if weights is None:
+        return {unit["key"]: len(unit["ids"]) for unit in units}
+    _mapping(weights, "weights")
+    if set(weights) != {unit["key"] for unit in units}:
+        raise ValueError("weights must cover exactly all census units")
+    for value in weights.values():
+        if (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
+            raise ValueError("weights must be finite nonnegative durations")
+    return weights
+
+
 def make_plan(census: dict, workers: int, weights: Optional[dict] = None) -> dict:
     """Balance intact units deterministically, then prove the resulting plan."""
     validate_census(census)
@@ -126,25 +176,8 @@ def make_plan(census: dict, workers: int, weights: Optional[dict] = None) -> dic
     parallel = [unit for unit in units if unit["serial_reason"] is None]
     if parallel and workers > len(parallel):
         raise ValueError("workers would create an empty assignment")
-    if weights is None:
-        costs = {unit["key"]: len(unit["ids"]) for unit in units}
-    else:
-        _mapping(weights, "weights")
-        if set(weights) != {unit["key"] for unit in units}:
-            raise ValueError("weights must cover exactly all census units")
-        for value in weights.values():
-            if (type(value) not in (int, float) or not math.isfinite(value)
-                    or value < 0):
-                raise ValueError("weights must be finite nonnegative durations")
-        costs = weights
-    buckets = [[] for _ in range(workers)] if parallel else []
-    loads = [0.0] * len(buckets)
-    positions = {unit["key"]: i for i, unit in enumerate(units)}
-    for unit in sorted(parallel, key=lambda unit: (-costs[unit["key"]], positions[unit["key"]])):
-        # Occupancy breaks zero-duration ties without producing empty workers.
-        index = min(range(workers), key=lambda i: (loads[i], len(buckets[i]), i))
-        buckets[index].append(unit)
-        loads[index] += costs[unit["key"]]
+    costs = _unit_costs(units, weights)
+    buckets = _balance(parallel, workers, costs) if parallel else []
     assignments = []
     for i, bucket in enumerate(buckets):
         assignments.append(_assignment(census, f"worker-{i + 1}", "parallel", bucket))
@@ -340,6 +373,57 @@ def reconcile(census: dict, plan: dict, results: list[dict]) -> dict:
     for field in ("selected_ids", "started_ids", "stopped_ids", "fixture_blocked_ids", "events"):
         aggregate[field] = [item for result in ordered for item in result[field]]
     return aggregate
+
+
+def reconcile_shards(reports, count, head, *, plan_only=False):
+    """Verify independent discovery and the exact multiset of native callbacks."""
+    if len(reports) != count or count < 1:
+        raise ValueError("missing or extra shard receipt")
+    if count == 1 and "shard" not in reports[0]:
+        # The ordinary full selftest records the full census directly.
+        report = reports[0]
+        census = report["census"]
+        reports = [{**report, "shard": {
+            "index": 1, "count": 1, "population_ids": census["ids"],
+            "population_digest": census["population_digest"],
+        }}]
+    full = reports[0]["shard"]["population_ids"]
+    digest = _population_digest(full)
+    _unique(_strings(full, "full population", nonempty=True), "full population ID")
+    source = reports[0]["source"]
+    if source["head"] != head:
+        raise ValueError("unexpected source commit")
+    indices, selected, started, stopped, rows = [], [], [], [], []
+    for report in reports:
+        shard = report["shard"]
+        indices.append(shard["index"])
+        if (shard["count"] != count or shard["population_ids"] != full
+                or shard["population_digest"] != digest or report["source"] != source):
+            raise ValueError("shards disagree on source or full discovery")
+        if report["status"] != ("planned" if plan_only else "complete"):
+            raise ValueError("incomplete shard")
+        if not report["cleanup"]["successful"]:
+            raise ValueError("shard cleanup failed")
+        ids = report["census"]["ids"]
+        selected.extend(ids)
+        successful = report["successful"]
+        if not plan_only:
+            result = reconcile(report["census"], report["plan"], report["results"])
+            if result["successful"] != successful or result != report["aggregate"]:
+                raise ValueError("shard verdict disagrees with worker results")
+            started.extend(result["started_ids"])
+            stopped.extend(result["stopped_ids"])
+        rows.append({"index": shard["index"], "count": len(ids),
+                     "successful": successful, "wall_seconds": report["wall_seconds"],
+                     "estimates": report.get("estimates")})
+    _same_multiset(range(1, count + 1), indices, "shard index")
+    _same_multiset(full, selected, "selected shard ID")
+    if not plan_only:
+        _same_multiset(full, started, "started shard ID")
+        _same_multiset(full, stopped, "stopped shard ID")
+    return {"population_count": len(full), "population_digest": digest,
+            "successful": all(row["successful"] for row in rows),
+            "shards": sorted(rows, key=lambda row: row["index"])}
 
 
 def compare_results(reference: dict, candidate: dict) -> dict:

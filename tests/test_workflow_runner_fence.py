@@ -8,6 +8,7 @@ failed with ModuleNotFoundError before floati/workflow_runner_fence.py existed.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ from pathlib import Path
 from floati.workflow_runner_fence import (
     ALLOWED_RUNNER_LABELS,
     REFUSAL_CODE,
+    load_workflow,
     scan_tree,
     scan_workflow_source,
 )
@@ -24,6 +26,16 @@ from tests.private_artifacts import require_private_artifact
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ".github/workflows/probe.yml"
+
+
+def harbor_runner_label():
+    from floati.tenant_fence import load_pinned_operator_declaration
+
+    runner_pin = "78dccc1ec29722c9306b0c161b160fdb61758fa6b288ae9350cd90f817c0b2c1"
+    declaration = load_pinned_operator_declaration(REPOSITORY_ROOT)
+    return next(entry["token"] for entry in declaration["forbidden_tokens"]
+                if entry["digest"] == runner_pin)
+
 
 # The harbor's own CI at 481afae4, verbatim, before it was renamed out of the
 # projection. It is the reason this fence exists, so it is pinned as bytes here
@@ -638,67 +650,75 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
         )
 
     def test_the_renamed_harbor_workflow_is_the_481afae4_bytes(self) -> None:
-        """The harbor's live CI is the 481afae4 bytes under four NAMED substitutions."""
-
-        from floati.tenant_fence import load_pinned_operator_declaration
+        """Only the reviewed historical substitutions and Linux shard changes are admitted."""
 
         relative = ".github/workflows/harbor-selftest.yml"
         require_private_artifact(self, relative)
         live = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
 
         # Restore the historical comment only in this private byte comparison.
-        declaration = load_pinned_operator_declaration(REPOSITORY_ROOT)
-        historical_runner_pin = "78dccc1ec29722c9306b0c161b160fdb61758fa6b288ae9350cd90f817c0b2c1"
-        historical_label = next(
-            entry["token"]
-            for entry in declaration["forbidden_tokens"]
-            if entry["digest"] == historical_runner_pin
-        )
+        historical_label = harbor_runner_label()
         substitutions = [
             (old, new.replace("fixture-runner-8", f"{historical_label}-8"), what)
             for old, new, what in HARBOR_SUBSTITUTIONS
         ]
 
-        # Every substitution is asserted from BOTH sides before it is applied:
-        # the 481afae4 text is in the fixture and ABSENT from the live file, and
-        # the live text is present. A replace() whose needle has drifted away is
-        # a silent no-op, so a pin built out of replace() alone goes green while
-        # measuring nothing.
-        # self.fail() rather than assertIn/assertNotIn on purpose: those print
-        # the whole 6 KB haystack and bury the sentence that says WHICH
-        # substitution moved. The first line of the literal is locator enough.
-        hunks = harbor_differing_hunks(HARBOR_SELFTEST_481AFAE4, live)
-        self.assertEqual(
-            HARBOR_SUBSTITUTION_COUNT,
-            len(substitutions),
-            "the named substitution LIST must have one entry per differing hunk",
-        )
-        self.assertEqual(
-            HARBOR_SUBSTITUTION_COUNT,
-            len(hunks),
-            "differing-hunk count must equal the named LIST length",
-        )
+        # Reconstruct the reviewed pre-sharding workflow from the historical fixture.
+        baseline = HARBOR_SELFTEST_481AFAE4
+        self.assertEqual(HARBOR_SUBSTITUTION_COUNT, len(substitutions))
         for old, new, what in substitutions:
-            if old not in HARBOR_SELFTEST_481AFAE4:
-                self.fail(
-                    f"{what}: this pin substitutes text absent from the 481afae4"
-                    f" fixture, beginning {old.splitlines()[0]!r}"
-                )
-            if new not in live:
-                self.fail(
-                    f"{what}: the live {relative} no longer carries the text this"
-                    f" pin names, beginning {new.splitlines()[0]!r}"
-                )
-            if old in live:
-                self.fail(
-                    f"{what}: the 481afae4 text is BACK in the live {relative},"
-                    f" beginning {old.splitlines()[0]!r}"
-                )
+            self.assertIn(old, baseline, what)
+            baseline = baseline.replace(old, new, 1)
+        self.assertEqual(HARBOR_SUBSTITUTION_COUNT,
+                         len(harbor_differing_hunks(HARBOR_SELFTEST_481AFAE4, baseline)))
 
-        restored = live
-        for old, new, _what in substitutions:
-            restored = restored.replace(new, old, 1)
-        self.assertEqual(HARBOR_SELFTEST_481AFAE4, restored)
+        for job, following in (("preflight", "\n  macos-selftest:"), ("macos-selftest", None)):
+            with self.subTest(job=job):
+                marker = f"\n  {job}:\n"
+                expected = baseline.split(marker, 1)[1]
+                actual = live.split(marker, 1)[1]
+                if following is not None:
+                    expected = expected.split(following, 1)[0]
+                    actual = actual.split(following, 1)[0]
+                self.assertEqual(expected, actual)
+
+        # Pin the exact Linux matrix, single-runner check, and hosted verdict.
+        # The historical fixture still drives the projection's runner-label controls.
+        diff = "".join(difflib.unified_diff(
+            baseline.splitlines(keepends=True), live.splitlines(keepends=True), n=0,
+        ))
+        self.assertEqual(
+            "050ca77e4b1392139f8a251e13016fbd133fd9c74fdb389e82c142978511d66b",
+            hashlib.sha256(diff.encode()).hexdigest(),
+            "harbor workflow moved beyond the reviewed hosted Linux changes",
+        )
+
+    def test_hosted_linux_shards_and_verdict_are_reserved_for_main_pushes(self) -> None:
+        relative = ".github/workflows/harbor-selftest.yml"
+        require_private_artifact(self, relative)
+        workflow = load_workflow((REPOSITORY_ROOT / relative).read_text())
+        jobs = workflow["jobs"]
+        main_push = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+        linux = jobs["linux-selftest"]
+        verdict = jobs["linux-selftest-verdict"]
+        expected_matrix = "${{ fromJSON((" + main_push + ") && '[1,2,3,4,5,6]' || '[0]') }}"
+        expected_verdict = "${{ !cancelled() && (" + main_push + ") }}"
+        with self.subTest(route="linux matrix"):
+            self.assertEqual(expected_matrix, linux["strategy"]["matrix"]["shard"])
+        with self.subTest(route="runner selection"):
+            labels = json.dumps(["self-hosted", "Linux", "X64", harbor_runner_label()],
+                                separators=(",", ":"))
+            self.assertEqual(
+                "${{ matrix.shard != 0 && 'ubuntu-24.04' || "
+                f"fromJSON('{labels}') }}}}",
+                linux["runs-on"],
+            )
+        with self.subTest(route="verdict"):
+            self.assertEqual(expected_verdict, verdict["if"])
+            self.assertEqual("ubuntu-24.04", verdict["runs-on"])
+        with self.subTest(route="single-runner receipt"):
+            step, = [step for step in linux["steps"] if step.get("if") == "matrix.shard == 0"]
+            self.assertIn("scripts/verify-ci-shards.py --shards 1", step["run"])
 
     def test_harbor_selftest_legs_pass_worker_counts_on_the_same_runners(self) -> None:
         """Both artifact legs call the parallel selftest; hosted macOS stays refused.
@@ -714,10 +734,6 @@ class WorkflowRunnerFenceTests(unittest.TestCase):
         self.assertIn("branches: [main]", text)
         self.assertIn("pull_request:", text)
         self.assertIn("workflow_dispatch:", text)
-        self.assertIn(
-            "${{ fromJSON(vars.FLOATI_CI_RUNNER_LINUX || '[\"ubuntu-latest\"]') }}",
-            text,
-        )
         self.assertIn(
             "${{ fromJSON(vars.FLOATI_CI_RUNNER_MACOS || '[\"self-hosted\",\"macOS\",\"floati-mac\"]') }}",
             text,
